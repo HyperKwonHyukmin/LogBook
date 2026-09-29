@@ -40,3 +40,20 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
   }
   return data;
 }
+
+/** 조각 업로드용 — 본문이 바이너리(Blob)다. 오류 처리·401 처리는 api() 와 같다. */
+export async function apiBinary(path, blob, { method = 'PUT' } = {}) {
+  const token = tokenStore.get();
+  const headers = { 'Content-Type': 'application/octet-stream' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`/api${path}`, { method, headers, body: blob });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    if (res.status === 401 && tokenStore.get() === token) {
+      tokenStore.clear();
+      window.dispatchEvent(new Event('logbook:unauthorized'));
+    }
+    throw new ApiError(res.status, data?.detail ?? null);
+  }
+  return data;
+}

@@ -131,3 +131,19 @@ def test_main_logs_orphaned_staging_folders_at_startup(storage, monkeypatch, cap
             worker.main()
 
     assert any("orphan-key-1234" in r.message for r in caplog.records)
+
+
+def test_run_once_cleans_stale_web_uploads(db, storage, make_user):
+    from datetime import datetime, timedelta
+
+    from app import models
+    from app.ingest.inbox import InboxWatcher
+    from app.uploads import service as uploads
+    from app.worker import run_once
+
+    user = make_user("A100001")
+    b = uploads.begin(db, storage, user, name="old", target_entry_id=None)
+    b.received_at = datetime.now() - timedelta(hours=30)
+    db.commit()
+    run_once(db, storage, InboxWatcher(storage))
+    assert db.query(models.Batch).filter_by(key=b.key).count() == 0

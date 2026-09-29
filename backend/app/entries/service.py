@@ -30,10 +30,18 @@ def zones_of(db: Session, entry: models.Entry) -> list[str]:
     return [v for (v,) in rows]
 
 
-def file_to_dict(f: models.File) -> dict:
+def file_to_dict(f: models.File, duplicate_entries: dict[int, str] | None = None) -> dict:
     return {"id": f.id, "rel_path": f.rel_path, "name": f.name, "kind": f.kind, "size": f.size,
             "sha256": f.sha256, "drm_encrypted": f.drm_encrypted, "duplicate_of_id": f.duplicate_of_id,
+            "duplicate_of_entry": (duplicate_entries or {}).get(f.duplicate_of_id),
             "location": f.location}
+
+
+def _entry_ref(db: Session, entry_pk: int | None) -> dict | None:
+    if entry_pk is None:
+        return None
+    e = db.get(models.Entry, entry_pk)
+    return {"entry_id": e.entry_id, "title": e.title} if e else None
 
 
 def entry_to_dict(db: Session, entry: models.Entry) -> dict:
@@ -41,6 +49,10 @@ def entry_to_dict(db: Session, entry: models.Entry) -> dict:
     ship = {h.hull_no: h.ship_type for h in
             db.query(models.Hull).filter(models.Hull.hull_no.in_([x.hull_no for x in hulls]))} if hulls else {}
     files = db.query(models.File).filter_by(entry_id=entry.id).order_by(models.File.rel_path).all()
+    dup_ids = [f.duplicate_of_id for f in files if f.duplicate_of_id]
+    dup_entries = dict(
+        db.query(models.File.id, models.Entry.entry_id).join(models.Entry, models.Entry.id == models.File.entry_id)
+        .filter(models.File.id.in_(dup_ids)).all()) if dup_ids else {}
     return {
         "id": entry.id, "entry_id": entry.entry_id, "status": entry.status, "title": entry.title,
         "analysis_type": entry.analysis_type, "description": entry.description,
@@ -53,7 +65,9 @@ def entry_to_dict(db: Session, entry: models.Entry) -> dict:
         "confirmed_at": entry.confirmed_at.isoformat() if entry.confirmed_at else None,
         "batch_id": entry.batch_id, "merge_into_id": entry.merge_into_id,
         "suggested_entry_id": entry.suggested_entry_id, "vault_rel": entry.vault_rel,
-        "files": [file_to_dict(f) for f in files],
+        "files": [file_to_dict(f, dup_entries) for f in files],
+        "suggested_entry": _entry_ref(db, entry.suggested_entry_id),
+        "merge_into": _entry_ref(db, entry.merge_into_id),
     }
 
 

@@ -118,7 +118,8 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch) -> No
             rows[key].entry_id = entry.id
         created += 1
 
-    batch.excluded = excluded
+    # 웹 업로드가 미리 적어 둔 DRM 거부 목록 등을 지우지 않는다(process_batch 는 배치당 한 번만 돈다).
+    batch.excluded = list(batch.excluded or []) + excluded
     batch.processed_at = datetime.now().replace(microsecond=0)
     if created == 0:
         # 초안이 하나도 안 생겼다(전부 제외됨 등) — 확정할 것이 없으니 곧장 done 으로

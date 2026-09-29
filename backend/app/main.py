@@ -12,7 +12,7 @@ from . import models  # noqa: F401  (테이블 등록)
 from .config import APP_VERSION, settings
 from .database import Base, engine
 from .dependencies import get_storage
-from .routers import auth, batches, entries, system, users
+from .routers import auth, batches, entries, suggest, system, uploads, users
 from .spa import mount_spa
 
 log = logging.getLogger("logbook")
@@ -37,6 +37,8 @@ def create_app(frontend_dist: Path | None | object = _USE_DEFAULT) -> FastAPI:
     app.include_router(system.router)
     app.include_router(batches.router)
     app.include_router(entries.router)
+    app.include_router(uploads.router)
+    app.include_router(suggest.router)
     dist = settings.frontend_dist if frontend_dist is _USE_DEFAULT else frontend_dist
     mount_spa(app, dist)  # 반드시 마지막 — 나머지 경로를 index.html 로 받는다
     return app

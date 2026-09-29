@@ -17,3 +17,13 @@ test('기록을 불러오면 목록으로 보여 준다', async () => {
   render(<AuditLogPage />);
   expect(await screen.findByText('가입 승인')).toBeInTheDocument();
 });
+
+test('올리기 관련 동작도 한국어 라벨로 보인다', async () => {
+  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([
+    { id: 1, at: '2026-09-29T12:33:04', employee_id: 'A476854', action: 'ENTRY_CONFIRM', target: { type: 'entry', id: 'E000001' } },
+    { id: 2, at: '2026-09-29T12:33:05', employee_id: 'A476854', action: 'DRAFT_DISCARD', target: { type: 'entry', id: 'E000002' } },
+  ]) })));
+  render(<AuditLogPage />);
+  expect(await screen.findByText('확정')).toBeInTheDocument();
+  expect(screen.getByText('초안 버림')).toBeInTheDocument();
+});

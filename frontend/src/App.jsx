@@ -5,6 +5,8 @@ import AppShell from './components/shell/AppShell.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import PlaceholderPage from './pages/PlaceholderPage.jsx';
 import AuditLogPage from './pages/AuditLogPage.jsx';
+import InboxPage from './pages/InboxPage.jsx';
+import TrashPage from './pages/TrashPage.jsx';
 import UsersPage from './pages/admin/UsersPage.jsx';
 
 export default function App() {
@@ -16,9 +18,9 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route index element={<PlaceholderPage kind="search" />} />
             <Route path="hulls" element={<PlaceholderPage kind="hulls" />} />
-            <Route path="inbox" element={<PlaceholderPage kind="inbox" />} />
+            <Route path="inbox" element={<InboxPage />} />
             <Route path="tags" element={<PlaceholderPage kind="tags" />} />
-            <Route path="trash" element={<PlaceholderPage kind="trash" />} />
+            <Route path="trash" element={<TrashPage />} />
             <Route path="log" element={<AuditLogPage />} />
             <Route element={<RequireAuth adminOnly />}>
               <Route path="admin" element={<Navigate to="/admin/users" replace />} />

@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
-
-const ACTION_LABELS = {
-  USER_REGISTER: '가입 신청', USER_APPROVE: '가입 승인', USER_REJECT: '가입 거절',
-  USER_DISABLE: '계정 비활성화', USER_ENABLE: '계정 재활성화',
-  USER_ADMIN_GRANT: '관리자 지정', USER_ADMIN_REVOKE: '관리자 해제', ADMIN_BOOTSTRAP: '관리자 초기 설정',
-};
+import { ACTION_LABELS } from '../lib/labels.js';
 
 export default function AuditLogPage() {
   const [rows, setRows] = useState([]);
@@ -25,7 +20,7 @@ export default function AuditLogPage() {
       <ul className="mt-4 divide-y divide-line rounded-lg border border-line bg-white">
         {rows.map((r) => (
           <li key={r.id} className="flex gap-4 px-4 py-2.5 text-[13px]">
-            <span className="w-36 shrink-0 font-mono text-zinc-500">{r.at.replace('T', ' ')}</span>
+            <span className="w-40 shrink-0 whitespace-nowrap font-mono text-zinc-500">{r.at.replace('T', ' ')}</span>
             <span className="w-24 shrink-0 font-mono">{r.employee_id || 'system'}</span>
             <span className="font-medium">{ACTION_LABELS[r.action] || r.action}</span>
             <span className="font-mono text-zinc-600">{r.target.id}</span>

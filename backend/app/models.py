@@ -152,7 +152,7 @@ class Batch(Base):
     key = Column(String(24), unique=True, nullable=False)  # 20260929-083015-a1b2
     source = Column(String(10), nullable=False)            # inbox | web
     original_name = Column(String(255), nullable=False)
-    state = Column(String(12), nullable=False, default="staged")  # staged|processed|failed|done
+    state = Column(String(12), nullable=False, default="staged")  # uploading|staged|processed|failed|done
     owner_account = Column(String(64), nullable=True)
     uploader_guess = Column(String(20), nullable=True)
     uploader = Column(String(20), nullable=True, index=True)

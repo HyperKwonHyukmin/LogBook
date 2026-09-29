@@ -18,6 +18,7 @@ from .entries.files import write_entry_files
 from .ingest.inbox import InboxWatcher, stage_item
 from .ingest.process import process_batch
 from .storage.paths import StoragePaths, to_long
+from .uploads.service import cleanup_stale
 
 log = logging.getLogger("logbook.worker")
 POLL_SECONDS = 30
@@ -32,6 +33,10 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
     recovered = jobs.recover_running(db, older_than=STUCK_JOB_AFTER)
     if recovered:
         log.warning("%d분 넘게 멈춰 있던 작업 %d개를 복구했습니다.", STUCK_JOB_AFTER.seconds // 60, recovered)
+
+    removed = cleanup_stale(db, storage)
+    if removed:
+        log.info("끝나지 않은 웹 업로드 %d건을 정리했습니다.", removed)
 
     stats = {"staged": 0, "processed": 0, "failed": 0}
     for item in watcher.poll():

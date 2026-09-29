@@ -7,7 +7,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { api, tokenStore, TOKEN_KEY } from '../api/client.js';
 
 export const SAVED_EMPLOYEE_ID_KEY = 'logbook_saved_employee_id';
-const AuthContext = createContext(null);
+export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);

@@ -102,6 +102,11 @@ class StoragePaths:
         return self.root / "00_Inbox"
 
     @property
+    def web_inbox(self) -> Path:
+        """크롬 업로드분이 조각으로 쌓이는 곳(`00_Inbox\\_web\\<key>`). Inbox 감시기는 `_web` 을 건너뛴다."""
+        return self.inbox / "_web"
+
+    @property
     def vault(self) -> Path:
         return self.root / "10_Vault"
 

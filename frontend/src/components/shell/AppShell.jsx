@@ -14,7 +14,7 @@ export default function AppShell() {
       <DisconnectedBanner storage={storage} />
       <div className="flex min-h-0 flex-1">
         <SideNav isAdmin={isAdmin} storage={storage} />
-        <main className="min-w-0 flex-1 overflow-auto"><Outlet /></main>
+        <main className="min-w-0 flex-1 overflow-auto"><Outlet context={{ storage }} /></main>
       </div>
     </div>
   );

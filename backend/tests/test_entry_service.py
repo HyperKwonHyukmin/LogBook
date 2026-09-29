@@ -154,3 +154,30 @@ def test_confirm_with_no_batch_is_conflict(db, storage, make_user):
     with pytest.raises(HTTPException) as ei:
         service.confirm(db, storage, e, u)
     assert ei.value.detail == "no_batch"
+
+
+def test_entry_to_dict_resolves_duplicate_and_suggestion_numbers(db):
+    from app import models
+    from app.entries.service import entry_to_dict
+
+    batch = models.Batch(key="k1", source="web", original_name="x", state="processed")
+    db.add(batch)
+    db.flush()
+    old = models.Entry(title="기존", status="confirmed", entry_id="E000045")
+    db.add(old)
+    db.flush()
+    old_file = models.File(batch_id=batch.id, entry_id=old.id, rel_path="a.bdf", name="a.bdf", ext=".bdf",
+                           kind="model", size=1, sha256="0" * 64, location="vault")
+    db.add(old_file)
+    db.flush()
+    draft = models.Entry(title="새", status="draft", entry_id="E000046", batch_id=batch.id,
+                         suggested_entry_id=old.id, merge_into_id=old.id)
+    db.add(draft)
+    db.flush()
+    db.add(models.File(batch_id=batch.id, entry_id=draft.id, rel_path="a.bdf", name="a.bdf", ext=".bdf",
+                       kind="model", size=1, sha256="0" * 64, location="staging", duplicate_of_id=old_file.id))
+    db.commit()
+    d = entry_to_dict(db, draft)
+    assert d["files"][0]["duplicate_of_entry"] == "E000045"
+    assert d["suggested_entry"] == {"entry_id": "E000045", "title": "기존"}
+    assert d["merge_into"] == {"entry_id": "E000045", "title": "기존"}
