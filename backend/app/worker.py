@@ -15,6 +15,7 @@ from . import jobs, models
 from .database import Base, SessionLocal, engine
 from .dependencies import get_storage
 from .entries.files import write_entry_files
+from .extract.job import mark_failed, run_extract
 from .ingest.inbox import InboxWatcher, stage_item
 from .ingest.process import process_batch
 from .storage.paths import StoragePaths, to_long
@@ -24,6 +25,10 @@ log = logging.getLogger("logbook.worker")
 POLL_SECONDS = 30
 MAX_ATTEMPTS = 3
 STUCK_JOB_AFTER = timedelta(minutes=10)
+# 한 주기에서 본문 추출에 쓰는 시간 상한(초). 넘으면 남은 추출 작업은 다음 주기로 미뤄
+# Inbox 감시와 배치 처리가 주기마다 돌아오게 한다(다른 종류 작업은 계속 처리한다).
+EXTRACT_BUDGET_SECONDS = 120
+_clock = time.monotonic  # 테스트가 바꿔 끼운다
 
 
 def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
@@ -47,7 +52,12 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
         except OSError as exc:
             db.rollback()
             log.warning("배치 받기 실패(다음 주기에 재시도): %s — %s", item.name, exc)
-    while (job := jobs.claim_next(db)) is not None:
+    started = _clock()
+    while True:
+        over_budget = _clock() - started >= EXTRACT_BUDGET_SECONDS
+        job = jobs.claim_next(db, exclude_types=("extract_file",) if over_budget else ())
+        if job is None:
+            break
         try:
             if job.type == "process_batch":
                 batch = db.get(models.Batch, job.target_id)
@@ -59,6 +69,11 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
                 if entry is None:
                     raise RuntimeError(f"Entry 를 찾을 수 없음: {job.target_id}")
                 write_entry_files(db, storage, entry)
+            elif job.type == "extract_file":
+                f = db.get(models.File, job.target_id)
+                if f is None:
+                    raise RuntimeError(f"파일을 찾을 수 없음: {job.target_id}")
+                run_extract(db, storage, f)
             else:
                 raise RuntimeError(f"알 수 없는 작업: {job.type} {job.target_id}")
             jobs.complete(db, job)
@@ -72,6 +87,9 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
                 if batch is not None:
                     batch.state, batch.error = "failed", str(exc)[:2000]
                     db.commit()
+            elif job.state == "failed" and job.type == "extract_file":
+                # 끝내 못 읽은 파일(이동 중·잠김·경로 없음) — 추출 상태가 queued 로 영영 남지 않게 한다
+                mark_failed(db, job.target_id, str(exc))
             stats["failed"] += 1
             log.exception("작업 처리 실패: %s %s", job.type, job.target_id)
     return stats

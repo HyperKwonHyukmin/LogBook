@@ -20,6 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects import mysql
 
 from .database import Base
 
@@ -195,3 +196,52 @@ class Job(Base):
     last_error = Column(Text, nullable=True)
     run_after = Column(DateTime, nullable=False, default=_now)
     updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
+
+
+# 본문 조각 하나가 64KB(TEXT) 를 넘을 수 있어 MySQL 에서는 MEDIUMTEXT(16MB) 를 쓴다.
+LONG_TEXT = Text().with_variant(mysql.MEDIUMTEXT(), "mysql")
+
+EXTRACT_STATES = ("queued", "done", "failed", "skipped")
+
+
+class FileExtract(Base):
+    """파일 본문 추출 상태와 규칙 기반 요약 카드(설계 §5.2).
+
+    files 표에 열을 더하지 않고 표를 따로 둔다 — 이 저장소는 마이그레이션 도구 없이
+    create_all 로만 표를 만들어서, 기존 표에 더한 열은 운영 DB 에 생기지 않는다."""
+
+    __tablename__ = "file_extracts"
+
+    file_id = Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), primary_key=True)
+    state = Column(String(10), nullable=False, default="queued")
+    error = Column(String(500), nullable=True)   # skipped 사유(drm·too_large·trashed) 또는 실패 메시지
+    summary = Column(JSON, nullable=True)        # 요약 카드 — extract.base.finish_summary() 참고
+    chars = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
+
+
+class FileText(Base):
+    """쪽·슬라이드·시트 단위 본문. ngram 전문 색인으로 한글 부분 일치를 찾는다(설계 §4)."""
+
+    __tablename__ = "file_texts"
+    __table_args__ = (
+        Index("ft_file_texts_text", "text", mysql_prefix="FULLTEXT", mysql_with_parser="ngram"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    file_id = Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), nullable=False, index=True)
+    seq = Column(Integer, nullable=False)
+    locator = Column(String(120), nullable=False)  # page:3 | slide:5 | notes:5 | sheet:<이름> | body
+    text = Column(LONG_TEXT, nullable=False)
+
+
+class DownloadToken(Base):
+    """짧게 사는 내려받기 링크. <iframe>·<a> 는 Authorization 헤더를 붙일 수 없어서
+    API 가 토큰을 주소에 담은 링크를 만들어 준다. 세션 토큰을 주소에 싣지 않기 위한 것이다."""
+
+    __tablename__ = "download_tokens"
+
+    token = Column(String(36), primary_key=True)
+    file_id = Column(Integer, nullable=False)
+    employee_id = Column(String(20), nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)

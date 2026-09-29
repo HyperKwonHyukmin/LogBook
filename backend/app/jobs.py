@@ -18,12 +18,18 @@ def enqueue(db: Session, job_type: str, target_id: int) -> models.Job:
     return job
 
 
-def claim_next(db: Session, now: datetime | None = None) -> models.Job | None:
+# 오래 걸리는 본문 추출은 뒤로 미룬다 — 추출이 수천 건 쌓여도 배치 처리·메타 쓰기가 먼저 돈다.
+LOW_PRIORITY_TYPES = ("extract_file",)
+
+
+def claim_next(db: Session, now: datetime | None = None, *,
+               exclude_types: tuple[str, ...] = ()) -> models.Job | None:
     now = now or _now()
+    q = db.query(models.Job).filter(models.Job.state == "queued", models.Job.run_after <= now)
+    if exclude_types:
+        q = q.filter(models.Job.type.notin_(exclude_types))
     job = (
-        db.query(models.Job)
-        .filter(models.Job.state == "queued", models.Job.run_after <= now)
-        .order_by(models.Job.id)
+        q.order_by(models.Job.type.in_(LOW_PRIORITY_TYPES), models.Job.id)
         .with_for_update(skip_locked=True)
         .first()
     )

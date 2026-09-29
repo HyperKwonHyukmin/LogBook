@@ -7,7 +7,10 @@ import { errorText, formatBytes } from '../../lib/labels.js';
 const BUSY_NOTICE = '올리는 중입니다. 지금 올리기가 끝난 뒤 다시 놓아 주세요.';
 
 /** 폴더·여러 파일 끌어 놓기/선택 → 한 배치로 올린다. DRM 파일은 거부하고 탐색기 경로를 안내한다. */
-export default function UploadZone({ onUploaded, disabled = false }) {
+/**
+ * targetEntryId: 기존 Entry 에 추가로 올릴 때. showSuccess=false 면 성공 문구를 부모가 대신 보인다.
+ */
+export default function UploadZone({ onUploaded, disabled = false, targetEntryId, showSuccess = true }) {
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(null);
@@ -39,7 +42,7 @@ export default function UploadZone({ onUploaded, disabled = false }) {
     if (!items.length || busy) return;
     setBusy(true); setError(''); setNotice(''); setResult(null); setProgress({ sent: 0, total: 1 });
     try {
-      const res = await uploadBatch(items, { onProgress: setProgress });
+      const res = await uploadBatch(items, { onProgress: setProgress, targetEntryId });
       setResult(res);
       onUploaded(res.key);
     } catch (err) {
@@ -85,7 +88,7 @@ export default function UploadZone({ onUploaded, disabled = false }) {
           </div>
         </div>
       )}
-      {result && result.uploaded > 0 && (
+      {showSuccess && result && result.uploaded > 0 && (
         <p role="status" className="mt-3 text-[13px] text-ok">{result.uploaded}개 파일을 올렸습니다. 잠시 뒤 아래에 묶음 제안이 나타납니다.</p>
       )}
       {notice && busy && <p className="mt-2 text-xs text-wait">{notice}</p>}

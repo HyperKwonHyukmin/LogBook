@@ -24,6 +24,34 @@ if not database.engine.url.database.endswith("_test"):
     raise RuntimeError(f"엔진이 가리키는 DB 도 _test 로 끝나야 합니다: {database.engine.url.database}")
 
 
+def _use_plain_pptx_template() -> None:
+    """개발 PC 의 사내 DRM 이 .venv 안 python-pptx 기본 서식(default.pptx)을 사후에 암호화한다
+    (HHIDRMC 헤더 — 설치 직후 평문으로 되돌려도 얼마 뒤 다시 감싸진다). 그러면 테스트가 메모리에서
+    PPTX 를 만들 때 쓰는 `Presentation()` 이 PackageNotFoundError 로 죽는다.
+
+    설치본이 암호화돼 있을 때만, 같은 라이브러리(python-pptx 1.0.2)의 빈 서식을 DRM 대상이 아닌
+    `.bin` 확장자로 둔 사본(tests/fixtures/pptx_default_template.bin)으로 바꿔 끼운다.
+    python-pptx 는 경로 대신 파일 객체도 받으므로 바이트로 넘긴다. 운영 코드는 서식을 쓰지 않는다
+    (추출은 공유 폴더의 기존 파일만 읽는다)."""
+    import io
+
+    import pptx.api
+
+    try:
+        with open(pptx.api._default_pptx_path(), "rb") as fh:
+            if fh.read(2) == b"PK":
+                return
+    except OSError:
+        pass
+    data = (Path(__file__).parent / "fixtures" / "pptx_default_template.bin").read_bytes()
+    pptx.api._default_pptx_path = lambda: io.BytesIO(data)
+
+
+from pathlib import Path  # noqa: E402
+
+_use_plain_pptx_template()
+
+
 @pytest.fixture(autouse=True)
 def _clear_reachability_cache():
     """StoragePaths.check_reachable() 의 TTL 캐시를 테스트마다 비운다(같은 루트를 쓰는
@@ -147,3 +175,49 @@ def auth_headers(client):
         return {"Authorization": f"Bearer {res.json()['token']}"}
 
     return _headers
+
+
+@pytest.fixture
+def make_entry_file(db):
+    """Entry(+배치) 와 파일 행을 한 번에 만든다(03 검색·추출 테스트 공용).
+
+    entry 를 넘기면 그 Entry 에 파일만 더한다. 디스크에는 아무것도 쓰지 않는다 —
+    디스크 파일이 필요한 테스트는 돌려받은 File 의 경로에 직접 쓴다."""
+    from datetime import datetime
+
+    from app import models
+
+    seq = {"n": 0}
+
+    def _make(*, entry=None, status="confirmed", title="구조 검토", hulls=("9999",), name="a.pdf",
+              kind="report", uploaded_by="A100001", analysis_type=None, period=None, sha=None,
+              location=None, confirmed_at=datetime(2026, 9, 1, 9, 0, 0)):
+        seq["n"] += 1
+        n = seq["n"]
+        if entry is None:
+            b = models.Batch(key=f"20260929-{n:06d}-test", source="inbox", original_name=title,
+                             uploader=uploaded_by)
+            db.add(b)
+            db.flush()
+            entry = models.Entry(title=title, status=status, batch_id=b.id, uploaded_by=uploaded_by,
+                                 analysis_type=analysis_type, analysis_period=period,
+                                 confirmed_at=confirmed_at if status == "confirmed" else None,
+                                 confirmed_by=uploaded_by if status == "confirmed" else None)
+            db.add(entry)
+            db.flush()
+            entry.entry_id = f"E{entry.id:06d}"
+            if status in ("confirmed", "trashed"):
+                entry.vault_rel = f"2026/{entry.entry_id}"
+            for i, h in enumerate(hulls):
+                db.add(models.EntryHull(entry_id=entry.id, hull_no=h, is_primary=(i == 0)))
+                if status == "confirmed" and db.get(models.Hull, h) is None:
+                    db.add(models.Hull(hull_no=h))
+        loc = location or {"confirmed": "vault", "draft": "staging", "trashed": "trash"}[entry.status]
+        ext = "." + name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        f = models.File(batch_id=entry.batch_id, entry_id=entry.id, rel_path=name, name=name.split("/")[-1],
+                        ext=ext, kind=kind, size=10, sha256=sha or f"{n:064d}", location=loc)
+        db.add(f)
+        db.commit()
+        return entry, f
+
+    return _make

@@ -66,3 +66,12 @@ test('올리는 중이어도 화면 안의 파일 옮기기 끌기(초안 카드
   await new Promise((r) => { setTimeout(r, 20); });
   expect(screen.queryByText(/올리는 중입니다/)).toBeNull();
 });
+
+test('showSuccess=false 면 묶음 제안 안내 문구를 띄우지 않는다(기존 자료에 추가할 때)', async () => {
+  uploadBatch.mockResolvedValue({ key: 'K2', uploaded: 2, rejected: [] });
+  const onUploaded = vi.fn();
+  render(<UploadZone onUploaded={onUploaded} showSuccess={false} />);
+  await userEvent.upload(screen.getByLabelText('파일 선택'), [new File(['GRID'], 'a.bdf')]);
+  await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('K2'));
+  expect(screen.queryByText(/묶음 제안이 나타납니다/)).toBeNull();
+});

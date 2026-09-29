@@ -112,7 +112,8 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry) -
 
     d = entry_to_dict(db, entry)
     meta = {k: d[k] for k in ("entry_id", "title", "analysis_type", "description", "analysis_period",
-                              "hulls", "zones", "uploaded_by", "confirmed_by", "confirmed_at", "version")}
+                              "hulls", "zones", "tags", "uploaded_by", "confirmed_by", "confirmed_at",
+                              "version")}
     meta["files"] = [{k: f[k] for k in ("rel_path", "kind", "size", "sha256")} for f in d["files"]]
     base = entry_dir(storage, entry)
     os.makedirs(to_long(base), exist_ok=True)
@@ -120,6 +121,7 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry) -
         json.dump(meta, fh, ensure_ascii=False, indent=2)
     hulls = ", ".join(h["hull_no"] + (f" ({h['ship_type']})" if h["ship_type"] else "") for h in d["hulls"])
     info = (f"{d['entry_id']}  {d['title']}\n호선: {hulls or '-'}\n구역: {', '.join(d['zones']) or '-'}\n"
+            f"태그: {', '.join(d['tags']) or '-'}\n"
             f"올린 사람: {d['uploaded_by'] or '-'}  확정: {d['confirmed_by'] or '-'} {d['confirmed_at'] or ''}\n"
             f"파일 {len(d['files'])}개 — 원본은 files 폴더. 이 폴더는 Logbook 이 관리합니다(직접 수정 금지).\n")
     with open(to_long(base / "_INFO.txt"), "w", encoding="utf-8") as fh:

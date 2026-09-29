@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..entries.files import remove_empty_dirs
+from ..extract.job import enqueue_extract
 from ..storage.paths import StoragePaths, to_long
 from .hashing import sha256_of
 from .proposal import FileInfo, propose
@@ -117,6 +118,10 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch) -> No
         for key in p.file_keys:
             rows[key].entry_id = entry.id
         created += 1
+
+    # 보고서 본문 추출은 워커가 따로 처리한다(배치 처리를 무겁게 만들지 않게).
+    for f in rows.values():
+        enqueue_extract(db, f)
 
     # 웹 업로드가 미리 적어 둔 DRM 거부 목록 등을 지우지 않는다(process_batch 는 배치당 한 번만 돈다).
     batch.excluded = list(batch.excluded or []) + excluded

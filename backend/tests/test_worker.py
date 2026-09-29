@@ -22,10 +22,14 @@ def test_run_once_end_to_end(db, storage, make_user):
     w = InboxWatcher(storage, stable_seconds=60, clock=clock, owner_of=lambda p: "a476854")
     assert run_once(db, storage, w) == {"staged": 0, "processed": 0, "failed": 0}
     clock.t += 61
-    assert run_once(db, storage, w) == {"staged": 1, "processed": 1, "failed": 0}
+    # process_batch 1 + 검토.pdf 본문 추출(extract_file) 1. 가짜 PDF 라 추출은 failed 로
+    # 기록되지만 작업 자체는 완료 처리된다(깨진 문서는 재시도해도 같다).
+    assert run_once(db, storage, w) == {"staged": 1, "processed": 2, "failed": 0}
     db.expire_all()
     [e] = db.query(models.Entry).all()
     assert e.title == "3496 Mooring 검토" and e.uploaded_by == "A476854"
+    [x] = db.query(models.FileExtract).all()
+    assert db.get(models.File, x.file_id).name == "검토.pdf" and x.state == "failed"
 
 
 def test_failed_processing_marks_batch_after_retries(db, storage, monkeypatch):
@@ -147,3 +151,60 @@ def test_run_once_cleans_stale_web_uploads(db, storage, make_user):
     db.commit()
     run_once(db, storage, InboxWatcher(storage))
     assert db.query(models.Batch).filter_by(key=b.key).count() == 0
+
+
+def _extract_jobs(db, make_entry_file, n):
+    out = []
+    for i in range(n):
+        _e, f = make_entry_file(name=f"r{i}.pdf")
+        db.add(models.FileExtract(file_id=f.id, state="queued"))
+        out.append(f)
+    db.commit()
+    return out
+
+
+def test_extract_job_final_failure_marks_extract_failed(db, storage, make_entry_file, monkeypatch):
+    """파일을 끝내 못 읽어 작업이 최종 실패하면 추출 상태도 queued 로 남지 않고 failed 가 된다."""
+    import app.worker as worker
+
+    [f] = _extract_jobs(db, make_entry_file, 1)
+    db.add(models.Job(type="extract_file", target_id=f.id, attempts=worker.MAX_ATTEMPTS - 1))
+    db.commit()
+
+    def boom(*a, **k):
+        raise OSError("공유 폴더 끊김")
+
+    monkeypatch.setattr(worker, "run_extract", boom)
+    stats = run_once(db, storage, InboxWatcher(storage))
+    assert stats["failed"] == 1
+    db.expire_all()
+    row = db.get(models.FileExtract, f.id)
+    assert row.state == "failed" and "공유 폴더 끊김" in row.error
+
+
+def test_extract_budget_leaves_rest_queued(db, storage, make_entry_file, monkeypatch):
+    """한 주기에서 본문 추출에 쓰는 시간을 제한한다 — 예산을 넘으면 남은 추출 작업은 다음 주기로
+    미루고, 다른 종류 작업은 계속 처리한다."""
+    import app.worker as worker
+
+    files = _extract_jobs(db, make_entry_file, 3)
+    for f in files:
+        db.add(models.Job(type="extract_file", target_id=f.id))
+    db.commit()
+    ran = []
+    monkeypatch.setattr(worker, "run_extract", lambda db, storage, f: ran.append(f.id))
+    ticks = iter([0.0, 0.0] + [1000.0] * 50)  # 시작 시각, 첫 확인은 예산 안, 그 뒤로는 초과
+    monkeypatch.setattr(worker, "_clock", lambda: next(ticks))
+    run_once(db, storage, InboxWatcher(storage))
+    assert ran == [files[0].id]
+    # 예산을 넘긴 뒤에도 추출 아닌 작업은 돈다
+    monkeypatch.setattr(worker, "EXTRACT_BUDGET_SECONDS", 0)
+    monkeypatch.setattr(worker, "_clock", lambda: 5.0)
+    e, _f = make_entry_file(name="x.pdf")
+    db.add(models.Job(type="write_meta", target_id=e.id))
+    db.commit()
+    run_once(db, storage, InboxWatcher(storage))
+    db.expire_all()
+    states = {j.target_id: j.state for j in db.query(models.Job).filter_by(type="extract_file")}
+    assert states == {files[0].id: "done", files[1].id: "queued", files[2].id: "queued"}
+    assert db.query(models.Job).filter_by(type="write_meta").one().state == "done"

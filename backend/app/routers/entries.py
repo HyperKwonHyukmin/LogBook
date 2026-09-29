@@ -7,6 +7,7 @@ from .. import models
 from ..database import get_db
 from ..dependencies import client_ip, get_storage, require_auth
 from ..entries import service
+from ..entries.files import entry_dir
 from ..storage.paths import StoragePaths
 
 router = APIRouter(prefix="/api", tags=["entries"])
@@ -20,6 +21,7 @@ class EntryPatch(BaseModel):
     analysis_period: str | None = None
     hulls: list[str] | None = None
     zones: list[str] | None = None
+    tags: list[str] | None = None
     merge_into_id: str | None = None
 
 
@@ -42,9 +44,29 @@ def _entry(db: Session, entry_id: str) -> models.Entry:
     return e
 
 
+def _detail(db: Session, storage: StoragePaths, e: models.Entry) -> dict:
+    """상세 응답 — Entry 사전 + 공유 폴더 경로(확정 Entry 만, 화면의 '경로 복사'용)."""
+    d = service.entry_to_dict(db, e)
+    d["vault_unc"] = str(entry_dir(storage, e)) if e.status == "confirmed" and e.vault_rel else None
+    return d
+
+
 @router.get("/entries/{entry_id}")
-def get_entry(entry_id: str, db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
-    return service.entry_to_dict(db, _entry(db, entry_id))
+def get_entry(entry_id: str, db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage),
+              user: models.User = Depends(require_auth)):
+    return _detail(db, storage, _entry(db, entry_id))
+
+
+@router.get("/entries/{entry_id}/history")
+def entry_history(entry_id: str, db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
+    """이 Entry 의 변경 이력(감사 로그) — 최근 것부터 200건."""
+    e = _entry(db, entry_id)
+    rows = (db.query(models.AuditLog).filter_by(target_type="entry", target_id=e.entry_id)
+            .order_by(models.AuditLog.at.desc(), models.AuditLog.id.desc()).limit(200).all())
+    names = dict(db.query(models.User.employee_id, models.User.name)
+                 .filter(models.User.employee_id.in_({r.employee_id for r in rows if r.employee_id} or {""})))
+    return [{"at": r.at.isoformat(), "employee_id": r.employee_id, "name": names.get(r.employee_id),
+             "action": r.action, "before": r.before, "after": r.after} for r in rows]
 
 
 @router.patch("/entries/{entry_id}")
@@ -52,14 +74,14 @@ def patch_entry(entry_id: str, body: EntryPatch, request: Request, db: Session =
                 storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
     e = service.update_entry(db, storage, _entry(db, entry_id), user, body.model_dump(exclude_unset=True),
                              client_ip(request))
-    return service.entry_to_dict(db, e)
+    return _detail(db, storage, e)
 
 
 @router.post("/entries/{entry_id}/confirm")
 def confirm_entry(entry_id: str, request: Request, db: Session = Depends(get_db),
                   storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
     e = service.confirm(db, storage, _entry(db, entry_id), user, client_ip(request))
-    return service.entry_to_dict(db, e)
+    return _detail(db, storage, e)
 
 
 @router.post("/entries/{entry_id}/split")
@@ -96,7 +118,7 @@ def trash_entry(entry_id: str, request: Request, db: Session = Depends(get_db),
 def restore_entry(entry_id: str, request: Request, db: Session = Depends(get_db),
                   storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
     e = service.restore(db, storage, _entry(db, entry_id), user, client_ip(request))
-    return service.entry_to_dict(db, e)
+    return _detail(db, storage, e)
 
 
 @router.get("/trash")

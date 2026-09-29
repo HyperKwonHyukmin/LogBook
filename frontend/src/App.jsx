@@ -3,9 +3,13 @@ import { AuthProvider } from './auth/AuthContext.jsx';
 import RequireAuth from './auth/RequireAuth.jsx';
 import AppShell from './components/shell/AppShell.jsx';
 import LoginPage from './pages/LoginPage.jsx';
-import PlaceholderPage from './pages/PlaceholderPage.jsx';
 import AuditLogPage from './pages/AuditLogPage.jsx';
+import EntryPage from './pages/EntryPage.jsx';
+import HullPage from './pages/HullPage.jsx';
+import HullsPage from './pages/HullsPage.jsx';
 import InboxPage from './pages/InboxPage.jsx';
+import SearchPage from './pages/SearchPage.jsx';
+import TagsPage from './pages/TagsPage.jsx';
 import TrashPage from './pages/TrashPage.jsx';
 import UsersPage from './pages/admin/UsersPage.jsx';
 
@@ -16,10 +20,12 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
-            <Route index element={<PlaceholderPage kind="search" />} />
-            <Route path="hulls" element={<PlaceholderPage kind="hulls" />} />
+            <Route index element={<SearchPage />} />
+            <Route path="hulls" element={<HullsPage />} />
+            <Route path="h/:hullNo" element={<HullPage />} />
+            <Route path="e/:entryId" element={<EntryPage />} />
             <Route path="inbox" element={<InboxPage />} />
-            <Route path="tags" element={<PlaceholderPage kind="tags" />} />
+            <Route path="tags" element={<TagsPage />} />
             <Route path="trash" element={<TrashPage />} />
             <Route path="log" element={<AuditLogPage />} />
             <Route element={<RequireAuth adminOnly />}>

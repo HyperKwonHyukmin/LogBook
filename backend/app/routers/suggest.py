@@ -10,15 +10,16 @@ router = APIRouter(prefix="/api", tags=["suggest"])
 
 
 @router.get("/suggest")
-def suggest(kind: str = Query(pattern="^(hull|zone|analysis_type)$"), q: str = "",
+def suggest(kind: str = Query(pattern="^(hull|zone|tag|analysis_type)$"), q: str = "",
             limit: int = Query(default=10, ge=1, le=50),
             db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
     q = q.strip()
     if kind == "hull":
         rows = (db.query(models.Hull.hull_no).filter(models.Hull.hull_no.like(f"{q}%"))
                 .order_by(models.Hull.hull_no).limit(limit))
-    elif kind == "zone":
-        rows = (db.query(models.Tag.value).filter(models.Tag.kind == "zone", models.Tag.value.like(f"%{q}%"))
+    elif kind in ("zone", "tag"):
+        tag_kind = "zone" if kind == "zone" else "free"  # tag = 자유 태그
+        rows = (db.query(models.Tag.value).filter(models.Tag.kind == tag_kind, models.Tag.value.like(f"%{q}%"))
                 .order_by(models.Tag.value).limit(limit))
     else:
         rows = (db.query(models.Entry.analysis_type).distinct()

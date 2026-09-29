@@ -54,3 +54,24 @@ def test_recover_running_older_than_filters_recent_jobs(db):
     db.expire_all()
     assert db.get(models.Job, fresh.id).state == "running"   # 방금 것은 그대로
     assert db.get(models.Job, stale.id).state == "queued"    # 오래된 것만 복구
+
+
+def test_claim_prefers_non_extract_jobs(db):
+    """본문 추출이 쌓여도 배치 처리·메타 쓰기가 먼저 돈다(워커 굶주림 방지)."""
+    jobs.enqueue(db, "extract_file", 1)
+    jobs.enqueue(db, "extract_file", 2)
+    jobs.enqueue(db, "write_meta", 3)
+    jobs.enqueue(db, "process_batch", 4)
+    db.commit()
+    order = []
+    while (job := jobs.claim_next(db)) is not None:
+        order.append((job.type, job.target_id))
+        jobs.complete(db, job)
+    assert order == [("write_meta", 3), ("process_batch", 4), ("extract_file", 1), ("extract_file", 2)]
+
+
+def test_claim_can_exclude_types(db):
+    jobs.enqueue(db, "extract_file", 1)
+    db.commit()
+    assert jobs.claim_next(db, exclude_types=("extract_file",)) is None
+    assert jobs.claim_next(db).type == "extract_file"

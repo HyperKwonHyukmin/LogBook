@@ -23,18 +23,25 @@ def hulls_of(db: Session, entry: models.Entry) -> list[models.EntryHull]:
             .order_by(models.EntryHull.is_primary.desc(), models.EntryHull.hull_no).all())
 
 
-def zones_of(db: Session, entry: models.Entry) -> list[str]:
+def tags_of(db: Session, entry: models.Entry, kind: str) -> list[str]:
     rows = (db.query(models.Tag.value).join(models.EntryTag, models.EntryTag.tag_id == models.Tag.id)
-            .filter(models.EntryTag.entry_id == entry.id, models.Tag.kind == "zone")
+            .filter(models.EntryTag.entry_id == entry.id, models.Tag.kind == kind)
             .order_by(models.Tag.value).all())
     return [v for (v,) in rows]
 
 
-def file_to_dict(f: models.File, duplicate_entries: dict[int, str] | None = None) -> dict:
+def zones_of(db: Session, entry: models.Entry) -> list[str]:
+    return tags_of(db, entry, "zone")
+
+
+def file_to_dict(f: models.File, duplicate_entries: dict[int, str] | None = None,
+                 extracts: dict[int, models.FileExtract] | None = None) -> dict:
+    x = (extracts or {}).get(f.id)
     return {"id": f.id, "rel_path": f.rel_path, "name": f.name, "kind": f.kind, "size": f.size,
             "sha256": f.sha256, "drm_encrypted": f.drm_encrypted, "duplicate_of_id": f.duplicate_of_id,
             "duplicate_of_entry": (duplicate_entries or {}).get(f.duplicate_of_id),
-            "location": f.location}
+            "location": f.location,
+            "extract": {"state": x.state, "error": x.error, "summary": x.summary} if x else None}
 
 
 def _entry_ref(db: Session, entry_pk: int | None) -> dict | None:
@@ -53,6 +60,8 @@ def entry_to_dict(db: Session, entry: models.Entry) -> dict:
     dup_entries = dict(
         db.query(models.File.id, models.Entry.entry_id).join(models.Entry, models.Entry.id == models.File.entry_id)
         .filter(models.File.id.in_(dup_ids)).all()) if dup_ids else {}
+    extracts = {x.file_id: x for x in db.query(models.FileExtract)
+                .filter(models.FileExtract.file_id.in_([f.id for f in files]))} if files else {}
     return {
         "id": entry.id, "entry_id": entry.entry_id, "status": entry.status, "title": entry.title,
         "analysis_type": entry.analysis_type, "description": entry.description,
@@ -60,12 +69,13 @@ def entry_to_dict(db: Session, entry: models.Entry) -> dict:
         "hulls": [{"hull_no": h.hull_no, "ship_type": ship.get(h.hull_no), "is_primary": bool(h.is_primary)}
                   for h in hulls],
         "zones": zones_of(db, entry),
+        "tags": tags_of(db, entry, "free"),
         "hull_evidence": entry.hull_evidence or [],
         "uploaded_by": entry.uploaded_by, "confirmed_by": entry.confirmed_by,
         "confirmed_at": entry.confirmed_at.isoformat() if entry.confirmed_at else None,
         "batch_id": entry.batch_id, "merge_into_id": entry.merge_into_id,
         "suggested_entry_id": entry.suggested_entry_id, "vault_rel": entry.vault_rel,
-        "files": [file_to_dict(f, dup_entries) for f in files],
+        "files": [file_to_dict(f, dup_entries, extracts) for f in files],
         "suggested_entry": _entry_ref(db, entry.suggested_entry_id),
         "merge_into": _entry_ref(db, entry.merge_into_id),
     }
@@ -73,7 +83,7 @@ def entry_to_dict(db: Session, entry: models.Entry) -> dict:
 
 def snapshot(db: Session, entry: models.Entry) -> dict:
     d = entry_to_dict(db, entry)
-    return {k: d[k] for k in ("title", "analysis_type", "description", "analysis_period", "zones")} | {
+    return {k: d[k] for k in ("title", "analysis_type", "description", "analysis_period", "zones", "tags")} | {
         "hulls": [h["hull_no"] for h in d["hulls"]]}
 
 
@@ -110,15 +120,30 @@ def set_hulls(db: Session, entry: models.Entry, hull_nos: list[str]) -> None:
         db.add(models.EntryHull(entry_id=entry.id, hull_no=h, is_primary=(i == 0)))
 
 
-def set_zones(db: Session, entry: models.Entry, values: list[str]) -> None:
-    db.query(models.EntryTag).filter_by(entry_id=entry.id).delete(synchronize_session=False)
-    for v in dict.fromkeys(x.strip() for x in values if x.strip()):
-        tag = db.query(models.Tag).filter_by(kind="zone", value=v[:100]).first()
+def set_tags(db: Session, entry: models.Entry, kind: str, values: list[str]) -> None:
+    """이 종류(kind)의 태그만 바꾼다 — 다른 종류(구역 ↔ 자유 태그)는 건드리지 않는다."""
+    old = [i for (i,) in db.query(models.EntryTag.tag_id).join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
+           .filter(models.EntryTag.entry_id == entry.id, models.Tag.kind == kind)]
+    if old:
+        db.query(models.EntryTag).filter(models.EntryTag.entry_id == entry.id,
+                                         models.EntryTag.tag_id.in_(old)).delete(synchronize_session=False)
+    added: set[int] = set()
+    for v in dict.fromkeys(x.strip()[:100] for x in values if x and x.strip()):
+        tag = db.query(models.Tag).filter_by(kind=kind, value=v).first()
         if tag is None:
-            tag = models.Tag(kind="zone", value=v[:100])
+            tag = models.Tag(kind=kind, value=v)
             db.add(tag)
             db.flush()
+        # FWD·fwd 처럼 대소문자만 다른 값은 MySQL 정렬 규칙상 같은 태그 한 개다. 세션이 autoflush 를
+        # 끄고 있어 DB 조회로는 방금 더한 행이 안 보이므로, 이번 호출에서 넣은 태그 id 로 거른다.
+        if tag.id in added:
+            continue
+        added.add(tag.id)
         db.add(models.EntryTag(entry_id=entry.id, tag_id=tag.id))
+
+
+def set_zones(db: Session, entry: models.Entry, values: list[str]) -> None:
+    set_tags(db, entry, "zone", values)
 
 
 def _set_merge_into(db: Session, entry: models.Entry, value: str | None) -> None:
@@ -156,6 +181,8 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
         set_hulls(db, entry, patch["hulls"] or [])
     if "zones" in patch:
         set_zones(db, entry, patch["zones"] or [])
+    if "tags" in patch:
+        set_tags(db, entry, "free", patch["tags"] or [])
     if "merge_into_id" in patch:
         _set_merge_into(db, entry, patch["merge_into_id"])
     entry.version += 1
@@ -364,8 +391,26 @@ def restore(db: Session, storage: StoragePaths, entry: models.Entry, user: model
         undo()
         raise
     db.commit()
+    _reenqueue_extract(db, entry)
     _write_meta_or_queue(db, storage, entry)
     return entry
+
+
+def _reenqueue_extract(db: Session, entry: models.Entry) -> None:
+    """복원한 Entry 의 파일 중 본문을 뽑은 적이 없거나 휴지통에 있어 건너뛴 것을 다시
+    추출 대기열에 넣는다(이미 뽑아 둔 본문은 휴지통에서도 지우지 않으므로 그대로 둔다)."""
+    from ..extract.job import enqueue_extract
+
+    files = db.query(models.File).filter_by(entry_id=entry.id).all()
+    if not files:
+        return
+    rows = {x.file_id: x for x in db.query(models.FileExtract)
+            .filter(models.FileExtract.file_id.in_([f.id for f in files]))}
+    for f in files:
+        x = rows.get(f.id)
+        if x is None or (x.state == "skipped" and x.error == "trashed"):
+            enqueue_extract(db, f)
+    db.commit()
 
 
 def _require_draft_owner(user: models.User, *entries: models.Entry) -> None:
