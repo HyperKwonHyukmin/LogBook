@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# 실험 산출물
+poc/out/
+
+# backend
+backend/.venv/
+backend/.env*
+!backend/.env.example
+backend/.pytest_cache/
+
+# frontend (dist 는 145 배포를 위해 커밋한다)
+frontend/node_modules/
+frontend/coverage/

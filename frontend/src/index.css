@@ -1,0 +1,32 @@
+@import "tailwindcss";
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/600.css";
+
+/* Logbook 디자인 토큰 — HD현대 시그니처 색 (WorkBench DESIGN.md 와 같은 값) */
+@theme {
+  --font-sans: "Pretendard Variable", Pretendard, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-brand: #002554;       /* Trust Blue — 주 버튼·링크·선택 */
+  --color-brand-dark: #003366;  /* hover */
+  --color-brand-tint: #E8EDF4;  /* 활성 메뉴·칩 배경 */
+  --color-brand-ring: #D3DCE8;  /* 포커스 링 */
+  --color-ok: #008233;          /* Heritage Green — 확정·연결 */
+  --color-spark: #00E600;       /* 로고 한 점에만 */
+  --color-wait: #B45309;        /* 미확정 */
+  --color-err: #B91C1C;         /* 오류 */
+  --color-canvas: #F4F4F5;      /* 바탕 */
+  --color-line: #E4E4E7;        /* 테두리 */
+  --color-viewer: #0E1A2B;      /* 3D 뷰어 배경 */
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: #18181B;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
