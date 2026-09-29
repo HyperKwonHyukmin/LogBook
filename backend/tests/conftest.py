@@ -65,9 +65,17 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 @pytest.fixture
 def storage():
-    from app.storage.paths import StoragePaths
+    from app.storage.paths import LAYOUT, StoragePaths, to_long
 
-    sp = StoragePaths(Path(_TEST_ROOT))
+    root = Path(_TEST_ROOT)
+    for name in LAYOUT:
+        # to_long() 로 지운다 — 끝에 공백·점이 있는 이름(테스트가 실측용으로 직접 만든 폴더
+        # 등)은 접두 없는 경로로 rmtree 하면 Windows 경로 정규화가 그 이름을 찾지 못해
+        # ignore_errors=True 아래 조용히 삭제가 실패하고, 다음 테스트의 inbox 스캔에
+        # 영원히 남아 오염시킨다(실측: test_worker 의 end-to-end 테스트가 이 때문에
+        # staged/processed 가 2로 뻥튀기됨 — 원인은 test_inbox 의 trailing-dot 테스트).
+        shutil.rmtree(to_long(root / name), ignore_errors=True)
+    sp = StoragePaths(root)
     sp.ensure_layout()
     return sp
 
@@ -92,6 +100,41 @@ def make_user(db):
         db.commit()
         db.refresh(u)
         return u
+
+    return _make
+
+
+@pytest.fixture
+def setup_entry_with_files(db, storage):
+    """확정 대상 초안 Entry + 배치 + staging 파일을 만든다(Task 11 이후 여러 테스트가 공유).
+
+    본디 tests/test_confirm.py 의 사설 함수 `_setup(db, storage, ...)` 였다. `tests/` 에
+    `__init__.py` 가 없어 네임스페이스 패키지로 잡히는데, 다른 테스트 모듈이
+    `from tests.test_confirm import _setup` 로 끌어 쓰면 같은 파일이 pytest 자체의 컬렉터
+    (최상위 모듈 `test_confirm`)와 이 import 문(`tests.test_confirm` 서브모듈)에 각각
+    다른 모듈 객체로 이중 로드될 위험이 있다. 리뷰에서 지적받아 공유 헬퍼는 전부 이
+    fixture 로 옮겼다 — 기존 fixture(`make_user` 등)와 같은 패턴.
+    """
+    from app import models
+
+    def _make(uploader="A100001", rels=("3496_검토/model/a.bdf", "3496_검토/r.pdf"),
+             key="20260929-000000-bbbb"):
+        b = models.Batch(key=key, source="inbox", original_name="3496_검토", uploader=uploader)
+        db.add(b)
+        db.flush()
+        e = models.Entry(title="3496 검토", status="draft", batch_id=b.id, uploaded_by=uploader)
+        db.add(e)
+        db.flush()
+        e.entry_id = f"E{e.id:06d}"
+        db.add(models.EntryHull(entry_id=e.id, hull_no="3496", is_primary=True))
+        for rel in rels:
+            p = storage.staging / b.key / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(b"data")
+            db.add(models.File(batch_id=b.id, entry_id=e.id, rel_path=rel, name=p.name, ext=p.suffix,
+                               kind="model", size=4, sha256="a" * 64))
+        db.commit()
+        return b, e
 
     return _make
 

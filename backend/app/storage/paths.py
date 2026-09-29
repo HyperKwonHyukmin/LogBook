@@ -59,6 +59,25 @@ def _on_reachability_done(key: str, future) -> None:
     _reachability_cache[key] = (time.monotonic(), result)
 
 
+def long_join(base: str | os.PathLike, rel_posix: str) -> str:
+    r"""to_long(base) 뒤에 rel_posix('/' 로 구분된 POSIX 스타일 상대경로)의 조각을
+    그대로 이어 붙인다 — to_long() 은 base 에만 걸리고 rel 조각은 GetFullPathNameW 를
+    (즉 abspath 를) 다시 타지 않으므로, 끝에 공백·점이 있는 이름도 잘려 나가지 않는다.
+
+    ⚠ os.path.relpath()·Path(*PurePosixPath(rel).parts) 뒤에 to_long() 을 부르는 패턴은
+    이미 만들어진(공백·점 있는) rel 문자열을 다시 정규화해 버린다 — 그 함정을 피하려고
+    이 함수가 있다. '..'·'.'· 빈 조각·드라이브 또는 절대경로 조각은 거부한다(ValueError,
+    다른 배치·상위 폴더로 새는 경로 조작 방지).
+    """
+    parts = rel_posix.split("/")
+    for part in parts:
+        if part in ("", ".", ".."):
+            raise ValueError(f"안전하지 않은 경로 조각: {part!r} (전체: {rel_posix!r})")
+        if ":" in part or part.startswith("\\"):
+            raise ValueError(f"안전하지 않은 경로 조각: {part!r} (전체: {rel_posix!r})")
+    return to_long(base) + "\\" + "\\".join(parts)
+
+
 def to_long(p: str | os.PathLike) -> str:
     """Windows 긴 경로 접두사를 붙인다(UNC·로컬 모두, 이미 붙어 있으면 그대로).
 
@@ -87,6 +106,10 @@ class StoragePaths:
         return self.root / "10_Vault"
 
     @property
+    def staging(self) -> Path:
+        return self.vault / "_staging"
+
+    @property
     def derived(self) -> Path:
         return self.root / "20_Derived"
 
@@ -111,7 +134,7 @@ class StoragePaths:
         return self.system / "logs"
 
     def ensure_layout(self) -> None:
-        for p in (*(self.root / n for n in LAYOUT), self.audit_dir, self.logs_dir):
+        for p in (*(self.root / n for n in LAYOUT), self.audit_dir, self.logs_dir, self.staging):
             os.makedirs(to_long(p), exist_ok=True)
 
     def is_reachable(self) -> bool:

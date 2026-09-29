@@ -3,8 +3,10 @@ import concurrent.futures
 import threading
 import time
 
+import pytest
+
 from app.storage import paths as paths_module
-from app.storage.paths import LAYOUT, StoragePaths, to_long
+from app.storage.paths import LAYOUT, StoragePaths, long_join, to_long
 
 
 def _wait_for_inflight(sp, timeout=2.0):
@@ -243,6 +245,24 @@ def test_check_reachable_abandoned_replacement_is_still_single_flight(tmp_path, 
     assert calls["n"] == 1, "버려진 job 교체가 동시 호출 중 여러 번 일어났다"
     assert results == [True] * 5
     _wait_for_inflight(sp)
+
+
+def test_long_join_joins_without_renormalizing(tmp_path):
+    # to_long() 은 base 에만 걸린다 — rel 조각은 GetFullPathNameW 를 다시 타지 않으므로
+    # 끝 공백·점이 있는 이름도 그대로 보존된다(I1).
+    got = long_join(tmp_path, "model./a.bdf")
+    assert got == to_long(tmp_path) + "\\model.\\a.bdf"
+
+
+def test_long_join_accepts_already_prefixed_base():
+    got = long_join(to_long(r"C:\root"), "a/b")
+    assert got == r"\\?\C:\root\a\b"
+
+
+@pytest.mark.parametrize("bad", ["..", ".", "", "a/../b", "a/./b", "C:/x", "/abs"])
+def test_long_join_rejects_unsafe_segments(tmp_path, bad):
+    with pytest.raises(ValueError):
+        long_join(tmp_path, bad)
 
 
 def test_check_reachable_uses_ttl_cache(tmp_path, monkeypatch):
