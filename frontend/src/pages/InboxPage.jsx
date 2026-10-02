@@ -4,12 +4,15 @@ import { Inbox } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
+import { ErrorNote, Page, PageHeader } from '../components/ui/Page.jsx';
+import { BlockSkeleton } from '../components/ui/Skeleton.jsx';
+import { Tabs } from '../components/ui/Tabs.jsx';
 import BatchCard from '../components/inbox/BatchCard.jsx';
-import UploadZone from '../components/inbox/UploadZone.jsx';
+import { PageDropOverlay, UploadButtons, UploadFeedback, useUploader } from '../components/inbox/UploadZone.jsx';
 import { errorText } from '../lib/labels.js';
 
-const TABS = [{ id: 'mine', label: '내 배치' }, { id: 'unclaimed', label: '주인 없는 배치' }];
 const tabId = (id) => `inbox-tab-${id}`;
+const TABS = [{ id: 'mine', label: '내 배치', tabId: tabId('mine') }, { id: 'unclaimed', label: '주인 없는 배치', tabId: tabId('unclaimed') }];
 const PANEL_ID = 'inbox-tabpanel';
 const POLL_MS = 5000;
 
@@ -22,7 +25,6 @@ export default function InboxPage() {
   const [error, setError] = useState('');
 
   const requestRef = useRef(0);
-  const tabRefs = useRef([]);
 
   // 가장 마지막 요청의 응답만 쓴다 — 탭을 빨리 바꾸면 늦게 온 이전 탭 응답이 목록을 덮을 수 있다.
   const load = useCallback(() => {
@@ -52,14 +54,7 @@ export default function InboxPage() {
     if (latestRef.current.tab === 'mine') reload();
     else setTab('mine'); // 탭이 바뀌면 effect 가 내 배치를 부른다
   }
-
-  function onTabKeyDown(e, idx) {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    e.preventDefault();
-    const next = (idx + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length;
-    setTab(TABS[next].id);
-    tabRefs.current[next]?.focus();
-  }
+  const uploader = useUploader({ onUploaded, disabled: storage?.reachable === false });
 
   async function claim(key) {
     let message = '';
@@ -69,34 +64,27 @@ export default function InboxPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-5 p-6">
-      <div>
-        <h1 className="text-lg font-bold tracking-tight">정리 대기</h1>
-        <p className="mt-1 text-[13px] text-zinc-600">올린 자료의 묶음 제안을 확인하고 확정하세요. 확정 전에도 검색에는 ‘미분류’로 보입니다.</p>
-      </div>
-      <UploadZone onUploaded={onUploaded} disabled={storage?.reachable === false} />
-      <div role="tablist" aria-label="배치 구분" className="flex gap-1 border-b border-line">
-        {TABS.map((t, idx) => (
-          <button key={t.id} ref={(el) => { tabRefs.current[idx] = el; }} type="button" role="tab" id={tabId(t.id)}
-                  aria-selected={tab === t.id} aria-controls={PANEL_ID} tabIndex={tab === t.id ? 0 : -1}
-                  onClick={() => setTab(t.id)} onKeyDown={(e) => onTabKeyDown(e, idx)}
-                  className={`-mb-px border-b-2 px-3 py-2 text-[13px] ${tab === t.id ? 'border-brand font-semibold text-brand' : 'border-transparent text-zinc-600 hover:text-zinc-900'}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-      <div role="tabpanel" id={PANEL_ID} aria-labelledby={tabId(tab)} className="flex flex-col gap-5">
-        {error && <p role="alert" className="text-[13px] text-err">{error}</p>}
-        {loading && <div className="h-24 animate-pulse rounded-lg bg-zinc-200/60" aria-label="불러오는 중" />}
+    <Page>
+      <PageDropOverlay u={uploader} />
+      <PageHeader title="정리 대기"
+        description="올린 자료의 묶음 제안을 확인하고 확정하세요. 확정 전에도 검색에는 미분류로 보입니다. 이 화면 어디에나 폴더를 끌어 놓아도 올라갑니다."
+        actions={<UploadButtons u={uploader} />} />
+      <div className="mb-4 empty:hidden"><UploadFeedback u={uploader} /></div>
+      <Tabs label="배치 구분" items={TABS} value={tab} onChange={setTab} controls={PANEL_ID} />
+      <div role="tabpanel" id={PANEL_ID} aria-labelledby={tabId(tab)} className="flex flex-col gap-8 pt-5">
+        {error && <ErrorNote>{error}</ErrorNote>}
+        {loading && <BlockSkeleton className="h-32" />}
         {!loading && batches.length === 0 && !error && (
           <EmptyState icon={Inbox} title="정리할 자료가 없습니다">
-            {tab === 'mine' ? '위에서 올리거나, 탐색기로 999_LogBook\\00_Inbox 에 복사하면 1~2분 뒤 여기에 나타납니다.' : '주인을 찾지 못한 배치가 없습니다.'}
+            {tab === 'mine'
+              ? <>폴더나 파일을 이 화면에 끌어 놓거나 위의 단추로 고르세요. 탐색기로 <span className="font-mono">999_LogBook\00_Inbox</span> 에 복사하면 1~2분 뒤 여기에 나타납니다.</>
+              : '주인을 찾지 못한 배치가 없습니다.'}
           </EmptyState>
         )}
         {batches.map((b) => (
           <BatchCard key={b.key} batch={b} me={user.employee_id} isAdmin={isAdmin} onChanged={reload} onClaim={claim} />
         ))}
       </div>
-    </div>
+    </Page>
   );
 }

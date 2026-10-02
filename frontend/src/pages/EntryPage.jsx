@@ -1,25 +1,32 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom';
-import { ChevronDown, ChevronRight, FileQuestion, Folder, Trash2, Upload } from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, FileQuestion, Folder, Link2, MoreHorizontal, Trash2, Upload } from 'lucide-react';
 import { api } from '../api/client.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 import FilePreview from '../components/preview/FilePreview.jsx';
 import UploadZone from '../components/inbox/UploadZone.jsx';
-import Button from '../components/ui/Button.jsx';
+import Button, { buttonClass } from '../components/ui/Button.jsx';
 import ChipInput from '../components/ui/ChipInput.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
 import InlineText from '../components/ui/InlineText.jsx';
 import KindBadge from '../components/ui/KindBadge.jsx';
-import { ACTION_LABELS, errorText, formatDateTime } from '../lib/labels.js';
+import Menu from '../components/ui/Menu.jsx';
+import { ErrorNote, Page, SectionTitle } from '../components/ui/Page.jsx';
+import { Bar } from '../components/ui/Skeleton.jsx';
+import { StatusDot, TagChip } from '../components/ui/Status.jsx';
+import { useToast } from '../components/ui/Toast.jsx';
+import { copyText } from '../lib/files.js';
+import { ACTION_LABELS, errorText, formatBytes, formatDateTime } from '../lib/labels.js';
 import { buildTree } from '../lib/tree.js';
 import { useEntry } from '../lib/useEntry.js';
 
-const STATUS = { confirmed: ['확정', 'text-ok'], draft: ['미확정', 'text-wait'], trashed: ['휴지통', 'text-err'] };
 const FIELD_LABELS = { title: '제목', analysis_type: '해석 종류', analysis_period: '해석 시기', description: '설명',
   hulls: '호선', zones: '구역', tags: '태그' };
 const hullRule = (v) => /^\d{4}$/.test(v) || '호선은 숫자 4자리입니다.';
 const periodRule = (v) => (v && !/^\d{4}-(0[1-9]|1[0-2])$/.test(v) ? '해석 시기는 YYYY-MM 형식입니다.' : '');
 const show = (v) => (Array.isArray(v) ? v.join(', ') : v) || '(없음)';
 const HISTORY_FILES_SHOWN = 5;
+const HISTORY_SHOWN = 5;
 
 /** 감사 기록의 before/after → "제목: a → b" 줄들. */
 function changes(before, after) {
@@ -67,25 +74,65 @@ function TreeNodes({ nodes, selectedId, onPick, depth = 0 }) {
     <li key={n.path} role="treeitem" aria-selected={n.file.id === selectedId} aria-label={n.name}
         tabIndex={n.file.id === selectedId ? 0 : -1}
         onClick={() => onPick(n.file.id)} onKeyDown={activate(() => onPick(n.file.id))}
-        style={{ paddingLeft: depth * 14 + 8 }}
-        className={`flex h-7 cursor-pointer items-center gap-2 rounded-md pr-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-brand-ring ${n.file.id === selectedId ? 'bg-brand-tint font-semibold text-brand' : 'hover:bg-zinc-100'}`}>
-      <KindBadge kind={n.file.kind} name={n.name} /><span className="truncate">{n.name}</span>
+        style={{ paddingLeft: depth * 12 + 8 }}
+        className={`flex h-8 cursor-pointer items-center gap-2 rounded-md pr-2 text-ui outline-none transition-colors duration-120 ease-out
+          focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-ring
+          ${n.file.id === selectedId ? 'bg-brand-subtle text-brand' : 'text-n-800 hover:bg-n-100 active:bg-n-150'}`}>
+      <KindBadge kind={n.file.kind} name={n.name} />
+      <span className={`min-w-0 flex-1 truncate ${n.file.id === selectedId ? 'font-medium' : ''}`} title={n.file.rel_path}>{n.name}</span>
+      <span className="shrink-0 font-mono text-meta text-n-500">{formatBytes(n.file.size)}</span>
     </li>
   ) : (
     <li key={n.path} role="treeitem" aria-expanded={!closed[n.path]} aria-label={n.name} tabIndex={-1}
         onKeyDown={activate(() => toggle(n.path))}
-        className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-brand-ring">
-      <div onClick={() => toggle(n.path)} style={{ paddingLeft: depth * 14 + 4 }}
-           className="flex h-7 cursor-pointer items-center gap-1 rounded-md text-[13px] text-zinc-700 hover:bg-zinc-100">
-        {closed[n.path] ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
-        <Folder size={14} className="text-zinc-400" aria-hidden="true" />{n.name}
+        className="rounded-md outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-ring">
+      <div onClick={() => toggle(n.path)} style={{ paddingLeft: depth * 12 + 4 }}
+           className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md text-ui text-n-700 transition-colors duration-120 hover:bg-n-100">
+        {closed[n.path] ? <ChevronRight size={14} className="text-n-400" aria-hidden="true" /> : <ChevronDown size={14} className="text-n-400" aria-hidden="true" />}
+        <Folder size={14} className="text-n-400" aria-hidden="true" />{n.name}
       </div>
       {!closed[n.path] && <ul role="group"><TreeNodes nodes={n.children} selectedId={selectedId} onPick={onPick} depth={depth + 1} /></ul>}
     </li>
   )));
 }
 
-function History({ entryId, version }) {
+/** 변경 이력 — 점 타임라인(세로 띠 없이, 점 사이만 가는 선으로 잇는다). */
+function History({ rows, failed }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? rows : rows?.slice(0, HISTORY_SHOWN);
+  return (
+    <section className="mt-6 border-t border-n-200 pt-5">
+      <SectionTitle className="mb-3">변경 이력</SectionTitle>
+      <ul aria-label="변경 이력" className="flex flex-col">
+        {failed && !rows && <li className="text-meta text-err">이력을 불러오지 못했습니다.</li>}
+        {!failed && !rows && <li aria-hidden="true" className="appear-late space-y-2"><Bar className="h-3 w-3/4" /><Bar className="h-3 w-1/2" /></li>}
+        {rows?.length === 0 && <li className="text-meta text-n-500">기록이 없습니다.</li>}
+        {shown?.map((r, i) => (
+          <li key={i} className="relative grid grid-cols-[12px_1fr] gap-x-2 pb-4 last:pb-0">
+            {i < shown.length - 1 && <span aria-hidden="true" className="absolute bottom-0 left-[5.5px] top-[14px] w-px bg-n-200" />}
+            <span aria-hidden="true" className={`mt-[7px] h-1.5 w-1.5 justify-self-center rounded-full ${i === 0 ? 'bg-n-600' : 'bg-n-300'}`} />
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-2">
+                <span className="text-ui font-medium text-n-800">{ACTION_LABELS[r.action] || r.action}</span>
+                <span className="min-w-0 truncate text-meta text-n-500" title={r.employee_id || undefined}>{r.name || r.employee_id || '시스템'}</span>
+                <span className="ml-auto shrink-0 font-mono text-meta text-n-500">{formatDateTime(r.at).slice(5)}</span>
+              </div>
+              {detailLines(r).map((c) => <div key={c} className="mt-0.5 text-meta text-n-600">{c}</div>)}
+            </div>
+          </li>
+        ))}
+      </ul>
+      {rows?.length > HISTORY_SHOWN && (
+        <button type="button" onClick={() => setAll(!all)}
+                className="mt-2 h-6 rounded-sm px-1 text-meta text-n-600 transition-colors duration-120 hover:bg-n-100 hover:text-n-900">
+          {all ? '접기' : `전체 보기 ${rows.length}`}
+        </button>
+      )}
+    </section>
+  );
+}
+
+function useHistory(entryId, version) {
   const [rows, setRows] = useState(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -95,34 +142,30 @@ function History({ entryId, version }) {
       .catch(() => { if (live) setFailed(true); });
     return () => { live = false; };
   }, [entryId, version]);
+  return { rows, failed };
+}
+
+/** 속성 레일 한 줄. */
+function Prop({ label, children }) {
   return (
-    <section className="mt-6">
-      <h2 className="mb-2 text-xs font-semibold text-zinc-500">변경 이력</h2>
-      <ul aria-label="변경 이력" className="space-y-2 text-xs">
-        {failed && !rows && <li className="text-err">이력을 불러오지 못했습니다.</li>}
-        {rows?.length === 0 && <li className="text-zinc-500">기록이 없습니다.</li>}
-        {rows?.map((r, i) => (
-          <li key={i} className="border-l-2 border-line pl-2.5">
-            <div className="flex gap-2 text-zinc-500">
-              <span className="font-mono">{formatDateTime(r.at)}</span><span>{r.name || r.employee_id || '시스템'}</span>
-            </div>
-            <div className="font-medium text-zinc-800">{ACTION_LABELS[r.action] || r.action}</div>
-            {detailLines(r).map((c) => <div key={c} className="break-all text-zinc-600">{c}</div>)}
-          </li>
-        ))}
-      </ul>
-    </section>
+    <>
+      <dt className="flex h-8 items-center text-meta text-n-500">{label}</dt>
+      <dd className="flex min-h-8 min-w-0 items-center text-ui text-n-900">{children}</dd>
+    </>
   );
 }
 
-/** Entry 상세(설계 §6.1 `/e/{entryId}`) — 인라인 수정 머리말, 파일 트리, 미리보기, 변경 이력. */
+/** Entry 상세(설계 §6.1 `/e/{entryId}`) — 머리, 파일·미리보기, 속성 레일과 변경 이력. */
 export default function EntryPage() {
   const { entryId } = useParams();
   const [params] = useSearchParams();
   const fileParam = Number(params.get('file')) || null; // 검색의 파일 결과에서 왔으면 그 파일부터 본다
   const navigate = useNavigate();
   const storage = useOutletContext()?.storage;
+  const { user } = useAuth();
+  const toast = useToast();
   const { entry, status, error, setError, save } = useEntry(entryId);
+  const history = useHistory(entryId, entry?.version);
   const [picked, setPicked] = useState(fileParam);
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState('');
@@ -137,17 +180,26 @@ export default function EntryPage() {
     setChips({}); setPicked(fileParam); setAdding(false); setNotice('');
   }, [entryId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (status === 'missing') return <EmptyState icon={FileQuestion} title="자료를 찾을 수 없습니다">주소의 Entry 번호를 확인해 주세요.</EmptyState>;
+  if (status === 'missing') {
+    return <Page><EmptyState icon={FileQuestion} title="자료를 찾을 수 없습니다">주소의 Entry 번호를 확인해 주세요.</EmptyState></Page>;
+  }
   if (!entry) {
-    return error ? <p role="alert" className="p-6 text-[13px] text-err">{error}</p>
-      : <div className="m-6 h-40 animate-pulse rounded-lg bg-zinc-200/60" />;
+    return (
+      <Page>
+        {error ? <ErrorNote>{error}</ErrorNote> : (
+          <div role="status" aria-label="자료를 불러오는 중" className="appear-late">
+            <Bar className="h-3 w-32" /><Bar className="mt-3 h-6 w-2/3" />
+            <div className="mt-8 grid grid-cols-[minmax(0,1fr)_272px] gap-8"><Bar className="h-72" /><Bar className="h-48" /></div>
+          </div>
+        )}
+      </Page>
+    );
   }
 
   // 확정 자료는 누구나 고친다(설계 §8). 미확정은 정리 대기에서, 휴지통은 복원 뒤에 고친다.
   const editable = entry.status === 'confirmed';
   const trashed = entry.status === 'trashed';
   const offline = storage?.reachable === false;
-  const [statusLabel, statusCls] = STATUS[entry.status] || [entry.status, ''];
   const file = entry.files.find((f) => f.id === picked) || entry.files.find((f) => f.kind === 'report') || entry.files[0];
   const field = (name, props = {}) => (
     <InlineText label={FIELD_LABELS[name]} value={entry[name]} disabled={!editable}
@@ -155,6 +207,11 @@ export default function EntryPage() {
   );
   const serverChips = { hulls: entry.hulls.map((h) => h.hull_no), zones: entry.zones, tags: entry.tags };
   const chipValues = (name) => chips[name] ?? serverChips[name];
+
+  // 사번 → 이름: 이 화면이 이미 받은 자료(변경 이력의 이름, 로그인한 나)에서만 찾는다.
+  const names = new Map((history.rows || []).filter((r) => r.name).map((r) => [r.employee_id, r.name]));
+  if (user?.employee_id && user?.name) names.set(user.employee_id, user.name);
+  const person = (id) => (id ? <span title={id}>{names.get(id) || <span className="font-mono">{id}</span>}</span> : <span className="text-n-500">—</span>);
 
   /** 칩 변경 — 화면에 바로 반영하고 그 값을 저장 줄에 세운다. 실패·충돌이면 서버 값으로 되돌린다. */
   function saveChips(name, values) {
@@ -171,86 +228,122 @@ export default function EntryPage() {
     });
   }
 
+  /** 휴지통으로 — 되돌릴 수 있는 동작이라 확인 없이 보내고, 토스트의 '되돌리기'로 복원한다. */
   async function onTrash() {
-    if (!window.confirm(`${entry.entry_id} ‘${entry.title}’ 을 휴지통으로 보낼까요? 휴지통에서 복원할 수 있습니다.`)) return;
+    const id = entry.entry_id;
     try {
-      await api(`/entries/${encodeURIComponent(entry.entry_id)}`, { method: 'DELETE' });
-      navigate('/trash');
-    } catch (err) { setError(errorText(err, '휴지통으로 보내지 못했습니다.')); }
+      await api(`/entries/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch (err) { setError(errorText(err, '휴지통으로 보내지 못했습니다.')); return; }
+    navigate('/trash');
+    toast.show({
+      message: `${id} 을 휴지통으로 보냈습니다.`,
+      action: {
+        label: '되돌리기',
+        onClick: async () => {
+          try {
+            await api(`/entries/${encodeURIComponent(id)}/restore`, { method: 'POST' });
+            navigate(`/e/${id}`);
+            toast.show({ message: `${id} 을 복원했습니다.` });
+          } catch (err) {
+            toast.show({ tone: 'err', message: errorText(err, '복원하지 못했습니다. 휴지통에서 다시 시도해 주세요.') });
+          }
+        },
+      },
+    });
+  }
+  async function copy(text, what) {
+    const ok = await copyText(text);
+    toast.show(ok ? { message: `${what}를 복사했습니다.` } : { tone: 'err', message: '복사하지 못했습니다.' });
   }
 
+  const menuItems = [
+    { label: '링크 복사', icon: Link2, onSelect: () => copy(window.location.href, '링크') },
+    ...(entry.vault_unc ? [{ label: '폴더 경로 복사', icon: Copy, onSelect: () => copy(entry.vault_unc, '폴더 경로') }] : []),
+    ...(editable ? [{ divider: true }, { label: '휴지통으로 보내기', icon: Trash2, tone: 'danger', onSelect: onTrash }] : []),
+  ];
+
   return (
-    <div className="mx-auto max-w-[1400px] p-6">
-      <header className="rounded-lg border border-line bg-white p-5">
-        <div className="flex items-center gap-2 text-xs">
-          <span className="font-mono text-zinc-500">{entry.entry_id}</span>
-          <span className={`inline-flex items-center gap-1 font-semibold ${statusCls}`}>
-            <span aria-hidden="true">●</span><span>{statusLabel}</span>
-          </span>
+    <Page>
+      <header className="border-b border-n-200 pb-5">
+        <div className="flex h-7 items-center gap-3">
+          <span className="font-mono text-meta text-n-500">{entry.entry_id}</span>
+          <StatusDot status={entry.status} />
           <div className="flex-1" />
-          {editable && (
-            <>
-              <Button variant="secondary" size="sm" onClick={() => setAdding(!adding)} aria-expanded={adding}>
-                <Upload size={13} aria-hidden="true" />파일 추가
-              </Button>
-              <Button variant="danger" size="sm" onClick={onTrash}><Trash2 size={13} aria-hidden="true" />휴지통으로</Button>
-            </>
-          )}
+          <Menu items={menuItems} trigger={(p) => (
+            <button type="button" {...p} aria-label="자료 동작" className={buttonClass('ghost', 'icon-sm')}>
+              <MoreHorizontal size={16} aria-hidden="true" />
+            </button>
+          )} />
         </div>
-        <h1 className="mt-2 text-xl font-bold tracking-tight">
+        <h1 className="mt-1 text-entry font-semibold tracking-[-0.015em] text-n-900">
           {field('title', { validate: (v) => (!v ? '제목을 입력해 주세요.' : '') })}
         </h1>
+        <div className="mt-1 text-body text-n-700">
+          {field('description', { multiline: true, placeholder: editable ? '설명 추가' : '설명 없음' })}
+        </div>
         {entry.status === 'draft' && (
-          <p className="mt-2 text-[13px] text-wait">미확정 자료는 <Link to="/inbox" className="font-semibold underline">정리 대기에서 고치고 확정합니다</Link>.</p>
+          <p className="mt-3 rounded-md border border-wait-line bg-wait-bg px-3 py-2 text-ui text-wait">
+            미확정 자료는 <Link to="/inbox" className="font-medium underline underline-offset-2 hover:no-underline">정리 대기에서 고치고 확정합니다</Link>.
+          </p>
         )}
-        {error && <p role="alert" className="mt-2 text-[13px] text-err">{error}</p>}
-        <dl className="mt-4 grid grid-cols-[88px_1fr] gap-x-4 gap-y-2 text-[13px] md:grid-cols-[88px_1fr_88px_1fr]">
-          <dt className="text-zinc-500">호선</dt>
-          <dd>
-            {editable && <ChipInput label="호선" kind="hull" values={chipValues('hulls')} validate={hullRule}
-                                    onChange={(v) => saveChips('hulls', v)} />}
-            <span className="mt-1 flex flex-wrap gap-1">
-              {entry.hulls.length === 0 && !editable && <span className="text-zinc-400">—</span>}
-              {entry.hulls.map((h) => (
-                <Link key={h.hull_no} to={`/h/${h.hull_no}`} title={h.ship_type || undefined}
-                      className="rounded bg-brand-tint px-1.5 font-mono text-xs font-semibold text-brand hover:underline">{h.hull_no}</Link>
-              ))}
-            </span>
-          </dd>
-          <dt className="text-zinc-500">구역</dt>
-          <dd>{editable ? <ChipInput label="구역" kind="zone" values={chipValues('zones')} onChange={(v) => saveChips('zones', v)} /> : entry.zones.join(', ') || '—'}</dd>
-          <dt className="text-zinc-500">해석 종류</dt><dd>{field('analysis_type')}</dd>
-          <dt className="text-zinc-500">해석 시기</dt><dd className="font-mono">{field('analysis_period', { validate: periodRule, placeholder: 'YYYY-MM' })}</dd>
-          <dt className="text-zinc-500">태그</dt>
-          <dd>{editable ? <ChipInput label="태그" kind="tag" values={chipValues('tags')} onChange={(v) => saveChips('tags', v)} /> : entry.tags.join(', ') || '—'}</dd>
-          <dt className="text-zinc-500">올린 사람</dt>
-          <dd className="font-mono text-xs text-zinc-600">{entry.uploaded_by || '—'} · 확정 {entry.confirmed_by || '—'} {formatDateTime(entry.confirmed_at)}</dd>
-          <dt className="text-zinc-500">설명</dt>
-          <dd className="md:col-span-3">{field('description', { multiline: true, placeholder: '설명 없음' })}</dd>
-        </dl>
-        {adding && editable && (
-          <div className="mt-4 border-t border-line pt-4">
-            <p className="mb-2 text-xs text-zinc-600">여기 올린 파일은 정리 대기에서 확정하면 이 자료에 추가됩니다.</p>
-            <UploadZone targetEntryId={entry.entry_id} disabled={offline} showSuccess={false}
-                        onUploaded={() => setNotice('올렸습니다. 정리 대기에서 확정하면 이 자료에 추가됩니다.')} />
-            {notice && <p role="status" className="mt-2 text-xs text-ok">{notice} <Link to="/inbox" className="underline">정리 대기로</Link></p>}
-          </div>
-        )}
+        {error && <ErrorNote className="mt-3">{error}</ErrorNote>}
       </header>
 
-      <div className="mt-5 flex gap-5">
-        <div className="w-80 shrink-0">
-          <h2 className="mb-2 text-xs font-semibold text-zinc-500">파일 <span className="font-mono">{entry.files.length}</span>개</h2>
-          <ul role="tree" aria-label="파일" onKeyDown={onTreeKeyDown} className="rounded-lg border border-line bg-white p-1.5">
+      <div className="mt-6 grid grid-cols-1 gap-8 min-[1200px]:grid-cols-[minmax(0,1fr)_272px]">
+        <div className="min-w-0">
+          <div className="mb-2 flex h-7 items-center gap-2">
+            <SectionTitle>파일 <span className="font-mono font-normal text-n-500">{entry.files.length}</span></SectionTitle>
+            {editable && (
+              <Button variant="ghost" size="sm" onClick={() => setAdding(!adding)} aria-expanded={adding} className="ml-auto">
+                <Upload size={14} aria-hidden="true" />파일 추가
+              </Button>
+            )}
+          </div>
+          {adding && editable && (
+            <div className="mb-3 rounded-lg border border-n-200 p-3">
+              <p className="mb-2 text-meta text-n-600">여기 올린 파일은 정리 대기에서 확정하면 이 자료에 추가됩니다.</p>
+              <UploadZone targetEntryId={entry.entry_id} disabled={offline} showSuccess={false}
+                          onUploaded={() => setNotice('올렸습니다. 정리 대기에서 확정하면 이 자료에 추가됩니다.')} />
+              {notice && <p role="status" className="mt-2 text-meta text-ok">{notice} <Link to="/inbox" className="underline underline-offset-2">정리 대기로</Link></p>}
+            </div>
+          )}
+          <ul role="tree" aria-label="파일" onKeyDown={onTreeKeyDown} className="flex flex-col gap-px">
             <TreeNodes nodes={buildTree(entry.files)} selectedId={file?.id} onPick={setPicked} />
           </ul>
-          <History entryId={entry.entry_id} version={entry.version} />
+          <div className="mt-4">
+            {file ? <FilePreview key={file.id} file={file} vaultUnc={entry.vault_unc} trashed={trashed} hideTitles={[entry.title]} />
+              : <p className="text-ui text-n-500">파일이 없습니다.</p>}
+          </div>
         </div>
-        <div className="min-w-0 flex-1">
-          {file ? <FilePreview key={file.id} file={file} vaultUnc={entry.vault_unc} trashed={trashed} />
-            : <p className="text-[13px] text-zinc-500">파일이 없습니다.</p>}
-        </div>
+
+        <aside aria-label="속성" className="min-w-0">
+          <dl className="grid grid-cols-[76px_minmax(0,1fr)] gap-x-3">
+            <Prop label="호선">
+              <ChipInput compact mono label="호선" kind="hull" values={chipValues('hulls')} validate={hullRule} disabled={!editable}
+                         chipHref={(h) => `/h/${encodeURIComponent(h)}`} onChange={(v) => saveChips('hulls', v)} />
+            </Prop>
+            <Prop label="구역">
+              <ChipInput compact label="구역" kind="zone" values={chipValues('zones')} disabled={!editable} onChange={(v) => saveChips('zones', v)} />
+            </Prop>
+            <Prop label="해석 종류">{field('analysis_type')}</Prop>
+            <Prop label="해석 시기">{field('analysis_period', { validate: periodRule, inputPlaceholder: 'YYYY-MM', mono: true })}</Prop>
+            <Prop label="태그">
+              {editable ? <ChipInput compact label="태그" kind="tag" values={chipValues('tags')} onChange={(v) => saveChips('tags', v)} />
+                : entry.tags.length ? <span className="flex flex-wrap gap-1">{entry.tags.map((t) => <TagChip key={t}>{t}</TagChip>)}</span>
+                  : <span className="text-n-500">—</span>}
+            </Prop>
+            <Prop label="올린 사람">{person(entry.uploaded_by)}</Prop>
+            <Prop label="확정자">
+              {entry.confirmed_by ? (
+                <span className="min-w-0 truncate">{person(entry.confirmed_by)}
+                  <span className="ml-1.5 font-mono text-meta text-n-500">{formatDateTime(entry.confirmed_at).slice(5)}</span>
+                </span>
+              ) : <span className="text-n-500">—</span>}
+            </Prop>
+          </dl>
+          <History rows={history.rows} failed={history.failed} />
+        </aside>
       </div>
-    </div>
+    </Page>
   );
 }

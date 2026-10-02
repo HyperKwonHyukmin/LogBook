@@ -34,8 +34,9 @@ export function useStorageStatus(intervalMs = 30000) {
 export function DisconnectedBanner({ storage }) {
   if (storage?.reachable !== false) return null;
   return (
-    <div role="alert" className="border-b border-red-200 bg-red-50 px-5 py-2 text-[13px] text-err">
-      999_LogBook 공유 폴더에 연결할 수 없습니다. 업로드가 제한되며, 검색·열람은 계속 사용할 수 있습니다.
+    <div role="alert" className="mx-3 mb-2 flex items-center gap-2 rounded-md border border-err-line bg-err-bg px-3 py-1.5 text-ui text-err">
+      <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-err" />
+      999_LogBook 공유 폴더에 연결할 수 없습니다. 올리기는 막히고, 검색과 열람은 계속 쓸 수 있습니다.
     </div>
   );
 }

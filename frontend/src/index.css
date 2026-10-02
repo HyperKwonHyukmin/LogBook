@@ -1,32 +1,139 @@
 @import "tailwindcss";
 @import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 @import "@fontsource/jetbrains-mono/400.css";
-@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/500.css";
 
-/* Logbook 디자인 토큰 — HD현대 시그니처 색 (WorkBench DESIGN.md 와 같은 값) */
+/*
+ * Logbook 디자인 토큰 (DESIGN.md 와 같은 값).
+ * 색은 여기서만 정의한다 — Tailwind 기본 팔레트(zinc 등)는 끈다.
+ */
 @theme {
-  --font-sans: "Pretendard Variable", Pretendard, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --color-*: initial;
 
-  --color-brand: #002554;       /* Trust Blue — 주 버튼·링크·선택 */
-  --color-brand-dark: #003366;  /* hover */
-  --color-brand-tint: #E8EDF4;  /* 활성 메뉴·칩 배경 */
-  --color-brand-ring: #D3DCE8;  /* 포커스 링 */
-  --color-ok: #008233;          /* Heritage Green — 확정·연결 */
-  --color-spark: #00E600;       /* 로고 한 점에만 */
-  --color-wait: #B45309;        /* 미확정 */
-  --color-err: #B91C1C;         /* 오류 */
-  --color-canvas: #F4F4F5;      /* 바탕 */
-  --color-line: #E4E4E7;        /* 테두리 */
-  --color-viewer: #0E1A2B;      /* 3D 뷰어 배경 */
+  /* 글꼴 — 모노 스택에 Pretendard 폴백: 모노 안의 한글이 바탕체로 떨어지지 않게 */
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Pretendard Variable", Pretendard, ui-monospace, monospace;
+
+  /* 글자 크기 / 행간 */
+  --text-micro: 11px;  --text-micro--line-height: 16px;
+  --text-meta: 12px;   --text-meta--line-height: 18px;
+  --text-ui: 13px;     --text-ui--line-height: 20px;
+  --text-body: 14px;   --text-body--line-height: 22px;
+  --text-title: 20px;  --text-title--line-height: 28px;
+  --text-entry: 22px;  --text-entry--line-height: 30px;
+  --text-hull: 28px;   --text-hull--line-height: 32px;
+
+  /* 중성 (브랜드 쪽 H≈214 로 살짝 기운 회색) */
+  --color-white: #FFFFFF;
+  --color-n-0: #FFFFFF;
+  --color-n-25: #FBFCFD;
+  --color-n-50: #F7F8FA;
+  --color-n-100: #F0F2F5;
+  --color-n-150: #E8EBEF;
+  --color-n-200: #E1E5EA;
+  --color-n-250: #D3D9E0;
+  --color-n-300: #BBC3CD;
+  --color-n-400: #8C95A3;   /* 아이콘 전용 — 글자 금지 */
+  --color-n-500: #646D7C;   /* 메타 글자·플레이스홀더 (AA) */
+  --color-n-600: #4B5362;
+  --color-n-700: #353C49;
+  --color-n-800: #222833;
+  --color-n-900: #13171E;
+
+  /* 브랜드 — 단 하나의 강조 */
+  --color-brand: #002554;
+  --color-brand-hover: #0B3468;
+  --color-brand-press: #001C40;
+  --color-brand-subtle: #EEF2F8;
+  --color-brand-muted: #DCE4EF;
+  --color-brand-ring: #7F97B8;
+
+  /* 의미 색 */
+  --color-ok: #007A30;    --color-ok-bg: #EAF5EE;   --color-ok-on-dark: #5FD38D;
+  --color-wait: #A34A07;  --color-wait-bg: #FDF3E7; --color-wait-line: #F3D3B0;
+  --color-err: #B42318;   --color-err-bg: #FDEEEC;  --color-err-line: #F4C7C1;
+  --color-err-press: #FBDCD8; --color-err-strong: #9A1D14;
+  --color-hit: #FFEDB3;
+  --color-spark: #00E600;
+  --color-viewer: #0E1A2B;
+  --color-link-on-dark: #9DB7DD;
+  --color-scrim: rgb(19 23 30 / 0.30);
+
+  /* 파일 종류 */
+  --color-k-pdf: #B42318;  --color-k-pdf-bg: #FDEEEC;
+  --color-k-ppt: #B54708;  --color-k-ppt-bg: #FEF2E6;
+  --color-k-xls: #067647;  --color-k-xls-bg: #E9F6EF;
+  --color-k-bdf: #1F3A8A;  --color-k-bdf-bg: #EBEFFA;
+  --color-k-res: #5B2BB5;  --color-k-res-bg: #F1ECFB;
+  --color-k-doc: #1D4F91;  --color-k-doc-bg: #EAF1FB;
+
+  /* 모서리 */
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  /* 그림자 — 떠 있는 것에만 */
+  --shadow-xs: 0 1px 0 rgb(19 23 30 / 0.04);
+  --shadow-sm: 0 1px 2px rgb(19 23 30 / 0.06), 0 0 0 1px rgb(19 23 30 / 0.05);
+  --shadow-md: 0 4px 12px -2px rgb(19 23 30 / 0.10), 0 0 0 1px rgb(19 23 30 / 0.06);
+  --shadow-lg: 0 16px 40px -8px rgb(19 23 30 / 0.18), 0 0 0 1px rgb(19 23 30 / 0.06);
+
+  /* 모션 */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --animate-skeleton: lb-pulse 1.2s var(--ease-in-out) infinite;
+  --animate-pop: lb-pop 140ms var(--ease-out);
+  --animate-panel: lb-panel 180ms var(--ease-out);
+  --animate-toast: lb-toast 180ms var(--ease-out);
+  --animate-fade: lb-fade 150ms var(--ease-out);
+  --animate-progress: lb-progress 1s linear infinite;
+  --animate-spin: lb-spin 0.8s linear infinite;
+
+  @keyframes lb-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+  @keyframes lb-pop { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+  @keyframes lb-panel { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+  @keyframes lb-toast { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @keyframes lb-fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes lb-progress { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+  @keyframes lb-spin { to { transform: rotate(360deg); } }
 }
 
 html, body, #root { height: 100%; }
 body {
   margin: 0;
-  background: var(--color-canvas);
-  color: #18181B;
+  background: var(--color-n-50);
+  color: var(--color-n-900);
   font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 22px;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  word-break: keep-all;        /* 한글은 어절 단위로 줄바꿈 */
+  overflow-wrap: break-word;   /* 긴 경로·파일명은 넘칠 때만 끊는다(anywhere 는 min-content 를 무너뜨린다) */
 }
-:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
+.font-mono, code, kbd { font-variant-numeric: tabular-nums slashed-zero; letter-spacing: 0; }
+.tnum { font-variant-numeric: tabular-nums; }
+::placeholder { color: var(--color-n-500); opacity: 1; }
+
+/* 포커스 — 키보드일 때만 2px 링 */
+:focus-visible { outline: 2px solid var(--color-brand-ring); outline-offset: 1px; }
+/* 입력류는 테두리 + 옅은 링 */
+.field:focus-within { border-color: var(--color-brand); box-shadow: 0 0 0 3px rgb(0 37 84 / 0.14); }
+.field[aria-invalid="true"], .field:has([aria-invalid="true"]) { border-color: var(--color-err); }
+.field:has([aria-invalid="true"]):focus-within, .field[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px rgb(180 35 24 / 0.14); }
+
+/* 지연 등장 — 300ms 안에 끝나는 로딩에는 스켈레톤을 보이지 않는다 */
+.appear-late { animation: lb-fade 150ms var(--ease-out) 300ms both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .animate-skeleton { opacity: 0.7; }
+  .progress-indeterminate { animation: none !important; transform: none !important; width: 100% !important; opacity: 0.35; }
+}

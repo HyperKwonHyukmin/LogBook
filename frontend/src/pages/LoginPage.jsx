@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import Button from '../components/ui/Button.jsx';
+import { inputClass } from '../components/ui/Field.jsx';
 import Logo from '../components/ui/Logo.jsx';
 import { api, ApiError } from '../api/client.js';
 import { SAVED_EMPLOYEE_ID_KEY, useAuth } from '../auth/AuthContext.jsx';
@@ -34,10 +35,10 @@ const TABS = [
 
 function Field({
   id, label, value, onChange, placeholder, mono = false, maxLength,
-  autoComplete, autoCapitalize, spellCheck, invalid = false, describedBy, ariaRequired = false,
+  autoComplete, autoCapitalize, spellCheck, invalid = false, describedBy, ariaRequired = false, autoFocus = false,
 }) {
   return (
-    <label htmlFor={id} className="flex flex-col gap-1.5 text-[13px] font-medium text-zinc-700">
+    <label htmlFor={id} className="flex flex-col gap-1 text-meta font-medium text-n-600">
       {label}
       <input
         id={id}
@@ -50,8 +51,9 @@ function Field({
         aria-required={ariaRequired || undefined}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
+        autoFocus={autoFocus}
         onChange={(e) => onChange(e.target.value)}
-        className={`h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none focus:border-brand focus:ring-2 focus:ring-brand ${mono ? 'font-mono' : ''}`}
+        className={inputClass(`h-9 text-body ${mono ? 'font-mono placeholder:font-mono' : ''}`)}
       />
     </label>
   );
@@ -124,25 +126,25 @@ export default function LoginPage() {
   const employeeIdInvalid = !!error && error !== NAME_REQUIRED_MESSAGE;
   const nameInvalid = mode === 'register' && error === NAME_REQUIRED_MESSAGE;
 
-  const tabClass = (active) =>
-    `h-9 flex-1 border-b-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-50 ${active ? 'border-brand font-semibold text-brand' : 'border-transparent text-zinc-500'}`;
-
   return (
-    <main className="flex min-h-full items-center justify-center bg-canvas px-4">
-      <div className="w-full max-w-sm rounded-xl border border-line bg-white p-8 shadow-sm">
-        <Logo size={36} />
-        <div role="tablist" aria-label="로그인 방식" className="mt-8 flex border-b border-line">
+    <main className="flex min-h-full flex-col items-center justify-center bg-n-50 px-4 py-10">
+      <div className="w-full max-w-[380px] rounded-xl border border-n-200 bg-n-0 p-8 shadow-sm">
+        <Logo size={28} subtitle />
+        <div role="tablist" aria-label="로그인 방식" className="mt-7 flex h-9 items-center rounded-md bg-n-100 p-0.5">
           {TABS.map((tab, idx) => (
             <button
               key={tab.key}
               ref={(el) => { tabRefs.current[idx] = el; }}
+              type="button"
               role="tab"
               id={tab.id}
               aria-selected={mode === tab.key}
               aria-controls="auth-panel"
               tabIndex={mode === tab.key ? 0 : -1}
               disabled={busy}
-              className={tabClass(mode === tab.key)}
+              className={`h-8 flex-1 rounded-[4px] text-ui font-medium transition-[background-color,color,box-shadow] duration-120 ease-out
+                disabled:cursor-not-allowed disabled:text-n-500
+                ${mode === tab.key ? 'bg-n-0 text-n-900 shadow-sm' : 'text-n-600 hover:text-n-900'}`}
               onClick={() => switchMode(tab.key)}
               onKeyDown={(e) => onTabKeyDown(e, idx)}
             >
@@ -155,11 +157,11 @@ export default function LoginPage() {
           role="tabpanel"
           id="auth-panel"
           aria-labelledby={activeTab.id}
-          className="mt-6 flex flex-col gap-4"
+          className="mt-5 flex flex-col gap-4"
         >
           <Field
             id="employee-id" label="사번" value={employeeId} onChange={setEmployeeId}
-            placeholder="A123456" mono maxLength={20} ariaRequired
+            placeholder="A123456" mono maxLength={20} ariaRequired autoFocus
             autoComplete="username" autoCapitalize="characters" spellCheck={false}
             invalid={employeeIdInvalid} describedBy={employeeIdInvalid ? 'auth-error' : undefined}
           />
@@ -177,15 +179,15 @@ export default function LoginPage() {
             </>
           )}
           {error && (
-            <p id="auth-error" role="alert" className="rounded-md bg-red-50 px-3 py-2 text-[13px] text-err">
+            <p id="auth-error" role="alert" className="flex items-start gap-2 rounded-md border border-err-line bg-err-bg px-3 py-2 text-ui text-err">
               {error}
             </p>
           )}
-          {done && <p role="status" className="rounded-md bg-green-50 px-3 py-2 text-[13px] text-ok">{done}</p>}
-          <Button type="submit" size="lg" disabled={busy}>{mode === 'login' ? '로그인' : '가입 신청'}</Button>
+          {done && <p role="status" className="rounded-md bg-ok-bg px-3 py-2 text-ui text-ok">{done}</p>}
+          <Button type="submit" size="lg" className="mt-1 w-full" loading={busy} disabled={busy}>{mode === 'login' ? '로그인' : '가입 신청'}</Button>
         </form>
-        <p className="mt-6 text-center text-xs text-zinc-500">사번으로 가입 신청 → 관리자 승인 후 사용할 수 있습니다.</p>
       </div>
+      <p className="mt-4 text-center text-meta text-n-500">처음이면 사번으로 가입 신청을 하세요. 관리자가 승인하면 쓸 수 있습니다.</p>
     </main>
   );
 }

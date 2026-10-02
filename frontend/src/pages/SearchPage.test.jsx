@@ -206,3 +206,37 @@ test('미리보기가 열리면 좁은 화면용 필터 버튼으로 필터를 �
   await userEvent.click(within(drawer).getByRole('button', { name: '필터 닫기' }));
   expect(screen.queryByRole('dialog', { name: '필터' })).toBeNull();
 });
+
+test('적용된 필터 칩으로 필터를 하나씩 해제한다', async () => {
+  mockApi({
+    'GET /api/search?q=a&hull=9999&limit=50&offset=0': { ...RES, hull_suggestion: null },
+    'GET /api/search?q=a&limit=50&offset=0': { ...RES, hull_suggestion: null },
+  });
+  renderAt('/?q=a&hull=9999');
+  await userEvent.click(await screen.findByRole('button', { name: '호선 9999 필터 해제' }));
+  expect(screen.getByTestId('loc').textContent).toBe('/?q=a');
+});
+
+test('고른 결과는 선택 표시되고, Esc 로 미리보기를 닫는다', async () => {
+  mockApi({ 'GET /api/search?q=a&limit=50&offset=0': RES, 'GET /api/entries/E000001': ENTRY,
+            'GET /api/files/11/text': { state: null, summary: null, chunks: [] } });
+  renderAt('/?q=a');
+  const row = (await screen.findByText('계류 구조 검토')).closest('[role="option"]');
+  await userEvent.click(row);
+  expect(row).toHaveAttribute('aria-selected', 'true');
+  expect(row).toHaveClass('bg-brand-subtle');
+  await screen.findByRole('complementary', { name: '미리보기' });
+  screen.getByRole('listbox', { name: '검색 결과' }).focus();
+  await userEvent.keyboard('{Escape}');
+  expect(screen.queryByRole('complementary', { name: '미리보기' })).toBeNull();
+});
+
+test('검색 오류에서 다시 시도하면 같은 검색을 다시 보낸다', async () => {
+  let n = 0;
+  const fetch = mockApi({ 'GET /api/search?q=a&limit=50&offset=0': () => (++n === 1 ? { __status: 500, detail: 'x' } : { ...RES, hull_suggestion: null }) });
+  renderAt('/?q=a');
+  expect(await screen.findByRole('alert')).toHaveTextContent('검색하지 못했습니다');
+  await userEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+  expect(await screen.findByText('계류 구조 검토')).toBeInTheDocument();
+  expect(calls(fetch).filter((c) => c === 'GET /api/search?q=a&limit=50&offset=0')).toHaveLength(2);
+});

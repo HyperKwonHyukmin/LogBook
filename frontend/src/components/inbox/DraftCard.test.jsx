@@ -91,11 +91,12 @@ test('기존 Entry 추가 제안을 받아들인다', async () => {
 test('확정과 버리기', async () => {
   mockFetch({ 'POST /api/entries/E000010/confirm': { ...ENTRY, status: 'confirmed' },
               'DELETE /api/entries/E000010': { ...ENTRY, status: 'trashed' } });
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
   const onChanged = vi.fn();
   render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={onChanged} />);
   await userEvent.click(screen.getByRole('button', { name: '확정' }));
   await userEvent.click(screen.getByRole('button', { name: '버리기' }));
+  // 초안은 복원할 수 없어 확인 대화상자를 거친다.
+  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '버리기' }));
   const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
   expect(calls).toContain('POST /api/entries/E000010/confirm');
   expect(calls).toContain('DELETE /api/entries/E000010');

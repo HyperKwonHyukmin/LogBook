@@ -24,6 +24,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** 확인 대화상자에서 고른다(ok=true 면 확인 단추, 아니면 취소). */
+async function answer(ok) {
+  const dialog = await screen.findByRole('alertdialog');
+  const buttons = within(dialog).getAllByRole('button');
+  await userEvent.click(ok ? buttons[buttons.length - 1] : within(dialog).getByRole('button', { name: '취소' }));
+}
+
 test('승인 대기 목록을 보여 주고 승인하면 목록을 다시 불러온다', async () => {
   routeFetch({
     'GET /api/admin/users?status=pending': PENDING,
@@ -74,7 +81,6 @@ test('이미 처리된 사용자(409 not_disabled)면 안내하고 목록을 새
 });
 
 test('이미 처리된 사용자(409 not_active)면 안내하고 목록을 새로 고친다', async () => {
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
   routeFetch({
     'GET /api/admin/users?status=active': ACTIVE,
     'POST /api/admin/users/A100004/disable': { __status: 409, detail: 'not_active' },
@@ -83,6 +89,7 @@ test('이미 처리된 사용자(409 not_active)면 안내하고 목록을 새�
   await userEvent.click(screen.getByRole('tab', { name: '활성' }));
   const row = (await screen.findByText('활성자')).closest('tr');
   await userEvent.click(within(row).getByRole('button', { name: '비활성화' }));
+  await answer(true);
   expect(await screen.findByRole('alert')).toHaveTextContent('이미 처리된 사용자입니다. 목록을 새로 고칩니다.');
   const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
   expect(calls.filter((c) => c === 'GET /api/admin/users?status=active')).toHaveLength(2);
@@ -117,7 +124,6 @@ test('처리 중에는 해당 행의 버튼이 비활성화된다', async () => 
   const row = (await screen.findByText('대기자')).closest('tr');
   const approveBtn = within(row).getByRole('button', { name: '승인' });
   const rejectBtn = within(row).getByRole('button', { name: '거절' });
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
   await userEvent.click(approveBtn);
   expect(approveBtn).toBeDisabled();
   expect(rejectBtn).toBeDisabled();
@@ -127,10 +133,11 @@ test('처리 중에는 해당 행의 버튼이 비활성화된다', async () => 
 
 test('거절 확인 대화상자에서 취소하면 요청을 보내지 않는다', async () => {
   routeFetch({ 'GET /api/admin/users?status=pending': PENDING });
-  vi.spyOn(window, 'confirm').mockReturnValue(false);
   render(<UsersPage />);
   const row = (await screen.findByText('대기자')).closest('tr');
   await userEvent.click(within(row).getByRole('button', { name: '거절' }));
+  await answer(false);
+  expect(screen.queryByRole('alertdialog')).toBeNull();
   const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
   expect(calls).not.toContain('POST /api/admin/users/A100002/reject');
 });
@@ -140,21 +147,21 @@ test('거절 확인 대화상자에서 확인하면 요청을 보낸다', async 
     'GET /api/admin/users?status=pending': PENDING,
     'POST /api/admin/users/A100002/reject': { ...PENDING[0], status: 'disabled' },
   });
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
   render(<UsersPage />);
   const row = (await screen.findByText('대기자')).closest('tr');
   await userEvent.click(within(row).getByRole('button', { name: '거절' }));
+  await answer(true);
   const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
   expect(calls).toContain('POST /api/admin/users/A100002/reject');
 });
 
 test('비활성화 확인 대화상자에서 취소하면 요청을 보내지 않는다', async () => {
   routeFetch({ 'GET /api/admin/users?status=active': ACTIVE });
-  vi.spyOn(window, 'confirm').mockReturnValue(false);
   render(<UsersPage />);
   await userEvent.click(screen.getByRole('tab', { name: '활성' }));
   const row = (await screen.findByText('활성자')).closest('tr');
   await userEvent.click(within(row).getByRole('button', { name: '비활성화' }));
+  await answer(false);
   const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
   expect(calls).not.toContain('POST /api/admin/users/A100004/disable');
 });

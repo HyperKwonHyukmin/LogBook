@@ -24,11 +24,13 @@ test('현재 경로의 메뉴가 활성 표시된다', () => {
 
 test('저장소 연결이 끊기면 경고를 보인다', () => {
   render(<MemoryRouter><SideNav isAdmin={false} storage={{ reachable: false }} /></MemoryRouter>);
-  expect(screen.getByText('999_LogBook 연결 끊김')).toBeInTheDocument();
+  const status = screen.getByRole('status');
+  expect(status).toHaveTextContent('999_LogBook');
+  expect(status).toHaveTextContent('끊김');
 });
 
 test('호선 화면(/h/9999)에서도 호선 메뉴가 활성이다', () => {
   render(<MemoryRouter initialEntries={['/h/9999']}><SideNav isAdmin={false} storage={{ reachable: true }} /></MemoryRouter>);
-  expect(screen.getByRole('link', { name: '호선' })).toHaveClass('bg-brand-tint');
+  expect(screen.getByRole('link', { name: '호선' })).toHaveClass('bg-brand-subtle');
   expect(screen.getByRole('link', { name: '호선' })).toHaveAttribute('aria-current', 'page');
 });

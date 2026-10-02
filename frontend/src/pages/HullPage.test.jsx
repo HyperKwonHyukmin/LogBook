@@ -30,7 +30,7 @@ test('호선 화면 — 통계·타임라인·분포', async () => {
   expect(screen.getByRole('link', { name: '이 호선 자료 검색' })).toHaveAttribute('href', '/?hull=9999');
   const tl = screen.getByRole('list', { name: '월별 타임라인' });
   const months = within(tl).getAllByRole('heading').map((h) => h.textContent);
-  expect(months).toEqual(['2026-09', '2026-08']);
+  expect(months).toEqual(['2026년 9월', '2026년 8월']);
   expect(within(tl).getByRole('link', { name: '계류 검토' })).toHaveAttribute('href', '/e/E000001');
   expect(screen.getByRole('region', { name: '구역 분포' })).toHaveTextContent('선수부');
   expect(screen.getByRole('region', { name: '참여자' })).toHaveTextContent('김해석');

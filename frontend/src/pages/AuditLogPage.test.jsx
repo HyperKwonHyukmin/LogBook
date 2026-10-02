@@ -1,5 +1,9 @@
 import { vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+
+// 대상 Entry 번호가 링크라 라우터 안에서 그린다.
+const render = (ui) => rtlRender(<MemoryRouter>{ui}</MemoryRouter>);
 import AuditLogPage from './AuditLogPage.jsx';
 
 test('로딩 중에는 기록 없음 안내가 나타나지 않는다', async () => {

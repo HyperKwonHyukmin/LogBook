@@ -7,6 +7,7 @@ import { calls, mockApi } from '../test/mockApi.js';
 
 vi.mock('../lib/upload.js', async (orig) => ({ ...(await orig()), uploadBatch: vi.fn(() => Promise.resolve({ key: 'K' })) }));
 import EntryPage from './EntryPage.jsx';
+import { ToastProvider } from '../components/ui/Toast.jsx';
 
 const FILES = [
   { id: 1, name: 'm.bdf', rel_path: 'model/m.bdf', kind: 'model', size: 100, extract: null },
@@ -98,8 +99,9 @@ test('파일을 고르면 미리보기가 바뀐다', async () => {
 
 test('휴지통으로 보내면 휴지통 화면으로 간다', async () => {
   const fetch = renderPage({ 'GET /api/entries/E000001': ENTRY, 'DELETE /api/entries/E000001': { ...ENTRY, status: 'trashed' } });
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
-  await userEvent.click(await screen.findByRole('button', { name: '휴지통으로' }));
+  // 휴지통으로 보내기는 동작 메뉴 안에 있다(복원할 수 있어 확인 대화상자 없이 보낸다).
+  await userEvent.click(await screen.findByRole('button', { name: '자료 동작' }));
+  await userEvent.click(screen.getByRole('menuitem', { name: '휴지통으로 보내기' }));
   expect(await screen.findByTestId('loc')).toHaveTextContent('/trash');
   expect(calls(fetch)).toContain('DELETE /api/entries/E000001');
 });
@@ -130,7 +132,9 @@ test('호선을 빠르게 두 번 더해도 둘 다 저장된다(응답 전 낙�
       return res;
     },
   });
-  const box = await screen.findByRole('combobox', { name: '호선' });
+  // 칩 칸은 평소 칩만 보이고, 고치기 단추로 입력칸을 연다.
+  await userEvent.click(await screen.findByRole('button', { name: '호선 고치기' }));
+  const box = screen.getByRole('combobox', { name: '호선' });
   await userEvent.type(box, '9998,9997,');
   // 응답을 기다리지 않고 칩이 바로 보인다.
   expect(screen.getByRole('button', { name: '9998 빼기' })).toBeInTheDocument();
@@ -148,7 +152,8 @@ test('칩 저장이 실패하면 서버 값으로 되돌린다', async () => {
     'GET /api/entries/E000001': ENTRY,
     'PATCH /api/entries/E000001': { __status: 500, detail: 'x' },
   });
-  const box = await screen.findByRole('combobox', { name: '구역' });
+  await userEvent.click(await screen.findByRole('button', { name: '구역 고치기' }));
+  const box = screen.getByRole('combobox', { name: '구역' });
   await userEvent.type(box, '선미부,');
   expect(await screen.findByRole('alert')).toHaveTextContent('저장하지 못했습니다');
   await waitFor(() => expect(screen.queryByRole('button', { name: '선미부 빼기' })).toBeNull());
@@ -222,4 +227,55 @@ test('이력을 못 불러오면 그렇게 알린다', async () => {
   const hist = await screen.findByRole('list', { name: '변경 이력' });
   expect(await within(hist).findByText('이력을 불러오지 못했습니다.')).toBeInTheDocument();
   expect(within(hist).queryByText('기록이 없습니다.')).toBeNull();
+});
+
+test('휴지통으로 보낸 뒤 토스트의 되돌리기로 복원하고 자료로 돌아온다', async () => {
+  const fetch = mockApi({
+    'GET /api/entries/E000001': ENTRY,
+    'GET /api/entries/E000001/history': HISTORY,
+    'POST /api/files/2/link?inline=true': { url: '/api/files/2/content?t=a&inline=1' },
+    'DELETE /api/entries/E000001': { ...ENTRY, status: 'trashed' },
+    'POST /api/entries/E000001/restore': ENTRY,
+  });
+  render(
+    <AuthContext.Provider value={{ user: { employee_id: 'A100009', name: '다른 사람' }, isAdmin: false }}>
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/e/E000001']}>
+          <Routes>
+            <Route path="/e/:entryId" element={<EntryPage />} />
+            <Route path="*" element={<Probe />} />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>
+    </AuthContext.Provider>,
+  );
+  await userEvent.click(await screen.findByRole('button', { name: '자료 동작' }));
+  await userEvent.click(screen.getByRole('menuitem', { name: '휴지통으로 보내기' }));
+  expect(await screen.findByTestId('loc')).toHaveTextContent('/trash');
+  expect(await screen.findByText('E000001 을 휴지통으로 보냈습니다.')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '되돌리기' }));
+  await waitFor(() => expect(calls(fetch)).toContain('POST /api/entries/E000001/restore'));
+  expect(await screen.findByText('계류 구조 검토')).toBeInTheDocument();
+  expect(await screen.findByText('E000001 을 복원했습니다.')).toBeInTheDocument();
+});
+
+test('칩 칸은 고치기 단추로 열고 Esc 로 닫으면 칩만 남는다', async () => {
+  renderPage({ 'GET /api/entries/E000001': ENTRY });
+  await userEvent.click(await screen.findByRole('button', { name: '구역 고치기' }));
+  expect(screen.getByRole('combobox', { name: '구역' })).toHaveFocus();
+  await userEvent.keyboard('{Escape}');
+  expect(screen.queryByRole('combobox', { name: '구역' })).toBeNull();
+  expect(screen.getByText('선수부')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '구역 고치기' })).toHaveFocus();
+});
+
+test('올린 사람은 이력에 이름이 있으면 사번 대신 이름으로 보인다', async () => {
+  renderPage({
+    'GET /api/entries/E000001': { ...ENTRY, uploaded_by: 'A100002' },
+  });
+  const rail = await screen.findByRole('complementary', { name: '속성' });
+  await within(rail).findAllByText('김해석');
+  const uploader = within(rail).getByText('올린 사람').nextElementSibling;
+  expect(uploader).toHaveTextContent('김해석');
+  expect(uploader).not.toHaveTextContent('A100002');
 });

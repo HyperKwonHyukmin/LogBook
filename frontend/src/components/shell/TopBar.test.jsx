@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { vi } from 'vitest';
 import TopBar from './TopBar.jsx';
 
 function LocationProbe() {
@@ -83,4 +84,27 @@ test('입력 반영을 기다리는 사이 주소가 밖에서 바뀌면, 걸려
   await new Promise((r) => setTimeout(r, 300));
   expect(screen.getByTestId('loc').textContent).toBe('/?q=9998');
   expect(screen.getByLabelText('검색어')).toHaveValue('9998');
+});
+
+test('계정 메뉴에서 로그아웃한다', async () => {
+  const onLogout = vi.fn();
+  render(
+    <MemoryRouter initialEntries={['/']}>
+      <TopBar user={{ name: '김철수', employee_id: 'A100001', department: '구조팀' }} onLogout={onLogout} />
+    </MemoryRouter>,
+  );
+  await userEvent.click(screen.getByRole('button', { name: /계정 메뉴/ }));
+  const menu = screen.getByRole('menu');
+  expect(menu).toHaveTextContent('A100001');
+  expect(menu).toHaveTextContent('구조팀');
+  await userEvent.click(screen.getByRole('menuitem', { name: '로그아웃' }));
+  expect(onLogout).toHaveBeenCalled();
+});
+
+test('검색어가 있으면 지우기 단추로 비운다', async () => {
+  renderTopBar();
+  await userEvent.type(screen.getByLabelText('검색어'), '9999');
+  await userEvent.click(screen.getByRole('button', { name: '검색어 지우기' }));
+  expect(screen.getByLabelText('검색어')).toHaveValue('');
+  expect(screen.getByLabelText('검색어')).toHaveFocus();
 });

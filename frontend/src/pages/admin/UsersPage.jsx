@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import Button from '../../components/ui/Button.jsx';
+import { useConfirm } from '../../components/ui/ConfirmDialog.jsx';
+import { ErrorNote, Page, PageHeader } from '../../components/ui/Page.jsx';
+import { Tabs } from '../../components/ui/Tabs.jsx';
 
 const TABS = [
-  { key: 'pending', label: '승인 대기' },
-  { key: 'active', label: '활성' },
-  { key: 'disabled', label: '비활성' },
+  { id: 'pending', label: '승인 대기' },
+  { id: 'active', label: '활성' },
+  { id: 'disabled', label: '비활성' },
 ];
 
 // 다른 관리자가 먼저 처리했거나, 화면을 열어 둔 사이 대상 사용자의 상태가 바뀌었거나
@@ -13,10 +16,14 @@ const TABS = [
 const STALE_TARGET_DETAILS = new Set(['not_pending', 'not_disabled', 'not_active', 'user_not_found']);
 const STALE_TARGET_MESSAGE = '이미 처리된 사용자입니다. 목록을 새로 고칩니다.';
 
-const CONFIRM_MESSAGES = {
-  reject: '이 사용자의 가입 신청을 거절할까요?',
-  disable: '이 사용자를 비활성화할까요? 즉시 로그인이 차단됩니다.',
+/** 되돌리기 어려운 동작은 확인 대화상자를 거친다. */
+const CONFIRMS = {
+  reject: (u) => ({ title: `${u.name} 님의 가입 신청을 거절할까요?`, body: '거절한 사번은 다시 가입 신청을 해야 합니다.', confirmLabel: '거절' }),
+  disable: (u) => ({ title: `${u.name} 님을 비활성화할까요?`, body: '즉시 로그인이 차단됩니다. 비활성 탭에서 다시 활성화할 수 있습니다.', confirmLabel: '비활성화' }),
 };
+
+const th = 'h-8 border-b border-n-200 bg-n-25 px-3 text-left text-meta font-medium text-n-500';
+const td = 'h-12 border-b border-n-200 px-3 text-ui';
 
 export default function UsersPage() {
   const [tab, setTab] = useState('pending');
@@ -24,6 +31,7 @@ export default function UsersPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [confirm, dialog] = useConfirm();
   // 탭을 빠르게 넘나들 때 먼저 나간 요청이 나중에 응답해 화면을 덮어쓰지 않도록,
   // 매 요청에 순번을 매겨 "가장 최근에 보낸 요청"의 응답만 반영한다.
   const requestSeq = useRef(0);
@@ -47,8 +55,9 @@ export default function UsersPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function act(employeeId, path, method = 'POST', body) {
-    if (CONFIRM_MESSAGES[path] && !window.confirm(CONFIRM_MESSAGES[path])) return;
+  async function act(user, path, method = 'POST', body) {
+    const employeeId = user.employee_id;
+    if (CONFIRMS[path] && !(await confirm(CONFIRMS[path](user)))) return;
     setBusyId(employeeId);
     try {
       await api(`/admin/users/${employeeId}/${path}`, { method, body });
@@ -71,61 +80,65 @@ export default function UsersPage() {
   const dateHeader = tab === 'pending' ? '신청일' : '가입일';
 
   return (
-    <div className="p-6">
-      <h1 className="text-lg font-bold tracking-tight">사용자 관리</h1>
-      <div role="tablist" className="mt-4 flex gap-5 border-b border-line">
-        {TABS.map((t) => (
-          <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}
-                  className={`h-9 border-b-2 text-[13px] ${tab === t.key ? 'border-brand font-semibold text-brand' : 'border-transparent text-zinc-500'}`}>
-            {t.label}
-          </button>
-        ))}
+    <Page>
+      {dialog}
+      <PageHeader title="사용자 관리" description="사번으로 가입을 신청한 사람을 승인하고, 권한과 활성 상태를 관리합니다." />
+      <Tabs label="사용자 상태" items={TABS} value={tab} onChange={setTab} className="mb-4" />
+      {error && <ErrorNote className="mb-4">{error}</ErrorNote>}
+      <div className="overflow-hidden rounded-lg border border-n-200">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <th className={th}>이름</th><th className={th}>부서</th>
+              <th className={th}>{dateHeader}</th><th className={th}>권한</th><th className={th}><span className="sr-only">동작</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((u) => {
+              const busy = busyId === u.employee_id;
+              return (
+                <tr key={u.employee_id} className="group transition-colors duration-120 last:[&>td]:border-0 hover:bg-n-25">
+                  <td className={td}>
+                    <div className="font-medium text-n-900">{u.name}</div>
+                    <div className="font-mono text-meta text-n-500">{u.employee_id}</div>
+                  </td>
+                  <td className={`${td} ${u.department ? 'text-n-700' : 'text-n-500'}`}>{u.department || '—'}</td>
+                  <td className={`${td} font-mono text-meta text-n-600`}>{u.created_at?.slice(0, 10)}</td>
+                  <td className={td}>
+                    {u.is_admin
+                      ? <span className="inline-flex h-5 items-center rounded-xs bg-brand-subtle px-1.5 text-micro font-semibold text-brand">관리자</span>
+                      : <span className="text-n-600">일반</span>}
+                  </td>
+                  <td className={td}>
+                    <div className="flex justify-end gap-1.5">
+                      {u.status === 'pending' && (<>
+                        <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(u, 'reject')}>거절</Button>
+                        <Button size="sm" disabled={busy} onClick={() => act(u, 'approve')}>승인</Button>
+                      </>)}
+                      {u.status === 'active' && (<>
+                        <Button size="sm" variant="ghost" disabled={busy}
+                                onClick={() => act(u, 'admin', 'PUT', { is_admin: !u.is_admin })}>
+                          {u.is_admin ? '관리자 해제' : '관리자 지정'}
+                        </Button>
+                        <Button size="sm" variant="danger" disabled={busy} onClick={() => act(u, 'disable')}>비활성화</Button>
+                      </>)}
+                      {u.status === 'disabled' && (
+                        <Button size="sm" variant="secondary" disabled={busy} onClick={() => act(u, 'enable')}>재활성화</Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {!loading && rows.length === 0 && (
+              <tr><td colSpan={5} className="py-10 text-center text-ui text-n-500">해당하는 사용자가 없습니다.</td></tr>
+            )}
+            {loading && rows.length === 0 && (
+              <tr><td colSpan={5} className="py-10 text-center text-ui text-n-500"><span className="appear-late">불러오는 중…</span></td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
-      {error && <p role="alert" className="mt-3 text-[13px] text-err">{error}</p>}
-      <table className="mt-4 w-full border-collapse rounded-lg bg-white text-[13px]">
-        <thead>
-          <tr className="border-b border-line text-left text-xs text-zinc-500">
-            <th className="px-3 py-2 font-medium">사번</th><th className="px-3 py-2 font-medium">이름</th>
-            <th className="px-3 py-2 font-medium">부서</th><th className="px-3 py-2 font-medium">{dateHeader}</th>
-            <th className="px-3 py-2 font-medium">권한</th><th className="px-3 py-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((u) => {
-            const busy = busyId === u.employee_id;
-            return (
-              <tr key={u.employee_id} className="border-b border-line last:border-0">
-                <td className="px-3 py-2 font-mono">{u.employee_id}</td>
-                <td className="px-3 py-2">{u.name}</td>
-                <td className="px-3 py-2 text-zinc-600">{u.department || '—'}</td>
-                <td className="px-3 py-2 font-mono text-zinc-600">{u.created_at?.slice(0, 10)}</td>
-                <td className="px-3 py-2">{u.is_admin ? '관리자' : '일반'}</td>
-                <td className="px-3 py-2">
-                  <div className="flex justify-end gap-1.5">
-                    {u.status === 'pending' && (<>
-                      <Button size="sm" disabled={busy} onClick={() => act(u.employee_id, 'approve')}>승인</Button>
-                      <Button size="sm" variant="danger" disabled={busy} onClick={() => act(u.employee_id, 'reject')}>거절</Button>
-                    </>)}
-                    {u.status === 'active' && (<>
-                      <Button size="sm" variant="secondary" disabled={busy}
-                              onClick={() => act(u.employee_id, 'admin', 'PUT', { is_admin: !u.is_admin })}>
-                        {u.is_admin ? '관리자 해제' : '관리자 지정'}
-                      </Button>
-                      <Button size="sm" variant="danger" disabled={busy} onClick={() => act(u.employee_id, 'disable')}>비활성화</Button>
-                    </>)}
-                    {u.status === 'disabled' && (
-                      <Button size="sm" variant="secondary" disabled={busy} onClick={() => act(u.employee_id, 'enable')}>재활성화</Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-          {!loading && rows.length === 0 && (
-            <tr><td colSpan={6} className="px-3 py-8 text-center text-zinc-500">해당하는 사용자가 없습니다.</td></tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+    </Page>
   );
 }

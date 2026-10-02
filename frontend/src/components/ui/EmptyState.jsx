@@ -1,9 +1,11 @@
-export default function EmptyState({ icon: Icon, title, children }) {
+/** 빈 상태 — 위쪽 정렬, 작게, 동작 하나(선택). */
+export default function EmptyState({ icon: Icon, title, children, action }) {
   return (
-    <div className="mx-auto mt-24 flex max-w-md flex-col items-center gap-3 text-center">
-      {Icon && <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-tint text-brand"><Icon size={22} aria-hidden="true" /></div>}
-      <h2 className="text-lg font-bold tracking-tight">{title}</h2>
-      <p className="text-sm leading-relaxed text-zinc-600">{children}</p>
+    <div className="mx-auto mt-12 flex max-w-[400px] flex-col items-center text-center">
+      {Icon && <Icon size={20} strokeWidth={1.75} className="text-n-400" aria-hidden="true" />}
+      <h2 className="mt-3 text-body font-semibold text-n-900">{title}</h2>
+      {children && <p className="mt-1 text-ui text-n-600">{children}</p>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }

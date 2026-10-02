@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { calls, mockApi } from '../../test/mockApi.js';
@@ -101,4 +101,42 @@ test('시트를 불러오다 실패해도 시트 탭은 남아 다시 고를 수
   expect(await screen.findByRole('alert')).toHaveTextContent('파일을 열 수 없습니다');
   await userEvent.click(screen.getByRole('tab', { name: '응력' }));
   expect(await screen.findByText('L100')).toBeInTheDocument();
+});
+
+test('PDF 는 불러오는 동안 여는 중 표시를 보이고, 다 열리면 걷는다', async () => {
+  mockApi({ 'POST /api/files/1/link?inline=true': { url: '/api/files/1/content?t=a&inline=1' } });
+  render(<FilePreview file={{ ...base, id: 1, name: 'r.pdf' }} />);
+  expect(screen.getByText('PDF 여는 중…')).toBeInTheDocument();
+  const frame = await screen.findByTitle('PDF 미리보기');
+  fireEvent.load(frame);
+  expect(screen.queryByText('PDF 여는 중…')).toBeNull();
+});
+
+test('브라우저가 PDF 를 보여 줄 수 없으면 빈 상자 대신 안내와 내려받기를 보인다', async () => {
+  Object.defineProperty(navigator, 'pdfViewerEnabled', { value: false, configurable: true });
+  try {
+    const fetch = mockApi({ 'POST /api/files/1/link': { url: '/api/files/1/content?t=z' } });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    render(<FilePreview file={{ ...base, id: 1, name: 'r.pdf' }} />);
+    expect(screen.getByText(/PDF 를 바로 미리 볼 수 없습니다/)).toBeInTheDocument();
+    expect(screen.queryByTitle('PDF 미리보기')).toBeNull();
+    // 인라인 링크는 받지 않는다(빈 iframe 을 만들지 않는다).
+    expect(calls(fetch)).not.toContain('POST /api/files/1/link?inline=true');
+    await userEvent.click(screen.getByRole('button', { name: '내려받아 열기' }));
+    expect(calls(fetch)).toContain('POST /api/files/1/link');
+    expect(click).toHaveBeenCalled();
+  } finally {
+    delete navigator.pdfViewerEnabled;
+  }
+});
+
+test('요약은 파일 제목·목차·표지 글이 같은 글을 되풀이하지 않는다', () => {
+  mockApi({ 'POST /api/files/1/link?inline=true': { url: '/api/files/1/content?t=a&inline=1' } });
+  const summary = { unit: 'page', count: 1, title: 'HULL NO. 9999 계류 검토', headings: ['HULL NO. 9999 계류 검토', '결론'],
+    cover: 'HULL NO. 9999 계류 검토\n선체 구조 강도 평가' };
+  render(<FilePreview file={{ ...base, id: 1, name: 'r.pdf', extract: { state: 'done', summary } }} hideTitles={['다른 제목']} />);
+  expect(screen.getAllByText('HULL NO. 9999 계류 검토')).toHaveLength(1);
+  expect(screen.getByText('결론')).toBeInTheDocument();
+  expect(screen.getByText('선체 구조 강도 평가')).toBeInTheDocument();
+  expect(screen.getByText('1쪽')).toBeInTheDocument();
 });

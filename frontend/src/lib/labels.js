@@ -16,7 +16,7 @@ export const BATCH_STATE_LABELS = {
 };
 
 export const EXCLUDE_REASON_LABELS = {
-  drm: 'DRM 암호화 — 탐색기로 00_Inbox 에 복사해 주세요',
+  drm: 'DRM 암호화. 탐색기로 00_Inbox 에 복사해 주세요',
   path_too_long: '경로가 너무 김',
 };
 
@@ -38,7 +38,7 @@ export const ERROR_LABELS = {
   no_files: '올릴 파일이 없습니다.',
   duplicate_path: '같은 경로의 파일이 두 번 들어 있습니다.',
   merge_into_id_only_for_draft: '기존 자료에 추가하기는 미확정 초안에서만 할 수 있습니다.',
-  drm_encrypted: 'DRM 암호화 파일이라 올릴 수 없습니다 — 탐색기로 00_Inbox 에 복사해 주세요.',
+  drm_encrypted: 'DRM 암호화 파일이라 올릴 수 없습니다. 탐색기로 00_Inbox 에 복사해 주세요.',
   link_invalid: '내려받기 링크가 만료됐습니다. 다시 눌러 주세요.',
   file_not_found: '파일을 찾을 수 없습니다.',
   file_missing: '공유 폴더에서 파일을 찾을 수 없습니다.',

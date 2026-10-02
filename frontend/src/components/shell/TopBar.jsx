@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { LogOut, Search, Upload } from 'lucide-react';
+import { LogOut, Search, Upload, X } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import Logo from '../ui/Logo.jsx';
+import Menu from '../ui/Menu.jsx';
 
 const DEBOUNCE_MS = 200;
 
@@ -75,24 +76,52 @@ export default function TopBar({ user, onLogout }) {
     go(q, { replace: false });
   }
 
+  function onClear() {
+    clearTimeout(timerRef.current);
+    setQ('');
+    if (locRef.current.pathname === '/') go('', { replace: true });
+    inputRef.current?.focus();
+  }
+
   return (
-    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-line bg-white pl-5 pr-4">
-      <div className="w-44"><Logo /></div>
-      <form role="search" className="flex-1" onSubmit={onSubmit}>
-        <label className="flex h-[38px] max-w-[640px] items-center gap-2.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 text-zinc-500 focus-within:border-brand focus-within:bg-white focus-within:ring-3 focus-within:ring-brand-ring">
-          <Search size={18} strokeWidth={1.75} aria-hidden="true" />
+    <header className="flex h-12 shrink-0 items-center gap-3 bg-n-50 px-3">
+      <div className="flex w-[196px] shrink-0 items-center pl-1"><Logo /></div>
+      <form role="search" className="min-w-0 flex-1" onSubmit={onSubmit}>
+        <label className="field group flex h-9 w-full max-w-[560px] items-center gap-2 rounded-md border border-transparent bg-n-100 px-2.5
+                          transition-[background-color,border-color,box-shadow] duration-120 ease-out hover:bg-n-150 focus-within:bg-n-0">
+          <Search size={16} strokeWidth={1.75} className="shrink-0 text-n-500" aria-hidden="true" />
           <input ref={inputRef} aria-label="검색어" value={q} onChange={onChange}
                  placeholder="호선, 제목, 보고서 내용 검색…"
-                 className="flex-1 bg-transparent text-sm text-zinc-900 outline-none" />
-          <kbd className="rounded border border-b-2 border-zinc-300 bg-white px-1.5 font-mono text-[11px] text-zinc-600">Ctrl K</kbd>
+                 className="min-w-0 flex-1 bg-transparent text-body text-n-900 outline-none focus-visible:outline-none" />
+          {q ? (
+            <button type="button" aria-label="검색어 지우기" onClick={onClear}
+                    className="flex h-5 w-5 items-center justify-center rounded-xs text-n-500 transition-colors duration-120 hover:bg-n-200 hover:text-n-900">
+              <X size={14} aria-hidden="true" />
+            </button>
+          ) : (
+            <kbd className="inline-flex h-5 items-center rounded-sm border border-n-250 bg-n-0 px-1.5 font-mono text-micro text-n-500 shadow-xs">Ctrl K</kbd>
+          )}
         </label>
       </form>
-      <Button onClick={() => navigate('/inbox')}><Upload size={14} aria-hidden="true" />올리기</Button>
-      <div className="flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-[13px] font-semibold text-white"
-              title={`${user.name} (${user.employee_id})`}>{user.name.slice(0, 1)}</span>
-        <Button variant="ghost" size="sm" onClick={onLogout} aria-label="로그아웃"><LogOut size={16} aria-hidden="true" /></Button>
-      </div>
+      <Button size="sm" onClick={() => navigate('/inbox')}><Upload size={14} aria-hidden="true" />올리기</Button>
+      <Menu
+        width={232}
+        trigger={(props) => (
+          <button type="button" {...props} aria-label={`계정 메뉴 (${user.name})`}
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-subtle text-meta font-semibold text-brand
+                             transition-colors duration-120 ease-out hover:bg-brand-muted active:bg-brand-muted">
+            {user.name.slice(0, 1)}
+          </button>
+        )}
+        header={(
+          <div className="border-b border-n-200 px-3 pb-2.5 pt-2">
+            <div className="text-body font-semibold text-n-900">{user.name}</div>
+            <div className="font-mono text-meta text-n-500">{user.employee_id}</div>
+            {user.department && <div className="text-meta text-n-500">{user.department}</div>}
+          </div>
+        )}
+        items={[{ label: '로그아웃', icon: LogOut, onSelect: onLogout }]}
+      />
     </header>
   );
 }

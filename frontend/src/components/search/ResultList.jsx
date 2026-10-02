@@ -1,18 +1,21 @@
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import Highlight from '../ui/Highlight.jsx';
+import Highlight, { TermHighlight } from '../ui/Highlight.jsx';
 import KindBadge from '../ui/KindBadge.jsx';
-import { MATCH_LABELS, formatDateTime } from '../../lib/labels.js';
+import { DraftBadge, HullChip } from '../ui/Status.jsx';
+import { formatDateTime } from '../../lib/labels.js';
 import { locatorLabel } from '../../lib/search.js';
 
-function Snippets({ snippets }) {
+const stop = (e) => e.stopPropagation();
+
+function Snippets({ snippets, showName = true }) {
   if (!snippets?.length) return null;
   return (
-    <ul className="mt-1.5 space-y-1">
+    <ul className="mt-1.5 flex flex-col gap-1">
       {snippets.map((s, i) => (
-        <li key={i} className="text-xs leading-relaxed text-zinc-600">
-          <span className="mr-1.5 rounded bg-zinc-100 px-1 py-px font-mono text-[11px] text-zinc-500">
-            <span>{s.name}</span> · <span>{locatorLabel(s.locator)}</span>
+        <li key={i} className="line-clamp-2 text-meta text-n-600">
+          <span className="mr-1.5 font-medium text-n-500">
+            {showName && <><span>{s.name}</span> · </>}<span>{locatorLabel(s.locator)}</span>
           </span>
           <Highlight text={s.text} highlights={s.highlights} />
         </li>
@@ -21,53 +24,54 @@ function Snippets({ snippets }) {
   );
 }
 
-function HullChips({ hulls }) {
-  return hulls.map((h) => (
-    <Link key={h} to={`/h/${h}`} onClick={(e) => e.stopPropagation()}
-          className="rounded bg-brand-tint px-1.5 font-mono text-xs font-semibold text-brand hover:underline">{h}</Link>
-  ));
-}
+const Hulls = ({ hulls }) => hulls.map((h) => <HullChip key={h} hull={h} onClick={stop} />);
+const Sep = () => <span aria-hidden="true" className="text-n-300">·</span>;
 
-const DraftBadge = () => <span className="rounded bg-amber-50 px-1.5 text-[11px] font-semibold text-wait">미확정</span>;
-
-function EntryRow({ item }) {
+function EntryRow({ item, on, terms }) {
+  const date = item.analysis_period || formatDateTime(item.confirmed_at).slice(0, 10);
+  const meta = [item.zones?.length ? item.zones.join(', ') : null, item.analysis_type].filter(Boolean);
   return (
     <>
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-xs text-zinc-500">{item.entry_id}</span>
-        {item.status === 'draft' && <DraftBadge />}
-        <Link to={`/e/${item.entry_id}`} onClick={(e) => e.stopPropagation()}
-              className="min-w-0 truncate text-sm font-semibold text-zinc-900 hover:text-brand hover:underline">{item.title}</Link>
+      <div className="flex items-baseline gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Link to={`/e/${item.entry_id}`} onClick={stop}
+                className={`min-w-0 truncate text-body font-semibold tracking-[-0.005em] hover:underline ${on ? 'text-brand' : 'text-n-900'}`}>
+            <TermHighlight text={item.title} terms={terms} />
+          </Link>
+          {item.status === 'draft' && <DraftBadge />}
+        </div>
+        <span className="shrink-0 font-mono text-meta text-n-500">{date}</span>
       </div>
-      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-zinc-600">
-        <HullChips hulls={item.hulls} />
-        {item.analysis_type && <span>{item.analysis_type}</span>}
-        {item.zones?.length > 0 && <span className="text-zinc-500">· {item.zones.join(', ')}</span>}
-        <span className="flex gap-1">{item.kinds.map((k) => <KindBadge key={k} kind={k} />)}</span>
-        <span className="ml-auto font-mono text-zinc-500">{item.analysis_period || formatDateTime(item.confirmed_at).slice(0, 10)}</span>
+      <div className="mt-1 flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-n-600">
+          <Hulls hulls={item.hulls} />
+          {meta.length > 0 && <span className="truncate">{meta.join(' · ')}</span>}
+          {item.kinds.length > 0 && (meta.length > 0 || item.hulls.length > 0) && <Sep />}
+          <span className="flex gap-1">{item.kinds.map((k) => <KindBadge key={k} kind={k} />)}</span>
+        </div>
+        <span className="shrink-0 font-mono text-meta text-n-500">{item.entry_id}</span>
       </div>
-      {item.matched?.length > 0 && (
-        <p className="mt-1 text-[11px] text-zinc-500">일치: {item.matched.map((m) => MATCH_LABELS[m] || m).join('·')}</p>
-      )}
       <Snippets snippets={item.snippets} />
     </>
   );
 }
 
-function FileRow({ item }) {
+function FileRow({ item, on }) {
   return (
     <>
       <div className="flex items-center gap-2">
         <KindBadge kind={item.kind} name={item.name} />
-        <span className="min-w-0 truncate text-sm font-semibold text-zinc-900" title={item.rel_path}>{item.name}</span>
-      </div>
-      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-zinc-600">
-        <HullChips hulls={item.hulls} />
-        <span className="font-mono text-zinc-500">{item.entry_id}</span>
-        <span className="truncate">{item.entry_title}</span>
+        <span className={`min-w-0 truncate text-body font-semibold tracking-[-0.005em] ${on ? 'text-brand' : 'text-n-900'}`} title={item.rel_path}>{item.name}</span>
         {item.entry_status === 'draft' && <DraftBadge />}
       </div>
-      <Snippets snippets={item.snippets} />
+      <div className="mt-1 flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2 text-meta text-n-600">
+          <Hulls hulls={item.hulls} />
+          <span className="truncate">{item.entry_title}</span>
+        </div>
+        <span className="shrink-0 font-mono text-meta text-n-500">{item.entry_id}</span>
+      </div>
+      <Snippets snippets={item.snippets} showName={false} />
     </>
   );
 }
@@ -78,7 +82,7 @@ export const itemKey = (item) => (item.file_id ? `f${item.file_id}` : item.entry
  * 결과 목록 — ↑/↓·Home·End 로 고르고 Enter 로 연다(onOpen).
  * onSelect(item, { immediate }) — 마우스로 누르면 immediate=true(미리보기를 바로 연다), 키보드는 false.
  */
-export default function ResultList({ unit, items, selectedKey, onSelect, onOpen }) {
+export default function ResultList({ unit, items, selectedKey, onSelect, onOpen, terms }) {
   const listRef = useRef(null);
   // 키보드로 고른 항목이 화면 밖이면 보이게 스크롤한다(jsdom 에는 scrollIntoView 가 없다).
   useEffect(() => {
@@ -104,14 +108,16 @@ export default function ResultList({ unit, items, selectedKey, onSelect, onOpen 
   return (
     <ul ref={listRef} role="listbox" aria-label="검색 결과" tabIndex={0} onKeyDown={onKeyDown}
         aria-activedescendant={selectedKey ? `result-${selectedKey}` : undefined}
-        className="divide-y divide-line rounded-lg border border-line bg-white outline-none focus-visible:ring-3 focus-visible:ring-brand-ring">
+        className={`group/list outline-none ${selectedKey ? 'focus-visible:outline-none' : 'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-ring'}`}>
       {items.map((it) => {
         const key = itemKey(it);
         const on = key === selectedKey;
         return (
           <li key={key} id={`result-${key}`} data-key={key} role="option" aria-selected={on} onClick={() => onSelect(it, { immediate: true })}
-              className={`cursor-pointer px-4 py-3 ${on ? 'bg-brand-tint/60' : 'hover:bg-zinc-50'}`}>
-            {unit === 'file' ? <FileRow item={it} /> : <EntryRow item={it} />}
+              className={`cursor-pointer border-b border-n-200 px-5 py-3
+                ${on ? 'bg-brand-subtle hover:bg-brand-muted/60 group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-brand-ring'
+                  : 'hover:bg-n-25'}`}>
+            {unit === 'file' ? <FileRow item={it} on={on} /> : <EntryRow item={it} on={on} terms={terms} />}
           </li>
         );
       })}

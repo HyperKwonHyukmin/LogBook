@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Copy, GripVertical, Lock, Scissors, Trash2 } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import ChipInput from '../ui/ChipInput.jsx';
+import { useConfirm } from '../ui/ConfirmDialog.jsx';
+import { Labeled, inputClass, selectClass } from '../ui/Field.jsx';
 import KindBadge from '../ui/KindBadge.jsx';
 import { api } from '../../api/client.js';
 import { errorText, formatBytes } from '../../lib/labels.js';
@@ -9,10 +11,6 @@ import { errorText, formatBytes } from '../../lib/labels.js';
 const DRAG_TYPE = 'application/x-logbook-file';
 const hullRule = (v) => /^\d{4}$/.test(v) || '호선은 숫자 4자리입니다.';
 
-function Field({ label, children }) {
-  return <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">{label}{children}</label>;
-}
-const inputCls = 'h-8 rounded-md border border-zinc-300 bg-white px-2.5 text-[13px] text-zinc-900 outline-none focus:border-brand focus:ring-3 focus:ring-brand-ring disabled:bg-zinc-50';
 
 /** 정리 대기 화면의 초안 Entry 카드 — 추정값을 고치고, 파일을 옮기고, 확정한다(설계 §5.5). */
 const TEXT_FIELDS = ['title', 'analysis_type', 'analysis_period', 'description'];
@@ -25,6 +23,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false); // 확정·버리기·나누기 등 동작 중(저장 중에는 켜지 않는다)
   const [over, setOver] = useState(false);
+  const [confirm, dialog] = useConfirm();
   const baseRef = useRef(entry); // 폼이 마지막으로 맞춘 서버 값(칸별로 '고쳤는가'를 가린다)
   const versionRef = useRef(entry.version); // 다음 PATCH 에 실을 version — PATCH 응답으로 갱신
   const queueRef = useRef(Promise.resolve()); // 저장·동작을 한 줄로 세운다
@@ -86,7 +85,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
     setBusy(true);
     return enqueue(async () => {
       if (saveFailedRef.current) {
-        setError(`저장하지 못한 내용이 있어 ${verb} 않았습니다 — ${saveFailedRef.current}`);
+        setError(`저장하지 못한 내용이 있어 ${verb} 않았습니다. ${saveFailedRef.current}`);
         return;
       }
       setError('');
@@ -108,6 +107,17 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
   const disabled = !canEdit || busy; // 버튼용
   const fieldDisabled = !canEdit; // 입력 칸은 저장 중에도 막지 않는다(포커스가 빠지지 않게)
   const hulls = form.hulls.map((h) => h.hull_no);
+
+  /** 초안 버리기 — 초안은 휴지통에서 복원할 수 없어 확인 대화상자를 거친다. */
+  async function discard() {
+    const ok = await confirm({
+      title: `${entry.entry_id} 초안을 버릴까요?`,
+      body: '파일은 휴지통으로 가며, 초안은 복원할 수 없습니다.',
+      confirmLabel: '버리기',
+    });
+    if (ok) act(() => api(`/entries/${entry.entry_id}`, { method: 'DELETE' }), '버리지');
+  }
+
   return (
     <article aria-label={`${entry.entry_id} ${entry.title}`}
              onDragOver={(e) => { if (canEdit) { e.preventDefault(); setOver(true); } }}
@@ -120,62 +130,64 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
                const { fileId, from } = JSON.parse(raw);
                if (from !== entry.entry_id) moveFile(fileId, entry.entry_id);
              }}
-             className={`rounded-lg border bg-white ${over ? 'border-brand ring-3 ring-brand-ring' : 'border-line'}`}>
-      <header className="flex items-center gap-2 border-b border-line px-4 py-2.5">
-        <span className="h-[7px] w-[7px] rounded-full bg-wait" aria-hidden="true" />
-        <span className="font-mono text-xs text-zinc-500">{entry.entry_id}</span>
-        <span className="text-xs font-medium text-wait">미확정</span>
-        {!canEdit && <span className="inline-flex items-center gap-1 text-xs text-zinc-500"><Lock size={12} aria-hidden="true" />올린 사람만 수정</span>}
+             className={`rounded-lg border bg-n-0 transition-[border-color,box-shadow] duration-120 ${over ? 'border-brand ring-3 ring-brand-muted' : 'border-n-200'}`}>
+      {dialog}
+      <header className="flex h-11 items-center gap-2.5 border-b border-n-200 px-4">
+        <span className="inline-flex items-center gap-1.5 text-meta font-medium text-wait">
+          <span className="h-1.5 w-1.5 rounded-full bg-wait" aria-hidden="true" />미확정
+        </span>
+        <span className="font-mono text-meta text-n-500">{entry.entry_id}</span>
+        {!canEdit && <span className="inline-flex items-center gap-1 text-meta text-n-500"><Lock size={12} aria-hidden="true" />올린 사람만 수정</span>}
         <div className="flex-1" />
-        <Button variant="danger" size="sm" disabled={disabled}
-                onClick={() => window.confirm(`${entry.entry_id} 초안을 버릴까요? 파일은 휴지통으로 갑니다.`) && act(() => api(`/entries/${entry.entry_id}`, { method: 'DELETE' }), '버리지')}>
-          <Trash2 size={13} aria-hidden="true" />버리기
+        <Button variant="ghost" size="sm" disabled={disabled} onClick={discard} className="hover:text-err">
+          <Trash2 size={14} aria-hidden="true" />버리기
         </Button>
-        <Button size="sm" disabled={disabled} onClick={() => act(() => api(`/entries/${entry.entry_id}/confirm`, { method: 'POST' }), '확정하지')}>
-          <CheckCircle2 size={13} aria-hidden="true" />확정
+        <Button size="sm" disabled={disabled}
+                onClick={() => act(() => api(`/entries/${entry.entry_id}/confirm`, { method: 'POST' }), '확정하지')}>
+          <CheckCircle2 size={14} aria-hidden="true" />확정
         </Button>
       </header>
 
-      <div className="grid grid-cols-1 gap-3 px-4 py-3 md:grid-cols-2">
-        <Field label="제목">
-          <input className={inputCls} value={form.title || ''} disabled={fieldDisabled}
+      <div className="grid grid-cols-1 gap-x-4 gap-y-3 px-4 py-4 md:grid-cols-2">
+        <Labeled label="제목">
+          <input className={inputClass()} value={form.title || ''} disabled={fieldDisabled}
                  onChange={(e) => setForm({ ...form, title: e.target.value })} onBlur={() => saveIfChanged('title')} />
-        </Field>
-        <Field label="해석 종류">
-          <input className={inputCls} value={form.analysis_type || ''} disabled={fieldDisabled} placeholder="예: 강도, 피로, 진동"
+        </Labeled>
+        <Labeled label="해석 종류">
+          <input className={inputClass()} value={form.analysis_type || ''} disabled={fieldDisabled} placeholder="예: 강도, 피로, 진동"
                  onChange={(e) => setForm({ ...form, analysis_type: e.target.value })} onBlur={() => saveIfChanged('analysis_type')} />
-        </Field>
-        <div className="flex flex-col gap-1 text-xs font-medium text-zinc-600">호선
-          <ChipInput label="호선" kind="hull" values={hulls} validate={hullRule} disabled={fieldDisabled}
+        </Labeled>
+        <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600">호선
+          <ChipInput label="호선" kind="hull" mono values={hulls} validate={hullRule} disabled={fieldDisabled}
                      onChange={setHulls} />
           {entry.hull_evidence?.length > 0 && (
-            <span className="font-normal text-zinc-500">추정 근거: {entry.hull_evidence.map((h) => `${h.hull_no} — ${(h.reasons || []).join(', ')}`).join(' · ')}</span>
+            <span className="font-normal text-n-500">추정 근거: {entry.hull_evidence.map((h) => `${h.hull_no} (${(h.reasons || []).join(', ')})`).join(' · ')}</span>
           )}
         </div>
-        <div className="flex flex-col gap-1 text-xs font-medium text-zinc-600">구역
+        <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600">구역
           <ChipInput label="구역" kind="zone" values={form.zones} disabled={fieldDisabled} onChange={setZones} />
         </div>
-        <Field label="해석 시기">
-          <input className={inputCls} value={form.analysis_period || ''} disabled={fieldDisabled} placeholder="YYYY-MM"
+        <Labeled label="해석 시기">
+          <input className={inputClass('font-mono placeholder:font-sans')} value={form.analysis_period || ''} disabled={fieldDisabled} placeholder="YYYY-MM"
                  onChange={(e) => setForm({ ...form, analysis_period: e.target.value })} onBlur={() => saveIfChanged('analysis_period')} />
-        </Field>
-        <Field label="설명">
-          <input className={inputCls} value={form.description || ''} disabled={fieldDisabled}
+        </Labeled>
+        <Labeled label="설명">
+          <input className={inputClass()} value={form.description || ''} disabled={fieldDisabled}
                  onChange={(e) => setForm({ ...form, description: e.target.value })} onBlur={() => saveIfChanged('description')} />
-        </Field>
+        </Labeled>
       </div>
 
       {(entry.suggested_entry || entry.merge_into) && (
-        <div className="mx-4 mb-3 flex items-center gap-2 rounded-md bg-brand-tint px-3 py-2 text-[13px] text-brand">
+        <div className="mx-4 mb-4 flex flex-wrap items-center gap-2 rounded-md bg-brand-subtle px-3 py-2 text-ui text-n-800">
           {entry.merge_into ? (
             <>
-              <span>확정하면 <b className="font-mono">{entry.merge_into.entry_id}</b> ‘{entry.merge_into.title}’ 에 파일이 추가됩니다.</span>
+              <span>확정하면 <span className="font-mono font-medium text-brand">{entry.merge_into.entry_id}</span> ‘{entry.merge_into.title}’ 에 파일이 추가됩니다.</span>
               <div className="flex-1" />
               <Button variant="ghost" size="sm" disabled={disabled} onClick={() => patch({ merge_into_id: null })}>새 Entry 로 확정</Button>
             </>
           ) : (
             <>
-              <span>비슷한 기존 자료 <b className="font-mono">{entry.suggested_entry.entry_id}</b> ‘{entry.suggested_entry.title}’ 에 추가할까요?</span>
+              <span>비슷한 기존 자료 <span className="font-mono font-medium text-brand">{entry.suggested_entry.entry_id}</span> ‘{entry.suggested_entry.title}’ 에 추가할까요?</span>
               <div className="flex-1" />
               <Button variant="secondary" size="sm" disabled={disabled} aria-label={`${entry.suggested_entry.entry_id} 에 추가`}
                       onClick={() => patch({ merge_into_id: entry.suggested_entry.entry_id })}>추가</Button>
@@ -184,12 +196,12 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
         </div>
       )}
 
-      <div className="border-t border-line">
-        <div className="flex items-center gap-2 px-4 py-2 text-xs text-zinc-600">
-          <span>파일 {entry.files.length}개</span>
+      <div className="border-t border-n-200">
+        <div className="flex h-10 items-center gap-2 px-4 text-meta text-n-600">
+          <span className="font-medium text-n-700">파일 <span className="font-mono font-normal text-n-500">{entry.files.length}</span></span>
           <div className="flex-1" />
           {canEdit && siblings.length > 0 && (
-            <select aria-label="다른 묶음과 합치기" disabled={disabled} value="" className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-xs"
+            <select aria-label="다른 묶음과 합치기" disabled={disabled} value="" className={selectClass('h-7 text-meta')}
                     onChange={(e) => e.target.value && act(() => api(`/entries/${entry.entry_id}/merge`, { method: 'POST', body: { from_entry_id: e.target.value } }), '합치지')}>
               <option value="">다른 묶음과 합치기…</option>
               {siblings.map((s) => <option key={s.entry_id} value={s.entry_id}>{s.entry_id} {s.title}</option>)}
@@ -198,31 +210,32 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
           {canEdit && (
             <Button variant="secondary" size="sm" disabled={disabled || selected.length === 0 || selected.length === entry.files.length}
                     onClick={() => act(() => api(`/entries/${entry.entry_id}/split`, { method: 'POST', body: { file_ids: selected } }), '나누지')}>
-              <Scissors size={13} aria-hidden="true" />새 묶음으로 나누기
+              <Scissors size={14} aria-hidden="true" />새 묶음으로 나누기
             </Button>
           )}
         </div>
-        <ul className="divide-y divide-line">
+        <ul>
           {entry.files.map((f) => (
             <li key={f.id} draggable={canEdit}
                 onDragStart={(e) => e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ fileId: f.id, from: entry.entry_id }))}
-                className="flex items-center gap-2.5 px-4 py-1.5 text-[13px]">
-              {canEdit && <GripVertical size={14} className="cursor-grab text-zinc-400" aria-hidden="true" />}
+                className="flex h-9 items-center gap-2.5 border-t border-n-200 px-4 text-ui transition-colors duration-120 hover:bg-n-25">
+              {canEdit && <GripVertical size={14} className="cursor-grab text-n-400" aria-hidden="true" />}
               {canEdit && (
                 <input type="checkbox" aria-label={`${f.rel_path} 선택`} checked={selected.includes(f.id)} disabled={busy}
+                       className="h-3.5 w-3.5 accent-brand"
                        onChange={(e) => setSelected(e.target.checked ? [...selected, f.id] : selected.filter((x) => x !== f.id))} />
               )}
               <KindBadge kind={f.kind} name={f.name} />
-              <span className="min-w-0 flex-1 truncate font-mono text-xs" title={f.rel_path}>{f.rel_path}</span>
+              <span className="min-w-0 flex-1 truncate text-n-800" title={f.rel_path}>{f.rel_path}</span>
               {f.duplicate_of_entry && (
-                <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 text-[11px] text-wait"><Copy size={11} aria-hidden="true" />{f.duplicate_of_entry} 에 이미 있음</span>
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-xs bg-wait-bg px-1.5 text-micro font-medium text-wait"><Copy size={11} aria-hidden="true" />{f.duplicate_of_entry} 에 이미 있음</span>
               )}
               {f.drm_encrypted && (
-                <span className="inline-flex items-center gap-1 rounded bg-red-50 px-1.5 text-[11px] text-err"><AlertTriangle size={11} aria-hidden="true" />암호화됨</span>
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-xs bg-err-bg px-1.5 text-micro font-medium text-err"><AlertTriangle size={11} aria-hidden="true" />암호화됨</span>
               )}
-              <span className="w-16 text-right font-mono text-xs text-zinc-500">{formatBytes(f.size)}</span>
+              <span className="w-16 shrink-0 text-right font-mono text-meta text-n-500">{formatBytes(f.size)}</span>
               {canEdit && siblings.length > 0 && (
-                <select aria-label={`${f.rel_path} 옮기기`} disabled={busy} value="" className="h-6 rounded border border-zinc-300 bg-white px-1 text-[11px]"
+                <select aria-label={`${f.rel_path} 옮기기`} disabled={busy} value="" className={selectClass('h-6 px-1.5 text-micro')}
                         onChange={(e) => e.target.value && moveFile(f.id, e.target.value)}>
                   <option value="">옮기기…</option>
                   {siblings.map((s) => <option key={s.entry_id} value={s.entry_id}>{s.entry_id}</option>)}
@@ -232,7 +245,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
           ))}
         </ul>
       </div>
-      {error && <p role="alert" className="border-t border-line px-4 py-2 text-[13px] text-err">{error}</p>}
+      {error && <p role="alert" className="border-t border-err-line bg-err-bg px-4 py-2 text-ui text-err">{error}</p>}
     </article>
   );
 }

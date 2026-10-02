@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render as rtlRender, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import TrashPage from './TrashPage.jsx';
 
@@ -7,6 +8,9 @@ const ROWS = [
   { entry_id: 'E000001', title: '9999 연결시험', trash_rel: 'E000001_20260929-123305', restorable: true, updated_at: '2026-09-29T12:33:05' },
   { entry_id: 'E000002', title: '버린 초안', trash_rel: 'draft_E000002_20260929-130000', restorable: false, updated_at: '2026-09-29T13:00:00' },
 ];
+
+// 제목과 복원 안내가 자료 링크라 라우터 안에서 그린다.
+const render = (ui) => rtlRender(<MemoryRouter>{ui}</MemoryRouter>);
 
 function mock(map) {
   vi.stubGlobal('fetch', vi.fn((url, init = {}) => {
