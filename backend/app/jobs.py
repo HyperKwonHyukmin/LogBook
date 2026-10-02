@@ -1,11 +1,14 @@
 """MySQL 기반 작업 큐(설계 §2: Redis 없음). 워커 하나가 돌지만 SKIP LOCKED 로 중복 실행을 막는다."""
 from datetime import datetime, timedelta
+from typing import Callable
 
 from sqlalchemy.orm import Session
 
 from . import models
 
 RETRY_STEP = timedelta(minutes=1)
+MAX_ATTEMPTS = 3          # 작업 하나의 최대 시도 횟수(worker.MAX_ATTEMPTS 가 이 값을 쓴다)
+EXHAUSTED_ERROR = "attempts_exhausted"
 
 
 def _now() -> datetime:
@@ -18,28 +21,44 @@ def enqueue(db: Session, job_type: str, target_id: int) -> models.Job:
     return job
 
 
-# 오래 걸리는 본문 추출은 뒤로 미룬다 — 추출이 수천 건 쌓여도 배치 처리·메타 쓰기가 먼저 돈다.
-LOW_PRIORITY_TYPES = ("extract_file",)
+# 오래 걸리는 작업(본문 추출·BDF 변환)은 뒤로 미룬다 — 수천 건 쌓여도 배치 처리·메타 쓰기가 먼저 돈다.
+# 워커의 한 주기 시간 예산도 이 묶음에 건다(worker.HEAVY_BUDGET_SECONDS).
+HEAVY_JOB_TYPES = ("extract_file", "convert_model")
+LOW_PRIORITY_TYPES = HEAVY_JOB_TYPES  # 03 의 옛 이름(별칭)
 
 
 def claim_next(db: Session, now: datetime | None = None, *,
-               exclude_types: tuple[str, ...] = ()) -> models.Job | None:
+               exclude_types: tuple[str, ...] = (), max_attempts: int = MAX_ATTEMPTS,
+               on_exhausted: Callable[[models.Job], None] | None = None) -> models.Job | None:
+    """다음 작업을 running 으로 집어 든다.
+
+    시도 횟수가 이미 상한에 닿은 queued 작업은 다시 돌리지 않고 failed 로 끝낸다 — jobs.fail 은
+    상한에서 failed 로 두므로, 이런 작업은 워커가 처리 도중 OS 에 죽어(메모리 부족 등) recover_running
+    이 되돌린 경우뿐이다. 그대로 집으면 같은 자리에서 또 죽어 영영 돈다. on_exhausted 는 작업 종류별
+    후처리(모델·추출 상태를 failed 로)를 맡는다."""
     now = now or _now()
-    q = db.query(models.Job).filter(models.Job.state == "queued", models.Job.run_after <= now)
-    if exclude_types:
-        q = q.filter(models.Job.type.notin_(exclude_types))
-    job = (
-        q.order_by(models.Job.type.in_(LOW_PRIORITY_TYPES), models.Job.id)
-        .with_for_update(skip_locked=True)
-        .first()
-    )
-    if job is None:
-        db.rollback()
-        return None
-    job.state = "running"
-    job.attempts += 1
-    db.commit()
-    return job
+    while True:
+        q = db.query(models.Job).filter(models.Job.state == "queued", models.Job.run_after <= now)
+        if exclude_types:
+            q = q.filter(models.Job.type.notin_(exclude_types))
+        job = (
+            q.order_by(models.Job.type.in_(HEAVY_JOB_TYPES), models.Job.id)
+            .with_for_update(skip_locked=True)
+            .first()
+        )
+        if job is None:
+            db.rollback()
+            return None
+        if job.attempts >= max_attempts:
+            job.state, job.last_error = "failed", EXHAUSTED_ERROR
+            db.commit()
+            if on_exhausted is not None:
+                on_exhausted(job)
+            continue
+        job.state = "running"
+        job.attempts += 1
+        db.commit()
+        return job
 
 
 def complete(db: Session, job: models.Job) -> None:
@@ -48,7 +67,7 @@ def complete(db: Session, job: models.Job) -> None:
     db.commit()
 
 
-def fail(db: Session, job: models.Job, error: str, *, max_attempts: int = 3) -> None:
+def fail(db: Session, job: models.Job, error: str, *, max_attempts: int = MAX_ATTEMPTS) -> None:
     job.last_error = error[:2000]
     if job.attempts >= max_attempts:
         job.state = "failed"

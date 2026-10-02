@@ -14,7 +14,8 @@
 | 02b | `2026-09-29-logbook-02b-ingest-ui.md` — 올리기 화면 — 크롬 업로드(DRM 검사, `00_Inbox\_web`), 정리 대기 화면(묶음 카드·끌어 옮기기·확정), 휴지통 화면, 활동 로그 라벨 | 화면에서 올리고 확정까지 | 02a |
 | 03a | `2026-09-29-logbook-03a-search-backend.md` — 본문 추출(PDF·PPTX·XLSX·DOCX)·요약 카드·문서 속 호선, ngram 전문 검색·필터 건수, 태그 동의어, 호선·Entry 상세·파일(내려받기 링크·시트) API | 검색 API | 02 |
 | 03b | `2026-09-29-logbook-03b-search-ui.md` — 검색 화면·미리보기 패널, 호선 목록·타임라인, Entry 상세(인라인 수정·이력·파일 추가), 태그 화면 | 찾고 열어 보는 앱 | 03a |
-| 04 | BDF 뷰어 — pyNastran 변환, `model.lbm`, 모델 지문, 썸네일, three.js 뷰어(MVP ①~④), GPU 피킹 | 3D 확인 | 02 (03과 병행 가능) |
+| 04a | `2026-10-02-logbook-04a-bdf-backend.md` — 자체 BDF 파서(INCLUDE·대형 필드·좌표계), `model.lbm`, 모델 지문, 썸네일, convert_model 작업, 모델 API | BDF 변환 | 02 |
+| 04b | `2026-10-02-logbook-04b-bdf-viewer.md` — three.js 뷰어(MVP ①~④, GPU 피킹), 모델 미리보기, 전체 화면 `/v/:id`, 검색 썸네일 | 3D 확인 | 04a |
 | 05 | 운영 — Windows 서비스 등록, 일일 백업, `entry.json` 기반 재구축 명령, 관리자 화면(워커 상태·재변환), `.url` 바로가기 배포 | 145 서버 운영 개시 | 03, 04 |
 
 커밋 정책: 에이전트는 커밋하지 않는다. 각 태스크의 "커밋" 단계는 사용자가 직접 수행한다.

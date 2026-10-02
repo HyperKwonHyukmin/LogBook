@@ -57,3 +57,29 @@ export async function apiBinary(path, blob, { method = 'PUT' } = {}) {
   }
   return data;
 }
+
+/** 인증 GET — 오류·401 처리는 api() 와 같고, 본문 해석은 호출자가 한다. */
+async function fetchAuthed(path) {
+  const token = tokenStore.get();
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const res = await fetch(`/api${path}`, { headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    if (res.status === 401 && tokenStore.get() === token) {
+      tokenStore.clear();
+      window.dispatchEvent(new Event('logbook:unauthorized'));
+    }
+    throw new ApiError(res.status, data?.detail ?? null);
+  }
+  return res;
+}
+
+/** 바이너리 응답(model.lbm). gzip 은 브라우저가 Content-Encoding 으로 이미 풀어 준다. */
+export async function apiArrayBuffer(path) {
+  return (await fetchAuthed(path)).arrayBuffer();
+}
+
+/** 이미지 등 Blob 응답(썸네일). */
+export async function apiBlob(path) {
+  return (await fetchAuthed(path)).blob();
+}

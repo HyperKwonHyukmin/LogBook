@@ -35,13 +35,18 @@ def zones_of(db: Session, entry: models.Entry) -> list[str]:
 
 
 def file_to_dict(f: models.File, duplicate_entries: dict[int, str] | None = None,
-                 extracts: dict[int, models.FileExtract] | None = None) -> dict:
+                 extracts: dict[int, models.FileExtract] | None = None,
+                 model_rows: dict[int, models.ModelSummary] | None = None) -> dict:
     x = (extracts or {}).get(f.id)
+    s = (model_rows or {}).get(f.id)
     return {"id": f.id, "rel_path": f.rel_path, "name": f.name, "kind": f.kind, "size": f.size,
             "sha256": f.sha256, "drm_encrypted": f.drm_encrypted, "duplicate_of_id": f.duplicate_of_id,
             "duplicate_of_entry": (duplicate_entries or {}).get(f.duplicate_of_id),
             "location": f.location,
-            "extract": {"state": x.state, "error": x.error, "summary": x.summary} if x else None}
+            "extract": {"state": x.state, "error": x.error, "summary": x.summary} if x else None,
+            # BDF 변환 상태(04a) — 모델 파일이 아니거나 변환 기록이 없으면 None
+            "model": ({"state": s.state, "error": s.error, "counts": s.counts, "bbox": s.bbox,
+                       "missing": s.missing or [], "warnings": (s.warnings or [])[:10]} if s else None)}
 
 
 def _entry_ref(db: Session, entry_pk: int | None) -> dict | None:
@@ -62,6 +67,8 @@ def entry_to_dict(db: Session, entry: models.Entry) -> dict:
         .filter(models.File.id.in_(dup_ids)).all()) if dup_ids else {}
     extracts = {x.file_id: x for x in db.query(models.FileExtract)
                 .filter(models.FileExtract.file_id.in_([f.id for f in files]))} if files else {}
+    model_rows = {s.file_id: s for s in db.query(models.ModelSummary)
+                  .filter(models.ModelSummary.file_id.in_([f.id for f in files]))} if files else {}
     return {
         "id": entry.id, "entry_id": entry.entry_id, "status": entry.status, "title": entry.title,
         "analysis_type": entry.analysis_type, "description": entry.description,
@@ -75,7 +82,7 @@ def entry_to_dict(db: Session, entry: models.Entry) -> dict:
         "confirmed_at": entry.confirmed_at.isoformat() if entry.confirmed_at else None,
         "batch_id": entry.batch_id, "merge_into_id": entry.merge_into_id,
         "suggested_entry_id": entry.suggested_entry_id, "vault_rel": entry.vault_rel,
-        "files": [file_to_dict(f, dup_entries, extracts) for f in files],
+        "files": [file_to_dict(f, dup_entries, extracts, model_rows) for f in files],
         "suggested_entry": _entry_ref(db, entry.suggested_entry_id),
         "merge_into": _entry_ref(db, entry.merge_into_id),
     }
@@ -296,6 +303,12 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
             undo()
             raise
         _finish_batch(db, storage, batch)
+        # 파일이 더해졌다 — INCLUDE 를 못 찾았거나 실패했던 모델을 다시 변환한다(설계 §7.7).
+        # 새로 들어온 모델 파일은 배치 처리 때 이미 변환 작업이 들어가 있다.
+        # 한계(알려진 것): unique_rel 이 이름 충돌로 파일 이름을 바꾸면(예: mesh(1).bdf) 본 파일의
+        # INCLUDE 'mesh.bdf' 는 바뀐 이름을 모른다 — 그 INCLUDE 는 기존 대상 파일을 가리키거나 missing 으로 남는다.
+        from ..convert.job import requeue_entry_models  # 순환 import 방지
+        requeue_entry_models(db, target.id)
         db.commit()
         _write_meta_or_queue(db, storage, target)
         return target
@@ -319,6 +332,9 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
         undo()
         raise
     _finish_batch(db, storage, batch)
+    # 파일이 staging → vault 로 옮겨졌다 — INCLUDE 를 못 찾았거나 실패했던 모델을 새 위치에서 다시 변환한다
+    from ..convert.job import requeue_entry_models  # 순환 import 방지
+    requeue_entry_models(db, entry.id)
     db.commit()
     _write_meta_or_queue(db, storage, entry)
     return entry
@@ -392,6 +408,7 @@ def restore(db: Session, storage: StoragePaths, entry: models.Entry, user: model
         raise
     db.commit()
     _reenqueue_extract(db, entry)
+    _reenqueue_convert(db, entry)
     _write_meta_or_queue(db, storage, entry)
     return entry
 
@@ -410,6 +427,23 @@ def _reenqueue_extract(db: Session, entry: models.Entry) -> None:
         x = rows.get(f.id)
         if x is None or (x.state == "skipped" and x.error == "trashed"):
             enqueue_extract(db, f)
+    db.commit()
+
+
+def _reenqueue_convert(db: Session, entry: models.Entry) -> None:
+    """복원한 Entry 의 모델 파일 중 변환한 적이 없거나 휴지통에 있어 건너뛴 것을 다시 변환한다
+    (이미 끝난 변환 결과는 휴지통에서도 지우지 않으므로 그대로 둔다)."""
+    from ..convert.job import enqueue_convert
+
+    files = db.query(models.File).filter_by(entry_id=entry.id, kind="model").all()
+    if not files:
+        return
+    rows = {r.file_id: r for r in db.query(models.ModelSummary)
+            .filter(models.ModelSummary.file_id.in_([f.id for f in files]))}
+    for f in files:
+        r = rows.get(f.id)
+        if r is None or (r.state == "skipped" and r.error == "trashed"):
+            enqueue_convert(db, f)
     db.commit()
 
 

@@ -5,6 +5,7 @@ import KindBadge from '../ui/KindBadge.jsx';
 import { DraftBadge, HullChip } from '../ui/Status.jsx';
 import { formatDateTime } from '../../lib/labels.js';
 import { locatorLabel } from '../../lib/search.js';
+import ModelThumb from '../viewer/ModelThumb.jsx';
 
 const stop = (e) => e.stopPropagation();
 
@@ -57,7 +58,7 @@ function EntryRow({ item, on, terms }) {
 }
 
 function FileRow({ item, on }) {
-  return (
+  const body = (
     <>
       <div className="flex items-center gap-2">
         <KindBadge kind={item.kind} name={item.name} />
@@ -73,6 +74,16 @@ function FileRow({ item, on }) {
       </div>
       <Snippets snippets={item.snippets} showName={false} />
     </>
+  );
+  // BDF 는 왼쪽에 썸네일(64×40)을 둔다. 변환이 끝났거나 이전 결과(model_key)가 있을 때만 —
+  // 그 밖에는 서버에 그림이 없어 요청이 404 로 헛돈다.
+  if (item.kind !== 'model' || !(item.model_state === 'done' || item.model_key)) return body;
+  return (
+    <div className="flex items-start gap-3">
+      {/* 장식 그림 — 파일 이름이 바로 옆에 있다. */}
+      <ModelThumb fileId={item.file_id} modelKey={item.model_key} alt="" className="mt-0.5 h-10 w-16 shrink-0 rounded-sm" />
+      <div className="min-w-0 flex-1">{body}</div>
+    </div>
   );
 }
 

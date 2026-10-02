@@ -75,3 +75,30 @@ def test_claim_can_exclude_types(db):
     db.commit()
     assert jobs.claim_next(db, exclude_types=("extract_file",)) is None
     assert jobs.claim_next(db).type == "extract_file"
+
+
+def test_claim_fails_exhausted_job_instead_of_rerunning(db):
+    """OS 가 워커를 죽여 recover_running 이 되돌린 작업은 attempts 가 이미 상한일 수 있다 —
+    다시 집어 들면 같은 자리에서 또 죽어 영영 돈다. 상한에 닿은 작업은 실패로 끝낸다."""
+    jobs.enqueue(db, "convert_model", 1)
+    db.commit()
+    job = db.query(models.Job).one()
+    job.attempts = jobs.MAX_ATTEMPTS
+    db.commit()
+    seen = []
+    assert jobs.claim_next(db, on_exhausted=seen.append) is None
+    db.expire_all()
+    job = db.get(models.Job, job.id)
+    assert job.state == "failed" and job.last_error == "attempts_exhausted"
+    assert [j.id for j in seen] == [job.id]
+
+
+def test_claim_skips_exhausted_and_returns_next(db):
+    jobs.enqueue(db, "process_batch", 1)
+    jobs.enqueue(db, "process_batch", 2)
+    db.commit()
+    first = db.query(models.Job).filter_by(target_id=1).one()
+    first.attempts = jobs.MAX_ATTEMPTS
+    db.commit()
+    job = jobs.claim_next(db)
+    assert job.target_id == 2 and job.attempts == 1

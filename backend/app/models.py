@@ -245,3 +245,25 @@ class DownloadToken(Base):
     file_id = Column(Integer, nullable=False)
     employee_id = Column(String(20), nullable=False)
     expires_at = Column(DateTime, nullable=False, index=True)
+
+
+MODEL_STATES = ("queued", "done", "failed", "skipped", "include")
+
+
+class ModelSummary(Base):
+    """BDF 변환 결과 요약(설계 §4 model_summaries). 파생물(lbm·png)은 key(바이트 sha256)로 20_Derived 에 있다."""
+
+    __tablename__ = "model_summaries"
+
+    file_id = Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), primary_key=True)
+    state = Column(String(10), nullable=False, default="queued")
+    error = Column(String(500), nullable=True)
+    key = Column(String(64), nullable=True)
+    counts = Column(JSON, nullable=True)
+    bbox = Column(JSON, nullable=True)
+    sol = Column(String(20), nullable=True)
+    fingerprint = Column(LONG_TEXT, nullable=True)
+    warnings = Column(JSON, nullable=True)
+    includes = Column(JSON, nullable=True)   # 이 파일이 INCLUDE 한 형제 rel_path
+    missing = Column(JSON, nullable=True)    # 찾지 못한 INCLUDE 이름
+    updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)

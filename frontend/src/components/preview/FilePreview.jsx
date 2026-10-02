@@ -5,6 +5,7 @@ import { copyText, downloadFile, fileLink, uncPath } from '../../lib/files.js';
 import { EXTRACT_LABELS, errorText, formatBytes } from '../../lib/labels.js';
 import Button from '../ui/Button.jsx';
 import { Bar } from '../ui/Skeleton.jsx';
+import ModelPreview from './ModelPreview.jsx';
 import SummaryCard from './SummaryCard.jsx';
 
 const extOf = (name) => {
@@ -218,8 +219,10 @@ export function FileActions({ file, vaultUnc, trashed = false, showPath = false,
 /**
  * 파일 미리보기(설계 §6.3) — 형식별 본문. toolbar=true 면 위에 크기·동작 줄을 둔다
  * (파일 이름은 옆 파일 목록에 이미 있어 되풀이하지 않는다). hideTitles: 요약에서 뺄 제목들.
+ * BDF(kind=model)는 3D 미리보기(ModelPreview)를 쓴다. inlineModel=false 면 뷰어 대신 썸네일 + 3D 로 보기
+ * (좁은 검색 미리보기 패널).
  */
-export default function FilePreview({ file, vaultUnc, trashed = false, toolbar = true, hideTitles = [] }) {
+export default function FilePreview({ file, vaultUnc, trashed = false, toolbar = true, hideTitles = [], inlineModel = true }) {
   const ext = extOf(file.name);
   const notice = extractNotice(file.extract);
   // DRM 파일은 서버가 본문을 못 읽는다(시트 API 도 409). 미리보기 대신 사유와 내려받기만 보인다.
@@ -227,6 +230,8 @@ export default function FilePreview({ file, vaultUnc, trashed = false, toolbar =
   // 휴지통의 파일은 서버가 내주지 않는다(404). 복원 전에는 미리보기·내려받기·경로 복사를 숨긴다.
   const { inTrash } = fileState(file, { vaultUnc, trashed });
   const View = !blocked && !inTrash && VIEWS[ext];
+  // 모델 파일은 추출 요약이 없어 SummaryCard 대신 변환 요약을 ModelPreview 가 보인다.
+  const model = file.kind === 'model' && !blocked && !inTrash;
 
   return (
     <div className="flex flex-col gap-3">
@@ -238,8 +243,9 @@ export default function FilePreview({ file, vaultUnc, trashed = false, toolbar =
       )}
       {inTrash && <p className="rounded-md bg-n-100 px-3 py-2 text-ui text-n-700">{EXTRACT_LABELS.trashed}</p>}
       {notice && !inTrash && <p className="rounded-md border border-wait-line bg-wait-bg px-3 py-2 text-ui text-wait">{notice}</p>}
-      {!inTrash && <SummaryCard summary={file.extract?.summary} hideTitles={hideTitles} />}
-      {inTrash ? null : (
+      {!inTrash && !model && <SummaryCard summary={file.extract?.summary} hideTitles={hideTitles} />}
+      {model && <ModelPreview file={file} inline={inlineModel} />}
+      {inTrash || model ? null : (
         <div className="rounded-lg bg-n-50 p-3">
           {View ? <View file={file} /> : (
             <Fallback file={file}>

@@ -18,6 +18,7 @@ test('위치 라벨', () => {
   expect(locatorLabel('notes:5')).toBe('슬라이드 5 노트');
   expect(locatorLabel('sheet:응력:A')).toBe('시트 응력:A');
   expect(locatorLabel('body')).toBe('본문');
+  expect(locatorLabel('model')).toBe('모델 지문');
 });
 
 test('강조 조각 — 위치는 서버(파이썬) 글자 수 기준', () => {

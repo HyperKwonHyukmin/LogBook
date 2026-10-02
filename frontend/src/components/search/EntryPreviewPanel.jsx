@@ -78,7 +78,8 @@ export default function EntryPreviewPanel({ entryId, fileId, onClose }) {
       )}
       {entry && (
         <div className="min-h-0 flex-1 overflow-auto p-3">
-          {file ? <FilePreview key={file.id} file={file} vaultUnc={entry.vault_unc} toolbar={false} hideTitles={[entry.title]} />
+          {file ? <FilePreview key={file.id} file={file} vaultUnc={entry.vault_unc} toolbar={false} hideTitles={[entry.title]}
+                                inlineModel={false} />
             : <p className="p-2 text-ui text-n-500">파일이 없습니다.</p>}
         </div>
       )}

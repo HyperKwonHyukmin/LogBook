@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 from . import jobs, models
 from .database import Base, SessionLocal, engine
 from .dependencies import get_storage
+from .convert.job import mark_failed as mark_convert_failed
+from .convert.job import run_convert
 from .entries.files import write_entry_files
 from .extract.job import mark_failed, run_extract
 from .ingest.inbox import InboxWatcher, stage_item
@@ -23,11 +25,13 @@ from .uploads.service import cleanup_stale
 
 log = logging.getLogger("logbook.worker")
 POLL_SECONDS = 30
-MAX_ATTEMPTS = 3
+MAX_ATTEMPTS = jobs.MAX_ATTEMPTS
 STUCK_JOB_AFTER = timedelta(minutes=10)
-# 한 주기에서 본문 추출에 쓰는 시간 상한(초). 넘으면 남은 추출 작업은 다음 주기로 미뤄
-# Inbox 감시와 배치 처리가 주기마다 돌아오게 한다(다른 종류 작업은 계속 처리한다).
-EXTRACT_BUDGET_SECONDS = 120
+# 한 주기에서 무거운 작업(본문 추출·BDF 변환, jobs.HEAVY_JOB_TYPES)에 쓰는 시간 상한(초).
+# 넘으면 남은 무거운 작업은 다음 주기로 미뤄 Inbox 감시와 배치 처리가 주기마다 돌아오게 한다
+# (다른 종류 작업은 계속 처리한다).
+HEAVY_BUDGET_SECONDS = 120
+EXTRACT_BUDGET_SECONDS = HEAVY_BUDGET_SECONDS  # 03 의 옛 이름(별칭)
 _clock = time.monotonic  # 테스트가 바꿔 끼운다
 
 
@@ -52,10 +56,17 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
         except OSError as exc:
             db.rollback()
             log.warning("배치 받기 실패(다음 주기에 재시도): %s — %s", item.name, exc)
+    def exhausted(job: models.Job) -> None:
+        # OS 에 죽어 시도 횟수를 다 쓴 작업 — 다시 돌리지 않고 최종 실패 후처리만 한다
+        log.error("시도 횟수를 다 쓴 작업을 실패로 끝냅니다: %s %s", job.type, job.target_id)
+        _final_failure(db, job, jobs.EXHAUSTED_ERROR)
+        stats["failed"] += 1
+
     started = _clock()
     while True:
-        over_budget = _clock() - started >= EXTRACT_BUDGET_SECONDS
-        job = jobs.claim_next(db, exclude_types=("extract_file",) if over_budget else ())
+        over_budget = _clock() - started >= HEAVY_BUDGET_SECONDS
+        job = jobs.claim_next(db, exclude_types=jobs.HEAVY_JOB_TYPES if over_budget else (),
+                              max_attempts=MAX_ATTEMPTS, on_exhausted=exhausted)
         if job is None:
             break
         try:
@@ -74,6 +85,11 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
                 if f is None:
                     raise RuntimeError(f"파일을 찾을 수 없음: {job.target_id}")
                 run_extract(db, storage, f)
+            elif job.type == "convert_model":
+                f = db.get(models.File, job.target_id)
+                if f is None:
+                    raise RuntimeError(f"파일을 찾을 수 없음: {job.target_id}")
+                run_convert(db, storage, f)
             else:
                 raise RuntimeError(f"알 수 없는 작업: {job.type} {job.target_id}")
             jobs.complete(db, job)
@@ -82,17 +98,26 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
             db.rollback()
             job = db.get(models.Job, job.id)
             jobs.fail(db, job, str(exc), max_attempts=MAX_ATTEMPTS)
-            if job.state == "failed" and job.type == "process_batch":
-                batch = db.get(models.Batch, job.target_id)
-                if batch is not None:
-                    batch.state, batch.error = "failed", str(exc)[:2000]
-                    db.commit()
-            elif job.state == "failed" and job.type == "extract_file":
-                # 끝내 못 읽은 파일(이동 중·잠김·경로 없음) — 추출 상태가 queued 로 영영 남지 않게 한다
-                mark_failed(db, job.target_id, str(exc))
+            if job.state == "failed":
+                _final_failure(db, job, str(exc))
             stats["failed"] += 1
             log.exception("작업 처리 실패: %s %s", job.type, job.target_id)
     return stats
+
+
+def _final_failure(db: Session, job: models.Job, error: str) -> None:
+    """작업이 최종 실패했을 때 대상의 상태가 queued 로 영영 남지 않게 한다."""
+    if job.type == "process_batch":
+        batch = db.get(models.Batch, job.target_id)
+        if batch is not None:
+            batch.state, batch.error = "failed", error[:2000]
+            db.commit()
+    elif job.type == "extract_file":
+        # 끝내 못 읽은 파일(이동 중·잠김·경로 없음)
+        mark_failed(db, job.target_id, error)
+    elif job.type == "convert_model":
+        # 끝내 못 읽은 BDF
+        mark_convert_failed(db, job.target_id, error)
 
 
 def _log_orphaned_staging_folders(db: Session, storage: StoragePaths) -> None:

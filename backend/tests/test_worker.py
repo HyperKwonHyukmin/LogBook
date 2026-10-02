@@ -22,14 +22,17 @@ def test_run_once_end_to_end(db, storage, make_user):
     w = InboxWatcher(storage, stable_seconds=60, clock=clock, owner_of=lambda p: "a476854")
     assert run_once(db, storage, w) == {"staged": 0, "processed": 0, "failed": 0}
     clock.t += 61
-    # process_batch 1 + 검토.pdf 본문 추출(extract_file) 1. 가짜 PDF 라 추출은 failed 로
-    # 기록되지만 작업 자체는 완료 처리된다(깨진 문서는 재시도해도 같다).
-    assert run_once(db, storage, w) == {"staged": 1, "processed": 2, "failed": 0}
+    # process_batch 1 + 검토.pdf 본문 추출(extract_file) 1 + 3496_FWD.bdf 변환(convert_model, 04a) 1.
+    # 가짜 PDF 라 추출은 failed 로, 요소 없는 BDF 는 skipped(no_elements) 로 기록되지만
+    # 작업 자체는 완료 처리된다(깨진 문서는 재시도해도 같다).
+    assert run_once(db, storage, w) == {"staged": 1, "processed": 3, "failed": 0}
     db.expire_all()
     [e] = db.query(models.Entry).all()
     assert e.title == "3496 Mooring 검토" and e.uploaded_by == "A476854"
     [x] = db.query(models.FileExtract).all()
     assert db.get(models.File, x.file_id).name == "검토.pdf" and x.state == "failed"
+    [s] = db.query(models.ModelSummary).all()
+    assert db.get(models.File, s.file_id).name == "3496_FWD.bdf" and (s.state, s.error) == ("skipped", "no_elements")
 
 
 def test_failed_processing_marks_batch_after_retries(db, storage, monkeypatch):
@@ -198,7 +201,7 @@ def test_extract_budget_leaves_rest_queued(db, storage, make_entry_file, monkeyp
     run_once(db, storage, InboxWatcher(storage))
     assert ran == [files[0].id]
     # 예산을 넘긴 뒤에도 추출 아닌 작업은 돈다
-    monkeypatch.setattr(worker, "EXTRACT_BUDGET_SECONDS", 0)
+    monkeypatch.setattr(worker, "HEAVY_BUDGET_SECONDS", 0)
     monkeypatch.setattr(worker, "_clock", lambda: 5.0)
     e, _f = make_entry_file(name="x.pdf")
     db.add(models.Job(type="write_meta", target_id=e.id))

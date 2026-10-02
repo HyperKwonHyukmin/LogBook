@@ -32,6 +32,7 @@ export function apiQuery(state, { limit = 50, offset = 0 } = {}) {
 /** 발췌 위치(page:3, slide:5, notes:5, sheet:이름, body) → 화면 라벨. */
 export function locatorLabel(loc) {
   if (loc === 'body') return '본문';
+  if (loc === 'model') return '모델 지문';
   const i = loc.indexOf(':');
   const kind = i < 0 ? loc : loc.slice(0, i);
   const rest = i < 0 ? '' : loc.slice(i + 1);

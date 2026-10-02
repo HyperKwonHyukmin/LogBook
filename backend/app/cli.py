@@ -5,6 +5,9 @@
 
 기존 파일(03 이전에 올라온 것)을 본문 추출 대기열에 넣기:
     .venv\\Scripts\\python.exe -m app.cli enqueue-extract [--force]
+
+기존 BDF(04a 이전에 올라온 것)를 변환 대기열에 넣기:
+    .venv\\Scripts\\python.exe -m app.cli enqueue-convert [--force]
 """
 import argparse
 import sys
@@ -59,6 +62,25 @@ def enqueue_extract_all(db: Session, *, force: bool = False) -> int:
     return n
 
 
+def enqueue_convert_all(db: Session, *, force: bool = False) -> int:
+    """변환 기록이 없거나 실패·휴지통에서 나온 모델을 변환 작업에 넣는다(force 면 휴지통 밖 전부).
+
+    DRM·크기 초과·요소 없음으로 건너뛴 것, 이미 끝났거나(done·include) 대기 중인 것은 둔다."""
+    from .convert.job import enqueue_convert
+
+    files = (db.query(models.File).filter(models.File.kind == "model", models.File.location != "trash")
+             .order_by(models.File.id).all())
+    rows = {r.file_id: r for r in db.query(models.ModelSummary)
+            .filter(models.ModelSummary.file_id.in_([f.id for f in files] or [0]))}
+    n = 0
+    for f in files:
+        r = rows.get(f.id)
+        if force or r is None or r.state == "failed" or (r.state == "skipped" and r.error == "trashed"):
+            n += enqueue_convert(db, f)
+    db.commit()
+    return n
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -68,6 +90,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("department", nargs="?")
     q = sub.add_parser("enqueue-extract", help="본문 추출이 안 된 파일을 워커 작업에 넣는다")
     q.add_argument("--force", action="store_true", help="상태와 상관없이 휴지통 밖 파일 전부 다시")
+    c = sub.add_parser("enqueue-convert", help="BDF 변환이 안 된 모델 파일을 워커 작업에 넣는다")
+    c.add_argument("--force", action="store_true", help="상태와 상관없이 휴지통 밖 모델 파일 전부 다시")
     args = parser.parse_args(argv)
 
     Base.metadata.create_all(bind=engine)
@@ -75,6 +99,9 @@ def main(argv: list[str]) -> int:
     try:
         if args.cmd == "enqueue-extract":
             print(f"추출 작업 {enqueue_extract_all(db, force=args.force)}건을 넣었습니다.")
+            return 0
+        if args.cmd == "enqueue-convert":
+            print(f"변환 작업 {enqueue_convert_all(db, force=args.force)}건을 넣었습니다.")
             return 0
         u = create_admin(db, get_storage(), args.employee_id, args.name, args.department)
     except ValueError as exc:

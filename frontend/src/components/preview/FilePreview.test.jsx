@@ -43,12 +43,13 @@ test('DRM 으로 건너뛴 파일은 사유를 보이고, 지원 안 하는 형�
   mockApi({});
   const { rerender } = render(<FilePreview file={{ ...base, id: 4, name: 'r.docx', extract: { state: 'skipped', error: 'drm' } }} />);
   expect(screen.getByText(/DRM 암호화 파일이라/)).toBeInTheDocument();
-  rerender(<FilePreview file={{ ...base, id: 5, name: 'm.bdf', kind: 'model' }} />);
+  // BDF 는 04b 부터 3D 미리보기가 있다 — 미지원 형식은 다른 확장자로 확인한다.
+  rerender(<FilePreview file={{ ...base, id: 5, name: 'a.zip', kind: 'other' }} />);
   expect(screen.getByText(/미리보기를 지원하지 않습니다/)).toBeInTheDocument();
 });
 
 test('경로 복사', async () => {
-  mockApi({});
+  mockApi({ 'GET /api/files/6/model': { state: 'include' } });
   vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: vi.fn(() => Promise.resolve()) } });
   render(<FilePreview file={{ ...base, id: 6, name: 'm.bdf', kind: 'model', rel_path: 'a/m.bdf' }} vaultUnc={'\\\\srv\\E1'} />);
   await userEvent.click(screen.getByRole('button', { name: '경로 복사' }));
@@ -57,7 +58,8 @@ test('경로 복사', async () => {
 });
 
 test('내려받기 버튼은 링크를 받아 연다', async () => {
-  const fetch = mockApi({ 'POST /api/files/7/link': { url: '/api/files/7/content?t=z' } });
+  const fetch = mockApi({ 'POST /api/files/7/link': { url: '/api/files/7/content?t=z' },
+                          'GET /api/files/7/model': { state: 'include' } });
   const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   render(<FilePreview file={{ ...base, id: 7, name: 'm.bdf', kind: 'model' }} />);
   await userEvent.click(screen.getByRole('button', { name: '내려받기' }));

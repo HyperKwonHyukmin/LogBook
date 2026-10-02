@@ -159,8 +159,9 @@ def test_process_batch_enqueues_extract(db, storage):
     (root / "r.pptx").write_bytes(_pptx())
     (root / "m.bdf").write_bytes(b"GRID,1,,0.,0.,0.\n")
     process_batch(db, storage, b)
+    # 추출 작업은 r.pptx 하나뿐이다. m.bdf 는 추출 대신 BDF 변환(convert_model, 04a)으로 간다.
     types = sorted(j.type for j in db.query(models.Job))
-    assert types == ["extract_file"]
+    assert types == ["convert_model", "extract_file"]
     assert db.query(models.FileExtract).count() == 1
 
 

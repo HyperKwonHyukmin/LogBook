@@ -50,6 +50,8 @@ export const ERROR_LABELS = {
   hull_not_found: '등록된 호선이 아닙니다.',
   invalid_hull: '호선은 숫자 4자리입니다.',
   entry_not_found: '자료를 찾을 수 없습니다.',
+  model_not_ready: '아직 3D 변환이 끝나지 않았습니다.',
+  model_missing: '3D 변환 결과를 찾을 수 없습니다. 관리자에게 재변환을 요청해 주세요.',
 };
 
 export function errorText(err, fallback = '요청을 처리하지 못했습니다.') {
@@ -73,6 +75,20 @@ export const EXTRACT_LABELS = {
   queued: '본문 추출 대기 중', failed: '본문을 읽지 못했습니다',
   drm: 'DRM 암호화 파일이라 본문을 읽지 못했습니다', too_large: '파일이 커서 본문을 색인하지 않았습니다',
   trashed: '휴지통에 있는 자료입니다. 복원 후 볼 수 있습니다.',
+};
+
+/** BDF 3D 변환 상태(설계 §7.7). skipped 는 error 코드로 고른다. */
+export const MODEL_STATE_LABELS = {
+  queued: '3D 변환 대기 중',
+  include: '같은 자료의 다른 BDF 가 INCLUDE 하는 파일입니다. 그 BDF 를 열어 보세요.',
+  drm: 'DRM 암호화 파일이라 3D 로 바꾸지 못했습니다. 내려받아 열어 주세요.',
+  too_large: '1GB 를 넘는 모델은 3D 변환을 하지 않습니다.',
+  no_elements: '요소가 없는 BDF(재료·하중 등)라 3D 로 볼 것이 없습니다.',
+  trashed: '휴지통에 있는 자료라 3D 변환을 하지 않았습니다.',
+  failed_admin: '3D 로 바꾸지 못했습니다. 관리자에게 알려 주세요.',
+  stale_queued: '다시 변환 대기 중 · 이전 결과를 보여 줍니다',
+  stale_failed: '다시 변환하지 못했습니다 · 이전 결과를 보여 줍니다',
+  slow: '변환이 오래 걸리고 있습니다.',
 };
 
 export const MATCH_LABELS = { entry_id: 'Entry 번호', hull: '호선', title: '제목', tag: '태그',

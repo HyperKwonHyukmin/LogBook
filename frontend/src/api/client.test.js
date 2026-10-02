@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { api, ApiError, tokenStore } from './client.js';
+import { api, apiArrayBuffer, ApiError, tokenStore } from './client.js';
 
 function stubFetch(status, body) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
@@ -56,4 +56,14 @@ test('응답을 받는 사이 토큰이 바뀌었으면 401 이어도 새 토큰
   resolveFetch({ ok: false, status: 401, json: () => Promise.resolve({ detail: 'session_invalid' }) });
   await expect(pending).rejects.toBeInstanceOf(ApiError);
   expect(tokenStore.get()).toBe('new-tok');
+});
+
+test('apiArrayBuffer 는 Bearer 를 붙여 ArrayBuffer 를 돌려준다', async () => {
+  localStorage.setItem('logbook_token', 'tok');
+  const buf = new Uint8Array([1, 2, 3]).buffer;
+  const fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 200, arrayBuffer: () => Promise.resolve(buf) }));
+  vi.stubGlobal('fetch', fetchMock);
+  const got = await apiArrayBuffer('/files/1/model.lbm');
+  expect(new Uint8Array(got)).toEqual(new Uint8Array([1, 2, 3]));
+  expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok');
 });

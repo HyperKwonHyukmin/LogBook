@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -239,4 +239,29 @@ test('검색 오류에서 다시 시도하면 같은 검색을 다시 보낸다'
   await userEvent.click(screen.getByRole('button', { name: '다시 시도' }));
   expect(await screen.findByText('계류 구조 검토')).toBeInTheDocument();
   expect(calls(fetch).filter((c) => c === 'GET /api/search?q=a&limit=50&offset=0')).toHaveLength(2);
+});
+
+test('파일 보기의 모델 행에는 변환된 것만 썸네일을 보인다', async () => {
+  globalThis.URL.createObjectURL = vi.fn(() => 'blob:thumb');
+  globalThis.URL.revokeObjectURL = vi.fn();
+  const model = { ...FILE_RES.items[0], kind: 'model' };
+  const res = { ...FILE_RES, items: [...FILE_RES.items,
+    { ...model, file_id: 12, name: 'm.bdf', rel_path: 'model/m.bdf', model_state: 'done', model_key: 'k12' },
+    // 다시 변환 대기 중이지만 이전 결과가 있다
+    { ...model, file_id: 13, name: 'old.bdf', rel_path: 'old.bdf', model_state: 'queued', model_key: 'k13' },
+    // 아직 한 번도 변환되지 않았다 — 썸네일 요청을 하지 않는다
+    { ...model, file_id: 14, name: 'new.bdf', rel_path: 'new.bdf', model_state: 'queued', model_key: null }] };
+  const fetch = mockApi({ 'GET /api/search?unit=file&limit=50&offset=0': res,
+            'GET /api/files/12/thumb.png': { __blob: new Blob(['png']) },
+            'GET /api/files/13/thumb.png': { __blob: new Blob(['png']) } });
+  renderAt('/?unit=file');
+  const row = (name) => screen.getByText(name).closest('[role="option"]');
+  await screen.findByText('m.bdf');
+  // 썸네일은 장식(이름이 바로 옆에 있다) — alt="" 라 역할로 찾지 않는다.
+  await waitFor(() => expect(row('m.bdf').querySelector('img')).toHaveAttribute('src', 'blob:thumb'));
+  expect(row('m.bdf').querySelector('img')).toHaveAttribute('alt', '');
+  await waitFor(() => expect(row('old.bdf').querySelector('img')).toBeTruthy());
+  expect(row('new.bdf').querySelector('img')).toBeNull();
+  expect(row('r.pptx').querySelector('img')).toBeNull();
+  expect(calls(fetch)).not.toContain('GET /api/files/14/thumb.png');
 });

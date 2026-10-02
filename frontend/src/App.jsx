@@ -12,6 +12,7 @@ import SearchPage from './pages/SearchPage.jsx';
 import TagsPage from './pages/TagsPage.jsx';
 import TrashPage from './pages/TrashPage.jsx';
 import UsersPage from './pages/admin/UsersPage.jsx';
+import ViewerPage from './pages/ViewerPage.jsx';
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
             <Route path="hulls" element={<HullsPage />} />
             <Route path="h/:hullNo" element={<HullPage />} />
             <Route path="e/:entryId" element={<EntryPage />} />
+            <Route path="v/:fileId" element={<ViewerPage />} />
             <Route path="inbox" element={<InboxPage />} />
             <Route path="tags" element={<TagsPage />} />
             <Route path="trash" element={<TrashPage />} />

@@ -26,6 +26,8 @@ function renderPage(map, { url = '/e/E000001', storage } = {}) {
   const fetch = mockApi({
     'GET /api/entries/E000001/history': HISTORY,
     'POST /api/files/2/link?inline=true': { url: '/api/files/2/content?t=a&inline=1' },
+    // BDF 는 3D 미리보기(04b) — 변환 상태 'include' 면 안내 한 줄만 보인다.
+    'GET /api/files/1/model': { state: 'include' },
     ...map,
   });
   render(
@@ -94,7 +96,7 @@ test('미확정 자료는 읽기 전용이고 정리 대기로 안내한다', as
 test('파일을 고르면 미리보기가 바뀐다', async () => {
   renderPage({ 'GET /api/entries/E000001': ENTRY });
   await userEvent.click(await screen.findByRole('treeitem', { name: /m\.bdf/ }));
-  expect(await screen.findByText(/미리보기를 지원하지 않습니다/)).toBeInTheDocument();
+  expect(await screen.findByText(/다른 BDF 가 INCLUDE/)).toBeInTheDocument();
 });
 
 test('휴지통으로 보내면 휴지통 화면으로 간다', async () => {
@@ -183,13 +185,13 @@ test('파일 트리는 키보드로 옮겨 다니고 Enter 로 고른다', async
   await userEvent.keyboard('{ArrowUp}');
   expect(bdf).toHaveFocus();
   await userEvent.keyboard('{Enter}');
-  expect(await screen.findByText(/미리보기를 지원하지 않습니다/)).toBeInTheDocument();
+  expect(await screen.findByText(/다른 BDF 가 INCLUDE/)).toBeInTheDocument();
   expect(bdf).toHaveAttribute('tabindex', '0');
 });
 
 test('주소의 ?file= 로 처음 고를 파일을 정한다', async () => {
   renderPage({ 'GET /api/entries/E000001': ENTRY }, { url: '/e/E000001?file=1' });
-  expect(await screen.findByText(/미리보기를 지원하지 않습니다/)).toBeInTheDocument();
+  expect(await screen.findByText(/다른 BDF 가 INCLUDE/)).toBeInTheDocument();
   expect(screen.queryByTitle('PDF 미리보기')).toBeNull();
 });
 

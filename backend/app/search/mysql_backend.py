@@ -323,11 +323,17 @@ class MySqlSearch:
         rows = {f.id: f for f in db.query(F).filter(F.id.in_([x[1] for x in page]))} if page else {}
         body = {fid for h in hits for fid in h.body_files}
         snippets = self._snippets(db, {fid: [fid] for _s, fid, _e, _m in page if fid in body}, terms)
+        # 모델 변환 상태·key — 화면이 썸네일이 있는 모델만 요청하고 key 로 캐시하게 한다(페이지당 한 번 조회)
+        model_rows = {fid: (state, key) for fid, state, key in
+                      db.query(models.ModelSummary.file_id, models.ModelSummary.state, models.ModelSummary.key)
+                      .filter(models.ModelSummary.file_id.in_([x[1] for x in page]))} if page else {}
         items = []
         for score, fid, eid, matched in page:
             f, r = rows[fid], by_entry[eid]
             items.append({"file_id": f.id, "name": f.name, "rel_path": f.rel_path, "kind": f.kind, "size": f.size,
                           "entry_id": r["entry"].entry_id, "entry_title": r["entry"].title,
                           "entry_status": r["entry"].status, "hulls": r["hulls"], "score": score,
-                          "matched": matched, "snippets": snippets.get(fid, [])})
+                          "matched": matched, "snippets": snippets.get(fid, []),
+                          "model_state": model_rows.get(fid, (None, None))[0],
+                          "model_key": model_rows.get(fid, (None, None))[1]})
         return items, total
