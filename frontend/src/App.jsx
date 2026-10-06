@@ -11,6 +11,7 @@ import InboxPage from './pages/InboxPage.jsx';
 import SearchPage from './pages/SearchPage.jsx';
 import TagsPage from './pages/TagsPage.jsx';
 import TrashPage from './pages/TrashPage.jsx';
+import OpsPage from './pages/admin/OpsPage.jsx';
 import UsersPage from './pages/admin/UsersPage.jsx';
 import ViewerPage from './pages/ViewerPage.jsx';
 
@@ -33,6 +34,7 @@ export default function App() {
             <Route element={<RequireAuth adminOnly />}>
               <Route path="admin" element={<Navigate to="/admin/users" replace />} />
               <Route path="admin/users" element={<UsersPage />} />
+              <Route path="admin/ops" element={<OpsPage />} />
             </Route>
           </Route>
         </Route>

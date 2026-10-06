@@ -115,7 +115,12 @@ def _lock(db: Session, entry: models.Entry) -> models.Entry:
     with_for_update 로 실제 SELECT ... FOR UPDATE 를 보내 행을 잠그면서도, 그 쿼리 결과로
     파이썬 객체의 속성을 다시 채우지는 않는다 — 캐시된(오래된) status/version 을 계속
     들고 있게 되어 "잠근 뒤 다시 검사" 가 무의미해진다."""
-    return db.get(models.Entry, entry.id, with_for_update=True, populate_existing=True)
+    locked = db.get(models.Entry, entry.id, with_for_update=True, populate_existing=True)
+    if locked is None:
+        # 잠금을 기다리는 사이 다른 요청이 지웠다(예: 휴지통 영구 삭제, 05) — 500 대신 404
+        db.rollback()
+        raise HTTPException(status_code=404, detail="entry_not_found")
+    return locked
 
 
 def set_hulls(db: Session, entry: models.Entry, hull_nos: list[str]) -> None:

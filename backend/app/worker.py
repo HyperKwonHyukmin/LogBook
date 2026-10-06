@@ -20,6 +20,8 @@ from .entries.files import write_entry_files
 from .extract.job import mark_failed, run_extract
 from .ingest.inbox import InboxWatcher, stage_item
 from .ingest.process import process_batch
+from .ops.daily import run_daily
+from .ops.state import heartbeat
 from .storage.paths import StoragePaths, to_long
 from .uploads.service import cleanup_stale
 
@@ -39,6 +41,7 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
     # 매 주기 시작 시, 10분 넘게 'running' 에 멈춰 있는 작업만 복구한다(I8) — 워커가
     # 살아서 정상 처리 중인(수 초짜리) 작업까지 매번 되돌리면 안 된다. 워커 시작 시
     # 전체 복구는 main() 이 별도로 한다.
+    heartbeat(db)  # 주기 시작(리뷰 I3) — 앞선 주기의 통계는 그대로 둔다
     recovered = jobs.recover_running(db, older_than=STUCK_JOB_AFTER)
     if recovered:
         log.warning("%d분 넘게 멈춰 있던 작업 %d개를 복구했습니다.", STUCK_JOB_AFTER.seconds // 60, recovered)
@@ -46,6 +49,15 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
     removed = cleanup_stale(db, storage)
     if removed:
         log.info("끝나지 않은 웹 업로드 %d건을 정리했습니다.", removed)
+
+    # 하루 한 번(02시 이후 첫 주기) 레지스트리·백업·휴지통 비우기(05). 실패해도 워커는 계속 돈다.
+    try:
+        daily = run_daily(db, storage)
+        if daily.get("ran"):
+            log.info("일일 작업: %s", daily)
+    except Exception:
+        db.rollback()
+        log.exception("일일 작업 실패")
 
     stats = {"staged": 0, "processed": 0, "failed": 0}
     for item in watcher.poll():
@@ -94,6 +106,7 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
                 raise RuntimeError(f"알 수 없는 작업: {job.type} {job.target_id}")
             jobs.complete(db, job)
             stats["processed"] += 1
+            heartbeat(db, stats)  # 작업 1건마다(긴 변환이 이어져도 멈춤으로 보이지 않게)
         except Exception as exc:  # 작업 하나의 실패가 워커를 멈추지 않게
             db.rollback()
             job = db.get(models.Job, job.id)
@@ -102,6 +115,9 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
                 _final_failure(db, job, str(exc))
             stats["failed"] += 1
             log.exception("작업 처리 실패: %s %s", job.type, job.target_id)
+            heartbeat(db, stats)
+    # 심장 박동 — 관리자 운영 화면이 워커가 살아 있는지 이것으로 판단한다(05)
+    heartbeat(db, stats)
     return stats
 
 

@@ -64,6 +64,13 @@ def list_tags(db: Session, kind: str) -> list[dict]:
     return [tag_to_dict(db, t, counts.get(t.id, 0)) for t in tags]
 
 
+def _write_registry(db: Session, storage: StoragePaths) -> None:
+    """동의어가 바뀌면 registry.json 을 다시 쓴다(05 — 재구축 원천). 순환 import 를 피해 안에서 불러온다."""
+    from .ops.registry import write_registry
+
+    write_registry(db, storage)
+
+
 def set_alias(db: Session, storage: StoragePaths, actor: str, tag: models.Tag, target: models.Tag,
               ip: str | None = None) -> models.Tag:
     # 동시에 두 요청이 서로를 묶으면(A→B, B→A) 순환이 생길 수 있다 — 두 태그를 id 오름차순으로
@@ -83,6 +90,7 @@ def set_alias(db: Session, storage: StoragePaths, actor: str, tag: models.Tag, t
     db.flush()
     audit.record(db, storage, actor=actor, action="TAG_ALIAS", target_type="tag",
                  target_id=f"{tag.kind}:{tag.value}", before=before, after={"alias_of": new_root.value}, ip=ip)
+    _write_registry(db, storage)
     return tag
 
 
@@ -95,4 +103,5 @@ def clear_alias(db: Session, storage: StoragePaths, actor: str, tag: models.Tag,
     db.flush()
     audit.record(db, storage, actor=actor, action="TAG_UNALIAS", target_type="tag",
                  target_id=f"{tag.kind}:{tag.value}", before=before, after={"alias_of": None}, ip=ip)
+    _write_registry(db, storage)
     return tag

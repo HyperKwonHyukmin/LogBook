@@ -64,6 +64,33 @@ def _clear_reachability_cache():
 
 
 @pytest.fixture(autouse=True)
+def _no_real_dump(monkeypatch):
+    """안전장치(05): 어떤 테스트도 실제 mysqldump 실행 파일을 부르지 않게 한다.
+
+    1) 백업 모듈의 mysqldump 경로를 없는 곳으로 바꾼다 — 실제 _run_dump 는 실행 전에
+       mysqldump_not_found 로 멈춘다(Popen 까지 가지 않는다).
+    2) 워커의 일일 작업(daily.run_backup)은 runner 를 넘기지 않으면 바로 성공하는 가짜
+       덤프를 쓴다 — 02시 이후에 도는 기존 워커 테스트가 백업 실패로 흔들리지 않게.
+       runner 를 넘기면(test_ops_daily) 그 runner 를 그대로 쓴다."""
+    import dataclasses
+
+    from app.ops import backup, daily
+
+    monkeypatch.setattr(backup, "settings", dataclasses.replace(
+        backup.settings, mysqldump_path=r"C:\__logbook_test_no_mysqldump__\mysqldump.exe"))
+    real_run_backup = backup.run_backup
+
+    def _stub_dump(out):
+        out.write(b"-- logbook test dump")
+
+    def _fake_run_backup(storage, *, runner=None, now=None):
+        return real_run_backup(storage, runner=runner or _stub_dump, now=now)
+
+    monkeypatch.setattr(daily, "run_backup", _fake_run_backup)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def clean_db():
     """테스트마다 모든 테이블을 지우고 다시 만든다."""
     from app import models  # noqa: F401  (테이블 등록)

@@ -109,4 +109,7 @@ def update_hull(db: Session, storage: StoragePaths, actor: str, hull_no: str, pa
     db.flush()
     audit.record(db, storage, actor=actor, action="HULL_UPDATE", target_type="hull", target_id=hull_no,
                  before=before, after={"ship_type": hull.ship_type, "memo": hull.memo}, ip=ip)
+    from .ops.registry import write_registry  # 순환 import 방지
+
+    write_registry(db, storage)  # 선종·메모를 registry.json 에도 남긴다(05 — 재구축 원천)
     return hull

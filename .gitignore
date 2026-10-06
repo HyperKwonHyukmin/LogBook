@@ -16,3 +16,6 @@ backend/.pytest_cache/
 # frontend (dist 는 145 배포를 위해 커밋한다)
 frontend/node_modules/
 frontend/coverage/
+
+# 05 운영 로그(ops/run-*.ps1 가 쓴다)
+backend/logs/

@@ -267,3 +267,13 @@ class ModelSummary(Base):
     includes = Column(JSON, nullable=True)   # 이 파일이 INCLUDE 한 형제 rel_path
     missing = Column(JSON, nullable=True)    # 찾지 못한 INCLUDE 이름
     updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
+
+
+class SystemState(Base):
+    """운영 상태(워커 심장 박동·마지막 백업·마지막 일일 작업). 재구축 대상이 아니다(다시 쌓인다)."""
+
+    __tablename__ = "system_state"
+
+    key = Column(String(40), primary_key=True)
+    value = Column(JSON, nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from .. import audit, models
 from ..database import get_db
 from ..dependencies import client_ip, get_storage, require_admin
+from ..ops.registry import write_registry
 from ..schemas import AdminFlagRequest, user_snapshot, user_to_dict
 from ..storage.paths import StoragePaths
 
@@ -39,6 +40,7 @@ def _set_status(db, storage, request, admin, employee_id, status, action, *,
                  target_id=user.employee_id, before=before, after=user_snapshot(user),
                  ip=client_ip(request))
     db.refresh(user)
+    write_registry(db, storage)  # 사용자 목록을 registry.json 에도 남긴다(05 — 재구축 원천)
     return user_to_dict(user)
 
 
@@ -87,6 +89,7 @@ def reject(employee_id: str, request: Request, db: Session = Depends(get_db),
     db.delete(user)
     audit.record(db, storage, actor=admin.employee_id, action="USER_REJECT", target_type="user",
                  target_id=target, before=before, ip=client_ip(request))
+    write_registry(db, storage)
     return {"ok": True}
 
 
@@ -104,4 +107,5 @@ def set_admin(employee_id: str, body: AdminFlagRequest, request: Request,
                  target_type="user", target_id=user.employee_id, before=before,
                  after=user_snapshot(user), ip=client_ip(request))
     db.refresh(user)
+    write_registry(db, storage)
     return user_to_dict(user)

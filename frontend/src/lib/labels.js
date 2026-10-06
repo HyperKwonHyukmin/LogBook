@@ -7,7 +7,15 @@ export const ACTION_LABELS = {
   ENTRY_UPDATE: '정보 수정', ENTRY_CONFIRM: '확정', ENTRY_FILES_ADDED: '파일 추가',
   ENTRY_TRASH: '휴지통으로', ENTRY_RESTORE: '복원', DRAFT_DISCARD: '초안 버림',
   TAG_ALIAS: '동의어 묶기', TAG_UNALIAS: '동의어 풀기', HULL_UPDATE: '호선 정보 수정',
+  TRASH_PURGE: '영구 삭제', JOB_RETRY: '작업 다시 시도',
+  OPS_REEXTRACT: '본문 다시 추출', OPS_RECONVERT: 'BDF 다시 변환', OPS_BACKUP: '수동 백업',
 };
+
+/** 워커 작업 종류·상태(관리자 운영 화면). */
+export const JOB_TYPE_LABELS = {
+  extract_file: '보고서 본문 추출', convert_model: 'BDF 변환', process_batch: '배치 처리', write_meta: '메타 파일 쓰기',
+};
+export const JOB_STATE_LABELS = { queued: '대기', running: '실행 중', done: '완료', failed: '실패' };
 
 export const KIND_LABELS = { model: 'BDF', result: '결과', report: '보고서', drawing: '도면', other: '기타' };
 
@@ -52,6 +60,11 @@ export const ERROR_LABELS = {
   entry_not_found: '자료를 찾을 수 없습니다.',
   model_not_ready: '아직 3D 변환이 끝나지 않았습니다.',
   model_missing: '3D 변환 결과를 찾을 수 없습니다. 관리자에게 재변환을 요청해 주세요.',
+  not_failed: '이미 다시 시도 중이거나 끝난 작업입니다.',
+  target_gone: '작업 대상 파일이 이미 영구 삭제되어 다시 시도할 수 없습니다.',
+  not_trashed: '휴지통에 있는 자료가 아닙니다.',
+  backup_failed: '백업하지 못했습니다.',
+  admin_required: '관리자만 할 수 있습니다.',
 };
 
 export function errorText(err, fallback = '요청을 처리하지 못했습니다.') {

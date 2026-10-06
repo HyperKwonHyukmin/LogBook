@@ -1,7 +1,8 @@
 import { vi } from 'vitest';
-import { render as rtlRender, screen, within } from '@testing-library/react';
+import { render as rtlRender, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
+import { AuthContext } from '../auth/AuthContext.jsx';
 import TrashPage from './TrashPage.jsx';
 
 const ROWS = [
@@ -47,4 +48,46 @@ test('삭제 시각이 없어도 행을 그린다', async () => {
   render(<TrashPage />);
   const row = (await screen.findByText('9999 연결시험')).closest('li');
   expect(within(row).getByText('—')).toBeInTheDocument();
+});
+
+const asUser = (isAdmin) => (ui) => rtlRender(
+  <AuthContext.Provider value={{ user: { employee_id: 'A100001', name: '관리자' }, isAdmin }}>
+    <MemoryRouter>{ui}</MemoryRouter>
+  </AuthContext.Provider>,
+);
+
+test('관리자는 영구 삭제할 수 있다', async () => {
+  mock({ 'GET /api/trash': [ROWS[0]], 'DELETE /api/admin/trash/E000001': {} });
+  asUser(true)(<TrashPage />);
+  const row = (await screen.findByText('9999 연결시험')).closest('li');
+  await userEvent.click(within(row).getByRole('button', { name: '영구 삭제' }));
+  const dialog = screen.getByRole('alertdialog');
+  expect(dialog).toHaveTextContent('되돌릴 수 없습니다. 95_Trash 폴더에서도 지워집니다.');
+  await userEvent.click(within(dialog).getByRole('button', { name: '영구 삭제' }));
+  expect(fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`)).toContain('DELETE /api/admin/trash/E000001');
+  await waitFor(() => expect(screen.queryByText('9999 연결시험')).toBeNull());
+  expect(screen.getByRole('status')).toHaveTextContent('E000001 을 영구 삭제했습니다');
+});
+
+test('영구 삭제를 취소하면 요청하지 않는다', async () => {
+  mock({ 'GET /api/trash': [ROWS[0]] });
+  asUser(true)(<TrashPage />);
+  await userEvent.click(await screen.findByRole('button', { name: '영구 삭제' }));
+  await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '취소' }));
+  expect(fetch.mock.calls.map(([u, i = {}]) => i.method || 'GET')).not.toContain('DELETE');
+  expect(screen.getByText('9999 연결시험')).toBeInTheDocument();
+});
+
+test('일반 사용자에게는 영구 삭제가 없다', async () => {
+  mock({ 'GET /api/trash': ROWS });
+  asUser(false)(<TrashPage />);
+  await screen.findByText('9999 연결시험');
+  expect(screen.queryByRole('button', { name: '영구 삭제' })).toBeNull();
+});
+
+test('인증 문맥이 없으면 일반 사용자로 동작한다', async () => {
+  mock({ 'GET /api/trash': ROWS });
+  render(<TrashPage />);
+  await screen.findByText('9999 연결시험');
+  expect(screen.queryByRole('button', { name: '영구 삭제' })).toBeNull();
 });

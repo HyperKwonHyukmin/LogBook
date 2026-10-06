@@ -22,6 +22,12 @@ class Settings:
     storage_root: str
     session_hours: int
     frontend_dist: Path
+    # 05 운영 — 백업(mysqldump)·바로가기 주소·보관 개수·휴지통 보관일·일일 작업 시각
+    mysqldump_path: str
+    public_url: str
+    backup_keep: int
+    trash_days: int
+    daily_hour: int
 
 
 def load_settings() -> Settings:
@@ -36,6 +42,12 @@ def load_settings() -> Settings:
         frontend_dist=Path(
             os.getenv("LOGBOOK_FRONTEND_DIST", str(BACKEND_DIR.parent / "frontend" / "dist"))
         ),
+        mysqldump_path=os.getenv("LOGBOOK_MYSQLDUMP",
+                                 r"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe"),
+        public_url=os.getenv("LOGBOOK_PUBLIC_URL", "http://10.14.42.145:9095"),
+        backup_keep=int(os.getenv("LOGBOOK_BACKUP_KEEP", "30")),
+        trash_days=int(os.getenv("LOGBOOK_TRASH_DAYS", "90")),
+        daily_hour=int(os.getenv("LOGBOOK_DAILY_HOUR", "2")),
     )
 
 

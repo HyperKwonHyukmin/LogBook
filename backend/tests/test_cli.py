@@ -40,7 +40,8 @@ def test_enqueue_extract_all(db, make_entry_file):
     db.add(models.FileExtract(file_id=b.id, state="done"))
     db.commit()
     assert enqueue_extract_all(db) == 1
-    assert enqueue_extract_all(db, force=True) == 2
+    # 05 리뷰 반영: force 여도 이미 대기 중인(a) 작업은 또 넣지 않는다 — b 만 다시 들어간다
+    assert enqueue_extract_all(db, force=True) == 1
 
 
 def test_enqueue_extract_all_retargets_restored_and_failed(db, make_entry_file):

@@ -10,6 +10,7 @@ from ..config import settings
 from ..database import get_db
 from ..dependencies import client_ip, get_storage, require_auth
 from ..identifiers import EMPLOYEE_ID_PATTERN
+from ..ops.registry import write_registry
 from ..schemas import LoginRequest, RegisterRequest, user_snapshot, user_to_dict
 from ..storage.paths import StoragePaths
 
@@ -46,6 +47,7 @@ def register(
         # 사전 조회와 커밋 사이 경쟁 — 동시에 같은 사번이 들어온 경우 unique 제약이 잡는다.
         db.rollback()
         raise HTTPException(status_code=409, detail="already_registered")
+    write_registry(db, storage)  # 가입 신청도 registry.json 에 남긴다(05 — 재구축 원천)
     return {"employee_id": employee_id, "status": "pending"}
 
 

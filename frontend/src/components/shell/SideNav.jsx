@@ -1,5 +1,5 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Anchor, History, Inbox, Search, Tag, Trash2, Users } from 'lucide-react';
+import { Activity, Anchor, History, Inbox, Search, Tag, Trash2, Users } from 'lucide-react';
 
 const GROUPS = [
   { items: [
@@ -52,6 +52,7 @@ export default function SideNav({ isAdmin, storage }) {
         <div className="mb-2 flex flex-col gap-px">
           <GroupLabel>관리</GroupLabel>
           <Item to="/admin/users" label="사용자 관리" icon={Users} pathname={pathname} />
+          <Item to="/admin/ops" label="운영" icon={Activity} pathname={pathname} />
         </div>
       )}
       <div role="status" title={reachable ? '공유 폴더에 연결되어 있습니다' : '공유 폴더에 연결할 수 없습니다'}
