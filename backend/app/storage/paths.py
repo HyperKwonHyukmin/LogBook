@@ -2,7 +2,8 @@
 """999_LogBook 폴더 구조와 경로 규칙.
 
 ⚠ 모든 파일 접근은 to_long() 을 거친다. PoC 실험 7에서 LongPathsEnabled=0 인 PC 는
-260자를 넘는 경로를 접두사 없이 열지 못함이 확인됐다(설계 §9).
+260자를 넘는 경로를 접두사 없이 열지 못함이 확인됐다(설계 §9). 반대로 회사 DRM 은 접두사 붙은
+경로로 공유 폴더의 .pdf·.zip 을 열지 못하게 해서, 짧은 경로는 접두사 없이 쓴다(to_long 참고).
 """
 import os
 import threading
@@ -75,22 +76,55 @@ def long_join(base: str | os.PathLike, rel_posix: str) -> str:
             raise ValueError(f"안전하지 않은 경로 조각: {part!r} (전체: {rel_posix!r})")
         if ":" in part or part.startswith("\\"):
             raise ValueError(f"안전하지 않은 경로 조각: {part!r} (전체: {rel_posix!r})")
-    return to_long(base) + "\\" + "\\".join(parts)
+    base_s = to_long(base)
+    head = _unprefixed(base_s) if base_s.startswith(_PREFIX) else base_s
+    plain = head + "\\" + "\\".join(parts)
+    return plain if _plain_ok(plain) else _prefixed(plain)
+
+
+_PREFIX = "\\\\?\\"
+# 접두사 없이 열어도 되는 길이 — CreateDirectory 한계(MAX_PATH 260 - 12) 아래로 둔다
+PLAIN_PATH_MAX = 247
+
+
+def _prefixed(plain: str) -> str:
+    return _PREFIX + "UNC\\" + plain[2:] if plain.startswith("\\\\") else _PREFIX + plain
+
+
+def _unprefixed(s: str) -> str:
+    body = s[len(_PREFIX):]
+    return "\\\\" + body[4:] if body[:4].upper() == "UNC\\" else body
+
+
+def _plain_ok(plain: str) -> bool:
+    """접두사 없이 열어도 같은 파일을 가리키는가 — 짧고, 끝에 공백·점이 붙은 조각이 없어야 한다
+    (Win32 는 접두사 없는 경로 조각의 끝 공백·점을 조용히 잘라 다른 이름으로 연다)."""
+    if len(plain) > PLAIN_PATH_MAX:
+        return False
+    return not any(part != part.rstrip(". ") for part in plain.split("\\") if part and not part.endswith(":"))
+
+
+def walk_root(p: str | os.PathLike) -> str:
+    """os.walk·os.scandir 로 하위를 훑을 때의 시작 경로 — 항상 긴 경로 접두사를 붙인다.
+    자식 경로가 이 접두사를 물려받아야 끝 공백·점 이름과 260자 넘는 경로가 잘리지 않는다.
+    ⚠ 이렇게 얻은 파일 경로를 **열 때는** to_long() 을 한 번 더 거칠 것(DRM 이 접두 경로의 .pdf 열기를 막는다)."""
+    plain = to_long(p)
+    return plain if plain.startswith(_PREFIX) else _prefixed(plain)
 
 
 def to_long(p: str | os.PathLike) -> str:
-    """Windows 긴 경로 접두사를 붙인다(UNC·로컬 모두, 이미 붙어 있으면 그대로).
+    """Windows 에서 안전하게 열 수 있는 절대경로를 돌려준다(이름은 옛 동작에서 남았다).
 
-    접두사가 없으면 os.path.abspath 로 먼저 정규화한다(`..`·`.`·슬래시 방향 정리) —
-    UNC 경로는 이미 절대경로라 abspath 를 거쳐도 `\\\\server\\share\\...` 형태를 유지한다.
+    짧은 경로(≤ PLAIN_PATH_MAX)는 **접두사 없이** 준다 — 회사 DRM 이 긴 경로 형식(`\\\\?\\UNC\\…`)으로
+    공유 폴더의 .pdf·.zip 을 열거나 만드는 것을 막는다(2026-10-07 dev PC 실측: open 이 FileNotFoundError,
+    같은 파일을 일반 UNC 경로로는 연다. stat·rename·remove 는 된다).
+    260자에 가깝거나 끝 공백·점 조각이 있으면 긴 경로 접두사를 붙인다 — LongPathsEnabled=0 인 PC 는
+    260자를 넘는 경로를 접두사 없이 열지 못한다(PoC 실험 7). 그런 경로의 .pdf 는 DRM PC 에서 여전히 못 연다.
+    접두사가 이미 붙은 경로(os.scandir 결과 등)도 같은 규칙으로 다시 판단한다(멱등).
     """
     s = str(p)
-    if s.startswith("\\\\?\\"):
-        return s
-    s = os.path.abspath(s)
-    if s.startswith("\\\\"):
-        return "\\\\?\\UNC\\" + s[2:]
-    return "\\\\?\\" + s
+    plain = _unprefixed(s) if s.startswith(_PREFIX) else os.path.abspath(s)
+    return plain if _plain_ok(plain) else _prefixed(plain)
 
 
 @dataclass(frozen=True)

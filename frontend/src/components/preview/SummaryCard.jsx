@@ -25,7 +25,7 @@ export default function SummaryCard({ summary, hideTitles = [], defaultOpen = fa
   return (
     <details aria-label="요약" open={defaultOpen} className="group rounded-lg border border-n-200 bg-n-0 text-ui">
       <summary className={`flex h-9 list-none items-center gap-2 rounded-lg px-3 text-meta text-n-600 marker:hidden [&::-webkit-details-marker]:hidden
-                           ${hasBody ? 'cursor-pointer hover:bg-n-25' : 'cursor-default'}`}>
+                           ${hasBody ? 'cursor-pointer hover:bg-n-50' : 'cursor-default'}`}>
         {hasBody && <ChevronRight size={14} aria-hidden="true" className="shrink-0 text-n-400 transition-transform duration-150 group-open:rotate-90" />}
         <span className="font-semibold text-n-700">요약</span>
         <dl className="flex min-w-0 flex-wrap items-center gap-x-3">

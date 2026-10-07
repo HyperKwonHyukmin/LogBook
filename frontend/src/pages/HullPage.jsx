@@ -28,7 +28,7 @@ function Distribution({ title, rows, hullNo, filterKey }) {
         {rows.map((r) => (
           <li key={r.value}>
             <Link to={`/?hull=${encodeURIComponent(hullNo)}&${filterKey}=${encodeURIComponent(r.value)}`}
-                  className="grid h-7 grid-cols-[minmax(0,1fr)_64px_24px] items-center gap-2 rounded-md px-1.5 text-ui text-n-700 transition-colors duration-120 hover:bg-n-100 hover:text-n-900">
+                  className="grid h-7 grid-cols-[minmax(0,1fr)_64px_24px] items-center gap-2 rounded-md px-1.5 text-ui text-n-700 transition-colors duration-150 hover:bg-n-100 hover:text-n-900">
               <span className="truncate" title={r.value}>{r.value}</span>
               <span className="h-1.5 rounded-full bg-n-100">
                 <span className="block h-full rounded-full bg-n-300" style={{ width: `${(r.count / max) * 100}%` }} />
@@ -92,8 +92,8 @@ export default function HullPage() {
       <header className="flex flex-wrap items-end gap-x-6 gap-y-3 border-b border-n-200 pb-5">
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <h1 className="font-mono text-hull font-medium tracking-[-0.02em] text-n-900">{hull.hull_no}<span className="sr-only"> 호선</span></h1>
-            <span aria-hidden="true" className="text-ui text-n-500">호선</span>
+            <h1 className="font-mono text-hull font-medium tracking-[-0.03em] text-brand">{hull.hull_no}<span className="sr-only"> 호선</span></h1>
+            <span aria-hidden="true" className="text-body font-medium text-n-600">호선</span>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-ui">
             <span className="flex items-center gap-1.5"><span className="text-n-500">선종</span>
@@ -131,7 +131,7 @@ export default function HullPage() {
               <ul className="overflow-hidden rounded-lg border border-n-200">
                 {m.entries.map((e) => (
                   <li key={e.entry_id} onClick={() => navigate(`/e/${e.entry_id}`)}
-                      className="grid h-10 cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto_72px_44px] items-center gap-3 border-b border-n-200 px-3 text-ui transition-colors duration-120 last:border-0 hover:bg-n-25">
+                      className="grid h-11 cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto_72px_44px] items-center gap-3 border-b border-n-200 px-3 text-ui transition-colors duration-150 last:border-0 hover:bg-n-50">
                     <span className="flex min-w-0 items-center gap-2">
                       <Link to={`/e/${e.entry_id}`} onClick={(ev) => ev.stopPropagation()}
                             className="truncate font-semibold text-n-900 hover:underline">{e.title}</Link>

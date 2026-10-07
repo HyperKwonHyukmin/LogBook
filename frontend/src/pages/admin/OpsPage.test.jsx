@@ -150,3 +150,25 @@ test('실패 작업이 없으면 빈 줄 안내를 보인다', async () => {
   const failed = await screen.findByRole('table', { name: '실패한 작업' });
   expect(within(failed).getByText('실패한 작업이 없습니다.')).toBeInTheDocument();
 });
+
+test('해석 검증 일괄 — "이미 검증한 모델도 모두" 를 force 로 보낸다', async () => {
+  const fetch = renderPage({ 'POST /api/admin/ops/solve-check': { queued: 12 } });
+  await userEvent.click(await screen.findByRole('checkbox', { name: '해석 검증 일괄: 이미 검증한 모델도 모두' }));
+  await userEvent.click(screen.getByRole('button', { name: '해석 검증 일괄' }));
+  const dialog = screen.getByRole('alertdialog');
+  expect(dialog).toHaveTextContent('변환이 끝난 모든 모델을 다시 검증합니다');
+  await userEvent.click(within(dialog).getByRole('button', { name: '실행' }));
+  expect(await screen.findByText('12건을 넣었습니다.')).toBeInTheDocument();
+  const post = fetch.mock.calls.find(([u]) => u === '/api/admin/ops/solve-check');
+  expect(JSON.parse(post[1].body)).toEqual({ force: true });
+});
+
+test('작업 큐·실패 작업에 해석 검증 라벨', async () => {
+  renderPage({ 'GET /api/admin/ops/status': { ...STATUS,
+    jobs: [...STATUS.jobs, { type: 'solve_check', state: 'queued', count: 3 }],
+    failed: [{ ...STATUS.failed[0], id: 10, type: 'solve_check', label: 'deck.bdf' }] } });
+  const queue = await screen.findByRole('table', { name: '작업 큐' });
+  expect(within(within(queue).getByText('해석 검증').closest('tr')).getByText('3')).toBeInTheDocument();
+  const failed = screen.getByRole('table', { name: '실패한 작업' });
+  expect(within(within(failed).getByText('deck.bdf').closest('tr')).getByText('해석 검증')).toBeInTheDocument();
+});

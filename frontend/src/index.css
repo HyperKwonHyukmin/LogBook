@@ -19,43 +19,70 @@
   --text-meta: 12px;   --text-meta--line-height: 18px;
   --text-ui: 13px;     --text-ui--line-height: 20px;
   --text-body: 14px;   --text-body--line-height: 22px;
-  --text-title: 20px;  --text-title--line-height: 28px;
-  --text-entry: 22px;  --text-entry--line-height: 30px;
-  --text-hull: 28px;   --text-hull--line-height: 32px;
+  --text-title: 24px;  --text-title--line-height: 32px;
+  --text-entry: 26px;  --text-entry--line-height: 34px;
+  --text-hull: 36px;   --text-hull--line-height: 40px;
 
-  /* 중성 (브랜드 쪽 H≈214 로 살짝 기운 회색) */
+  /* 중성 — OKLCH H 255(트러스트 블루 쪽), 채도 0.005~0.012. 밝기는 예전 단계를 그대로 따른다. */
   --color-white: #FFFFFF;
   --color-n-0: #FFFFFF;
-  --color-n-25: #FBFCFD;
-  --color-n-50: #F7F8FA;
-  --color-n-100: #F0F2F5;
-  --color-n-150: #E8EBEF;
-  --color-n-200: #E1E5EA;
+  --color-n-25: #FAFCFF;
+  --color-n-50: #F5F8FD;
+  --color-n-100: #EEF2F8;
+  --color-n-150: #E6EBF2;
+  --color-n-200: #E0E5EC;
   --color-n-250: #D3D9E0;
-  --color-n-300: #BBC3CD;
-  --color-n-400: #8C95A3;   /* 아이콘 전용 — 글자 금지 */
-  --color-n-500: #646D7C;   /* 메타 글자·플레이스홀더 (AA) */
-  --color-n-600: #4B5362;
-  --color-n-700: #353C49;
-  --color-n-800: #222833;
-  --color-n-900: #13171E;
+  --color-n-300: #BDC3CA;
+  --color-n-400: #90959C;   /* 아이콘 전용 — 글자 금지 */
+  --color-n-500: #686D74;   /* 메타 글자·플레이스홀더 (흰 바탕 5.2:1, n-50 4.9:1) */
+  --color-n-600: #4E5359;
+  --color-n-700: #383C42;
+  --color-n-800: #24282E;
+  --color-n-900: #13171C;
+
+  /* 네이비 크롬 — #002554(L .273 C .095 H 256.6) 둘레의 밝기 단계 */
+  --color-navy-950: #00183B;  /* 가장 깊은 면(로그인 패널 바닥줄, 크롬 위 구분선) */
+  --color-navy-900: #002554;  /* 크롬 바탕 = 트러스트 블루 */
+  --color-navy-800: #0D315F;  /* 크롬 hover */
+  --color-navy-700: #1B3E6E;  /* 크롬 active(현재 메뉴), 아바타 */
+  --color-navy-600: #2E507F;  /* 크롬 위 테두리·눌림 */
+  --color-navy-500: #4A6A97;  /* 크롬 위 옅은 선 */
+  /* 네이비 위 글자 — 숫자는 navy-900 기준 대비 */
+  --color-on-navy: #FFFFFF;           /* 현재 메뉴·제목 15.1:1 */
+  --color-on-navy-muted: #B9C9DE;     /* 메뉴 라벨 9.0:1 (hover navy-800 7.7, active navy-700 6.4) */
+  --color-on-navy-subtle: #97A9C2;    /* 구역 라벨·상태 글자 6.3:1 */
+  --color-on-navy-icon: #8A9DB8;      /* 아이콘 전용 5.5:1 */
+  --color-on-navy-ring: #98C0F8;      /* 네이비 위 포커스 링 8.1:1 */
 
   /* 브랜드 — 단 하나의 강조 */
   --color-brand: #002554;
-  --color-brand-hover: #0B3468;
-  --color-brand-press: #001C40;
-  --color-brand-subtle: #EEF2F8;
-  --color-brand-muted: #DCE4EF;
+  --color-brand-hover: #0B2F5E;
+  --color-brand-press: #011D43;
+  --color-brand-subtle: #EDF3FB;   /* 선택 행 (brand 글자 13.5:1) */
+  --color-brand-muted: #D9E4F4;
   --color-brand-ring: #7F97B8;
 
   /* 의미 색 */
   --color-ok: #007A30;    --color-ok-bg: #EAF5EE;   --color-ok-on-dark: #5FD38D;
+  --color-ok-on-navy: #55CE71;   /* 헤리티지 그린 색상(H 148) 그대로 밝힌 점 — navy-900 7.5:1 */
+  --color-err-on-navy: #F8A59B;  /* 네이비 위 끊김 글자 7.8:1 */
   --color-wait: #A34A07;  --color-wait-bg: #FDF3E7; --color-wait-line: #F3D3B0;
   --color-err: #B42318;   --color-err-bg: #FDEEEC;  --color-err-line: #F4C7C1;
   --color-err-press: #FBDCD8; --color-err-strong: #9A1D14;
   --color-hit: #FFEDB3;
   --color-spark: #00E600;
-  --color-viewer: #0E1A2B;
+  /* 3D 뷰어 — Model Builder Studio 와 같은 바탕(#1A1A2E 깊은 남보라, 04c 후속). 엔진 BACKGROUND 와 같은 값 */
+  --color-viewer: #1A1A2E;
+  /* 3D 뷰포트 위에 뜨는 것(도구줄·범례·찾기 바·축 자르기) — 반투명·블러 없이 한 단계 밝은 같은 계열 면.
+     숫자는 viewer-raised 기준 대비 */
+  --color-viewer-raised: #22223A;     /* 뜬 면 바탕 */
+  --color-viewer-line: #3A3A5C;       /* 뜬 면 테두리·구분선 */
+  --color-viewer-hover: #2C2C48;      /* 단추 hover */
+  --color-viewer-active: #3B3B62;     /* 켜진 단추·선택(on-viewer 8.8:1, muted 5.3:1) */
+  --color-on-viewer: #E8EAF4;         /* 제목·켜진 글자 12.9:1 */
+  --color-on-viewer-muted: #B3B6CC;   /* 단추 글자 7.7:1 */
+  --color-on-viewer-subtle: #9497B0;  /* 보조 글자·숫자 5.4:1 (viewer-active 위에서는 쓰지 않는다) */
+  --color-wait-on-dark: #F3C27A;      /* 뷰포트 위 주의 글자 9.4:1 */
   --color-link-on-dark: #9DB7DD;
   --color-scrim: rgb(19 23 30 / 0.30);
 
@@ -118,8 +145,25 @@ body {
 .tnum { font-variant-numeric: tabular-nums; }
 ::placeholder { color: var(--color-n-500); opacity: 1; }
 
-/* 포커스 — 키보드일 때만 2px 링 */
+/* 브라우저 기본 표면도 팔레트를 따른다 — 선택 영역, 캐럿, 스크롤바 */
+::selection { background: var(--color-brand-muted); color: var(--color-n-900); }
+input, textarea { caret-color: var(--color-brand); }
+html { scrollbar-color: var(--color-n-300) transparent; }
+.on-navy { scrollbar-color: var(--color-navy-600) transparent; }
+.on-navy ::selection { background: var(--color-navy-600); color: var(--color-on-navy); }
+/* 어두운 뷰포트 위 — 네이비 크롬과 같은 밝은 링, 스크롤바·선택 영역도 남색 계열 */
+.on-viewer { scrollbar-color: var(--color-viewer-line) transparent; }
+.on-viewer ::selection { background: var(--color-viewer-active); color: var(--color-on-viewer); }
+.on-viewer :focus-visible { outline-color: var(--color-on-navy-ring); outline-offset: 1px; }
+.on-viewer input { caret-color: var(--color-on-viewer); }
+
+/* 포커스 — 키보드일 때만 2px 링. 네이비 크롬 위에서는 밝은 링 */
 :focus-visible { outline: 2px solid var(--color-brand-ring); outline-offset: 1px; }
+.on-navy :focus-visible { outline-color: var(--color-on-navy-ring); outline-offset: 2px; }
+/* 크롬 안이라도 흰 면 위(검색칸 안 단추, 계정 메뉴)는 원래 링 */
+.on-navy .field :focus-visible, .on-navy [role="menu"] :focus-visible { outline-color: var(--color-brand-ring); outline-offset: 1px; }
+/* 네이비 위 흰 검색칸 — 테두리 대신 밝은 링(바깥 3px) */
+.on-navy .field:focus-within { border-color: var(--color-n-0); box-shadow: 0 0 0 3px var(--color-on-navy-ring); }
 /* 입력류는 테두리 + 옅은 링 */
 .field:focus-within { border-color: var(--color-brand); box-shadow: 0 0 0 3px rgb(0 37 84 / 0.14); }
 .field[aria-invalid="true"], .field:has([aria-invalid="true"]) { border-color: var(--color-err); }

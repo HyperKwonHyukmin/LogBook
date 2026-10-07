@@ -2,6 +2,7 @@ import { vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DraftCard from './DraftCard.jsx';
+import { invalidateVocab } from '../../lib/vocab.js';
 
 const ENTRY = {
   entry_id: 'E000010', status: 'draft', title: '9999 연결시험', version: 3, analysis_type: null,
@@ -15,11 +16,25 @@ const ENTRY = {
   ],
 };
 const OTHER = { entry_id: 'E000011', title: '다른 묶음' };
+// 분류 목록(08) — 해석 종류·구역 입력이 받아 간다
+const VOCAB = {
+  '/api/vocab?kind=atype': { kind: 'atype', other: '기타', terms: [
+    { id: 1, value: '강도 평가', active: true, count: 0, synonyms: [] },
+    { id: 2, value: '피로 평가', active: true, count: 0, synonyms: [{ id: 9, value: '피로 해석' }] },
+    { id: 3, value: '기타', active: true, count: 0, synonyms: [] }] },
+  '/api/vocab?kind=zone': { kind: 'zone', other: '기타', terms: [
+    { id: 4, value: '선수부', active: true, count: 0, synonyms: [{ id: 8, value: 'FWD' }] },
+    { id: 5, value: '기타', active: true, count: 0, synonyms: [] }] },
+};
+const vocabReply = (url) => VOCAB[url] && Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(VOCAB[url]) });
+
+beforeEach(() => invalidateVocab());
 
 function mockFetch(map) {
   vi.stubGlobal('fetch', vi.fn((url, init = {}) => {
     const key = `${init.method || 'GET'} ${url}`;
     if (key.startsWith('GET /api/suggest')) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) });
+    if (VOCAB[url]) return vocabReply(url);
     const r = map[key];
     if (!r) throw new Error(`unexpected ${key}`);
     return Promise.resolve(r.__status ? { ok: false, status: r.__status, json: () => Promise.resolve({ detail: r.detail }) }
@@ -115,6 +130,7 @@ function deferredFetch() {
   const queue = [];
   vi.stubGlobal('fetch', vi.fn((url, init = {}) => {
     if (url.startsWith('/api/suggest')) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) });
+    if (VOCAB[url]) return vocabReply(url);
     return new Promise((resolve) => {
       queue.push({ key: `${init.method || 'GET'} ${url}`, body: init.body ? JSON.parse(init.body) : null,
         resolve: (r) => resolve({ ok: true, status: 200, json: () => Promise.resolve(r) }) });
@@ -155,12 +171,13 @@ test('빠르게 두 칸을 저장하면 두 번째 PATCH 는 첫 응답의 versi
   const kind = screen.getByLabelText('해석 종류');
   expect(kind).toHaveFocus();
   expect(kind).toBeEnabled();
-  await userEvent.type(kind, '피로');
-  await userEvent.tab();
+  // 해석 종류는 목록에서 고른다(08) — 동의어 '피로 해석' 을 쳐도 용어 '피로 평가' 로 저장
+  await userEvent.type(kind, '피로 해석');
+  await userEvent.keyboard('{Enter}');
   expect(q).toHaveLength(1);
   q[0].resolve({ ...ENTRY, title: '9999 연결시험!', version: 4 });
   await vi.waitFor(() => expect(q).toHaveLength(2));
-  expect(q[1].body).toEqual({ version: 4, analysis_type: '피로' });
+  expect(q[1].body).toEqual({ version: 4, analysis_type: '피로 평가' });
 });
 
 test('첫 저장이 끝나기 전에 호선 칩을 둘 더해도 두 번째 PATCH 에 모두 실린다', async () => {
@@ -203,4 +220,14 @@ test('앞선 저장이 실패한 채로 확정을 누르면 확정하지 않고 
   await vi.waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('저장하지 못한 내용이 있어 확정하지 않았습니다'));
   expect(screen.getByRole('alert')).toHaveTextContent('해석 시기는 YYYY-MM 형식입니다.');
   expect(fetch.mock.calls.some(([u]) => u.endsWith('/confirm'))).toBe(false);
+});
+
+test('구역은 목록에서 칩으로 고르고, 동의어를 치면 대표 용어가 들어간다', async () => {
+  mockFetch({ 'PATCH /api/entries/E000010': { ...ENTRY, zones: ['선수부'], version: 4 } });
+  render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={() => {}} />);
+  const zone = screen.getByRole('combobox', { name: '구역' });
+  await userEvent.type(zone, 'fwd');
+  expect(await screen.findByRole('option', { name: /선수부/ })).toHaveTextContent('FWD 의 대표 용어');
+  await userEvent.keyboard('{Enter}');
+  expect(bodyOf('PATCH', '/api/entries/E000010')).toEqual({ version: 3, zones: ['선수부'] });
 });

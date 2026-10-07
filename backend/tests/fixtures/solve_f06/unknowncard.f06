@@ -1,0 +1,74 @@
+                 ENTRY                                                                                                              
+                 COUNT        .   1  ..   2  ..   3  ..   4  ..   5  ..   6  ..   7  ..   8  ..   9  ..  10  .                      
+ *** USER WARNING MESSAGE 9994 (BULKEF)
+      The following lines could not be processed by the current IFPSTAR rule base.
+      They are being passed to Classic IFP for an additional attempt at resolution.
+                              FOOBAR,1,2,3
+1                                                                           OCTOBER   6, 2026  MSC Nastran  3/14/14   PAGE     5
+                                                                                                                                    
+0                                                                                                                                   
+                                        M O D E L   S U M M A R Y          BULK = 0
+                                   ENTRY NAME        NUMBER OF ENTRIES
+                                   ----------        -----------------
+                                       CQUAD4                        1
+                                         GRAV                        1
+                                         GRID                        4
+                                         MAT1                        1
+                                       PSHELL                        1
+                                     REJ_BULK                        4
+                                         SPC1                        1
+
+ *** USER FATAL MESSAGE 307 (IFPDRV)
+     ILLEGAL NAME FOR BULK DATA ENTRY FOOBAR
+ ^^^     
+ ^^^ >>> IFP OPERATIONS COMPLETE <<< 
+ ^^^     
+ ^^^     
+ *** USER FATAL MESSAGE 9002 (SUBDMAP IFPS)
+     ERROR(S) ENCOUNTERED IN THE MAIN BULK DATA SECTION
+     SEE MESSAGES ABOVE. ERROR ENCOUNTERED IN MODULE IFP,
+ ^^^     
+1                                                                           OCTOBER   6, 2026  MSC Nastran  3/14/14   PAGE     6
+                                                                                                                                    
+0                                                                                                                                   
+0                                                                                                                                   
+                                                                                                                                    
+                                                                                                                                    
+ *** USER INFORMATION MESSAGE 4425 (PRTPRN)
+     ONE OR MORE FATAL ERRORS HAVE OCCURRED.  THERE MAY BE MORE ERROR MESSAGES IN THE PRECEDING OUTPUT
+1                                                                           OCTOBER   6, 2026  MSC Nastran  3/14/14   PAGE     7
+                                                                                                                                    
+0                                                                                                                                   
+ * * * *  D B D I C T   P R I N T  * * * *      SUBDMAP = PRTSUM  ,  DMAP STATEMENT NO.     41
+
+
+
+0                                   * * * *  A N A L Y S I S  S U M M A R Y  T A B L E  * * * *
+0 SEID  PEID PROJ VERS APRCH      SEMG SEMR SEKR SELG SELR MODES DYNRED SOLLIN PVALID SOLNL LOOPID DESIGN CYCLE SENSITIVITY
+ --------------------------------------------------------------------------------------------------------------------------
+0SEID = SUPERELEMENT ID.
+ PEID = PRIMARY SUPERELEMENT ID OF IMAGE SUPERELEMENT.
+ PROJ = PROJECT ID NUMBER.
+ VERS = VERSION ID.
+ APRCH = BLANK FOR STRUCTURAL ANALYSIS.  HEAT FOR HEAT TRANSFER ANALYSIS.
+ SEMG = STIFFNESS AND MASS MATRIX GENERATION STEP.
+ SEMR = MASS MATRIX REDUCTION STEP (INCLUDES EIGENVALUE SOLUTION FOR MODES).
+ SEKR = STIFFNESS MATRIX REDUCTION STEP.
+ SELG = LOAD MATRIX GENERATION STEP.
+ SELR = LOAD MATRIX REDUCTION STEP. 
+ MODES = T (TRUE) IF NORMAL MODES OR BUCKLING MODES CALCULATED.
+ DYNRED = T (TRUE) MEANS GENERALIZED DYNAMIC AND/OR COMPONENT MODE REDUCTION PERFORMED.
+ SOLLIN = T (TRUE) IF LINEAR SOLUTION EXISTS IN DATABASE.
+ PVALID = P-DISTRIBUTION ID OF P-VALUE FOR P-ELEMENTS
+ LOOPID = THE LAST LOOPID VALUE USED IN THE NONLINEAR ANALYSIS.  USEFUL FOR RESTARTS.
+ SOLNL = T (TRUE) IF NONLINEAR SOLUTION EXISTS IN DATABASE.
+ DESIGN CYCLE = THE LAST DESIGN CYCLE (ONLY VALID IN OPTIMIZATION).
+ SENSITIVITY = SENSITIVITY MATRIX GENERATION FLAG.
+ 
+ No PARAM values were set in the Control File.
+ 
+1                                        * * * END OF JOB * * *
+ 
+ 
+ No Symbolic Replacement variables or values were specified.
+

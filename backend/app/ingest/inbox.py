@@ -17,7 +17,7 @@ from typing import Callable
 from sqlalchemy.orm import Session
 
 from .. import audit, jobs, models
-from ..storage.paths import StoragePaths, long_join, to_long
+from ..storage.paths import StoragePaths, long_join, to_long, walk_root
 from .owner import employee_for_account, owner_account
 from .rules import is_excluded
 
@@ -42,7 +42,7 @@ def _iter_file_entries(root: Path):
     """root 아래 모든 파일을 재귀적으로 훑는다(os.scandir 재귀 — DirEntry.stat() 은
     나열할 때 이미 받은 정보를 쓰므로 파일마다 새 핸들을 열지 않는다). 제외 규칙에
     걸리는 이름은 건너뛴다. 못 읽는 하위 폴더는 경고만 남기고 계속한다."""
-    stack = [to_long(root)]
+    stack = [walk_root(root)]
     while stack:
         cur = stack.pop()
         try:
@@ -128,7 +128,7 @@ class InboxWatcher:
         ready_folders: list[ReadyItem] = []
         loose_info: list[dict] = []  # 이번 회차에 본 낱개 파일 전부(준비 여부와 무관)
 
-        with os.scandir(to_long(self.storage.inbox)) as it:
+        with os.scandir(walk_root(self.storage.inbox)) as it:
             entries = list(it)
         for entry in entries:
             name = entry.name

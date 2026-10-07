@@ -120,19 +120,42 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 @pytest.fixture
 def storage():
-    from app.storage.paths import LAYOUT, StoragePaths, to_long
+    from app.storage.paths import LAYOUT, StoragePaths, walk_root
 
     root = Path(_TEST_ROOT)
     for name in LAYOUT:
-        # to_long() 로 지운다 — 끝에 공백·점이 있는 이름(테스트가 실측용으로 직접 만든 폴더
+        # walk_root()(늘 긴 경로 접두) 로 지운다 — 끝에 공백·점이 있는 이름(테스트가 실측용으로 직접 만든 폴더
         # 등)은 접두 없는 경로로 rmtree 하면 Windows 경로 정규화가 그 이름을 찾지 못해
         # ignore_errors=True 아래 조용히 삭제가 실패하고, 다음 테스트의 inbox 스캔에
         # 영원히 남아 오염시킨다(실측: test_worker 의 end-to-end 테스트가 이 때문에
         # staged/processed 가 2로 뻥튀기됨 — 원인은 test_inbox 의 trailing-dot 테스트).
-        shutil.rmtree(to_long(root / name), ignore_errors=True)
+        shutil.rmtree(walk_root(root / name), ignore_errors=True)
     sp = StoragePaths(root)
     sp.ensure_layout()
     return sp
+
+
+_LOCAL_DRM: bool | None = None
+
+
+@pytest.fixture
+def skip_if_local_drm():
+    """이 PC 의 회사 DRM 이 로컬에 막 쓴 .pdf 를 감싸 내용을 바꾸면(2026-10-06 부터 dev PC 에서 실측:
+    11B 를 쓰면 4096B 빈 파일로 읽히고, 평범한 PDF 도 크기가 +4096B 로 보임) 바이트·크기를 그대로
+    되읽는 테스트는 의미가 없어 건너뛴다.
+    공유 폴더와 145 서버에서는 일어나지 않는 일이라 코드 결함이 아니다."""
+    global _LOCAL_DRM
+    if _LOCAL_DRM is None:
+        probe = Path(_TEST_ROOT) / "_drm_probe.pdf"
+        # 실측: 평범한 PDF 는 내용은 그대로 읽히지만 크기가 +4096B 로 보이고, DRM 머리를 흉내 낸 내용은 빈 값으로 읽힌다
+        data = b"HHIDRMC...."
+        with open(probe, "wb") as fh:
+            fh.write(data)
+        with open(probe, "rb") as fh:
+            _LOCAL_DRM = fh.read() != data
+        probe.unlink(missing_ok=True)
+    if _LOCAL_DRM:
+        pytest.skip("로컬 DRM 이 .pdf 쓰기를 바꿔 이 PC 에서는 확인할 수 없음")
 
 
 @pytest.fixture

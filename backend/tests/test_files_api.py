@@ -91,7 +91,8 @@ def test_missing_file_404(client, db, make_user, auth_headers, make_entry_file):
     assert client.get(url).status_code == 404
 
 
-def test_drm_file_streams_without_length(client, db, storage, make_user, auth_headers, make_entry_file):
+def test_drm_file_streams_without_length(client, db, storage, make_user, auth_headers, make_entry_file,
+                                        skip_if_local_drm):
     make_user("A100001")
     _e, f = make_entry_file(name="r.pdf")
     f.drm_encrypted = True

@@ -60,9 +60,9 @@ export default function InlineText({ label, value, onSave, multiline = false, pl
       <span className="inline-flex max-w-full items-center gap-2">
         <button type="button" aria-label={`${label} 고치기`} aria-describedby={valueId} onClick={start}
                 className={`group -mx-1.5 inline-flex min-h-7 min-w-0 cursor-text items-center gap-1.5 rounded-md px-1.5 text-left
-                  transition-colors duration-120 ease-out hover:bg-n-100 active:bg-n-150 ${className}`}>
+                  transition-colors duration-150 ease-out hover:bg-n-100 active:bg-n-150 ${className}`}>
           <span id={valueId} className={`min-w-0 ${multiline ? 'whitespace-pre-wrap' : ''} ${value ? '' : 'text-n-500'} ${value ? monoCls : ''}`}>{shown}</span>
-          <Pencil size={12} aria-hidden="true" className="shrink-0 text-n-400 opacity-0 transition-opacity duration-120 group-hover:opacity-100 group-focus-visible:opacity-100" />
+          <Pencil size={12} aria-hidden="true" className="shrink-0 text-n-400 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100" />
         </button>
         {saved && <span role="status" className="animate-fade text-meta font-normal tracking-normal text-n-500">저장됨</span>}
       </span>

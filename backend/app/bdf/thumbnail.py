@@ -12,9 +12,11 @@ from PIL import Image, ImageDraw
 from .model import Model
 
 WIDTH, HEIGHT, MARGIN = 640, 400, 16
-BACKGROUND = (247, 248, 250)
-PALETTE = [(0, 61, 128), (0, 130, 51), (180, 83, 9), (124, 58, 237), (14, 116, 144), (190, 18, 60),
-           (71, 85, 105), (161, 98, 7), (2, 132, 199), (101, 163, 13), (219, 39, 119), (87, 83, 78)]
+# 뷰어와 같은 바탕(--color-viewer)과 PID 팔레트(frontend/src/lib/pidPalette.js) — 한쪽을 바꾸면 같이 바꾼다
+BACKGROUND = (26, 26, 46)
+PALETTE = [(0x4D, 0x8F, 0xEF), (0xED, 0xAE, 0x3B), (0xE8, 0x58, 0x7D), (0x3D, 0xC5, 0x84), (0x9A, 0x79, 0xF2),
+           (0xEE, 0x7D, 0x3E), (0x2D, 0xB5, 0xA3), (0xD8, 0x65, 0xC2), (0x9F, 0xCB, 0x55), (0x6E, 0x7F, 0xD8),
+           (0xE3, 0xCF, 0x72), (0xB5, 0xBF, 0xCC)]
 MAX_SHELLS, MAX_BEAMS, OUTLINE_LIMIT = 150_000, 200_000, 20_000
 _EYE = np.array([1.0, 1.0, 1.0]) / math.sqrt(3)
 _RIGHT = np.array([-1.0, 1.0, 0.0]) / math.sqrt(2)
@@ -75,10 +77,11 @@ def render_thumbnail(m: Model) -> bytes:
         length[length == 0] = 1.0
         shade = 0.55 + 0.45 * np.abs(normal @ _EYE) / length
         base = np.array([color_for(e.pid) for e in shells], dtype=np.float64)
-        fill = (255 - (255 - base) * shade[:, None] * 0.75).astype(np.int64)
+        # 어두운 바탕이라 비스듬한 면일수록 바탕 쪽으로 어둡게 한다
+        fill = (base * shade[:, None] * 0.9).astype(np.int64)
         fills = [tuple(row) for row in fill.tolist()]
         outline = len(shells) <= OUTLINE_LIMIT
-        edges = [tuple(row) for row in (fill * 0.7).astype(np.int64).tolist()] if outline else None
+        edges = [tuple(row) for row in (fill * 0.4).astype(np.int64).tolist()] if outline else None
         for k in order:
             draw.polygon([(X[i], Y[i]) for i in idx[k]], fill=fills[k], outline=edges[k] if edges else None)
 

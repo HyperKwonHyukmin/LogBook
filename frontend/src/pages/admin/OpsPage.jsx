@@ -21,12 +21,12 @@ function aliveLimitText(worker) {
   return sec % 60 === 0 ? `${sec / 60}분` : `${sec}초`;
 }
 
-const th = 'h-8 border-b border-n-200 bg-n-25 px-3 text-left text-meta font-medium text-n-500';
+const th = 'h-9 border-b border-n-200 bg-n-50 px-3 text-left text-meta font-medium text-n-600';
 const thNum = `${th} text-right`;
-const td = 'h-10 border-b border-n-200 px-3 text-ui';
+const td = 'h-11 border-b border-n-200 px-3 text-ui';
 const tdNum = `${td} text-right font-mono`;
 
-/** 일괄 작업 두 가지. force 체크는 "이미 끝난 것도 모두". */
+/** 일괄 작업. force 체크는 "이미 끝난 것도 모두"(forceLabel 이 있으면 그 말). */
 const BULK = [
   { id: 'reextract', label: '본문 다시 추출', title: '본문을 다시 추출할까요?',
     body: (force) => (force
@@ -36,7 +36,12 @@ const BULK = [
     body: (force) => (force
       ? '이미 변환한 BDF 까지 모두 작업 큐에 넣습니다. 큰 모델이 많으면 오래 걸립니다.'
       : '아직 변환하지 않은 BDF 만 작업 큐에 넣습니다.') },
+  { id: 'solve-check', label: '해석 검증 일괄', title: '해석 검증을 일괄로 돌릴까요?', forceLabel: '이미 검증한 모델도 모두',
+    body: (force) => (force
+      ? '변환이 끝난 모든 모델을 다시 검증합니다. Nastran 을 모델마다 한 번씩 돌리므로 오래 걸립니다. 원본 파일은 바뀌지 않습니다.'
+      : '아직 검증하지 않은 모델만 작업 큐에 넣습니다. 변환·추출 작업 뒤에 차례로 돌고, 원본 파일은 바뀌지 않습니다.') },
 ];
+const FORCE_LABEL = '이미 끝난 것도 모두';
 
 const QUEUE_STATES = ['queued', 'running', 'failed'];
 
@@ -123,7 +128,7 @@ function QueueTable({ jobs }) {
           </thead>
           <tbody>
             {types.map((t) => (
-              <tr key={t} className="transition-colors duration-120 last:[&>td]:border-0 hover:bg-n-25">
+              <tr key={t} className="transition-colors duration-150 last:[&>td]:border-0 hover:bg-n-50">
                 <td className={`${td} text-n-900`}>{JOB_TYPE_LABELS[t] || t}</td>
                 {states.map((s) => {
                   const n = counts[`${t}:${s}`] || 0;
@@ -147,7 +152,7 @@ function ErrorText({ text }) {
   return (
     <div className="min-w-0">
       <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)}
-              className={`block max-w-full rounded-sm px-1 -mx-1 text-left font-mono text-meta text-n-700 transition-colors duration-120 ease-out hover:bg-n-100 hover:text-n-900 active:bg-n-150 ${open ? 'whitespace-pre-wrap break-all' : 'truncate'}`}>
+              className={`block max-w-full rounded-sm px-1 -mx-1 text-left font-mono text-meta text-n-700 transition-colors duration-150 ease-out hover:bg-n-100 hover:text-n-900 active:bg-n-150 ${open ? 'whitespace-pre-wrap break-all' : 'truncate'}`}>
         {first}
       </button>
       {open && rest.length > 0 && (
@@ -176,7 +181,7 @@ function FailedTable({ failed, retrying, onRetry }) {
           </thead>
           <tbody>
             {failed.map((j) => (
-              <tr key={j.id} className="align-top transition-colors duration-120 last:[&>td]:border-0 hover:bg-n-25">
+              <tr key={j.id} className="align-top transition-colors duration-150 last:[&>td]:border-0 hover:bg-n-50">
                 <td className={`${td} py-2.5`}>
                   <div className="truncate font-medium text-n-900" title={j.label}>{j.label}</div>
                   <div className="font-mono text-meta text-n-500">{when(j.updated_at)}</div>
@@ -211,14 +216,14 @@ export default function OpsPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);
   // 동작마다 따로 잠근다. 하나로 두면 백업 중에 다른 동작이 끝나며 백업 단추가 다시 열려 두 번 실행될 수 있다.
-  const [busy, setBusy] = useState({ backup: false, reextract: false, reconvert: false, retry: {} });
+  const [busy, setBusy] = useState({ backup: false, reextract: false, reconvert: false, 'solve-check': false, retry: {} });
   const setFlag = (key, on) => setBusy((cur) => ({ ...cur, [key]: on }));
   const setRetrying = (id, on) => setBusy((cur) => {
     const retry = { ...cur.retry };
     if (on) retry[id] = true; else delete retry[id];
     return { ...cur, retry };
   });
-  const [force, setForce] = useState({ reextract: false, reconvert: false });
+  const [force, setForce] = useState({ reextract: false, reconvert: false, 'solve-check': false });
   const [confirm, dialog] = useConfirm();
   // 주기 재조회와 동작 뒤 재조회가 겹칠 때, 가장 최근에 보낸 요청의 응답만 반영한다.
   const seq = useRef(0);
@@ -326,9 +331,9 @@ export default function OpsPage() {
                   {b.label}
                 </Button>
                 <label className="inline-flex cursor-pointer items-center gap-2 text-ui text-n-700">
-                  <input type="checkbox" className="h-4 w-4 accent-brand" aria-label={`${b.label}: 이미 끝난 것도 모두`}
+                  <input type="checkbox" className="h-4 w-4 accent-brand" aria-label={`${b.label}: ${b.forceLabel || FORCE_LABEL}`}
                          checked={force[b.id]} onChange={(e) => setForce((cur) => ({ ...cur, [b.id]: e.target.checked }))} />
-                  이미 끝난 것도 모두
+                  {b.forceLabel || FORCE_LABEL}
                 </label>
               </div>
             ))}

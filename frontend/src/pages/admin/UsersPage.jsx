@@ -22,7 +22,7 @@ const CONFIRMS = {
   disable: (u) => ({ title: `${u.name} 님을 비활성화할까요?`, body: '즉시 로그인이 차단됩니다. 비활성 탭에서 다시 활성화할 수 있습니다.', confirmLabel: '비활성화' }),
 };
 
-const th = 'h-8 border-b border-n-200 bg-n-25 px-3 text-left text-meta font-medium text-n-500';
+const th = 'h-9 border-b border-n-200 bg-n-50 px-3 text-left text-meta font-medium text-n-600';
 const td = 'h-12 border-b border-n-200 px-3 text-ui';
 
 export default function UsersPage() {
@@ -97,7 +97,7 @@ export default function UsersPage() {
             {rows.map((u) => {
               const busy = busyId === u.employee_id;
               return (
-                <tr key={u.employee_id} className="group transition-colors duration-120 last:[&>td]:border-0 hover:bg-n-25">
+                <tr key={u.employee_id} className="group transition-colors duration-150 last:[&>td]:border-0 hover:bg-n-50">
                   <td className={td}>
                     <div className="font-medium text-n-900">{u.name}</div>
                     <div className="font-mono text-meta text-n-500">{u.employee_id}</div>

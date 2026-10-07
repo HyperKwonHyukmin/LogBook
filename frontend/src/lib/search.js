@@ -1,5 +1,11 @@
 /** 검색 상태는 주소가 원본이다(메신저로 공유하면 같은 결과가 열린다 — 설계 §6.1). */
-export const FILTER_KEYS = ['hull', 'ship_type', 'analysis_type', 'zone', 'year', 'uploaded_by', 'kind'];
+export const FILTER_KEYS = ['hull', 'ship_type', 'analysis_type', 'zone', 'year', 'tag', 'uploaded_by', 'kind'];
+
+/** 정렬(08) — 주소에 없으면 서버가 정한다(검색어가 있으면 관련도, 없으면 해석 시기). */
+export const SORTS = [{ id: 'relevance', label: '관련도' }, { id: 'period', label: '해석 시기' }, { id: 'recent', label: '최근 등록' }];
+export const defaultSort = (q) => (q ? 'relevance' : 'period');
+/** 해석 시기가 없는 Entry 의 '해석 연도' 값. */
+export const YEAR_UNKNOWN = 'unknown';
 
 export function readSearch(params) {
   const filters = {};
@@ -7,16 +13,18 @@ export function readSearch(params) {
     const v = params.get(k);
     if (v) filters[k] = v;
   }
+  const sort = SORTS.some((s) => s.id === params.get('sort')) ? params.get('sort') : '';
   return { q: params.get('q') || '', unit: params.get('unit') === 'file' ? 'file' : 'entry',
-           drafts: params.get('drafts') === '1', filters };
+           drafts: params.get('drafts') === '1', filters, sort };
 }
 
-export function writeSearch({ q = '', unit = 'entry', drafts = false, filters = {} }) {
+export function writeSearch({ q = '', unit = 'entry', drafts = false, filters = {}, sort = '' }) {
   const p = new URLSearchParams();
   if (q) p.set('q', q);
   if (unit === 'file') p.set('unit', 'file');
   if (drafts) p.set('drafts', '1');
   for (const k of FILTER_KEYS) if (filters[k]) p.set(k, filters[k]);
+  if (sort) p.set('sort', sort);
   return p;
 }
 

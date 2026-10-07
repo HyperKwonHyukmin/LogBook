@@ -12,14 +12,18 @@ from logging.handlers import RotatingFileHandler
 from sqlalchemy.orm import Session
 
 from . import jobs, models
-from .database import Base, SessionLocal, engine
+from .database import SessionLocal, init_schema
 from .dependencies import get_storage
 from .convert.job import mark_failed as mark_convert_failed
 from .convert.job import run_convert
+from .solve.job import mark_failed as mark_solve_failed
+from .solve.job import run_solve_check
 from .entries.files import write_entry_files
+from .entries.service import auto_merge_batch
 from .extract.job import mark_failed, run_extract
 from .ingest.inbox import InboxWatcher, stage_item
 from .ingest.process import process_batch
+from .ingest.progress import make_reporter
 from .ops.daily import run_daily
 from .ops.state import heartbeat
 from .storage.paths import StoragePaths, to_long
@@ -29,7 +33,7 @@ log = logging.getLogger("logbook.worker")
 POLL_SECONDS = 30
 MAX_ATTEMPTS = jobs.MAX_ATTEMPTS
 STUCK_JOB_AFTER = timedelta(minutes=10)
-# 한 주기에서 무거운 작업(본문 추출·BDF 변환, jobs.HEAVY_JOB_TYPES)에 쓰는 시간 상한(초).
+# 한 주기에서 무거운 작업(본문 추출·BDF 변환·해석 검증, jobs.HEAVY_JOB_TYPES)에 쓰는 시간 상한(초).
 # 넘으면 남은 무거운 작업은 다음 주기로 미뤄 Inbox 감시와 배치 처리가 주기마다 돌아오게 한다
 # (다른 종류 작업은 계속 처리한다).
 HEAVY_BUDGET_SECONDS = 120
@@ -86,7 +90,10 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
                 batch = db.get(models.Batch, job.target_id)
                 if batch is None:
                     raise RuntimeError(f"배치를 찾을 수 없음: {job.target_id}")
-                process_batch(db, storage, batch)
+                # 정리 대기 화면에 단계·n/N 을 보인다 — 별도 세션으로 쓴다(ingest.progress 머리말)
+                process_batch(db, storage, batch, progress=make_reporter(batch.key, SessionLocal))
+                # 확정 자료의 [파일 추가]로 올린 배치는 정리 대기를 건너뛰고 곧장 그 자료에 합친다
+                auto_merge_batch(db, storage, batch)
             elif job.type == "write_meta":
                 entry = db.get(models.Entry, job.target_id)
                 if entry is None:
@@ -102,6 +109,10 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
                 if f is None:
                     raise RuntimeError(f"파일을 찾을 수 없음: {job.target_id}")
                 run_convert(db, storage, f)
+            elif job.type == "solve_check":
+                # 최대 LOGBOOK_SOLVE_TIMEOUT(30분) 걸린다 — 실행 중 1분마다 박동을 남겨 '멈춘 작업'(10분)
+                # 복구와 운영 화면의 '워커 멈춤'(10분)에 걸리지 않게 한다
+                run_solve_check(db, storage, job.target_id, heartbeat=job_heartbeat(job.id))
             else:
                 raise RuntimeError(f"알 수 없는 작업: {job.type} {job.target_id}")
             jobs.complete(db, job)
@@ -134,6 +145,28 @@ def _final_failure(db: Session, job: models.Job, error: str) -> None:
     elif job.type == "convert_model":
         # 끝내 못 읽은 BDF
         mark_convert_failed(db, job.target_id, error)
+    elif job.type == "solve_check":
+        # 끝내 못 돌린 해석 검증 — queued/running 으로 남지 않게 error 로
+        mark_solve_failed(db, job.target_id, error)
+
+
+def job_heartbeat(job_id: int, session_factory=None):
+    """긴 작업(해석 검증) 실행 중에 부를 박동 — 작업의 updated_at 과 워커 심장 박동을 별도 세션으로 갱신한다.
+    작업 세션은 Nastran 이 도는 동안 쓰지 않으므로 잠금이 겹치지 않는다. 실패해도 해석은 계속한다."""
+    factory = session_factory or SessionLocal
+
+    def beat() -> None:
+        s = factory()
+        try:
+            s.query(models.Job).filter(models.Job.id == job_id).update(
+                {"updated_at": jobs._now()}, synchronize_session=False)
+            heartbeat(s)   # 커밋까지 한다
+        except Exception:  # noqa: BLE001 — 박동 실패로 해석을 멈추지 않는다
+            s.rollback()
+            log.warning("작업 박동 갱신 실패: job=%s", job_id, exc_info=True)
+        finally:
+            s.close()
+    return beat
 
 
 def _log_orphaned_staging_folders(db: Session, storage: StoragePaths) -> None:
@@ -164,7 +197,7 @@ def _setup_logging(storage: StoragePaths) -> None:
 
 def main() -> None:
     storage = get_storage()
-    Base.metadata.create_all(bind=engine)
+    init_schema()
     try:
         storage.ensure_layout()
     except OSError:

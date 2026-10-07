@@ -26,10 +26,10 @@ export function DraftBadge() {
   );
 }
 
-const hullChipClass = 'inline-flex h-5 items-center rounded-sm border border-brand-muted bg-n-0 px-1.5 font-mono text-meta '
-  + 'font-medium text-brand transition-colors duration-120 ease-out hover:bg-brand-subtle active:bg-brand-muted';
+const hullChipClass = 'inline-flex h-5 items-center rounded-sm bg-brand px-1.5 font-mono text-meta font-medium text-on-navy '
+  + 'transition-colors duration-150 ease-out hover:bg-navy-700 active:bg-brand-press';
 
-/** 호선 칩(전역 1종) — 호선 화면으로 가는 링크. */
+/** 호선 칩(전역 1종) — 네이비 채움 + 흰 mono 숫자. 호선 화면으로 가는 링크. */
 export function HullChip({ hull, title, onClick }) {
   return (
     <Link to={`/h/${encodeURIComponent(hull)}`} title={title} onClick={onClick} className={hullChipClass}>{hull}</Link>
@@ -40,5 +40,24 @@ export function HullChip({ hull, title, onClick }) {
 export function TagChip({ children, className = '' }) {
   return (
     <span className={`inline-flex h-6 items-center rounded-sm bg-n-100 px-2 text-meta text-n-700 ${className}`}>{children}</span>
+  );
+}
+
+/** 태그로 거른 검색 주소(08). */
+export const tagHref = (tag) => `/?tag=${encodeURIComponent(tag)}`;
+
+/**
+ * 자유 태그 링크(08) — 누르면 그 태그로 거른 검색. small: 결과 행 안의 작은 '#태그'.
+ */
+export function TagLink({ tag, small = false, onClick }) {
+  if (small) {
+    return (
+      <Link to={tagHref(tag)} onClick={onClick} title={`태그 ‘${tag}’ 로 거르기`}
+            className="max-w-40 truncate rounded-xs text-meta text-n-600 underline-offset-2 transition-colors duration-150 hover:text-brand hover:underline">#{tag}</Link>
+    );
+  }
+  return (
+    <Link to={tagHref(tag)} onClick={onClick} title={`태그 ‘${tag}’ 로 거르기`}
+          className="inline-flex h-6 items-center rounded-sm bg-n-100 px-2 text-meta text-n-700 transition-colors duration-150 ease-out hover:bg-n-150 hover:text-n-900">{tag}</Link>
   );
 }

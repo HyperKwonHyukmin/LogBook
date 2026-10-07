@@ -7,7 +7,12 @@
     .venv\\Scripts\\python.exe -m app.cli enqueue-extract [--force]
 
 기존 BDF(04a 이전에 올라온 것)를 변환 대기열에 넣기:
-    .venv\\Scripts\\python.exe -m app.cli enqueue-convert [--force]
+    .venv\\Scripts\\python.exe -m app.cli enqueue-convert [--force | --outdated]
+    (--outdated: 변환은 끝났지만 lbm 형식이 옛 버전인 모델만 — 04c 형식 v2 로 다시 변환)
+
+변환이 끝난 모델을 해석 검증(Nastran) 대기열에 넣기(06):
+    .venv\\Scripts\\python.exe -m app.cli enqueue-solve-check [--all]
+    (기본: 검증 기록이 없는 모델만 / --all: 검증 중이 아닌 모델 전부 다시)
 
 DB 백업(mysqldump → 80_Backup, 05):
     .venv\\Scripts\\python.exe -m app.cli backup
@@ -23,6 +28,11 @@ DB 백업(mysqldump → 80_Backup, 05):
 
 팀원 배포용 바로가기(Logbook.url + 사용 안내문)를 공유 폴더 루트에 쓰기:
     .venv\\Scripts\\python.exe -m app.cli write-shortcut [--url URL]
+
+해석 종류·구역 값을 분류 목록 용어로 맞추기(08) — 먼저 보고서로 확인하고 적용한다:
+    .venv\\Scripts\\python.exe -m app.cli vocab-report
+    .venv\\Scripts\\python.exe -m app.cli vocab-normalize --apply
+    (다시 돌려도 바뀌는 것이 없다. 맞추지 못한 값은 그대로 두고 관리 화면 '목록 밖 값'에 남는다)
 """
 import argparse
 import sys
@@ -31,7 +41,7 @@ from sqlalchemy.orm import Session
 
 from . import audit, models
 from .config import settings
-from .database import Base, SessionLocal, engine
+from .database import SessionLocal, init_schema
 from .dependencies import get_storage
 from .identifiers import EMPLOYEE_ID_PATTERN
 from .schemas import user_snapshot
@@ -89,10 +99,12 @@ def enqueue_extract_all(db: Session, *, force: bool = False) -> int:
     return n
 
 
-def enqueue_convert_all(db: Session, *, force: bool = False) -> int:
+def enqueue_convert_all(db: Session, *, force: bool = False, outdated: bool = False) -> int:
     """변환 기록이 없거나 실패·휴지통에서 나온 모델을 변환 작업에 넣는다(force 면 휴지통 밖 전부).
 
-    DRM·크기 초과·요소 없음으로 건너뛴 것, 이미 끝났거나(done·include) 대기 중인 것은 둔다."""
+    DRM·크기 초과·요소 없음으로 건너뛴 것, 이미 끝났거나(done·include) 대기 중인 것은 둔다.
+    outdated: 변환이 끝난(done) 모델 중 lbm 형식 버전이 현재(bdf.lbm.VERSION)보다 낮은 것(NULL = v1)만."""
+    from .bdf.lbm import VERSION
     from .convert.job import enqueue_convert
 
     files = (db.query(models.File).filter(models.File.kind == "model", models.File.location != "trash")
@@ -105,7 +117,10 @@ def enqueue_convert_all(db: Session, *, force: bool = False) -> int:
         if f.id in pending:  # 이미 대기 중인 작업이 있으면 force 여도 또 넣지 않는다
             continue
         r = rows.get(f.id)
-        if force or r is None or r.state == "failed" or (r.state == "skipped" and r.error == "trashed"):
+        if outdated:
+            if r is not None and r.state == "done" and (r.format_version or 1) < VERSION:
+                n += enqueue_convert(db, f)
+        elif force or r is None or r.state == "failed" or (r.state == "skipped" and r.error == "trashed"):
             n += enqueue_convert(db, f)
     db.commit()
     return n
@@ -130,7 +145,7 @@ def _cmd_backup() -> int:
 def _cmd_fix_autoinc() -> int:
     from .ops.autoinc import fix_autoinc
 
-    Base.metadata.create_all(bind=engine)
+    init_schema()
     db = SessionLocal()
     try:
         r = fix_autoinc(db, get_storage())
@@ -153,7 +168,7 @@ def _cmd_rebuild(yes: bool, force: bool = False) -> int:
         print(f"빈 DB 에 공유 폴더({storage.root})의 entry.json·registry.json·감사 로그를 읽어 채웁니다. "
               "실행하려면 --yes")
         return 1
-    Base.metadata.create_all(bind=engine)
+    init_schema()
     db = SessionLocal()
     try:
         result = rebuild(db, storage, force=force)
@@ -175,6 +190,48 @@ def _cmd_rebuild(yes: bool, force: bool = False) -> int:
     return 0
 
 
+_VOCAB_NAMES = {"atype": "해석 종류", "zone": "구역"}
+
+
+def _print_vocab_report(rep: dict) -> None:
+    from .vocab import KINDS
+
+    if rep.get("seeded"):
+        verb = "넣었습니다" if rep["applied"] else "넣게 됩니다(아직 비어 있음)"
+        print(f"기본 목록을 {verb}: {', '.join(_VOCAB_NAMES[k] for k in rep['seeded'])}")
+    for kind in KINDS:
+        r = rep[kind]
+        print(f"\n[{_VOCAB_NAMES[kind]}] 용어 {len(r['terms'])}개: {', '.join(r['terms'])}")
+        if not r["values"]:
+            print("  (데이터에 값 없음)")
+        for row in r["values"]:
+            if row["to"] is None:
+                mark = "목록 밖 — 그대로 둠"
+            elif row["to"] == row["value"]:
+                mark = "용어"
+            else:
+                mark = f"→ {row['to']}"
+            print(f"  {row['value']}  ({row['count']}건)  {mark}")
+        print(f"  바꿀 Entry {r['changes']}건 · 목록 밖 값 {len(r['unlisted'])}개")
+        if rep["applied"]:
+            print(f"  바꾼 Entry {len(r.get('entries', []))}건: {', '.join(r.get('entries', [])) or '-'}")
+    if not rep["applied"]:
+        print("\n아무것도 바꾸지 않았습니다. 적용하려면: vocab-normalize --apply")
+
+
+def _cmd_vocab(apply: bool) -> int:
+    from .vocab import normalize
+
+    init_schema()
+    db = SessionLocal()
+    try:
+        rep = normalize(db, get_storage(), "system", apply=apply)
+    finally:
+        db.close()
+    _print_vocab_report(rep)
+    return 0
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -185,7 +242,11 @@ def main(argv: list[str]) -> int:
     q = sub.add_parser("enqueue-extract", help="본문 추출이 안 된 파일을 워커 작업에 넣는다")
     q.add_argument("--force", action="store_true", help="상태와 상관없이 휴지통 밖 파일 전부 다시")
     c = sub.add_parser("enqueue-convert", help="BDF 변환이 안 된 모델 파일을 워커 작업에 넣는다")
-    c.add_argument("--force", action="store_true", help="상태와 상관없이 휴지통 밖 모델 파일 전부 다시")
+    cg = c.add_mutually_exclusive_group()
+    cg.add_argument("--force", action="store_true", help="상태와 상관없이 휴지통 밖 모델 파일 전부 다시")
+    cg.add_argument("--outdated", action="store_true", help="lbm 형식이 옛 버전(현재보다 낮음)인 변환 완료 모델만 다시")
+    v = sub.add_parser("enqueue-solve-check", help="변환이 끝난 모델을 해석 검증(Nastran) 작업에 넣는다")
+    v.add_argument("--all", action="store_true", help="이미 검증한 모델도 다시(검증 중인 것은 제외)")
     sub.add_parser("backup", help="mysqldump 로 DB 를 80_Backup 에 백업하고 오래된 백업을 정리한다")
     t = sub.add_parser("purge-trash", help="보관 기간이 지난 휴지통 Entry 를 영구 삭제한다(수동 실행용)")
     t.add_argument("--days", type=int, default=None, help="보관일(기본: LOGBOOK_TRASH_DAYS)")
@@ -195,8 +256,15 @@ def main(argv: list[str]) -> int:
     sub.add_parser("fix-autoinc", help="Entry 자동 증가 값을 공유 폴더·감사 로그의 최대 번호 다음으로 올린다(덤프 복원 뒤)")
     w = sub.add_parser("write-shortcut", help="공유 폴더 루트에 Logbook.url 과 사용 안내문을 쓴다")
     w.add_argument("--url", default=None, help="접속 주소(기본: LOGBOOK_PUBLIC_URL)")
+    sub.add_parser("vocab-report", help="해석 종류·구역 값이 분류 목록 용어로 어떻게 맞춰질지 보고한다(쓰지 않음)")
+    n = sub.add_parser("vocab-normalize", help="해석 종류·구역 값을 분류 목록 용어로 맞춘다(--apply 없으면 보고만)")
+    n.add_argument("--apply", action="store_true", help="실제로 바꾼다(감사 로그·entry.json 갱신)")
     args = parser.parse_args(argv)
 
+    if args.cmd == "vocab-report":
+        return _cmd_vocab(False)
+    if args.cmd == "vocab-normalize":
+        return _cmd_vocab(args.apply)
     if args.cmd == "backup":
         return _cmd_backup()
     if args.cmd == "rebuild":
@@ -215,7 +283,7 @@ def main(argv: list[str]) -> int:
         print(f"바로가기를 썼습니다({url}): {', '.join(names)}")
         return 0
 
-    Base.metadata.create_all(bind=engine)
+    init_schema()
     db = SessionLocal()
     try:
         if args.cmd == "enqueue-extract":
@@ -228,8 +296,15 @@ def main(argv: list[str]) -> int:
             n = purge_expired(db, get_storage(), days)
             print(f"휴지통에서 {days}일 지난 Entry {n}건을 영구 삭제했습니다.")
             return 0
+        if args.cmd == "enqueue-solve-check":
+            from .solve.job import enqueue_solve_all
+
+            n = enqueue_solve_all(db, force=args.all, requested_by="system")
+            print(f"해석 검증 작업 {n}건을 넣었습니다." + (" (전체 다시)" if args.all else ""))
+            return 0
         if args.cmd == "enqueue-convert":
-            print(f"변환 작업 {enqueue_convert_all(db, force=args.force)}건을 넣었습니다.")
+            n = enqueue_convert_all(db, force=args.force, outdated=args.outdated)
+            print(f"변환 작업 {n}건을 넣었습니다." + (" (옛 형식 모델)" if args.outdated else ""))
             return 0
         u = create_admin(db, get_storage(), args.employee_id, args.name, args.department)
     except ValueError as exc:

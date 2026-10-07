@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { mockApi } from '../../test/mockApi.js';
 import { encodeLbm } from '../../test/modelFixtures.js';
+import { fakeEngine } from '../../test/fakeEngine.js';
 import { ViewerEngineContext } from './ViewerEngineContext.js';
 import ModelViewer from './ModelViewer.jsx';
 
@@ -30,13 +31,6 @@ function lbmBuffer(extra = {}) {
   });
 }
 
-function fakeEngine(pick = 0) {
-  return {
-    setModel: vi.fn(), setGroupVisible: vi.fn(), setEdges: vi.fn(), setMarkers: vi.fn(),
-    setView: vi.fn(), fit: vi.fn(), pickAt: vi.fn(() => pick), highlight: vi.fn(), dispose: vi.fn(),
-  };
-}
-
 function renderViewer(engine, map = { 'GET /api/files/7/model.lbm': { __binary: lbmBuffer() } }) {
   mockApi(map);
   const factory = vi.fn(async () => engine);
@@ -54,7 +48,7 @@ test('불러와서 엔진에 넘기고 PID 목록·표시물 칩을 보인다', 
   const list = await screen.findByRole('list', { name: 'PID' });
   expect(within(list).getByText('PBEAML L 100x100x10x10')).toBeInTheDocument();
   expect(within(list).getByText('PSHELL t12')).toBeInTheDocument();
-  expect(engine.setModel).toHaveBeenCalledWith(expect.objectContaining({ total: 2 }), { edges: true });
+  expect(engine.setModel).toHaveBeenCalledWith(expect.objectContaining({ total: 2 }), expect.objectContaining({ edges: true }));
   expect(screen.getByRole('button', { name: /RBE2 1/ })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /SPC 1/ })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /CONM2/ })).toBeNull();
@@ -91,7 +85,7 @@ test('클릭하면 요소 정보를 보인다, 드래그는 무시', async () =>
   expect(info).toHaveTextContent('20');
   expect(info).toHaveTextContent('CQUAD4');
   expect(info).toHaveTextContent('PSHELL t12');
-  expect(engine.highlight).toHaveBeenCalledWith(1);
+  expect(engine.highlight).toHaveBeenCalledWith({ kind: 'element', index: 1 });
   fireEvent.keyDown(canvas, { key: 'Escape' });
   expect(engine.highlight).toHaveBeenLastCalledWith(null);
 });

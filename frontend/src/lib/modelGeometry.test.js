@@ -26,7 +26,7 @@ test('중심 이동·반지름·표시물', () => {
   expect(Array.from(g.rigid.rbe3)).toEqual([3, 0]);
   expect(Array.from(g.masses)).toEqual([4]);
   expect(Array.from(g.spcs)).toEqual([0]);
-  expect(g.groups[0].color).toMatch(/^#[0-9a-f]{6}$/);
+  expect(g.groups[0].color).toMatch(/^#[0-9a-f]{6}$/i);
 });
 
 test('피킹 색 왕복', () => {
@@ -35,4 +35,27 @@ test('피킹 색 왕복', () => {
     expect(decodePick(r, g, b)).toBe(i);
   }
   expect(decodePick(0, 0, 0)).toBeNull();
+});
+
+test('PID 묶음 안 카드별 범위', async () => {
+  const { sampleModelV2 } = await import('../test/modelFixtures.js');
+  const m = sampleModelV2();
+  m.blocks.tris = new Int32Array([21, 5, 4, 5, 6]);
+  m.blocks.tri_cards = new Uint8Array([0]);
+  const g = buildGeometry(m);
+  const shell = g.groups.find((x) => x.pid === 5);
+  expect(shell.shellRanges).toEqual([{ card: 'CTRIA3', start: 0, count: 3 }, { card: 'CQUAD4', start: 3, count: 6 }]);
+  const beam = g.groups.find((x) => x.pid === 1);
+  expect(beam.beamRanges).toEqual([{ card: 'CBEAM', start: 0, count: 2 }]);
+});
+
+test('같은 PID 에 카드가 섞이면 카드끼리 모은다', () => {
+  const m = sampleModel();
+  m.blocks.beams = new Int32Array([10, 1, 0, 1, 11, 1, 1, 2, 12, 1, 2, 3]);
+  m.blocks.beam_cards = new Uint8Array([1, 0, 1]);
+  const g = buildGeometry(m);
+  const b = g.groups[0];
+  expect(b.beamRanges).toEqual([{ card: 'CBAR', start: 0, count: 2 }, { card: 'CBEAM', start: 2, count: 4 }]);
+  expect(Array.from(b.beamElem)).toEqual([1, 0, 2]);
+  expect(Array.from(b.beams)).toEqual([1, 2, 0, 1, 2, 3]);
 });

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from .. import audit, jobs, models
 from ..ingest.inbox import new_batch_key
 from ..ingest.process import MAX_NAME, MAX_REL_PATH
-from ..storage.paths import StoragePaths, long_join, to_long
+from ..storage.paths import StoragePaths, long_join, to_long, walk_root
 
 log = logging.getLogger("logbook.uploads")
 
@@ -138,7 +138,7 @@ def finish(db: Session, storage: StoragePaths, user: models.User, key: str, *,
     # 입력 검증은 전부 폴더를 옮기기 전에 끝낸다(옮긴 뒤 실패하면 되돌리기가 필요해진다).
     excluded = [{"name": clean_rel(r["rel_path"]), "size": 0, "reason": r.get("reason") or "drm"}
                 for r in rejected]
-    root = to_long(storage.web_inbox / key)
+    root = walk_root(storage.web_inbox / key)
     declared: set[str] = set()
     for f in files:
         rel = clean_rel(f["rel_path"])

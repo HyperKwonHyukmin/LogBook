@@ -1,6 +1,6 @@
 """레지스트리 — DB 에만 있던 운영 정보를 공유 폴더(90_System\\registry.json)에도 남긴다.
 
-entry.json 이 Entry 를 되살린다면, 이 파일은 사용자·호선 메모·선종·태그 동의어를 되살린다(재구축 원천).
+entry.json 이 Entry 를 되살린다면, 이 파일은 사용자·호선 메모·선종·태그 동의어·분류 목록(08)을 되살린다(재구축 원천).
 쓰기 실패는 요청을 실패시키지 않는다(DB 가 먼저다) — 다음 변경이나 매일 작업에서 다시 쓴다."""
 import json
 import logging
@@ -17,7 +17,7 @@ from ..storage.paths import StoragePaths, to_long
 
 log = logging.getLogger(__name__)
 REGISTRY_FILE = "registry.json"
-EMPTY = {"version": 1, "users": [], "hulls": [], "tags": []}
+EMPTY = {"version": 1, "users": [], "hulls": [], "tags": [], "vocab": []}
 _write_lock = threading.Lock()
 
 
@@ -32,8 +32,12 @@ def build_registry(db: Session) -> dict:
     tags = [{"kind": t.kind, "value": t.value, "alias_of": roots.get(t.alias_of_id)}
             for t in db.query(models.Tag).filter(models.Tag.alias_of_id.isnot(None))
             .order_by(models.Tag.kind, models.Tag.value)]
+    # 08 — 해석 종류·구역 목록 용어(순서·사용 여부). 동의어는 위 tags 에 함께 들어 있다
+    vocab = [{"kind": t.kind, "value": t.value, "sort_order": t.sort_order, "active": bool(t.active)}
+             for t in db.query(models.Tag).filter(models.Tag.listed.is_(True), models.Tag.alias_of_id.is_(None))
+             .order_by(models.Tag.kind, models.Tag.sort_order, models.Tag.value)]
     return {"version": 1, "written_at": datetime.now().replace(microsecond=0).isoformat(),
-            "users": users, "hulls": hulls, "tags": tags}
+            "users": users, "hulls": hulls, "tags": tags, "vocab": vocab}
 
 
 def write_registry(db: Session, storage: StoragePaths) -> bool:
@@ -77,4 +81,4 @@ def read_registry(storage: StoragePaths) -> dict:
         return {k: (list(v) if isinstance(v, list) else v) for k, v in EMPTY.items()}
     if not isinstance(data, dict):
         return {k: (list(v) if isinstance(v, list) else v) for k, v in EMPTY.items()}
-    return {**EMPTY, **{k: data.get(k) or [] for k in ("users", "hulls", "tags")}, "version": data.get("version", 1)}
+    return {**EMPTY, **{k: data.get(k) or [] for k in ("users", "hulls", "tags", "vocab")}, "version": data.get("version", 1)}

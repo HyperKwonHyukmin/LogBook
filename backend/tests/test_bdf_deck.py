@@ -108,3 +108,25 @@ def test_digest_changes_with_include_content():
     b = _reader({"m.bdf": "INCLUDE 'i.bdf'\n", "i.bdf": "GRID,1,,1.,0.,0.\n"})
     b.read("m.bdf")
     assert a.digest != b.digest and len(a.digest) == 64
+
+
+def test_missing_begin_bulk_starts_bulk_at_first_bulk_card():
+    # 실제 사례: SOL·CEND·Case Control 뒤에 BEGIN BULK 없이 PARAM·GRID 가 이어진다(Nastran 은 FATAL, 뷰어는 읽는다)
+    deck = ("$ head\nSOL 101\nCEND\n  DISPLACEMENT(PLOT) = ALL\nSUBCASE 1\n  SPC = 1\n  LOAD = 2\n"
+            "PARAM,POST,-1\nGRID           9        202754.0  -410.0 26256.0\n"
+            "CBEAM,1,1,9,10,0.,0.,1.\nGRID,10,,0.,0.,0.\nENDDATA\n")
+    seen: list[str] = []
+    r = _reader({"m.bdf": deck})
+    r.raw_sink = seen.append
+    cards = r.read("m.bdf")
+    assert r.sol == "101"
+    assert [c.name for c in cards] == ["GRID", "CBEAM", "GRID"]
+    assert "missing_begin_bulk" in r.warnings
+    assert seen[0].startswith("GRID")
+
+
+def test_case_control_lines_do_not_start_bulk():
+    deck = "SOL 101\nCEND\nSUBCASE 1\n  SPC = 1\n  LOAD = 2\nBEGIN BULK\nGRID,1,,0.,0.,0.\nENDDATA\n"
+    r = _reader({"m.bdf": deck})
+    assert [c.name for c in r.read("m.bdf")] == ["GRID"]
+    assert "missing_begin_bulk" not in r.warnings

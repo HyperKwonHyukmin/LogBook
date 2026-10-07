@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { CornerDownRight, Link2, Search, Unlink } from 'lucide-react';
 import { api } from '../api/client.js';
 import Button from '../components/ui/Button.jsx';
 import { inputClass, selectClass } from '../components/ui/Field.jsx';
 import { ErrorNote, Page, PageHeader } from '../components/ui/Page.jsx';
 import { RowsSkeleton } from '../components/ui/Skeleton.jsx';
-import { Segmented } from '../components/ui/Tabs.jsx';
+import { tagHref } from '../components/ui/Status.jsx';
 import { errorText } from '../lib/labels.js';
 
-const KINDS = [{ id: 'zone', label: '구역' }, { id: 'free', label: '자유 태그' }];
+// 구역·해석 종류는 통제 어휘라 관리자의 '분류 목록'(08)으로 옮겼다 — 여기는 자유 태그만.
+const KIND = 'free';
+const valueLink = 'min-w-0 truncate rounded-xs underline-offset-2 hover:text-brand hover:underline';
 const COLS = 'grid grid-cols-[minmax(0,1fr)_64px_minmax(180px,auto)] items-center gap-3';
 /** 행 끝 부차 동작 — 행 hover·포커스 때만 보이고, 터치 기기에서는 늘 보인다. */
-const reveal = 'opacity-0 transition-opacity duration-120 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100';
+const reveal = 'opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100';
 
 /** 대표 태그(alias_of 없음)를 이름순으로, 그 아래에 동의어를 묶는다. */
 function groupsOf(tags) {
@@ -24,8 +27,8 @@ function RootRow({ group, roots, onAlias, busy }) {
   const [target, setTarget] = useState('');
   const others = roots.filter((r) => r.id !== group.root.id);
   return (
-    <div className={`group ${COLS} min-h-10 px-3 py-1 text-ui transition-colors duration-120 hover:bg-n-25`}>
-      <span className="truncate font-medium text-n-900">{group.root.value}</span>
+    <div className={`group ${COLS} min-h-10 px-3 py-1 text-ui transition-colors duration-150 hover:bg-n-50`}>
+      <Link to={tagHref(group.root.value)} title="이 태그로 검색" className={`font-medium text-n-900 ${valueLink}`}>{group.root.value}</Link>
       <span className="text-right font-mono text-meta text-n-600" title="사용 횟수">{group.root.count}</span>
       <div className="flex items-center justify-end gap-1.5">
         {open ? (
@@ -51,7 +54,7 @@ function RootRow({ group, roots, onAlias, busy }) {
 
 /** 태그 화면(설계 §6.1 `/tags`) — 사용 횟수, 동의어 묶기·풀기. 누구나 할 수 있고 기록된다. */
 export default function TagsPage() {
-  const [kind, setKind] = useState('zone');
+  const kind = KIND;
   const [tags, setTags] = useState(null);
   const [filter, setFilter] = useState('');
   const [error, setError] = useState('');
@@ -79,10 +82,8 @@ export default function TagsPage() {
 
   return (
     <Page>
-      <PageHeader title="태그" description="동의어로 묶은 값은 검색과 필터에서 함께 찾습니다. 원래 입력한 값은 그대로 남습니다." />
+      <PageHeader title="태그" description="자유 태그는 누구나 붙이고 묶습니다. 동의어로 묶은 값은 검색과 필터에서 함께 찾고, 원래 입력한 값은 그대로 남습니다. 값을 누르면 그 태그로 검색합니다. 구역·해석 종류는 관리자가 ‘분류 목록’에서 관리합니다." />
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Segmented role="tablist" label="태그 종류" items={KINDS} value={kind}
-                   onChange={(k) => { if (k !== kind) { setKind(k); setFilter(''); } }} />
         <label className={inputClass('flex w-56 items-center gap-2 px-2')}>
           <Search size={14} className="shrink-0 text-n-500" aria-hidden="true" />
           <input type="search" aria-label="태그 거르기" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="값으로 거르기"
@@ -91,7 +92,7 @@ export default function TagsPage() {
       </div>
       {error && <ErrorNote className="mb-4 max-w-[880px]">{error}</ErrorNote>}
       <div className="max-w-[880px] overflow-hidden rounded-lg border border-n-200">
-        <div className={`${COLS} h-8 border-b border-n-200 bg-n-25 px-3 text-meta font-medium text-n-500`}>
+        <div className={`${COLS} h-9 border-b border-n-200 bg-n-50 px-3 text-meta font-medium text-n-600`}>
           <span>값</span><span className="text-right">사용</span><span />
         </div>
         {!tags && !error && <RowsSkeleton rows={4} dense label="태그를 불러오는 중" />}
@@ -106,10 +107,10 @@ export default function TagsPage() {
                 {g.aliases.length > 0 && (
                   <ul className="pb-1">
                     {g.aliases.map((a) => (
-                      <li key={a.id} className={`group ${COLS} h-9 px-3 text-ui text-n-700 transition-colors duration-120 hover:bg-n-25`}>
+                      <li key={a.id} className={`group ${COLS} h-9 px-3 text-ui text-n-700 transition-colors duration-150 hover:bg-n-50`}>
                         <span className="flex min-w-0 items-center gap-1.5 pl-2">
                           <CornerDownRight size={14} className="shrink-0 text-n-400" aria-hidden="true" />
-                          <span className="truncate">{a.value}</span>
+                          <Link to={tagHref(a.value)} title="이 태그로 검색" className={valueLink}>{a.value}</Link>
                           <span className="text-meta text-n-500">동의어</span>
                         </span>
                         <span className="text-right font-mono text-meta text-n-500" title="사용 횟수">{a.count}</span>

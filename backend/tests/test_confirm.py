@@ -239,3 +239,56 @@ def test_merge_into_existing_entry(db, storage, make_user, setup_entry_with_file
     assert db.get(models.Entry, d.id) is None
     assert first.version == 2
     assert db.query(models.AuditLog).filter_by(action="ENTRY_FILES_ADDED").count() == 1
+
+
+def _staged_add_batch(db, storage, first, key, uploader="A100001"):
+    """확정 자료의 [파일 추가]로 올린 배치가 _staging 에 막 들어온 상태(process_batch 전)."""
+    b = models.Batch(key=key, source="web", original_name="추가", uploader=uploader, state="staged",
+                     target_entry_id=first.id)
+    db.add(b)
+    p = storage.staging / key / "보고서.pdf"
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"%PDF-1.4 report")
+    db.commit()
+    return b
+
+
+def test_add_files_batch_merges_without_inbox(db, storage, make_user, setup_entry_with_files):
+    from app.ingest.process import process_batch
+
+    u = make_user("A100001")
+    _b1, first = setup_entry_with_files()
+    service.confirm(db, storage, first, u)
+    b = _staged_add_batch(db, storage, first, "20261007-000000-aaaa")
+    process_batch(db, storage, b)
+    assert service.auto_merge_batch(db, storage, b) == 1
+    db.expire_all()
+    first = db.get(models.Entry, first.id)
+    names = sorted(f.rel_path for f in db.query(models.File).filter_by(entry_id=first.id))
+    assert "보고서.pdf" in names
+    assert db.get(models.Batch, b.id).state == "done"
+    assert db.query(models.Entry).filter_by(batch_id=b.id, status="draft").count() == 0
+    assert db.query(models.AuditLog).filter_by(action="ENTRY_FILES_ADDED").count() == 1
+
+
+def test_add_files_batch_stays_in_inbox_when_target_trashed(db, storage, make_user, setup_entry_with_files):
+    from app.ingest.process import process_batch
+
+    u = make_user("A100001")
+    _b1, first = setup_entry_with_files()
+    service.confirm(db, storage, first, u)
+    b = _staged_add_batch(db, storage, first, "20261007-000000-bbbb")
+    process_batch(db, storage, b)
+    first = db.get(models.Entry, first.id)
+    first.status = "trashed"   # 그 사이 휴지통으로 간 경우
+    db.commit()
+    assert service.auto_merge_batch(db, storage, b) == 0
+    db.expire_all()
+    assert db.get(models.Batch, b.id).state == "processed"
+    assert db.query(models.Entry).filter_by(batch_id=b.id, status="draft").count() == 1
+
+
+def test_normal_batch_is_not_auto_merged(db, storage, make_user, setup_entry_with_files):
+    make_user("A100001")
+    b, _draft = setup_entry_with_files()
+    assert service.auto_merge_batch(db, storage, b) == 0

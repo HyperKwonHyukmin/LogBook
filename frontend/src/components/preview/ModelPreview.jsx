@@ -9,6 +9,8 @@ import { Bar } from '../ui/Skeleton.jsx';
 import Spinner from '../ui/Spinner.jsx';
 import ModelThumb from '../viewer/ModelThumb.jsx';
 import ModelNote from './ModelNote.jsx';
+import SolveCheckCard from './SolveCheckCard.jsx';
+import { CompareToggle } from '../compare/CompareBasket.jsx';
 
 // three 가 든 뷰어는 따로 묶는다 — 검색 화면 번들에 섞이지 않게.
 const ModelViewer = lazy(() => import('../viewer/ModelViewer.jsx'));
@@ -48,7 +50,7 @@ function SummaryLine({ summary }) {
 
 const INITIAL = { data: null, error: '', errors: 0, fatal: false, polls: 0, seq: 0 };
 
-function ModelPreviewBody({ file, inline }) {
+function ModelPreviewBody({ file, inline, compare }) {
   const [st, setSt] = useState(INITIAL);
   const [tick, setTick] = useState(0);
 
@@ -100,10 +102,11 @@ function ModelPreviewBody({ file, inline }) {
 
   const msg = modelStateMessage(data);
   if (msg?.busy) {
-    return capped ? <ModelNote action={recheckButton}>{MODEL_STATE_LABELS.slow}</ModelNote>
-      : <ModelNote busy>{msg.text}</ModelNote>;
+    return capped ? <ModelNote action={<div className="flex gap-2">{recheckButton}{compare}</div>}>{MODEL_STATE_LABELS.slow}</ModelNote>
+      : <ModelNote busy action={compare}>{msg.text}</ModelNote>;
   }
-  if (msg) return <ModelNote title={msg.title}>{msg.text}</ModelNote>;
+  // 변환이 끝나지 않은 모델도 비교에 담을 수 있다(비교 화면에서 상태 문구로 보인다).
+  if (msg) return <ModelNote title={msg.title} action={compare}>{msg.text}</ModelNote>;
 
   const stale = modelStaleNote(data);
   const missing = data.missing || [];
@@ -124,7 +127,13 @@ function ModelPreviewBody({ file, inline }) {
           {`INCLUDE 파일 ${missing.join(', ')} 이 없습니다. 같은 자료에 추가하면 자동으로 다시 변환합니다.`}
         </p>
       )}
-      <SummaryLine summary={data} />
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1"><SummaryLine summary={data} /></div>
+        {compare}
+      </div>
+      {/* 해석 검증(06) — 다시 변환되면(key) 새 모델 기준으로 카드를 새로 시작한다. */}
+      <SolveCheckCard key={data.key || 'solve'} fileId={file.id} fileName={file.name} initial={data.solve || null}
+                      ready={data.state === 'done'} />
       {warnings.length > 0 && (
         <details className="group text-meta">
           <summary className="w-fit cursor-pointer select-none rounded-sm text-n-600 hover:text-n-900">{`경고 ${warnings.length}`}</summary>
@@ -138,6 +147,7 @@ function ModelPreviewBody({ file, inline }) {
           <Suspense fallback={<div className="appear-late h-full" aria-hidden="true"><Bar className="h-full" /></div>}>
             {/* 다시 변환되면(key 바뀜) 뷰어를 새로 띄워 새 결과를 불러온다. */}
             <ModelViewer key={data.key || 'model'} fileId={file.id} fullscreenHref={`/v/${file.id}`}
+                         formatVersion={data.format_version ?? null}
                          className="h-full rounded-lg border border-n-200" />
           </Suspense>
         </div>
@@ -157,7 +167,9 @@ function ModelPreviewBody({ file, inline }) {
 /**
  * 모델 파일 미리보기(설계 §7.7) — 변환 상태에 따라 안내, 요약, 뷰어(inline) 또는 썸네일 + 3D 로 보기.
  * inline=false 는 좁은 검색 미리보기 패널용이다. 파일이 바뀌면 상태를 통째로 새로 시작한다.
+ * hull = 소속 자료의 대표 호선(비교 바구니 칩에 쓴다).
  */
-export default function ModelPreview({ file, inline = true }) {
-  return <ModelPreviewBody key={file.id} file={file} inline={inline} />;
+export default function ModelPreview({ file, inline = true, hull = '' }) {
+  const compare = <CompareToggle file={{ id: file.id, name: file.name, hull }} />;
+  return <ModelPreviewBody key={file.id} file={file} inline={inline} compare={compare} />;
 }

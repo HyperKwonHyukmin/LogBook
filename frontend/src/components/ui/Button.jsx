@@ -2,7 +2,7 @@ import Spinner from './Spinner.jsx';
 
 /**
  * 공통 버튼(DESIGN.md §버튼). 비활성은 opacity 가 아니라 색으로 칠한다.
- * variant: primary | secondary | ghost | danger | danger-solid
+ * variant: primary | secondary | ghost | danger | danger-solid | inverse(네이비 크롬 위 흰 단추)
  * size: sm(28) | md(32) | lg(36) | icon(32 정사각) | icon-sm(28 정사각)
  */
 const VARIANTS = {
@@ -14,6 +14,8 @@ const VARIANTS = {
   danger: 'border border-n-250 bg-n-0 text-err shadow-xs hover:border-err-line hover:bg-err-bg active:bg-err-press '
     + 'disabled:border-n-200 disabled:bg-n-50 disabled:text-n-500 disabled:shadow-none',
   'danger-solid': 'bg-err text-white shadow-xs hover:bg-err-strong active:bg-err-strong disabled:bg-n-150 disabled:text-n-500',
+  inverse: 'bg-n-0 text-brand shadow-xs hover:bg-brand-subtle active:bg-brand-muted '
+    + 'disabled:bg-navy-700 disabled:text-on-navy-subtle disabled:shadow-none',
 };
 const SIZES = {
   sm: 'h-7 px-2.5 text-meta',
@@ -25,7 +27,7 @@ const SIZES = {
 
 export const buttonClass = (variant = 'primary', size = 'md', className = '') =>
   'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium '
-  + 'transition-[background-color,border-color,color,box-shadow] duration-120 ease-out select-none '
+  + 'transition-[background-color,border-color,color,box-shadow] duration-150 ease-out select-none '
   + `disabled:cursor-not-allowed ${VARIANTS[variant]} ${SIZES[size]} ${className}`;
 
 export default function Button({ variant = 'primary', size = 'md', className = '', type = 'button', loading = false,

@@ -2,7 +2,10 @@
 
 Entry 수가 수만 건을 넘지 않는다는 전제로, 후보 Entry 의 필터용 속성을 한 번에 읽어
 파이썬에서 거르고 센다(필터 건수를 "자기 필터만 뺀" 방식으로 세기 쉽다). 규모가 커지면
-이 모듈만 Meilisearch 구현으로 바꾼다(base.SearchBackend)."""
+이 모듈만 Meilisearch 구현으로 바꾼다(base.SearchBackend).
+
+08: 해석 종류·구역은 통제 어휘의 대표 값으로 세고 거른다(vocab.Vocab.canon). '연도'는 해석 시기의
+연도만(없으면 YEAR_UNKNOWN). 정렬은 관련도·해석 시기·최근 등록 중 하나."""
 import re
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -13,7 +16,8 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..tags import group_ids
-from .base import FILTER_KEYS, SearchQuery
+from ..vocab import Vocab
+from .base import FILTER_KEYS, SORTS, YEAR_UNKNOWN, SearchQuery
 from .snippets import make_snippet
 
 MAX_TERMS = 8
@@ -22,6 +26,8 @@ FACET_LIMIT = 30
 HULL_TERM = re.compile(r"^[0-9]{4}$")
 S_ID, S_HULL, S_TITLE_EXACT, S_TITLE, S_TAG, S_TYPE, S_DESC, S_FILE, S_BODY = 100, 100, 90, 70, 50, 50, 40, 30, 10
 _EPOCH = datetime(1970, 1, 1)
+# 결과 행의 종류별 파일 수(08) — 화면은 BDF·보고서·도면·결과를 0 이어도, 기타는 있을 때만 보인다
+ROW_KINDS = ("model", "report", "drawing", "result", "other")
 
 
 def _like(term: str) -> str:
@@ -31,6 +37,32 @@ def _like(term: str) -> str:
 def _phrase(term: str) -> str | None:
     cleaned = term.replace('"', " ").strip()
     return f'"{cleaned}"' if len(cleaned) >= 2 else None
+
+
+def _period_num(p: str | None) -> int | None:
+    """'2025-11' → 202511. 형식이 아니면 None(시기 미상)."""
+    try:
+        return int(p[:4]) * 100 + int(p[5:7]) if p and len(p) >= 7 else None
+    except ValueError:
+        return None
+
+
+def _ts(r: dict) -> float:
+    return (r["sort_at"] - _EPOCH).total_seconds()
+
+
+class _FreeTags:
+    """자유 태그 값 → 동의어 묶음의 대표 값(태그 필터·건수용)."""
+
+    def __init__(self, db: Session):
+        tags = db.query(models.Tag).filter(models.Tag.kind == "free").all()
+        by_id = {t.id: t for t in tags}
+        self._root = {t.value.casefold(): (by_id[t.alias_of_id].value if t.alias_of_id in by_id else t.value)
+                      for t in tags}
+
+    def canon(self, value: str | None) -> str | None:
+        v = " ".join(str(value or "").split())
+        return self._root.get(v.casefold(), v) if v else None
 
 
 _MATCH = "MATCH(file_texts.text) AGAINST (:p IN BOOLEAN MODE)"
@@ -65,7 +97,13 @@ class MySqlSearch:
     def search(self, db: Session, query: SearchQuery) -> dict:
         statuses = ("confirmed", "draft") if query.include_drafts else ("confirmed",)
         terms = [t for t in query.q.split()][:MAX_TERMS]
-        filters = {k: str(v) for k, v in (query.filters or {}).items() if k in FILTER_KEYS and v}
+        raw = {k: str(v) for k, v in (query.filters or {}).items() if k in FILTER_KEYS and v}
+        sort = query.sort if query.sort in SORTS else ("relevance" if terms else "period")
+
+        vocab = {"atype": Vocab(db, "atype"), "zone": Vocab(db, "zone"), "free": _FreeTags(db)}
+        # 서버가 실제로 적용한 필터 — 해석 종류·구역·태그는 대표 값으로 바꿔 준다(zone=ER → 기관실).
+        # 화면이 공유 URL 의 동의어 값으로도 필터 항목을 올바르게 강조할 수 있게 한다.
+        filters = {k: self._canon_filter(vocab, k, v) for k, v in raw.items()}
 
         hits = [self._term_hits(db, t, statuses) for t in terms]
         if terms:
@@ -75,27 +113,42 @@ class MySqlSearch:
         else:
             ids = {i for (i,) in db.query(models.Entry.id).filter(models.Entry.status.in_(statuses))}
 
-        rows = self._rows(db, ids)
-        zone_root = self._zone_root(db, filters.get("zone"))
-        passed = [r for r in rows.values() if self._passes(r, filters, zone_root)]
-        facets = self._facets(db, rows.values(), filters, zone_root)
+        rows = self._rows(db, ids, vocab)
+        passed = [r for r in rows.values() if self._passes(r, filters)]
+        facets = self._facets(db, rows.values(), filters)
         suggestion = self._hull_suggestion(db, terms, filters)
 
         if query.unit == "file":
-            items, total = self._file_items(db, passed, terms, hits, filters, query)
+            items, total = self._file_items(db, passed, terms, hits, filters, query, sort)
         else:
             for r in passed:
                 r["score"] = sum(h.entries[r["id"]][0] for h in hits)
                 r["matched"] = sorted({h.entries[r["id"]][1] for h in hits})
-            passed.sort(key=lambda r: (-r["score"], -(r["sort_at"] - _EPOCH).total_seconds(), -r["id"]))
+            passed.sort(key=lambda r: self._entry_order(r, sort))
             total = len(passed)
             page = passed[query.offset: query.offset + query.limit]
             items = self._entry_items(db, page, terms, hits)
-        # 서버가 실제로 적용한 필터 — 구역은 동의어를 대표값으로 바꿔 준다(zone=ER → Engine Room).
-        # 화면이 공유 URL 의 동의어 값으로도 필터 항목을 올바르게 강조할 수 있게 한다.
-        applied = {k: (zone_root if k == "zone" else v) for k, v in filters.items()}
         return {"unit": query.unit, "total": total, "items": items, "facets": facets,
-                "hull_suggestion": suggestion, "terms": terms, "applied_filters": applied}
+                "hull_suggestion": suggestion, "terms": terms, "applied_filters": filters, "sort": sort}
+
+    @staticmethod
+    def _canon_filter(vocab: dict, key: str, value: str) -> str:
+        if key == "analysis_type":
+            return vocab["atype"].canon(value) or value
+        if key == "zone":
+            return vocab["zone"].canon(value) or value
+        if key == "tag":
+            return vocab["free"].canon(value) or value
+        return value
+
+    @staticmethod
+    def _entry_order(r: dict, sort: str):
+        if sort == "recent":
+            return (-_ts(r), -r["id"])
+        if sort == "period":
+            pn = r["period_num"]
+            return (pn is None, -(pn or 0), -_ts(r), -r["id"])
+        return (-r.get("score", 0), -_ts(r), -r["id"])
 
     # ---- 낱말 적중 ----
     def _term_hits(self, db: Session, term: str, statuses) -> _Hits:
@@ -110,13 +163,20 @@ class MySqlSearch:
             h.entry(eid, S_HULL, "hull")
         for eid, title in db.query(E.id, E.title).filter(live, E.title.like(like, escape="\\")):
             h.entry(eid, S_TITLE_EXACT if title.lower() == term.lower() else S_TITLE, "title")
-        tag_ids = [i for (i,) in db.query(models.Tag.id).filter(models.Tag.value.like(like, escape="\\"))]
+        tag_rows = db.query(models.Tag.id, models.Tag.kind).filter(models.Tag.value.like(like, escape="\\")).all()
+        tag_ids = [i for i, kind in tag_rows if kind != "atype"]
         if tag_ids:
             for (eid,) in (db.query(models.EntryTag.entry_id).join(E, E.id == models.EntryTag.entry_id)
                            .filter(live, models.EntryTag.tag_id.in_(group_ids(db, tag_ids)))):
                 h.entry(eid, S_TAG, "tag")
         for (eid,) in db.query(E.id).filter(live, E.analysis_type.like(like, escape="\\")):
             h.entry(eid, S_TYPE, "analysis_type")
+        # 해석 종류 사전(08) — 동의어(FEM)로 찾아도 그 용어(FE 해석)를 쓴 Entry 가 맞는다
+        atype_ids = [i for i, kind in tag_rows if kind == "atype"]
+        if atype_ids:
+            values = [v for (v,) in db.query(models.Tag.value).filter(models.Tag.id.in_(group_ids(db, atype_ids)))]
+            for (eid,) in db.query(E.id).filter(live, E.analysis_type.in_(values)):
+                h.entry(eid, S_TYPE, "analysis_type")
         for (eid,) in db.query(E.id).filter(live, E.description.like(like, escape="\\")):
             h.entry(eid, S_DESC, "description")
         for fid, eid in (db.query(F.id, F.entry_id).join(E, E.id == F.entry_id)
@@ -135,16 +195,19 @@ class MySqlSearch:
         return h
 
     # ---- 필터용 속성 ----
-    def _rows(self, db: Session, ids: set[int]) -> dict[int, dict]:
+    def _rows(self, db: Session, ids: set[int], vocab: dict) -> dict[int, dict]:
         if not ids:
             return {}
         rows: dict[int, dict] = {}
         id_list = list(ids)
+        atype = vocab["atype"]
         for e in db.query(models.Entry).filter(models.Entry.id.in_(id_list)):
-            year = (e.analysis_period or "")[:4] or str((e.confirmed_at or e.created_at).year)
-            rows[e.id] = {"id": e.id, "entry": e, "hulls": [], "ship_types": set(), "zones": set(),
-                          "kinds": set(), "file_count": 0, "year": year,
-                          "analysis_type": e.analysis_type, "uploaded_by": e.uploaded_by,
+            pn = _period_num(e.analysis_period)
+            rows[e.id] = {"id": e.id, "entry": e, "hulls": [], "ship_types": set(), "zones": set(), "tags": set(),
+                          "kinds": set(), "kind_counts": Counter(), "file_count": 0,
+                          # 08 — '해석 연도'는 해석 시기만 본다(확정일로 대신하지 않는다)
+                          "year": e.analysis_period[:4] if pn else YEAR_UNKNOWN, "period_num": pn,
+                          "analysis_type": atype.canon(e.analysis_type), "uploaded_by": e.uploaded_by,
                           "sort_at": e.confirmed_at or e.created_at}
         hull_rows = (db.query(models.EntryHull.entry_id, models.EntryHull.hull_no, models.Hull.ship_type)
                      .outerjoin(models.Hull, models.Hull.hull_no == models.EntryHull.hull_no)
@@ -154,29 +217,22 @@ class MySqlSearch:
             rows[eid]["hulls"].append(hull_no)
             if ship:
                 rows[eid]["ship_types"].add(ship)
-        tag_rows = (db.query(models.EntryTag.entry_id, models.Tag)
+        tag_rows = (db.query(models.EntryTag.entry_id, models.Tag.kind, models.Tag.value)
                     .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
-                    .filter(models.EntryTag.entry_id.in_(id_list), models.Tag.kind == "zone"))
-        tag_rows = tag_rows.all()
-        root_ids = {t.alias_of_id for _eid, t in tag_rows if t.alias_of_id}
-        roots = dict(db.query(models.Tag.id, models.Tag.value).filter(models.Tag.id.in_(root_ids))) if root_ids else {}
-        for eid, tag in tag_rows:
-            rows[eid]["zones"].add(roots.get(tag.alias_of_id, tag.value) if tag.alias_of_id else tag.value)
+                    .filter(models.EntryTag.entry_id.in_(id_list), models.Tag.kind.in_(("zone", "free"))))
+        for eid, kind, value in tag_rows:
+            if kind == "zone":
+                rows[eid]["zones"].add(vocab["zone"].canon(value))
+            else:
+                rows[eid]["tags"].add(vocab["free"].canon(value))
         # 파일 행을 다 읽지 않고 (Entry, 종류) 별 개수만 센다
         for eid, kind, n in (db.query(models.File.entry_id, models.File.kind, func.count(models.File.id))
                              .filter(models.File.entry_id.in_(id_list), models.File.location != "trash")
                              .group_by(models.File.entry_id, models.File.kind)):
             rows[eid]["kinds"].add(kind)
+            rows[eid]["kind_counts"][kind] += n
             rows[eid]["file_count"] += n
         return rows
-
-    def _zone_root(self, db: Session, zone: str | None) -> str | None:
-        if not zone:
-            return None
-        tag = db.query(models.Tag).filter(models.Tag.kind == "zone", models.Tag.value == zone).first()
-        if tag is None:
-            return zone
-        return db.get(models.Tag, tag.alias_of_id).value if tag.alias_of_id else tag.value
 
     @staticmethod
     def _values(r: dict, key: str) -> list[str]:
@@ -188,27 +244,31 @@ class MySqlSearch:
             return sorted(r["zones"])
         if key == "kind":
             return sorted(r["kinds"])
+        if key == "tag":
+            return sorted(r["tags"])
         v = r[key]
         return [v] if v else []
 
-    def _passes(self, r: dict, filters: dict, zone_root: str | None, skip: str | None = None) -> bool:
-        for key, val in filters.items():
+    def _passes(self, r: dict, filters: dict, skip: str | None = None) -> bool:
+        for key, want in filters.items():
             if key == skip:
                 continue
-            want = zone_root if key == "zone" else val
             if want not in self._values(r, key):
                 return False
         return True
 
-    def _facets(self, db: Session, rows, filters: dict, zone_root: str | None) -> dict:
+    def _facets(self, db: Session, rows, filters: dict) -> dict:
         rows = list(rows)
         out = {}
         for key in FILTER_KEYS:
             c = Counter()
             for r in rows:
-                if self._passes(r, filters, zone_root, skip=key):
+                if self._passes(r, filters, skip=key):
                     c.update(self._values(r, key))
             out[key] = [{"value": v, "count": n} for v, n in sorted(c.items(), key=lambda x: (-x[1], x[0]))][:FACET_LIMIT]
+        # 해석 연도는 최근 해부터(시기 미상은 맨 끝) — 건수 순이면 연도를 찾기 어렵다
+        out["year"] = (sorted((f for f in out["year"] if f["value"] != YEAR_UNKNOWN), key=lambda f: f["value"], reverse=True)
+                       + [f for f in out["year"] if f["value"] == YEAR_UNKNOWN])
         names = dict(db.query(models.User.employee_id, models.User.name)
                      .filter(models.User.employee_id.in_([f["value"] for f in out["uploaded_by"]] or [""])))
         for f in out["uploaded_by"]:
@@ -258,15 +318,34 @@ class MySqlSearch:
                        **make_snippet(texts[i][0].text, terms)} for i in ids]
                 for key, ids in picked.items()}
 
+    @staticmethod
+    def _thumbs(db: Session, ids: list[int]) -> dict[int, dict]:
+        """Entry 마다 대표 BDF 썸네일 — 변환 결과(key)가 있는 모델 중 노드(GRID)가 가장 많은 것.
+        INCLUDE 전용 파일(state=include)은 그림이 없어 뺀다. 페이지 전체를 한 번에 읽는다."""
+        if not ids:
+            return {}
+        best: dict[int, tuple] = {}
+        q = (db.query(models.File.entry_id, models.File.id, models.File.size, models.ModelSummary.key,
+                      models.ModelSummary.counts)
+             .join(models.ModelSummary, models.ModelSummary.file_id == models.File.id)
+             .filter(models.File.entry_id.in_(ids), models.File.kind == "model", models.File.location != "trash",
+                     models.ModelSummary.key.isnot(None), models.ModelSummary.state != "include"))
+        for eid, fid, size, key, counts in q:
+            rank = (int((counts or {}).get("GRID") or 0), size or 0, -fid)
+            if eid not in best or rank > best[eid][0]:
+                best[eid] = (rank, {"file_id": fid, "model_key": key})
+        return {eid: v[1] for eid, v in best.items()}
+
     def _entry_items(self, db: Session, page: list[dict], terms: list[str], hits: list[_Hits]) -> list[dict]:
         ids = [r["id"] for r in page]
         free: dict[int, list[str]] = defaultdict(list)
-        if ids:  # 자유 태그는 페이지 전체를 한 번에 읽는다
+        if ids:  # 자유 태그는 페이지 전체를 한 번에 읽는다(화면에는 입력한 값 그대로)
             for eid, value in (db.query(models.EntryTag.entry_id, models.Tag.value)
                                .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
                                .filter(models.EntryTag.entry_id.in_(ids), models.Tag.kind == "free")
                                .order_by(models.Tag.value)):
                 free[eid].append(value)
+        thumbs = self._thumbs(db, ids)
         wanted = set(ids)
         groups: dict[int, set[int]] = defaultdict(set)
         for h in hits:
@@ -278,19 +357,21 @@ class MySqlSearch:
         for r in page:
             e = r["entry"]
             items.append({
-                "entry_id": e.entry_id, "title": e.title, "status": e.status, "analysis_type": e.analysis_type,
+                "entry_id": e.entry_id, "title": e.title, "status": e.status, "analysis_type": r["analysis_type"],
                 "analysis_period": e.analysis_period, "hulls": r["hulls"], "ship_types": sorted(r["ship_types"]),
                 "zones": sorted(r["zones"]), "tags": free[e.id],
                 "uploaded_by": e.uploaded_by,
                 "confirmed_at": e.confirmed_at.isoformat() if e.confirmed_at else None,
                 "file_count": r["file_count"], "kinds": sorted(r["kinds"]),
+                "kind_counts": {k: r["kind_counts"].get(k, 0) for k in ROW_KINDS},
+                "thumb": thumbs.get(e.id),
                 "score": r.get("score", 0), "matched": r.get("matched", []),
                 "snippets": snippets.get(e.id, []),
             })
         return items
 
     def _file_items(self, db: Session, passed: list[dict], terms: list[str], hits: list[_Hits],
-                    filters: dict, query: SearchQuery) -> tuple[list[dict], int]:
+                    filters: dict, query: SearchQuery, sort: str) -> tuple[list[dict], int]:
         by_entry = {r["id"]: r for r in passed}
         if not by_entry:
             return [], 0
@@ -317,7 +398,16 @@ class MySqlSearch:
             if not ok or (terms and not own):
                 continue
             scored.append((score, fid, eid, sorted(matched)))
-        scored.sort(key=lambda x: (-x[0], -(by_entry[x[2]]["sort_at"] - _EPOCH).total_seconds(), x[1]))
+
+        def order(x):
+            r = by_entry[x[2]]
+            if sort == "recent":
+                return (-_ts(r), x[1])
+            if sort == "period":
+                return (r["period_num"] is None, -(r["period_num"] or 0), -_ts(r), x[1])
+            return (-x[0], -_ts(r), x[1])
+
+        scored.sort(key=order)
         total = len(scored)
         page = scored[query.offset: query.offset + query.limit]
         rows = {f.id: f for f in db.query(F).filter(F.id.in_([x[1] for x in page]))} if page else {}
@@ -333,6 +423,7 @@ class MySqlSearch:
             items.append({"file_id": f.id, "name": f.name, "rel_path": f.rel_path, "kind": f.kind, "size": f.size,
                           "entry_id": r["entry"].entry_id, "entry_title": r["entry"].title,
                           "entry_status": r["entry"].status, "hulls": r["hulls"], "score": score,
+                          "analysis_period": r["entry"].analysis_period,
                           "matched": matched, "snippets": snippets.get(fid, []),
                           "model_state": model_rows.get(fid, (None, None))[0],
                           "model_key": model_rows.get(fid, (None, None))[1]})

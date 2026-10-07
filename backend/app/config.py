@@ -1,5 +1,6 @@
 """Logbook 설정 — backend/.env 를 읽어 한곳에서 제공한다. 다른 모듈은 os.getenv 를 직접 쓰지 않는다."""
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,7 @@ load_dotenv(BACKEND_DIR / ".env")
 
 DEFAULT_STORAGE_ROOT = r"\\storage.hpc.hd.com\a476854\00_PROJECT\AA_300_CF44\999_LogBook"
 APP_VERSION = "0.1.0"
+DEFAULT_NASTRAN_EXE = r"C:\MSC.Software\MSC_Nastran\20131\bin\nastran.exe"
 
 
 @dataclass(frozen=True)
@@ -28,6 +30,9 @@ class Settings:
     backup_keep: int
     trash_days: int
     daily_hour: int
+    # 06 해석 검증 — Nastran 실행 파일·제한 시간(초)
+    nastran_exe: str
+    solve_timeout: int
 
 
 def load_settings() -> Settings:
@@ -48,6 +53,9 @@ def load_settings() -> Settings:
         backup_keep=int(os.getenv("LOGBOOK_BACKUP_KEEP", "30")),
         trash_days=int(os.getenv("LOGBOOK_TRASH_DAYS", "90")),
         daily_hour=int(os.getenv("LOGBOOK_DAILY_HOUR", "2")),
+        # 기본: PATH 의 nastran → 없으면 MSC Nastran 2013.1 기본 설치 경로
+        nastran_exe=os.getenv("LOGBOOK_NASTRAN_EXE") or shutil.which("nastran") or DEFAULT_NASTRAN_EXE,
+        solve_timeout=int(os.getenv("LOGBOOK_SOLVE_TIMEOUT", "1800")),
     )
 
 

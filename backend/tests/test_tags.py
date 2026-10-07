@@ -40,7 +40,7 @@ def test_confirmed_update_audits_tags(db, storage, make_user, make_entry_file):
 
 
 def test_tags_api_list_alias_unalias(client, db, make_user, auth_headers, make_entry_file):
-    make_user("A100001")
+    make_user("A100001", is_admin=True)  # 구역 동의어는 관리자만(08)
     h = auth_headers("A100001")
     e, _f = make_entry_file(status="confirmed")
     bow, fwd = _tag(db, "선수부"), _tag(db, "FWD")
@@ -62,7 +62,7 @@ def test_tags_api_list_alias_unalias(client, db, make_user, auth_headers, make_e
 
 
 def test_alias_moves_children_to_new_root(client, db, make_user, auth_headers):
-    make_user("A100001")
+    make_user("A100001", is_admin=True)  # 구역 동의어는 관리자만(08)
     h = auth_headers("A100001")
     a, b, c = _tag(db, "A"), _tag(db, "B"), _tag(db, "C")
     client.post(f"/api/tags/{b.id}/alias", json={"target_id": a.id}, headers=h)
@@ -73,7 +73,7 @@ def test_alias_moves_children_to_new_root(client, db, make_user, auth_headers):
 
 
 def test_alias_to_child_resolves_to_root(client, db, make_user, auth_headers):
-    make_user("A100001")
+    make_user("A100001", is_admin=True)  # 구역 동의어는 관리자만(08)
     h = auth_headers("A100001")
     a, b, c = _tag(db, "A"), _tag(db, "B"), _tag(db, "C")
     client.post(f"/api/tags/{b.id}/alias", json={"target_id": a.id}, headers=h)
@@ -82,7 +82,7 @@ def test_alias_to_child_resolves_to_root(client, db, make_user, auth_headers):
 
 
 def test_alias_rejections(client, db, make_user, auth_headers):
-    make_user("A100001")
+    make_user("A100001", is_admin=True)  # 구역 동의어는 관리자만(08)
     h = auth_headers("A100001")
     z, f = _tag(db, "Z"), _tag(db, "F", kind="free")
     assert client.post(f"/api/tags/{z.id}/alias", json={"target_id": f.id}, headers=h).json()["detail"] == "kind_mismatch"

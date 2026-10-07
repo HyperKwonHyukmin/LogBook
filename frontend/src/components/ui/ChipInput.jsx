@@ -5,7 +5,7 @@ import { api } from '../../api/client.js';
 
 const chipBase = 'inline-flex h-6 max-w-full items-center gap-1 rounded-sm text-meta';
 const toneOf = (mono) => (mono
-  ? 'border border-brand-muted bg-n-0 px-1.5 font-mono font-medium text-brand'
+  ? 'bg-brand px-1.5 font-mono font-medium text-on-navy' // 호선 칩 = 전역 HullChip 과 같은 네이비 채움
   : 'bg-n-100 px-2 text-n-700');
 
 /**
@@ -73,11 +73,11 @@ export default function ChipInput({ label, kind, values, onChange, validate, pla
     return (
       <div className="flex min-h-7 flex-wrap items-center gap-1">
         {values.map((v) => (
-          <span key={v} className={`${chipBase} ${toneOf(mono)} ${chipHref ? 'transition-colors duration-120 hover:bg-brand-subtle' : ''}`}>{chipLabel(v)}</span>
+          <span key={v} className={`${chipBase} ${toneOf(mono)} ${chipHref ? `transition-colors duration-150 ${mono ? 'hover:bg-navy-700' : 'hover:bg-n-150'}` : ''}`}>{chipLabel(v)}</span>
         ))}
         {!disabled && (
           <button ref={openBtnRef} type="button" aria-label={`${label} 고치기`} title="추가하거나 빼기" onClick={() => setOpen(true)}
-                  className={`inline-flex h-6 min-w-6 items-center justify-center gap-1 rounded-sm px-1 text-meta text-n-500 ${values.length === 0 ? '-ml-1' : ''} transition-colors duration-120 ease-out hover:bg-n-100 hover:text-n-900 active:bg-n-150`}>
+                  className={`inline-flex h-6 min-w-6 items-center justify-center gap-1 rounded-sm px-1 text-meta text-n-500 ${values.length === 0 ? '-ml-1' : ''} transition-colors duration-150 ease-out hover:bg-n-100 hover:text-n-900 active:bg-n-150`}>
             <Plus size={14} aria-hidden="true" />{values.length === 0 && <span>추가</span>}
           </button>
         )}
@@ -94,14 +94,15 @@ export default function ChipInput({ label, kind, values, onChange, validate, pla
            if (text.trim() && !add(text)) return;
            closeEditor();
          }}>
-      <div className={`field flex min-h-8 flex-wrap items-center gap-1 rounded-md border bg-n-0 px-1 py-[3px] shadow-xs transition-[border-color,box-shadow] duration-120 ease-out
+      <div className={`field flex min-h-8 flex-wrap items-center gap-1 rounded-md border bg-n-0 px-1 py-[3px] shadow-xs transition-[border-color,box-shadow] duration-150 ease-out
                        ${disabled ? 'border-n-200 bg-n-50' : 'border-n-250 hover:border-n-300'}`}>
         {values.map((v) => (
           <span key={v} className={`${chipBase} ${toneOf(mono)} ${disabled ? '' : 'pr-1'}`}>
             {chipLabel(v)}
             {!disabled && (
               <button type="button" aria-label={`${v} 빼기`} onClick={() => onChange(values.filter((x) => x !== v))}
-                      className="flex h-4 w-4 items-center justify-center rounded-xs text-n-500 transition-colors duration-120 hover:bg-n-150 hover:text-n-900">
+                      className={`flex h-4 w-4 items-center justify-center rounded-xs transition-colors duration-150 ${mono
+                        ? 'text-on-navy-muted hover:bg-navy-700 hover:text-on-navy' : 'text-n-500 hover:bg-n-150 hover:text-n-900'}`}>
                 <X size={12} aria-hidden="true" />
               </button>
             )}

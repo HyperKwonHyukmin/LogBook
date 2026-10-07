@@ -49,12 +49,12 @@ def purge_entry(db: Session, storage: StoragePaths, entry: models.Entry, actor: 
         # 다른 파일이 이 파일들을 중복 원본으로 가리키면 FK 위반이 난다 — 참조만 비운다
         db.query(models.File).filter(models.File.duplicate_of_id.in_(file_ids)).update(
             {"duplicate_of_id": None}, synchronize_session=False)
-        for model in (models.FileText, models.FileExtract, models.ModelSummary):
+        for model in (models.FileText, models.FileExtract, models.ModelSummary, models.SolveCheck):
             db.query(model).filter(model.file_id.in_(file_ids)).delete(synchronize_session=False)
         db.query(models.DownloadToken).filter(models.DownloadToken.file_id.in_(file_ids)).delete(
             synchronize_session=False)
         # 이 파일들의 작업은 대상이 없어지므로 상태와 상관없이 지운다(실패 목록에 '#id' 로 남지 않게)
-        db.query(models.Job).filter(models.Job.type.in_(("extract_file", "convert_model")),
+        db.query(models.Job).filter(models.Job.type.in_(("extract_file", "convert_model", "solve_check")),
                                     models.Job.target_id.in_(file_ids)).delete(synchronize_session=False)
         db.query(models.File).filter(models.File.id.in_(file_ids)).delete(synchronize_session=False)
     db.query(models.Job).filter(models.Job.type == "write_meta",

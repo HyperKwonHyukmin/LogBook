@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from .. import jobs, models
 from ..bdf.deck import DeckReader, DeckTooLarge
 from ..bdf.fingerprint import fingerprint
-from ..bdf.lbm import write_lbm
+from ..bdf.lbm import VERSION as LBM_VERSION, write_lbm
 from ..bdf.model import ModelError, build_model
 from ..bdf.thumbnail import render_thumbnail
 from ..entries.files import entry_dir
@@ -34,9 +34,14 @@ class FileMoved(OSError):
     """읽는 동안 파일이 옮겨졌다(확정 staging → vault 등) — 작업 큐가 재시도해 새 위치에서 다시 읽는다."""
 
 
-def model_paths(storage: StoragePaths, key: str) -> tuple[Path, Path]:
+def model_paths(storage: StoragePaths, key: str, version: int | None = LBM_VERSION) -> tuple[Path, Path]:
+    """key 의 파생물 경로(lbm, png). lbm 은 형식 버전마다 다른 파일이다 — v1 은 `{key}.lbm`(04a 그대로),
+    v2 부터 `{key}.v2.lbm`. 그래서 다시 변환해도 옛 형식 파일을 덮지 않고, 재변환이 끝날 때까지(또는 실패해도)
+    ModelSummary.format_version 이 가리키는 옛 파일을 계속 준다. version None = v1(04c 이전 행)."""
     base = storage.derived / "_model" / key[:2]
-    return base / f"{key}.lbm", base / f"{key}.png"
+    v = version or 1
+    lbm = base / (f"{key}.lbm" if v <= 1 else f"{key}.v{v}.lbm")
+    return lbm, base / f"{key}.png"
 
 
 def enqueue_convert(db: Session, f: models.File) -> bool:
@@ -226,6 +231,7 @@ def run_convert(db: Session, storage: StoragePaths, f: models.File) -> None:
     _write(png_path, png)
 
     row.state, row.error, row.key = "done", None, key
+    row.format_version = LBM_VERSION
     row.counts, row.bbox = model.counts(), model.bbox()
     row.sol = model.sol[:MAX_SOL_CHARS] if model.sol else None
     row.fingerprint, row.warnings = fp, model.warnings[:MAX_WARNINGS]

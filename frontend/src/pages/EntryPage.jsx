@@ -7,18 +7,21 @@ import FilePreview from '../components/preview/FilePreview.jsx';
 import UploadZone from '../components/inbox/UploadZone.jsx';
 import Button, { buttonClass } from '../components/ui/Button.jsx';
 import ChipInput from '../components/ui/ChipInput.jsx';
+import VocabInput from '../components/ui/VocabInput.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
 import InlineText from '../components/ui/InlineText.jsx';
 import KindBadge from '../components/ui/KindBadge.jsx';
 import Menu from '../components/ui/Menu.jsx';
+import Spinner from '../components/ui/Spinner.jsx';
 import { ErrorNote, Page, SectionTitle } from '../components/ui/Page.jsx';
 import { Bar } from '../components/ui/Skeleton.jsx';
-import { StatusDot, TagChip } from '../components/ui/Status.jsx';
+import { StatusDot, TagLink, tagHref } from '../components/ui/Status.jsx';
 import { useToast } from '../components/ui/Toast.jsx';
 import { copyText } from '../lib/files.js';
 import { ACTION_LABELS, errorText, formatBytes, formatDateTime } from '../lib/labels.js';
 import { buildTree } from '../lib/tree.js';
 import { useEntry } from '../lib/useEntry.js';
+import { useAddFilesWatch } from '../lib/useAddFilesWatch.js';
 
 const FIELD_LABELS = { title: '제목', analysis_type: '해석 종류', analysis_period: '해석 시기', description: '설명',
   hulls: '호선', zones: '구역', tags: '태그' };
@@ -75,7 +78,7 @@ function TreeNodes({ nodes, selectedId, onPick, depth = 0 }) {
         tabIndex={n.file.id === selectedId ? 0 : -1}
         onClick={() => onPick(n.file.id)} onKeyDown={activate(() => onPick(n.file.id))}
         style={{ paddingLeft: depth * 12 + 8 }}
-        className={`flex h-8 cursor-pointer items-center gap-2 rounded-md pr-2 text-ui outline-none transition-colors duration-120 ease-out
+        className={`flex h-8 cursor-pointer items-center gap-2 rounded-md pr-2 text-ui outline-none transition-colors duration-150 ease-out
           focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-ring
           ${n.file.id === selectedId ? 'bg-brand-subtle text-brand' : 'text-n-800 hover:bg-n-100 active:bg-n-150'}`}>
       <KindBadge kind={n.file.kind} name={n.name} />
@@ -87,7 +90,7 @@ function TreeNodes({ nodes, selectedId, onPick, depth = 0 }) {
         onKeyDown={activate(() => toggle(n.path))}
         className="rounded-md outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-ring">
       <div onClick={() => toggle(n.path)} style={{ paddingLeft: depth * 12 + 4 }}
-           className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md text-ui text-n-700 transition-colors duration-120 hover:bg-n-100">
+           className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md text-ui text-n-700 transition-colors duration-150 hover:bg-n-100">
         {closed[n.path] ? <ChevronRight size={14} className="text-n-400" aria-hidden="true" /> : <ChevronDown size={14} className="text-n-400" aria-hidden="true" />}
         <Folder size={14} className="text-n-400" aria-hidden="true" />{n.name}
       </div>
@@ -124,7 +127,7 @@ function History({ rows, failed }) {
       </ul>
       {rows?.length > HISTORY_SHOWN && (
         <button type="button" onClick={() => setAll(!all)}
-                className="mt-2 h-6 rounded-sm px-1 text-meta text-n-600 transition-colors duration-120 hover:bg-n-100 hover:text-n-900">
+                className="mt-2 h-6 rounded-sm px-1 text-meta text-n-600 transition-colors duration-150 hover:bg-n-100 hover:text-n-900">
           {all ? '접기' : `전체 보기 ${rows.length}`}
         </button>
       )}
@@ -146,6 +149,35 @@ function useHistory(entryId, version) {
 }
 
 /** 속성 레일 한 줄. */
+/** [파일 추가] 뒤 진행 — 워커가 파일을 확인해 이 자료에 붙일 때까지. */
+function AddFilesStatus({ watch }) {
+  const { state, excluded = 0, message, workerDown } = watch;
+  if (state === 'idle') return null;
+  // 제외 = 임시·잠금 파일(~$ 등)이나 DRM 암호화 파일 — 올리기 칸이 DRM 거부 목록을 따로 보인다
+  const skipped = excluded > 0 ? ` (제외된 파일 ${excluded}개)` : '';
+  if (state === 'working') {
+    return (
+      <p role="status" className="mt-2 flex items-center gap-1.5 text-meta text-n-600">
+        <Spinner size={12} />
+        {workerDown ? '처리 프로그램(워커)이 꺼져 있어 기다리는 중입니다 — 관리자에게 알려 주세요.'
+          : '파일을 확인하고 이 자료에 붙이는 중입니다…'}
+      </p>
+    );
+  }
+  if (state === 'done') return <p role="status" className="mt-2 text-meta text-ok">파일을 이 자료에 추가했습니다.{skipped}</p>;
+  if (state === 'inbox') {
+    return (
+      <p role="status" className="mt-2 text-meta text-wait">
+        이 자료에 바로 붙이지 못해 정리 대기에 두었습니다.{skipped} <Link to="/inbox" className="underline underline-offset-2">정리 대기로</Link>
+      </p>
+    );
+  }
+  if (state === 'slow') {
+    return <p role="status" className="mt-2 text-meta text-wait">처리가 오래 걸리고 있습니다. 잠시 뒤 새로 고쳐 확인해 주세요.</p>;
+  }
+  return <p role="alert" className="mt-2 text-meta text-err">{message}</p>;
+}
+
 function Prop({ label, children }) {
   return (
     <>
@@ -164,7 +196,8 @@ export default function EntryPage() {
   const storage = useOutletContext()?.storage;
   const { user } = useAuth();
   const toast = useToast();
-  const { entry, status, error, setError, save } = useEntry(entryId);
+  const { entry, status, error, setError, save, reload } = useEntry(entryId);
+  const adder = useAddFilesWatch({ onMerged: () => { reload().catch(() => {}); } });
   const history = useHistory(entryId, entry?.version);
   const [picked, setPicked] = useState(fileParam);
   const [adding, setAdding] = useState(false);
@@ -177,7 +210,7 @@ export default function EntryPage() {
   useEffect(() => {
     genRef.current += 1;
     pendingRef.current = {};
-    setChips({}); setPicked(fileParam); setAdding(false); setNotice('');
+    setChips({}); setPicked(fileParam); setAdding(false); setNotice(''); adder.reset();
   }, [entryId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (status === 'missing') {
@@ -275,7 +308,7 @@ export default function EntryPage() {
             </button>
           )} />
         </div>
-        <h1 className="mt-1 text-entry font-semibold tracking-[-0.015em] text-n-900">
+        <h1 className="mt-1 text-entry font-semibold tracking-[-0.02em] text-n-900">
           {field('title', { validate: (v) => (!v ? '제목을 입력해 주세요.' : '') })}
         </h1>
         <div className="mt-1 text-body text-n-700">
@@ -301,17 +334,19 @@ export default function EntryPage() {
           </div>
           {adding && editable && (
             <div className="mb-3 rounded-lg border border-n-200 p-3">
-              <p className="mb-2 text-meta text-n-600">여기 올린 파일은 정리 대기에서 확정하면 이 자료에 추가됩니다.</p>
+              <p className="mb-2 text-meta text-n-600">여기 올린 파일은 정리 대기를 거치지 않고 이 자료에 바로 추가됩니다.</p>
               <UploadZone targetEntryId={entry.entry_id} disabled={offline} showSuccess={false}
-                          onUploaded={() => setNotice('올렸습니다. 정리 대기에서 확정하면 이 자료에 추가됩니다.')} />
-              {notice && <p role="status" className="mt-2 text-meta text-ok">{notice} <Link to="/inbox" className="underline underline-offset-2">정리 대기로</Link></p>}
+                          onUploaded={(key) => adder.start(key)} />
+              <AddFilesStatus watch={adder.watch} />
+              {notice && <p role="status" className="mt-2 text-meta text-ok">{notice}</p>}
             </div>
           )}
           <ul role="tree" aria-label="파일" onKeyDown={onTreeKeyDown} className="flex flex-col gap-px">
             <TreeNodes nodes={buildTree(entry.files)} selectedId={file?.id} onPick={setPicked} />
           </ul>
           <div className="mt-4">
-            {file ? <FilePreview key={file.id} file={file} vaultUnc={entry.vault_unc} trashed={trashed} hideTitles={[entry.title]} />
+            {file ? <FilePreview key={file.id} file={file} vaultUnc={entry.vault_unc} trashed={trashed} hideTitles={[entry.title]}
+                                    hull={entry.hulls[0]?.hull_no || ''} />
               : <p className="text-ui text-n-500">파일이 없습니다.</p>}
           </div>
         </div>
@@ -323,20 +358,25 @@ export default function EntryPage() {
                          chipHref={(h) => `/h/${encodeURIComponent(h)}`} onChange={(v) => saveChips('hulls', v)} />
             </Prop>
             <Prop label="구역">
-              <ChipInput compact label="구역" kind="zone" values={chipValues('zones')} disabled={!editable} onChange={(v) => saveChips('zones', v)} />
+              <VocabInput compact multiple kind="zone" label="구역" values={chipValues('zones')} disabled={!editable} onChange={(v) => saveChips('zones', v)} />
             </Prop>
-            <Prop label="해석 종류">{field('analysis_type')}</Prop>
+            <Prop label="해석 종류">
+              <VocabInput compact kind="atype" label="해석 종류" value={entry.analysis_type} disabled={!editable}
+                          onChange={(v) => save({ analysis_type: v || null })} />
+            </Prop>
             <Prop label="해석 시기">{field('analysis_period', { validate: periodRule, inputPlaceholder: 'YYYY-MM', mono: true })}</Prop>
             <Prop label="태그">
-              {editable ? <ChipInput compact label="태그" kind="tag" values={chipValues('tags')} onChange={(v) => saveChips('tags', v)} />
-                : entry.tags.length ? <span className="flex flex-wrap gap-1">{entry.tags.map((t) => <TagChip key={t}>{t}</TagChip>)}</span>
+              {editable ? <ChipInput compact label="태그" kind="tag" values={chipValues('tags')} onChange={(v) => saveChips('tags', v)}
+                                     chipHref={tagHref} />
+                : entry.tags.length ? <span className="flex flex-wrap gap-1">{entry.tags.map((t) => <TagLink key={t} tag={t} />)}</span>
                   : <span className="text-n-500">—</span>}
             </Prop>
             <Prop label="올린 사람">{person(entry.uploaded_by)}</Prop>
             <Prop label="확정자">
               {entry.confirmed_by ? (
                 <span className="min-w-0 truncate">{person(entry.confirmed_by)}
-                  <span className="ml-1.5 font-mono text-meta text-n-500">{formatDateTime(entry.confirmed_at).slice(5)}</span>
+                  {/* 08 — 날짜는 '해석 시기' 하나로 보이고, 확정일은 여기(상세)·미리보기에서만 */}
+                  <span className="ml-1.5 font-mono text-meta text-n-500" title={formatDateTime(entry.confirmed_at)}>{formatDateTime(entry.confirmed_at).slice(0, 10)}</span>
                 </span>
               ) : <span className="text-n-500">—</span>}
             </Prop>

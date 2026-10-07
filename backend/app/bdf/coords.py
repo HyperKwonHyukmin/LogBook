@@ -1,6 +1,8 @@
 """좌표계 → 전역(basic) 좌표. CORD2R/C/S 는 세 점(A 원점, B z 축 위, C xz 평면 위), CORD1R/C/S 는 세 GRID 로 정한다.
 
 정의가 서로를 참조하므로(좌표계가 다른 좌표계·GRID 를 기준으로 함) 더 풀리는 것이 없을 때까지 반복한다.
+풀린 좌표계는 systems 로 돌려받을 수 있다 — 보의 방향 벡터·오프셋(GRID 의 변위 좌표계 CD 성분)을
+기본 좌표계로 돌릴 때 쓴다(04c).
 """
 import math
 
@@ -42,6 +44,36 @@ class CoordSystem:
                 o[1] + a * x[1] + b * y[1] + c * z[1],
                 o[2] + a * x[2] + b * y[2] + c * z[2])
 
+    def _rotate(self, a: float, b: float, c: float) -> Vec:
+        """국부 직교 성분(ex·ey·ez 기준) → 기본 좌표계 성분(원점 이동 없음)."""
+        x, y, z = self.ex, self.ey, self.ez
+        return (a * x[0] + b * y[0] + c * z[0], a * x[1] + b * y[1] + c * z[1], a * x[2] + b * y[2] + c * z[2])
+
+    def vector_to_basic(self, v, at: Vec) -> Vec:
+        """이 좌표계 성분의 벡터 v → 기본 좌표계 벡터. 원통·구 좌표계는 점 at(기본 좌표)의 국부 기저
+        (원통 = e_r·e_θ·e_z, 구 = e_r·e_θ·e_φ)를 쓴다 — Nastran 변위 좌표계(CD)의 규약.
+        축 위의 점(r≈0)처럼 각이 정해지지 않으면 각 0 으로 본다."""
+        a, b, c = float(v[0]), float(v[1]), float(v[2])
+        if self.kind == "R":
+            return (a, b, c) if self.is_basic else self._rotate(a, b, c)
+        d = _sub(at, self.o)
+        # at 을 이 좌표계의 국부 직교 좌표로(회전 행렬의 전치)
+        lx = d[0] * self.ex[0] + d[1] * self.ex[1] + d[2] * self.ex[2]
+        ly = d[0] * self.ey[0] + d[1] * self.ey[1] + d[2] * self.ey[2]
+        lz = d[0] * self.ez[0] + d[1] * self.ez[1] + d[2] * self.ez[2]
+        rxy = math.hypot(lx, ly)
+        phi = math.atan2(ly, lx) if rxy > 1e-12 else 0.0
+        cp, sp = math.cos(phi), math.sin(phi)
+        if self.kind == "C":
+            # (v_r, v_θ, v_z) → 국부 직교: e_r=(cosθ, sinθ, 0), e_θ=(−sinθ, cosθ, 0)
+            return self._rotate(a * cp - b * sp, a * sp + b * cp, c)
+        # 구: θ = z 축에서 잰 극각, φ = 방위각. e_r=(sθcφ, sθsφ, cθ), e_θ=(cθcφ, cθsφ, −sθ), e_φ=(−sφ, cφ, 0)
+        th = math.atan2(rxy, lz) if (rxy > 1e-12 or abs(lz) > 1e-12) else 0.0
+        ct, st = math.cos(th), math.sin(th)
+        return self._rotate(a * st * cp + b * ct * cp - c * sp,
+                            a * st * sp + b * ct * sp + c * cp,
+                            a * ct - b * st)
+
 
 BASIC = CoordSystem("R", (0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 
@@ -54,10 +86,15 @@ def from_points(kind: str, a: Vec, b: Vec, c: Vec) -> CoordSystem:
 
 
 def resolve_coords(raw_grids: dict[int, tuple[int, float, float, float]],
-                   coord_defs: list[tuple]) -> tuple[dict[int, Vec], int, list[int]]:
+                   coord_defs: list[tuple], *,
+                   systems: dict[int, CoordSystem] | None = None) -> tuple[dict[int, Vec], int, list[int]]:
     """raw_grids: gid → (cp, x, y, z). coord_defs: ("2", kind, cid, rid, [9 실수]) | ("1", kind, cid, None, [g1, g2, g3]).
-    반환: (gid → 전역 좌표, 풀지 못한 GRID 수, 퇴화한 좌표계 cid 목록)."""
-    systems: dict[int, CoordSystem] = {0: BASIC}
+    반환: (gid → 전역 좌표, 풀지 못한 GRID 수, 퇴화한 좌표계 cid 목록).
+    systems 에 빈 dict 를 넘기면 풀린 좌표계(cid → CoordSystem, 0 = 기본)를 채워 준다."""
+    if systems is None:
+        systems = {}
+    systems.clear()
+    systems[0] = BASIC
     nodes: dict[int, Vec] = {}
     pending = dict(raw_grids)
     defs = list(coord_defs)

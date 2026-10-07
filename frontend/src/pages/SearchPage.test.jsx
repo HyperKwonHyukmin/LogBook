@@ -118,7 +118,7 @@ test('↑/↓ 로 빠르게 옮겨도 미리보기는 멈춘 항목만 불러온
   list.focus();
   await userEvent.keyboard('{ArrowDown}{ArrowDown}');
   // 목록의 강조는 바로 옮겨 간다.
-  expect(screen.getByRole('option', { selected: true })).toHaveTextContent('초안 자료');
+  expect(within(screen.getByRole('listbox', { name: '검색 결과' })).getByRole('option', { selected: true })).toHaveTextContent('초안 자료');
   await sleep(300);
   expect(calls(fetch)).toContain('GET /api/entries/E000002');
   expect(calls(fetch)).not.toContain('GET /api/entries/E000001');
@@ -134,10 +134,10 @@ test('Home·End 로 처음·끝 항목을 고르고, 고른 항목을 화면 안
     const list = await screen.findByRole('listbox', { name: '검색 결과' });
     list.focus();
     await userEvent.keyboard('{End}');
-    expect(screen.getByRole('option', { selected: true })).toHaveTextContent('초안 자료');
+    expect(within(screen.getByRole('listbox', { name: '검색 결과' })).getByRole('option', { selected: true })).toHaveTextContent('초안 자료');
     expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
     await userEvent.keyboard('{Home}');
-    expect(screen.getByRole('option', { selected: true })).toHaveTextContent('계류 구조 검토');
+    expect(within(screen.getByRole('listbox', { name: '검색 결과' })).getByRole('option', { selected: true })).toHaveTextContent('계류 구조 검토');
   } finally {
     delete Element.prototype.scrollIntoView;
   }
@@ -264,4 +264,50 @@ test('파일 보기의 모델 행에는 변환된 것만 썸네일을 보인다'
   expect(row('new.bdf').querySelector('img')).toBeNull();
   expect(row('r.pptx').querySelector('img')).toBeNull();
   expect(calls(fetch)).not.toContain('GET /api/files/14/thumb.png');
+});
+
+const ROW = { ...ITEM, entry_id: 'E000005', title: '선미 구조 국부 강도', hulls: ['9002'], ship_types: ['벌크선'],
+  zones: ['선미부'], analysis_type: 'FE 해석', analysis_period: '2026-01', tags: ['응력'], snippets: [],
+  kind_counts: { model: 2, report: 1, drawing: 0, result: 0, other: 0 }, thumb: null };
+
+test('결과 한 행 — 통제 값 줄·종류별 파일 수·태그 링크·해석 시기(08)', async () => {
+  mockApi({ 'GET /api/search?limit=50&offset=0': { ...RES, terms: [], hull_suggestion: null, items: [ROW, { ...ROW, entry_id: 'E000006', analysis_period: null, tags: [] }] } });
+  renderAt('/');
+  const row = (await screen.findAllByText('선미 구조 국부 강도'))[0].closest('[role="option"]');
+  expect(within(row).getByRole('link', { name: '9002' })).toBeInTheDocument();
+  expect(within(row).getByText('선미부 · FE 해석 · 벌크선')).toBeInTheDocument();
+  expect(within(row).getByLabelText('파일 BDF 2, 보고서 1, 도면 0, 결과 0')).toBeInTheDocument();
+  expect(within(row).getByRole('link', { name: '#응력' })).toHaveAttribute('href', '/?tag=%EC%9D%91%EB%A0%A5');
+  expect(row).toHaveTextContent('해석 2026-01');
+  expect(screen.getByText('해석 시기 미입력')).toBeInTheDocument();
+});
+
+test('호선 하나로 거른 검색이면 그 호선 칩은 행에서 뺀다', async () => {
+  mockApi({ 'GET /api/search?hull=9002&limit=50&offset=0': { ...RES, terms: [], hull_suggestion: null, items: [ROW], applied_filters: { hull: '9002' } } });
+  renderAt('/?hull=9002');
+  const row = (await screen.findByText('선미 구조 국부 강도')).closest('[role="option"]');
+  expect(within(row).queryByRole('link', { name: '9002' })).toBeNull();
+});
+
+test('정렬 — 기본은 검색어가 없으면 해석 시기, 바꾸면 주소에 담는다', async () => {
+  mockApi({
+    'GET /api/search?limit=50&offset=0': { ...RES, hull_suggestion: null },
+    'GET /api/search?sort=recent&limit=50&offset=0': { ...RES, hull_suggestion: null },
+  });
+  renderAt('/');
+  const sort = await screen.findByRole('combobox', { name: '정렬' });
+  expect(sort).toHaveValue('period');
+  await userEvent.selectOptions(sort, 'recent');
+  expect(screen.getByTestId('loc').textContent).toBe('/?sort=recent');
+  await userEvent.selectOptions(sort, 'period');
+  expect(screen.getByTestId('loc').textContent).toBe('/');
+});
+
+test('해석 연도 필터의 시기 미상과 태그 필터 이름', async () => {
+  mockApi({ 'GET /api/search?year=unknown&tag=%EC%9D%91%EB%A0%A5&limit=50&offset=0': { ...RES, hull_suggestion: null,
+    facets: { ...FACETS, year: [{ value: '2026', count: 1 }, { value: 'unknown', count: 1 }], tag: [{ value: '응력', count: 1 }] } } });
+  renderAt('/?year=unknown&tag=응력');
+  expect(await screen.findByRole('button', { name: '해석 연도 시기 미상 필터 해제' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '태그 응력 필터 해제' })).toBeInTheDocument();
+  expect(within(screen.getByRole('group', { name: '해석 연도' })).getByText('시기 미상')).toBeInTheDocument();
 });

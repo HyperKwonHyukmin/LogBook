@@ -17,5 +17,7 @@
 | 04a | `2026-10-02-logbook-04a-bdf-backend.md` — 자체 BDF 파서(INCLUDE·대형 필드·좌표계), `model.lbm`, 모델 지문, 썸네일, convert_model 작업, 모델 API | BDF 변환 | 02 |
 | 04b | `2026-10-02-logbook-04b-bdf-viewer.md` — three.js 뷰어(MVP ①~④, GPU 피킹), 모델 미리보기, 전체 화면 `/v/:id`, 검색 썸네일 | 3D 확인 | 04a |
 | 05 | `2026-10-02-logbook-05-operations.md` — 운영 — 작업 스케줄러 등록, 일일 백업, `entry.json` 기반 재구축 명령, 관리자 화면(워커 상태·재변환), `.url` 바로가기 배포 | 145 서버 운영 개시 | 03, 04 |
+| 06 | `2026-10-06-logbook-06-solve-check.md` — 해석 검증 — 원본 불변 사본으로 Nastran SOL 101(그룹별 최하단 고정 + GRAV) 실행, f06 판정·오류 유형 분류(`solve_checks`), `solve_check` 작업·API·관리자 일괄·CLI, 모델 미리보기 배지 | 모델이 해석 가능한지 모델 특성에 기록 | 04a, 05 |
+| 08 | `2026-10-06-logbook-08-vocab-dates-rows.md` — 분류·날짜·결과 행(P1): 해석 종류·구역 통제 어휘(태그 동의어 확장, `tags.listed`), 관리 화면 '분류 목록'·목록 밖 값 합치기, `vocab-report`/`vocab-normalize` CLI, 태그 필터, '해석 시기' 하나로(해석 연도·정렬 선택), 결과 행(대표 BDF 썸네일·통제 값 줄·종류별 파일 수) | 값이 갈라지지 않는 분류와 읽기 쉬운 결과 행 | 03, 04b |
 
 커밋 정책: 에이전트는 커밋하지 않는다. 각 태스크의 "커밋" 단계는 사용자가 직접 수행한다.

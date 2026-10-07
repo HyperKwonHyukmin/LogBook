@@ -40,7 +40,7 @@ export default function Menu({ trigger, items, align = 'right', width = 220, hea
           {items.map((it, i) => (it.divider ? <div key={i} role="separator" className="my-1 h-px bg-n-200" /> : (
             <button key={it.label} ref={(el) => { itemRefs.current[i] = el; }} type="button" role="menuitem" disabled={it.disabled}
                     onClick={() => { setOpen(false); btnRef.current?.focus(); it.onSelect(); }}
-                    className={`flex h-8 w-full items-center gap-2 px-3 text-left text-ui outline-none transition-colors duration-120 ease-out
+                    className={`flex h-8 w-full items-center gap-2 px-3 text-left text-ui outline-none transition-colors duration-150 ease-out
                       hover:bg-n-100 focus-visible:bg-n-100 active:bg-n-150 disabled:cursor-not-allowed disabled:text-n-500
                       ${it.tone === 'danger' ? 'text-err' : 'text-n-800'}`}>
               {it.icon && <it.icon size={14} aria-hidden="true" className={it.tone === 'danger' ? '' : 'text-n-500'} />}

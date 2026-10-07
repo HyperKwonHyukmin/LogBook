@@ -10,11 +10,14 @@ import { Tabs } from '../components/ui/Tabs.jsx';
 import BatchCard from '../components/inbox/BatchCard.jsx';
 import { PageDropOverlay, UploadButtons, UploadFeedback, useUploader } from '../components/inbox/UploadZone.jsx';
 import { errorText } from '../lib/labels.js';
+import { hasPendingConvert } from '../lib/inboxStatus.js';
 
 const tabId = (id) => `inbox-tab-${id}`;
 const TABS = [{ id: 'mine', label: '내 배치', tabId: tabId('mine') }, { id: 'unclaimed', label: '주인 없는 배치', tabId: tabId('unclaimed') }];
 const PANEL_ID = 'inbox-tabpanel';
 const POLL_MS = 5000;
+/** BDF 3D 변환만 기다릴 때는 느긋하게 — 변환은 한 건에 수십 초~분 걸린다. */
+const CONVERT_POLL_MS = 15000;
 
 export default function InboxPage() {
   const { user, isAdmin } = useAuth();
@@ -42,13 +45,16 @@ export default function InboxPage() {
   const reload = useCallback(() => latestRef.current.load(), []);
 
   useEffect(() => { setLoading(true); load(); }, [load]);
-  // 분석 중(staged) 배치가 있으면 워커가 끝낼 때까지 주기적으로 다시 부른다.
+  // 분석 중(staged) 배치가 있으면 워커가 끝낼 때까지 주기적으로 다시 부른다(진행 단계·n/N 도 함께 바뀐다).
+  // 초안의 BDF 3D 변환만 남았으면 더 느리게 부른다.
   const waiting = batches.some((b) => b.state === 'staged');
+  const converting = !waiting && batches.some(hasPendingConvert);
+  const pollMs = waiting ? POLL_MS : converting ? CONVERT_POLL_MS : 0;
   useEffect(() => {
-    if (!waiting) return undefined;
-    const t = setInterval(load, POLL_MS);
+    if (!pollMs) return undefined;
+    const t = setInterval(load, pollMs);
     return () => clearInterval(t);
-  }, [waiting, load]);
+  }, [pollMs, load]);
 
   function onUploaded() {
     if (latestRef.current.tab === 'mine') reload();

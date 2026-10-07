@@ -8,6 +8,6 @@ def test_file_meta(client, db, make_user, auth_headers, make_entry_file):
     d = client.get(f"/api/files/{f.id}", headers=h).json()
     assert d == {"id": f.id, "name": "m.bdf", "rel_path": "sub/m.bdf", "kind": "model", "size": 10,
                  "entry_id": e.entry_id, "entry_title": "모델 검토", "entry_status": "confirmed",
-                 "drm_encrypted": False}
+                 "drm_encrypted": False, "format_version": None}   # 04c — 변환 결과가 없으면 None
     assert client.get(f"/api/files/{f.id}").status_code == 401
     assert client.get("/api/files/999999", headers=h).status_code == 404

@@ -2,9 +2,9 @@ import { apiQuery, highlightParts, locatorLabel, readSearch, writeSearch } from 
 
 test('주소 ↔ 검색 상태', () => {
   const s = readSearch(new URLSearchParams('q=9999%20강도&hull=9999&unit=file&drafts=1&bogus=x'));
-  expect(s).toEqual({ q: '9999 강도', unit: 'file', drafts: true, filters: { hull: '9999' } });
+  expect(s).toEqual({ q: '9999 강도', unit: 'file', drafts: true, filters: { hull: '9999' }, sort: '' });
   expect(writeSearch(s).toString()).toBe('q=9999+%EA%B0%95%EB%8F%84&unit=file&drafts=1&hull=9999');
-  expect(readSearch(new URLSearchParams(''))).toEqual({ q: '', unit: 'entry', drafts: false, filters: {} });
+  expect(readSearch(new URLSearchParams(''))).toEqual({ q: '', unit: 'entry', drafts: false, filters: {}, sort: '' });
 });
 
 test('API 질의는 drafts=true 와 쪽 정보를 붙인다', () => {
@@ -27,4 +27,12 @@ test('강조 조각 — 위치는 서버(파이썬) 글자 수 기준', () => {
   // 이모지(서로게이트 쌍)가 앞에 있어도 파이썬 글자 위치로 자른다
   expect(highlightParts('😀강도', [[1, 3]])).toEqual([{ text: '😀', hit: false }, { text: '강도', hit: true }]);
   expect(highlightParts('abc', [])).toEqual([{ text: 'abc', hit: false }]);
+});
+
+test('태그 필터·정렬도 주소에 담는다(08)', () => {
+  const s = readSearch(new URLSearchParams('tag=%EA%B3%84%EB%A5%98&sort=recent&year=unknown'));
+  expect(s.filters).toEqual({ tag: '계류', year: 'unknown' });
+  expect(s.sort).toBe('recent');
+  expect(writeSearch(s).toString()).toBe('year=unknown&tag=%EA%B3%84%EB%A5%98&sort=recent');
+  expect(readSearch(new URLSearchParams('sort=bogus')).sort).toBe('');
 });

@@ -84,32 +84,33 @@ export default function TopBar({ user, onLogout }) {
   }
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 bg-n-50 px-3">
-      <div className="flex w-[196px] shrink-0 items-center pl-1"><Logo /></div>
+    <header className="on-navy flex h-12 shrink-0 items-center gap-3 bg-navy-900 px-3">
+      <div className="flex w-[196px] shrink-0 items-center pl-1"><Logo tone="navy" /></div>
       <form role="search" className="min-w-0 flex-1" onSubmit={onSubmit}>
-        <label className="field group flex h-9 w-full max-w-[560px] items-center gap-2 rounded-md border border-transparent bg-n-100 px-2.5
-                          transition-[background-color,border-color,box-shadow] duration-120 ease-out hover:bg-n-150 focus-within:bg-n-0">
-          <Search size={16} strokeWidth={1.75} className="shrink-0 text-n-500" aria-hidden="true" />
+        {/* 네이비 위의 흰 검색칸 — 화면의 첫 진입점이라 크롬에서 가장 밝은 면이다 */}
+        <label className="field group flex h-9 w-full max-w-[560px] items-center gap-2 rounded-md border border-n-0 bg-n-0 px-2.5 shadow-xs
+                          transition-[box-shadow] duration-150 ease-out hover:shadow-[0_0_0_3px_var(--color-navy-600)]">
+          <Search size={16} strokeWidth={1.75} className="shrink-0 text-brand" aria-hidden="true" />
           <input ref={inputRef} aria-label="검색어" value={q} onChange={onChange}
                  placeholder="호선, 제목, 보고서 내용 검색…"
                  className="min-w-0 flex-1 bg-transparent text-body text-n-900 outline-none focus-visible:outline-none" />
           {q ? (
             <button type="button" aria-label="검색어 지우기" onClick={onClear}
-                    className="flex h-5 w-5 items-center justify-center rounded-xs text-n-500 transition-colors duration-120 hover:bg-n-200 hover:text-n-900">
+                    className="flex h-5 w-5 items-center justify-center rounded-xs text-n-500 transition-colors duration-150 hover:bg-n-100 hover:text-n-900">
               <X size={14} aria-hidden="true" />
             </button>
           ) : (
-            <kbd className="inline-flex h-5 items-center rounded-sm border border-n-250 bg-n-0 px-1.5 font-mono text-micro text-n-500 shadow-xs">Ctrl K</kbd>
+            <kbd className="inline-flex h-5 items-center rounded-sm border border-n-200 bg-n-50 px-1.5 font-mono text-micro text-n-600">Ctrl K</kbd>
           )}
         </label>
       </form>
-      <Button size="sm" onClick={() => navigate('/inbox')}><Upload size={14} aria-hidden="true" />올리기</Button>
+      <Button variant="inverse" size="md" onClick={() => navigate('/inbox')}><Upload size={14} aria-hidden="true" />올리기</Button>
       <Menu
         width={232}
         trigger={(props) => (
           <button type="button" {...props} aria-label={`계정 메뉴 (${user.name})`}
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-subtle text-meta font-semibold text-brand
-                             transition-colors duration-120 ease-out hover:bg-brand-muted active:bg-brand-muted">
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-navy-700 text-ui font-semibold text-on-navy ring-1 ring-navy-500
+                             transition-colors duration-150 ease-out hover:bg-navy-600 active:bg-navy-600 aria-expanded:bg-navy-600">
             {user.name.slice(0, 1)}
           </button>
         )}

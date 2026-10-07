@@ -7,7 +7,7 @@ import FilePreview, { FileActions } from '../preview/FilePreview.jsx';
 import { buttonClass } from '../ui/Button.jsx';
 import KindBadge from '../ui/KindBadge.jsx';
 import { Bar } from '../ui/Skeleton.jsx';
-import { HullChip, StatusDot } from '../ui/Status.jsx';
+import { HullChip, StatusDot, TagLink } from '../ui/Status.jsx';
 
 /** 오른쪽 미리보기 패널(설계 §6.4 "떠나지 않고 본다"). 파일을 고르면 그 파일을 미리 본다. */
 export default function EntryPreviewPanel({ entryId, fileId, onClose }) {
@@ -46,9 +46,17 @@ export default function EntryPreviewPanel({ entryId, fileId, onClose }) {
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-n-600">
             {entry.hulls.map((h) => <HullChip key={h.hull_no} hull={h.hull_no} title={h.ship_type || undefined} />)}
             {entry.zones?.length > 0 && <span>{entry.zones.join(', ')}</span>}
+            {entry.analysis_type && <span>{entry.analysis_type}</span>}
             <StatusDot status={entry.status} />
             <span className="font-mono text-n-500">{entry.entry_id}</span>
-            {entry.confirmed_at && <span className="font-mono text-n-500">{formatDateTime(entry.confirmed_at).slice(0, 10)}</span>}
+          </div>
+        )}
+        {entry && (
+          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-meta text-n-500">
+            {entry.analysis_period ? <span className="tnum">해석 <span className="font-mono text-n-700">{entry.analysis_period}</span></span>
+              : <span>해석 시기 미입력</span>}
+            {entry.confirmed_at && <span className="tnum">확정 <span className="font-mono">{formatDateTime(entry.confirmed_at).slice(0, 10)}</span></span>}
+            {entry.tags?.map((t) => <TagLink key={t} tag={t} small />)}
           </div>
         )}
       </div>
@@ -65,7 +73,7 @@ export default function EntryPreviewPanel({ entryId, fileId, onClose }) {
             return (
               <li key={f.id}>
                 <button type="button" onClick={() => setPicked(f.id)} aria-pressed={on} title={f.rel_path}
-                        className={`flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-ui transition-colors duration-120 ease-out
+                        className={`flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-ui transition-colors duration-150 ease-out
                           ${on ? 'bg-brand-subtle text-brand' : 'text-n-800 hover:bg-n-100 active:bg-n-150'}`}>
                   <KindBadge kind={f.kind} name={f.name} />
                   <span className={`min-w-0 flex-1 truncate ${on ? 'font-medium' : ''}`}>{f.name}</span>
@@ -79,7 +87,7 @@ export default function EntryPreviewPanel({ entryId, fileId, onClose }) {
       {entry && (
         <div className="min-h-0 flex-1 overflow-auto p-3">
           {file ? <FilePreview key={file.id} file={file} vaultUnc={entry.vault_unc} toolbar={false} hideTitles={[entry.title]}
-                                inlineModel={false} />
+                                inlineModel={false} hull={entry.hulls[0]?.hull_no || ''} />
             : <p className="p-2 text-ui text-n-500">파일이 없습니다.</p>}
         </div>
       )}

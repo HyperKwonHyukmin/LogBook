@@ -1,9 +1,22 @@
-"""카드 → Model. 표시에 필요한 것만 해석한다(설계 §7.1·§7.2)."""
+"""카드 → Model. 표시에 필요한 것만 해석한다(설계 §7.1·§7.2).
+
+04c(형식 v2): CBAR·CBEAM 의 방향 벡터(X1–X3 또는 G0)와 오프셋(WA·WB)을 기본 좌표계로 풀어
+Element.v·Element.off 에 둔다. 필드 배치(MSC QRG, fields[0] = 2번째 칸):
+
+    CBAR   EID PID GA GB X1/G0 X2 X3 OFFT      / PA PB W1A W2A W3A W1B W2B W3B
+    CBEAM  EID PID GA GB X1/G0 X2 X3 OFFT/BIT  / PA PB W1A W2A W3A W1B W2B W3B / SA SB
+    → X = f[4:7], OFFT = f[7], WA = f[10:13], WB = f[13:16]
+    BAROR·BEAMOR  (빈칸) PID (빈칸) (빈칸) X1/G0 X2 X3 OFFT — 카드 칸이 비었을 때의 기본값
+
+X1 이 정수이고 X2·X3 이 비면 G0(절점 번호)이다. CBEAM 의 8번째 칸이 실수면 BIT(곡률 보)이고
+OFFT 는 기본값(GGG)이다.
+"""
+import math
 import re
 from collections import Counter
 from dataclasses import dataclass, field
 
-from .coords import resolve_coords
+from .coords import CoordSystem, resolve_coords
 from .deck import Card
 from .fields import is_real, parse_float, parse_int
 
@@ -44,6 +57,9 @@ class Element:
     card: str
     pid: int
     nodes: tuple[int, ...]
+    v: tuple[float, float, float] | None = None      # 보: 기본 좌표계 단위 방향 벡터(없으면 None)
+    off: tuple[float, ...] | None = None             # 보: 기본 좌표계 WA(3)·WB(3)(없으면 None)
+    spec: tuple | None = None                        # 보: 파싱 중 원값(X·OFFT·WA·WB) — 풀고 나면 비운다
 
 
 @dataclass(slots=True)
@@ -102,6 +118,130 @@ class Model:
         return {"min": [min(xs), min(ys), min(zs)], "max": [max(xs), max(ys), max(zs)]}
 
 
+def _orient_spec(x1: str, x2: str, x3: str) -> tuple | None:
+    """X1–X3 칸 → ("g0", 절점) | ("x", (x1, x2, x3)) | None(모두 빈칸)."""
+    t1, t2, t3 = (x1 or "").strip(), (x2 or "").strip(), (x3 or "").strip()
+    if not (t1 or t2 or t3):
+        return None
+    if t1 and not t2 and not t3 and not is_real(t1):
+        g0 = parse_int(t1)
+        if g0 is not None:
+            return ("g0", g0)
+    return ("x", (parse_float(t1) or 0.0, parse_float(t2) or 0.0, parse_float(t3) or 0.0))
+
+
+def _offt(token: str) -> str:
+    """OFFT 칸 — 문자열만 받는다(CBEAM 의 같은 칸이 실수면 BIT 라서 빈칸으로 본다)."""
+    t = (token or "").strip().upper()
+    return "" if not t or parse_float(t) is not None else t
+
+
+def _offset(tokens: list[str]) -> tuple[float, float, float] | None:
+    if not any((t or "").strip() for t in tokens):
+        return None
+    return tuple(parse_float(t) or 0.0 for t in tokens)
+
+
+def _vsub(a, b) -> tuple[float, float, float]:
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def _vcross(a, b) -> tuple[float, float, float]:
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def _vunit(a) -> tuple[float, float, float] | None:
+    n = math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2])
+    if not math.isfinite(n) or n < 1e-12:
+        return None
+    return (a[0] / n, a[1] / n, a[2] / n)
+
+
+def _resolve_beams(m: "Model", systems: dict[int, CoordSystem], cds: dict[int, int], grdset_cd: int,
+                   defaults: dict[str, tuple]) -> None:
+    """CBAR·CBEAM 의 방향 벡터·오프셋을 기본 좌표계로 푼다(Element.v·off).
+
+    - G0: v = xyz(G0) − xyz(GA).
+    - X1–X3: OFFT 첫 글자가 B 면 기본 좌표계 성분 그대로, G(기본값)면 GA 의 변위 좌표계(CD) 성분 →
+      기본 좌표계(원통·구 CD 는 GA 위치의 국부 기저). CD 가 정의되지 않았으면 기본으로 보고 경고 cd_unresolved.
+    - 오프셋: OFFT 둘째(끝 A)·셋째(끝 B) 글자가 G 면 그 끝 절점의 CD 성분, O 면 오프셋 좌표계 성분.
+      오프셋 좌표계 = x 는 GA→GB(오프셋 전 절점), v 가 x-y 평면에 있고 z = x × v, y = z × x(요소 좌표계와 같다).
+      OFFT 를 알 수 없거나 O 인데 v 가 없으면 0 + 경고 offset_unsupported.
+    v 가 없는 보(카드 칸·BAROR/BEAMOR 모두 빈칸, G0 절점 없음, 길이 0)는 None + 경고 beam_orient_missing."""
+    nodes = m.nodes
+    missing_v = cd_unknown = unsupported = 0
+
+    def cd_vector(g: int, vec) -> tuple[float, float, float]:
+        nonlocal cd_unknown
+        cd = cds.get(g, grdset_cd)
+        if cd == 0:
+            return tuple(vec)
+        cs = systems.get(cd)
+        if cs is None:
+            cd_unknown += 1
+            return tuple(vec)
+        return cs.vector_to_basic(vec, nodes[g])
+
+    for e in m.beams:
+        spec, e.spec = e.spec, None
+        if spec is None:
+            continue
+        xs, offt, wa, wb = spec
+        d = defaults.get(e.card)
+        if xs is None and d is not None:
+            xs = d[0]
+        if not offt and d is not None:
+            offt = d[1]
+        offt = offt or "GGG"
+        known = len(offt) == 3 and offt[0] in "GB" and offt[1] in "GO" and offt[2] in "GO"
+        ga, gb = e.nodes
+        v = None
+        if xs is not None:
+            if xs[0] == "g0":
+                p0 = nodes.get(xs[1])
+                v = _vunit(_vsub(p0, nodes[ga])) if p0 is not None else None
+            elif known and offt[0] == "B":
+                v = _vunit(xs[1])
+            else:
+                v = _vunit(cd_vector(ga, xs[1]))
+        if v is None:
+            missing_v += 1
+        e.v = v
+        if wa is None and wb is None:
+            continue
+        if not known:
+            unsupported += 1
+            continue
+        frame = None
+        if "O" in offt[1:]:
+            ex = _vunit(_vsub(nodes[gb], nodes[ga]))
+            ez = _vunit(_vcross(ex, v)) if ex is not None and v is not None else None
+            if ez is not None:
+                frame = (ex, _vcross(ez, ex), ez)
+        out: list[float] = []
+        for code, g, w in ((offt[1], ga, wa), (offt[2], gb, wb)):
+            if w is None:
+                out += (0.0, 0.0, 0.0)
+            elif code == "G":
+                out += cd_vector(g, w)
+            elif frame is not None:
+                ex, ey, ez = frame
+                out += (w[0] * ex[k] + w[1] * ey[k] + w[2] * ez[k] for k in range(3))
+            else:
+                out = []
+                break
+        if len(out) == 6 and all(math.isfinite(x) for x in out):
+            e.off = tuple(out)
+        else:
+            unsupported += 1
+    if missing_v:
+        m.warnings.append(f"beam_orient_missing: {missing_v}")
+    if cd_unknown:
+        m.warnings.append(f"cd_unresolved: {cd_unknown}")
+    if unsupported:
+        m.warnings.append(f"offset_unsupported: {unsupported}")
+
+
 def _ints(tokens) -> list[int]:
     return [v for v in (parse_int(t) for t in tokens if t and not is_real(t)) if v is not None]
 
@@ -116,7 +256,25 @@ def _property(name: str, f: list[str]) -> tuple[int | None, dict]:
         dims = [v for v in (parse_float(x) for x in f[4:]) if v is not None][:DIM_COUNT.get(shape, 4)]
         return pid, {"card": name, "mid": mid, "type": shape, "dims": dims}
     if name in ("PBAR", "PBEAM", "PROD"):
-        return pid, {"card": name, "mid": mid, "A": parse_float(f[2])}
+        # 단면 형상이 없는 속성 — 뷰어의 3D 단면용으로 면적이 같은 원(PROD)·정사각형(PBAR·PBEAM)을 덧붙인다(04c)
+        a = parse_float(f[2])
+        prop = {"card": name, "mid": mid, "A": a}
+        if a is not None and a > 0:
+            if name == "PROD":
+                prop |= {"type": "ROD", "dims": [math.sqrt(a / math.pi)], "approx": True}
+            else:
+                prop |= {"type": "BAR", "dims": [math.sqrt(a), math.sqrt(a)], "approx": True}
+        return pid, prop
+    if name == "PTUBE":
+        # PTUBE PID MID OD T NSM OD2 — PBARL TUBE 규약(DIM1 바깥 반지름, DIM2 안 반지름)으로 바꾼다.
+        # T 가 비면 속이 찬 봉(안 반지름 0). 테이퍼(OD2)는 무시한다.
+        od, t = parse_float(f[2]), parse_float(f[3])
+        prop = {"card": name, "mid": mid}
+        if od is not None and od > 0:
+            r_out = od / 2
+            r_in = max(r_out - t, 0.0) if t is not None and t > 0 else 0.0
+            prop |= {"type": "TUBE", "dims": [r_out, r_in]}
+        return pid, prop
     if name == "PCOMP":
         # 층마다 4칸(MID·T·THETA·SOUT). T 가 빈 층은 앞 층 T 를 잇고, LAM=SYM 이면 두께가 두 배다.
         plies = f[8:]
@@ -193,7 +351,9 @@ def build_model(cards: list[Card], *, sol: str | None = None, warnings=(), inclu
     elements: dict[int, tuple[str, object]] = {}
     unsupported: Counter = Counter()
     grounded = missing_gb = duplicates = 0
-    grdset_cp = 0
+    grdset_cp = grdset_cd = 0
+    raw_cd: dict[int, int] = {}              # GRID 의 CD(빈칸이 아닌 것만) — 빈칸은 GRDSET 의 CD
+    orient_defaults: dict[str, tuple] = {}   # "CBAR"/"CBEAM" → (BAROR/BEAMOR 의 X 원값, OFFT)
 
     def put(eid: int, kind: str, obj) -> None:
         nonlocal duplicates
@@ -211,8 +371,16 @@ def build_model(cards: list[Card], *, sol: str | None = None, warnings=(), inclu
                 # CP 가 비면 None — 끝에서 GRDSET 의 CP(없으면 0)로 채운다(GRDSET 은 덱 어디에 있어도 된다)
                 raw_grids[gid] = (parse_int(f[1]), parse_float(f[2]) or 0.0,
                                   parse_float(f[3]) or 0.0, parse_float(f[4]) or 0.0)
+                cd = parse_int(f[5])           # 7번째 칸 = CD(변위 좌표계)
+                if cd is None:
+                    raw_cd.pop(gid, None)
+                else:
+                    raw_cd[gid] = cd
         elif n == "GRDSET":
             grdset_cp = parse_int(f[1]) or 0   # 3번째 칸 = CP
+            grdset_cd = parse_int(f[5]) or 0   # 7번째 칸 = CD
+        elif n in ("BAROR", "BEAMOR"):
+            orient_defaults["CBAR" if n == "BAROR" else "CBEAM"] = (_orient_spec(f[4], f[5], f[6]), _offt(f[7]))
         elif n in ("CORD2R", "CORD2C", "CORD2S"):
             cid = parse_int(f[0])
             if cid:
@@ -241,7 +409,10 @@ def build_model(cards: list[Card], *, sol: str | None = None, warnings=(), inclu
                         missing_gb += 1     # CBAR·CBEAM·CROD 의 GB 누락 — 깨진 카드
                     continue
                 pid = parse_int(f[1])       # PID 가 비면 EID(Nastran 규칙)
-                put(eid, "beam", Element(eid, n, eid if pid is None else pid, (ga, gb)))
+                spec = None
+                if n in ("CBAR", "CBEAM"):
+                    spec = (_orient_spec(f[4], f[5], f[6]), _offt(f[7]), _offset(f[10:13]), _offset(f[13:16]))
+                put(eid, "beam", Element(eid, n, eid if pid is None else pid, (ga, gb), spec=spec))
         elif n in TRI_CARDS or n in QUAD_CARDS:
             eid = parse_int(f[0])
             k = 3 if n in TRI_CARDS else 4
@@ -287,7 +458,8 @@ def build_model(cards: list[Card], *, sol: str | None = None, warnings=(), inclu
             unsupported[n] += 1
 
     grids = {g: (grdset_cp if cp is None else cp, x, y, z) for g, (cp, x, y, z) in raw_grids.items()}
-    m.nodes, unresolved, bad = resolve_coords(grids, coord_defs)
+    systems: dict[int, CoordSystem] = {}
+    m.nodes, unresolved, bad = resolve_coords(grids, coord_defs, systems=systems)
     if unresolved:
         m.warnings.append(f"coord_unresolved: {unresolved}")
     for cid in bad:
@@ -324,6 +496,7 @@ def build_model(cards: list[Card], *, sol: str | None = None, warnings=(), inclu
     m.spcs = {g: comp for g, comp in m.spcs.items() if g in m.nodes}
     if missing:
         m.warnings.append(f"missing_node: {missing}")
+    _resolve_beams(m, systems, raw_cd, grdset_cd, orient_defaults)
     m.unsupported = dict(unsupported.most_common(30))
     _check_ids(m)
     return m

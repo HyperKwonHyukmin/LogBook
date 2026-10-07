@@ -10,11 +10,12 @@ import EmptyState from '../components/ui/EmptyState.jsx';
 import KindBadge from '../components/ui/KindBadge.jsx';
 import { Bar } from '../components/ui/Skeleton.jsx';
 import { DraftBadge } from '../components/ui/Status.jsx';
+import { CompareToggle } from '../components/compare/CompareBasket.jsx';
 
 // three 가 든 뷰어는 따로 묶는다.
 const ModelViewer = lazy(() => import('../components/viewer/ModelViewer.jsx'));
 
-/** 전체 화면 3D 뷰어(/v/:fileId) — 머리줄(파일 이름·소속 자료·닫기) + 남은 높이 전부 뷰어. */
+/** 전체 화면 3D 뷰어(/v/:fileId) — 머리줄(파일 이름·소속 자료·닫기) + 남은 높이 전부 Studio 식 뷰어(04c). */
 export default function ViewerPage() {
   const { fileId } = useParams();
   const location = useLocation();
@@ -68,7 +69,8 @@ export default function ViewerPage() {
           </>
         ) : !error && <Bar className="h-3.5 w-60" />}
         {stale && <span className="hidden shrink-0 text-meta text-n-500 md:inline">{stale}</span>}
-        <Button variant="ghost" size="sm" className="ml-auto" onClick={close}>
+        {isModel && <CompareToggle file={{ id: file.id, name: file.name }} className="ml-auto" />}
+        <Button variant="ghost" size="sm" className={isModel ? '' : 'ml-auto'} onClick={close}>
           <X size={14} aria-hidden="true" />닫기
         </Button>
       </header>
@@ -83,7 +85,9 @@ export default function ViewerPage() {
       {isModel && !msg && !summary && !error && <div className="min-h-0 flex-1 bg-viewer" />}
       {viewable && (
         <Suspense fallback={<div className="min-h-0 flex-1 bg-viewer" />}>
-          <ModelViewer key={summary.key || 'model'} fileId={file.id} className="min-h-0 flex-1" />
+          <ModelViewer key={summary.key || 'model'} fileId={file.id} variant="full" formatVersion={summary.format_version ?? null}
+                       solve={summary.solve || null} modelDone={summary.state === 'done'} fileName={file.name}
+                       className="min-h-0 flex-1" />
         </Suspense>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Check, X } from 'lucide-react';
-import { FILTER_KEYS } from '../../lib/search.js';
+import { FILTER_KEYS, YEAR_UNKNOWN } from '../../lib/search.js';
 import { FACET_LABELS, KIND_LABELS } from '../../lib/labels.js';
 
 const SHOW = 8;
@@ -9,8 +9,12 @@ const MONO_KEYS = new Set(['hull', 'year']);
 export function valueLabel(key, f) {
   if (key === 'kind') return KIND_LABELS[f.value] || f.value;
   if (key === 'uploaded_by') return f.label || f.value;
+  if (key === 'year' && f.value === YEAR_UNKNOWN) return '시기 미상';
   return f.value;
 }
+
+/** 숫자 값(호선·연도)은 mono — '시기 미상' 같은 글자 값은 sans. */
+export const isMonoValue = (key, value) => MONO_KEYS.has(key) && value !== YEAR_UNKNOWN;
 
 function Facet({ name, items, selected, onPick }) {
   const [open, setOpen] = useState(false);
@@ -27,9 +31,9 @@ function Facet({ name, items, selected, onPick }) {
           return (
             <li key={f.value}>
               <button type="button" onClick={() => onPick(on ? null : f.value)} aria-pressed={on}
-                      className={`group flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-ui transition-colors duration-120 ease-out
+                      className={`group flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-ui transition-colors duration-150 ease-out
                         ${on ? 'bg-brand-subtle font-medium text-brand hover:bg-brand-muted' : 'text-n-700 hover:bg-n-100 hover:text-n-900 active:bg-n-150'}`}>
-                <span className={`min-w-0 flex-1 truncate ${MONO_KEYS.has(name) ? 'font-mono' : ''}`}>{valueLabel(name, f)}</span>
+                <span className={`min-w-0 flex-1 truncate ${isMonoValue(name, f.value) ? 'font-mono' : ''}`}>{valueLabel(name, f)}</span>
                 {on ? (
                   <span className="flex h-3.5 w-3.5 items-center justify-center" aria-label="해제">
                     <Check size={14} aria-hidden="true" className="group-hover:hidden" />
@@ -43,7 +47,7 @@ function Facet({ name, items, selected, onPick }) {
       </ul>
       {all.length > SHOW && (
         <button type="button" onClick={() => setOpen(!open)}
-                className="mt-0.5 h-6 rounded-md px-2 text-meta text-n-600 transition-colors duration-120 hover:bg-n-100 hover:text-n-900">
+                className="mt-0.5 h-6 rounded-md px-2 text-meta text-n-600 transition-colors duration-150 hover:bg-n-100 hover:text-n-900">
           {open ? '접기' : `더 보기 ${all.length - SHOW}`}
         </button>
       )}

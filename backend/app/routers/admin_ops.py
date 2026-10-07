@@ -1,4 +1,5 @@
-"""관리자 운영 API(설계 §6.1·§12) — 워커·작업 큐·백업 상태, 재시도·재추출·재변환·수동 백업, 휴지통 영구 삭제.
+"""관리자 운영 API(설계 §6.1·§12) — 워커·작업 큐·백업 상태, 재시도·재추출·재변환·해석 검증 일괄(06)·수동 백업,
+휴지통 영구 삭제.
 
 재구축은 여기 없다 — 빈 DB 전제라 화면 단추로 두면 위험해서 CLI(`python -m app.cli rebuild`)로만 한다."""
 from datetime import datetime, timedelta
@@ -25,6 +26,10 @@ FAILED_LIMIT = 20
 EXPIRING_DAYS = 7
 
 
+# 대상이 파일인 작업 종류(06 해석 검증 포함)
+FILE_JOB_TYPES = ("extract_file", "convert_model", "solve_check")
+
+
 class ForceBody(BaseModel):
     force: bool = False
 
@@ -33,7 +38,7 @@ def _failed_jobs(db: Session) -> list[dict]:
     rows = (db.query(models.Job).filter(models.Job.state == "failed")
             .order_by(models.Job.updated_at.desc(), models.Job.id.desc()).limit(FAILED_LIMIT).all())
     # 대상 이름은 종류별로 한 번에 읽는다(N+1 방지)
-    file_ids = {j.target_id for j in rows if j.type in ("extract_file", "convert_model")}
+    file_ids = {j.target_id for j in rows if j.type in FILE_JOB_TYPES}
     batch_ids = {j.target_id for j in rows if j.type == "process_batch"}
     entry_ids = {j.target_id for j in rows if j.type == "write_meta"}
     files = dict(db.query(models.File.id, models.File.name).filter(models.File.id.in_(file_ids))) if file_ids else {}
@@ -41,7 +46,7 @@ def _failed_jobs(db: Session) -> list[dict]:
         if batch_ids else {}
     entries = dict(db.query(models.Entry.id, models.Entry.entry_id).filter(models.Entry.id.in_(entry_ids))) \
         if entry_ids else {}
-    names = {"extract_file": files, "convert_model": files, "process_batch": batches, "write_meta": entries}
+    names = {**{t: files for t in FILE_JOB_TYPES}, "process_batch": batches, "write_meta": entries}
 
     def label(j: models.Job) -> str:
         return names.get(j.type, {}).get(j.target_id) or f"#{j.target_id}"
@@ -75,7 +80,7 @@ def status(db: Session = Depends(get_db), storage: StoragePaths = Depends(get_st
 
 
 _TARGET_MODELS = {"process_batch": models.Batch, "write_meta": models.Entry,
-                  "extract_file": models.File, "convert_model": models.File}
+                  **{t: models.File for t in FILE_JOB_TYPES}}
 
 
 def _target(db: Session, job: models.Job):
@@ -96,6 +101,11 @@ def retry(job_id: int, request: Request, db: Session = Depends(get_db),
         db.rollback()
         raise HTTPException(status_code=409, detail="target_gone")
     before = {"state": job.state, "attempts": job.attempts, "last_error": (job.last_error or "")[:500]}
+    if job.type == "solve_check":
+        # 최종 실패 때 검증 행을 error 로 바꿔 두었다 — 다시 대기로 돌려 화면이 '검증 중' 을 보이게
+        row = db.get(models.SolveCheck, target.id)
+        if row is not None:
+            row.state = "queued"
     if job.type == "process_batch":
         # 최종 실패 때 배치를 failed 로 바꿔 두었다 — 그대로면 process_batch 가 '이미 처리됨' 으로 건너뛴다(리뷰 I4)
         target.state, target.error = "staged", None
@@ -124,6 +134,19 @@ def reconvert(request: Request, body: ForceBody | None = None, db: Session = Dep
     n = cli.enqueue_convert_all(db, force=force)
     audit.record(db, storage, actor=admin.employee_id, action="OPS_RECONVERT", target_type="system",
                  target_id="convert", after={"force": force, "queued": n}, ip=client_ip(request))
+    return {"queued": n}
+
+
+@router.post("/ops/solve-check")
+def solve_check_all(request: Request, body: ForceBody | None = None, db: Session = Depends(get_db),
+                    storage: StoragePaths = Depends(get_storage), admin: models.User = Depends(require_admin)):
+    """해석 검증 일괄(06) — 변환이 끝난 모델 중 미검증(force: 검증 중이 아닌 전부)을 대기열에 넣는다."""
+    from ..solve.job import enqueue_solve_all
+
+    force = bool(body and body.force)
+    n = enqueue_solve_all(db, force=force, requested_by=admin.employee_id)
+    audit.record(db, storage, actor=admin.employee_id, action="OPS_SOLVE_CHECK", target_type="system",
+                 target_id="solve_check", after={"force": force, "queued": n}, ip=client_ip(request))
     return {"queued": n}
 
 

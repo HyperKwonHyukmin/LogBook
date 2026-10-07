@@ -127,10 +127,24 @@ export default function LoginPage() {
   const nameInvalid = mode === 'register' && error === NAME_REQUIRED_MESSAGE;
 
   return (
-    <main className="flex min-h-full flex-col items-center justify-center bg-n-50 px-4 py-10">
-      <div className="w-full max-w-[380px] rounded-xl border border-n-200 bg-n-0 p-8 shadow-sm">
-        <Logo size={28} subtitle />
-        <div role="tablist" aria-label="로그인 방식" className="mt-7 flex h-9 items-center rounded-md bg-n-100 p-0.5">
+    // 서명 화면: 왼쪽 네이비 브랜드 면(로고 + 목적 한 줄) | 오른쪽 흰 양식 면. 좁은 화면에서는 네이비 띠가 위로 간다.
+    <main className="grid min-h-full grid-rows-[auto_1fr] bg-n-0 min-[900px]:grid-cols-[minmax(400px,5fr)_7fr] min-[900px]:grid-rows-1">
+      <section aria-label="Logbook" className="on-navy flex flex-col gap-10 bg-navy-900 px-8 py-8 min-[900px]:justify-between min-[900px]:px-14 min-[900px]:py-12">
+        <Logo tone="navy" size={32} subtitle />
+        <div>
+          <p className="max-w-[520px] text-[26px] font-semibold leading-[36px] tracking-[-0.02em] text-on-navy [text-wrap:balance]
+                        min-[900px]:text-[32px] min-[900px]:leading-[44px] min-[1600px]:text-[40px] min-[1600px]:leading-[54px]">
+            지난 구조해석을 호선 번호와 보고서 내용으로 바로 찾습니다.
+          </p>
+          <p className="mt-8 hidden border-t border-navy-700 pt-5 text-meta text-on-navy-subtle min-[900px]:block">
+            보고서, 결과, 모델 파일을 <span className="font-mono">999_LogBook</span> 공유 폴더 한곳에 모읍니다.
+          </p>
+        </div>
+      </section>
+      <section className="flex items-center justify-center px-6 py-12">
+        <div className="w-full max-w-[360px]">
+        <h1 className="text-title font-semibold tracking-[-0.018em] text-n-900">사번으로 들어갑니다</h1>
+        <div role="tablist" aria-label="로그인 방식" className="mt-6 flex h-9 items-center rounded-md bg-n-100 p-0.5">
           {TABS.map((tab, idx) => (
             <button
               key={tab.key}
@@ -142,7 +156,7 @@ export default function LoginPage() {
               aria-controls="auth-panel"
               tabIndex={mode === tab.key ? 0 : -1}
               disabled={busy}
-              className={`h-8 flex-1 rounded-[4px] text-ui font-medium transition-[background-color,color,box-shadow] duration-120 ease-out
+              className={`h-8 flex-1 rounded-[4px] text-ui font-medium transition-[background-color,color,box-shadow] duration-150 ease-out
                 disabled:cursor-not-allowed disabled:text-n-500
                 ${mode === tab.key ? 'bg-n-0 text-n-900 shadow-sm' : 'text-n-600 hover:text-n-900'}`}
               onClick={() => switchMode(tab.key)}
@@ -186,8 +200,9 @@ export default function LoginPage() {
           {done && <p role="status" className="rounded-md bg-ok-bg px-3 py-2 text-ui text-ok">{done}</p>}
           <Button type="submit" size="lg" className="mt-1 w-full" loading={busy} disabled={busy}>{mode === 'login' ? '로그인' : '가입 신청'}</Button>
         </form>
-      </div>
-      <p className="mt-4 text-center text-meta text-n-500">처음이면 사번으로 가입 신청을 하세요. 관리자가 승인하면 쓸 수 있습니다.</p>
+        <p className="mt-6 border-t border-n-200 pt-4 text-meta text-n-500">처음이면 사번으로 가입 신청을 하세요. 관리자가 승인하면 쓸 수 있습니다.</p>
+        </div>
+      </section>
     </main>
   );
 }

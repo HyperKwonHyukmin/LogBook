@@ -61,7 +61,7 @@ export default function HullsPage() {
       )}
       {rows && (rows.length > 0 || q) && (
         <div role="table" aria-label="호선 목록" className="overflow-hidden rounded-lg border border-n-200">
-          <div role="row" className={`${COLS} h-8 border-b border-n-200 bg-n-25 text-meta font-medium text-n-500`}>
+          <div role="row" className={`${COLS} h-9 border-b border-n-200 bg-n-50 text-meta font-medium text-n-600`}>
             <span role="columnheader">호선</span><span role="columnheader">선종</span>
             <span role="columnheader" className="text-right">자료</span><span role="columnheader" className="text-right">최근 확정</span>
           </div>
@@ -70,10 +70,10 @@ export default function HullsPage() {
           )}
           {rows.map((r) => (
             <div key={r.hull_no} role="row" onClick={() => navigate(`/h/${encodeURIComponent(r.hull_no)}`)}
-                 className={`${COLS} h-10 cursor-pointer border-b border-n-200 text-ui transition-colors duration-120 last:border-0 hover:bg-n-25`}>
+                 className={`${COLS} h-11 cursor-pointer border-b border-n-200 text-ui transition-colors duration-150 last:border-0 hover:bg-n-50`}>
               <span role="cell">
                 <Link to={`/h/${encodeURIComponent(r.hull_no)}`} onClick={(e) => e.stopPropagation()}
-                      className="font-mono font-medium text-n-900 hover:underline">{r.hull_no}</Link>
+                      className="font-mono text-body font-medium text-brand hover:underline">{r.hull_no}</Link>
               </span>
               <span role="cell" className={`truncate ${r.ship_type ? 'text-n-700' : 'text-n-500'}`}>{r.ship_type || '—'}</span>
               <span role="cell" className="text-right font-mono text-n-700">{r.entries}</span>

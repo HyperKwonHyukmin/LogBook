@@ -15,6 +15,7 @@ from ..database import get_db
 from ..dependencies import get_storage, require_auth
 from ..entries.locate import FileUnavailable, file_path
 from ..extract.xlsx import sheet_preview
+from ..solve.job import brief as solve_brief
 from ..storage.paths import StoragePaths, to_long
 
 router = APIRouter(prefix="/api/files", tags=["files"])
@@ -54,9 +55,11 @@ def file_meta(file_id: int, db: Session = Depends(get_db), user: models.User = D
     """파일 메타(04b 전체 화면 뷰어 머리줄) — 이름·경로·종류와 소속 Entry. 휴지통 파일은 _file() 이 404."""
     f = _file(db, file_id)
     e = db.get(models.Entry, f.entry_id) if f.entry_id else None
+    s = db.get(models.ModelSummary, f.id) if f.kind == "model" else None
     return {"id": f.id, "name": f.name, "rel_path": f.rel_path, "kind": f.kind, "size": f.size,
             "entry_id": e.entry_id if e else None, "entry_title": e.title if e else None,
-            "entry_status": e.status if e else None, "drm_encrypted": bool(f.drm_encrypted)}
+            "entry_status": e.status if e else None, "drm_encrypted": bool(f.drm_encrypted),
+            "format_version": _format_version(s)}
 
 
 @router.post("/{file_id}/link")
@@ -140,10 +143,20 @@ def sheet(file_id: int, name: str | None = None, db: Session = Depends(get_db),
         raise HTTPException(status_code=422, detail="unreadable")
 
 
+def _format_version(s: models.ModelSummary | None) -> int | None:
+    """key 의 lbm 형식 버전 — 변환 결과(key)가 없으면 None, 04c 이전 행(NULL)이면 1."""
+    return (s.format_version or 1) if s is not None and s.key else None
+
+
+def _paths(storage: StoragePaths, s: models.ModelSummary):
+    """행이 가리키는 파생물 — lbm 은 그 행의 형식 버전 파일(재변환 전이면 옛 v1 파일)."""
+    return model_paths(storage, s.key, _format_version(s))
+
+
 def _servable(storage: StoragePaths, s: models.ModelSummary | None, which: int = 0) -> bool:
     """이전 결과까지 포함해 보여 줄 파생물이 있는가 — 재변환 대기·실패 중에도 key 의 파일이 있으면 그대로 쓴다."""
     return bool(s is not None and s.key and s.state in SERVABLE_STATES
-                and os.path.exists(to_long(model_paths(storage, s.key)[which])))
+                and os.path.exists(to_long(_paths(storage, s)[which])))
 
 
 def _ready_model(db: Session, storage: StoragePaths, f: models.File, which: int) -> models.ModelSummary:
@@ -166,12 +179,15 @@ def _etag_matches(if_none_match: str | None, etag: str) -> bool:
 
 def _derived_response(storage: StoragePaths, s: models.ModelSummary, which: int, media_type: str,
                       if_none_match: str | None, extra: dict | None = None) -> Response:
-    """파생물 응답 — key 가 곧 내용이므로 ETag 로 쓰고, 매번 재검증(no-cache)해 재변환된 모델을 놓치지 않는다."""
-    etag = f'"{s.key}"'
+    """파생물 응답 — key 가 곧 내용이므로 ETag 로 쓰고, 매번 재검증(no-cache)해 재변환된 모델을 놓치지 않는다.
+    lbm 은 같은 key 라도 형식 버전이 바뀌면 내용이 달라지므로 ETag 에 버전을 붙인다(v1 은 04a 그대로 key 만) —
+    v1 을 캐시한 브라우저가 재변환 뒤 304 로 옛 형식을 계속 쓰지 않게(04c)."""
+    v = _format_version(s)
+    etag = f'"{s.key}.v{v}"' if which == 0 and v > 1 else f'"{s.key}"'
     headers = {"ETag": etag, "Cache-Control": "private, no-cache"}
     if _etag_matches(if_none_match, etag):
         return Response(status_code=304, headers=headers)
-    data = _derived(model_paths(storage, s.key)[which])
+    data = _derived(_paths(storage, s)[which])
     return Response(content=data, media_type=media_type, headers=headers | (extra or {}))
 
 
@@ -190,12 +206,14 @@ def model_summary(file_id: int, db: Session = Depends(get_db), storage: StorageP
                   user: models.User = Depends(require_auth)):
     f = _file(db, file_id)
     s = db.get(models.ModelSummary, f.id)
+    # 06 해석 검증 요약 — 상태·오류 유형·'다시 검증 필요'(검증한 원본과 지금 변환 결과가 다름)
+    solve = solve_brief(db.get(models.SolveCheck, f.id), s)
     if s is None:
-        return {"state": None, "key": None}
+        return {"state": None, "key": None, "format_version": None, "solve": solve}
     has_lbm = _servable(storage, s)
     return {"state": s.state, "error": s.error, "key": s.key, "counts": s.counts, "bbox": s.bbox, "sol": s.sol,
             "fingerprint": s.fingerprint, "warnings": s.warnings or [], "includes": s.includes or [],
-            "missing": s.missing or [], "has_lbm": has_lbm}
+            "missing": s.missing or [], "has_lbm": has_lbm, "format_version": _format_version(s), "solve": solve}
 
 
 @router.get("/{file_id}/model.lbm")

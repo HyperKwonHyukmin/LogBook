@@ -13,7 +13,7 @@ import { errorText } from '../lib/labels.js';
 const COLS = 'grid grid-cols-[minmax(0,1fr)_88px_136px_148px] items-center gap-3 px-3';
 // 관리자는 행마다 '영구 삭제' 가 더 붙어 동작 칸이 넓다.
 const COLS_ADMIN = 'grid grid-cols-[minmax(0,1fr)_88px_136px_232px] items-center gap-3 px-3';
-const reveal = 'opacity-0 transition-opacity duration-120 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100';
+const reveal = 'opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100';
 
 /**
  * 휴지통 — 삭제한 Entry 를 복원한다(설계 §8). 자료는 95_Trash 에 있다. 복원은 되돌릴 수 있는 동작이라 확인을 묻지 않는다.
@@ -70,13 +70,13 @@ export default function TrashPage() {
       {!loading && rows.length === 0 && !error && <EmptyState icon={Trash2} title="휴지통이 비어 있습니다">삭제한 자료가 여기에 모입니다.</EmptyState>}
       {(loading || rows.length > 0) && (
         <div className="overflow-hidden rounded-lg border border-n-200">
-          <div className={`${cols} h-8 border-b border-n-200 bg-n-25 text-meta font-medium text-n-500`}>
+          <div className={`${cols} h-9 border-b border-n-200 bg-n-50 text-meta font-medium text-n-600`}>
             <span>제목</span><span>Entry</span><span>보낸 시각</span><span />
           </div>
           {loading && <RowsSkeleton rows={3} dense label="휴지통을 불러오는 중" />}
           <ul>
             {rows.map((r) => (
-              <li key={r.entry_id} className={`group ${cols} h-10 border-b border-n-200 text-ui transition-colors duration-120 last:border-0 hover:bg-n-25`}>
+              <li key={r.entry_id} className={`group ${cols} h-11 border-b border-n-200 text-ui transition-colors duration-150 last:border-0 hover:bg-n-50`}>
                 <Link to={`/e/${r.entry_id}`} className="truncate font-medium text-n-900 hover:underline">{r.title}</Link>
                 <span className="font-mono text-meta text-n-600">{r.entry_id}</span>
                 <span className="font-mono text-meta text-n-500">{r.updated_at ? r.updated_at.replace('T', ' ').slice(0, 16) : '—'}</span>

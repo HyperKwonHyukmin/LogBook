@@ -56,3 +56,13 @@ def test_claim_unknown_batch_404(client, make_user, auth_headers):
     make_user("A100001")
     h = auth_headers("A100001")
     assert client.post("/api/batches/no-such-key/claim", headers=h).status_code == 404
+
+
+def test_get_one_batch(client, db, make_user, auth_headers):
+    make_user("A100001")
+    _batch(db, "k-one", "A100001")
+    h = auth_headers("A100001")
+    r = client.get("/api/batches/k-one", headers=h)
+    assert r.status_code == 200 and r.json()["key"] == "k-one" and r.json()["state"] == "processed"
+    assert client.get("/api/batches/nope", headers=h).status_code == 404
+    assert client.get("/api/batches/k-one").status_code == 401

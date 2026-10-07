@@ -78,7 +78,7 @@ def test_drm_flag_skips(db, storage, make_entry_file):
     assert row.state == "skipped" and row.error == "drm"
 
 
-def test_drm_magic_detected_when_reading(db, storage, make_entry_file):
+def test_drm_magic_detected_when_reading(db, storage, make_entry_file, skip_if_local_drm):
     _e, f = make_entry_file(name="r.pdf", sha="3" * 64)
     _write(db, storage, f, b"HHIDRMC" + b"\0" * 100)
     run_extract(db, storage, f)

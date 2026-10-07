@@ -1,5 +1,5 @@
 """MySQL 연결. WorkBench app/database.py 를 이식했다(예약문자 안전 URL, pool_pre_ping)."""
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -33,6 +33,43 @@ def _disable_fulltext_stopwords(dbapi_conn, _record) -> None:
         cur.close()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+
+# create_all 은 이미 있는 표에 열을 더하지 않는다(마이그레이션 도구 없음). 기존 표에 열을 더할 때는
+# 여기에 (표, 열, DDL 형식) 을 적는다 — 시작할 때 init_schema() 가 없는 열만 ALTER TABLE 로 더한다.
+# 반드시 NULL 허용(또는 기본값 있는) 열이어야 한다(기존 행이 있으므로).
+ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("model_summaries", "format_version", "INT NULL"),   # 04c — lbm 형식 버전
+    ("tags", "listed", "TINYINT(1) NOT NULL DEFAULT 0"),   # 08 — 통제 어휘 용어
+    ("tags", "sort_order", "INT NULL"),
+    ("tags", "active", "TINYINT(1) NOT NULL DEFAULT 1"),
+)
+
+
+def ensure_columns(bind=None) -> list[str]:
+    """ADDED_COLUMNS 중 없는 열을 더한다(여러 번 불러도 같다). 더한 '표.열' 목록을 돌려준다."""
+    bind = bind or engine
+    insp = inspect(bind)
+    tables = set(insp.get_table_names())
+    added: list[str] = []
+    for table, column, ddl in ADDED_COLUMNS:
+        if table not in tables:
+            continue   # 표가 없으면 create_all 이 열까지 만든다
+        if column in {c["name"] for c in insp.get_columns(table)}:
+            continue
+        with bind.begin() as conn:
+            conn.execute(text(f"ALTER TABLE `{table}` ADD COLUMN `{column}` {ddl}"))
+        added.append(f"{table}.{column}")
+    return added
+
+
+def init_schema(bind=None) -> list[str]:
+    """표 만들기(create_all) + 기존 표에 빠진 열 더하기. API·워커·CLI 시작 때 부른다."""
+    from . import models  # noqa: F401  (테이블 등록)
+
+    bind = bind or engine
+    Base.metadata.create_all(bind=bind)
+    return ensure_columns(bind)
 
 
 def get_db():

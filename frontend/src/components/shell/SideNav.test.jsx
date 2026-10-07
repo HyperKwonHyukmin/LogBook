@@ -31,7 +31,7 @@ test('저장소 연결이 끊기면 경고를 보인다', () => {
 
 test('호선 화면(/h/9999)에서도 호선 메뉴가 활성이다', () => {
   render(<MemoryRouter initialEntries={['/h/9999']}><SideNav isAdmin={false} storage={{ reachable: true }} /></MemoryRouter>);
-  expect(screen.getByRole('link', { name: '호선' })).toHaveClass('bg-brand-subtle');
+  expect(screen.getByRole('link', { name: '호선' })).toHaveClass('bg-navy-700'); // 현재 메뉴 = 한 단계 밝은 네이비 채움
   expect(screen.getByRole('link', { name: '호선' })).toHaveAttribute('aria-current', 'page');
 });
 

@@ -23,7 +23,10 @@ def enqueue(db: Session, job_type: str, target_id: int) -> models.Job:
 
 # 오래 걸리는 작업(본문 추출·BDF 변환)은 뒤로 미룬다 — 수천 건 쌓여도 배치 처리·메타 쓰기가 먼저 돈다.
 # 워커의 한 주기 시간 예산도 이 묶음에 건다(worker.HEAVY_BUDGET_SECONDS).
-HEAVY_JOB_TYPES = ("extract_file", "convert_model")
+# solve_check(06 해석 검증, 최대 LOGBOOK_SOLVE_TIMEOUT 초)는 무거운 작업 중에서도 맨 뒤 — 변환·추출이 먼저 돈다.
+# 한 건이 예산(120초)을 넘기면 그 주기에는 무거운 작업을 더 집지 않으므로 검증은 주기당 사실상 1건이다.
+HEAVY_JOB_TYPES = ("extract_file", "convert_model", "solve_check")
+LAST_JOB_TYPES = ("solve_check",)
 LOW_PRIORITY_TYPES = HEAVY_JOB_TYPES  # 03 의 옛 이름(별칭)
 
 
@@ -42,7 +45,7 @@ def claim_next(db: Session, now: datetime | None = None, *,
         if exclude_types:
             q = q.filter(models.Job.type.notin_(exclude_types))
         job = (
-            q.order_by(models.Job.type.in_(HEAVY_JOB_TYPES), models.Job.id)
+            q.order_by(models.Job.type.in_(HEAVY_JOB_TYPES), models.Job.type.in_(LAST_JOB_TYPES), models.Job.id)
             .with_for_update(skip_locked=True)
             .first()
         )

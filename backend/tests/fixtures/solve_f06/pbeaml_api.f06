@@ -1,0 +1,27 @@
+ ^^^     
+ ^^^ >>> IFP OPERATIONS COMPLETE <<< 
+ ^^^     
+ *** SYSTEM FATAL MESSAGE 6498 (Beam Lib, BSBRP)                                 
+     API MESSAGE FOLLOWS.                                                        
+     USER INFORMATION: Evaluator Specific Error.                                 
+                       *** USER INFORMATION MESSAGE 6623 ( BSMSG ).              
+                       ERROR DETECTED WHILE PROCESSING A "PBEAML" BULK           
+                       DATA ENTRY WITH PID = 2.                                  
+                       THE ERROR OCCURED FOR CROSS SECTION TYPE H       .        
+                       HEIGHT, DIM3, CAN NOT BE LESS THAN WIDTH, DIM4.           
+ *** USER FATAL MESSAGE 6624 (IFP9)
+     SEE INFORMATION MESSAGES ABOVE
+ ^^^     
+ *** USER FATAL MESSAGE 9002 (SUBDMAP IFPS)
+     ERROR(S) ENCOUNTERED IN THE MAIN BULK DATA SECTION
+     SEE MESSAGES ABOVE. ERROR ENCOUNTERED IN MODULE IFP9,
+ ^^^     
+1                                                                           OCTOBER   6, 2026  MSC Nastran  3/14/14   PAGE     5
+                                                                                                                                    
+0                                                                                                                                   
+0                                                                                                                                   
+                                                                                                                                    
+                                                                                                                                    
+ *** USER INFORMATION MESSAGE 4425 (PRTPRN)
+     ONE OR MORE FATAL ERRORS HAVE OCCURRED.  THERE MAY BE MORE ERROR MESSAGES IN THE PRECEDING OUTPUT
+1                                        * * * END OF JOB * * *

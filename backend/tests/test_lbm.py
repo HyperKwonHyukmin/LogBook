@@ -33,7 +33,7 @@ def test_layout_and_alignment():
 
 def test_roundtrip_blocks():
     header, b = read_lbm(write_lbm(_model()))
-    assert header["version"] == 1 and header["sol"] == "101"
+    assert header["version"] == 2 and header["sol"] == "101"
     assert b["node_ids"].tolist() == [1, 2, 3, 4]
     assert b["node_xyz"].shape == (4, 3) and b["node_xyz"][1].tolist() == [1000.0, 0.0, 0.0]
     assert b["beams"].tolist() == [[10, 1, 0, 1], [11, 0, 1, 2]]  # CONROD 11: G1=2, G2=3 → 순번 1, 2

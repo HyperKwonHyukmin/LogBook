@@ -109,3 +109,22 @@ test('오류가 세 번 이어지면 멈추고 알린다', async () => {
   await tick(3);
   expect(modelCalls(fetch)).toBe(4);
 });
+
+test('해석 검증 배지는 /model 의 solve 요약으로 시작하고, 변환 대기 중이면 단추를 잠근다', async () => {
+  const fetch = mockApi({
+    'GET /api/files/7/model': { state: 'queued', has_lbm: true, key: 'old', counts: { CROD: 1 }, bbox: null, warnings: [], missing: [],
+      solve: { state: 'fail', error_types: ['mechanism'], stale: false } },
+    'GET /api/files/7/thumb.png': { __blob: new Blob(['png']) },
+    'GET /api/files/7/solve-check': { state: 'fail', error_types: ['mechanism'], fatals: [], stale: false, fixed_node_ids: [] },
+  });
+  globalThis.URL.createObjectURL = vi.fn(() => 'blob:thumb');
+  globalThis.URL.revokeObjectURL = vi.fn();
+  render(
+    <ViewerEngineContext.Provider value={async () => ({ setModel() {}, dispose() {} })}>
+      <MemoryRouter><ModelPreview file={FILE} inline={false} /></MemoryRouter>
+    </ViewerEngineContext.Provider>,
+  );
+  expect(await screen.findByText('해석 불가 · 구속 부족·메커니즘')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '다시 검증' })).toBeDisabled();
+  expect(calls(fetch)).toContain('GET /api/files/7/solve-check');
+});

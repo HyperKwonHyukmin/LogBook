@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext.jsx';
 import RequireAuth from './auth/RequireAuth.jsx';
@@ -13,7 +14,11 @@ import TagsPage from './pages/TagsPage.jsx';
 import TrashPage from './pages/TrashPage.jsx';
 import OpsPage from './pages/admin/OpsPage.jsx';
 import UsersPage from './pages/admin/UsersPage.jsx';
+import VocabPage from './pages/admin/VocabPage.jsx';
 import ViewerPage from './pages/ViewerPage.jsx';
+
+// 비교 화면(07)은 뷰어 상태·표 묶음이 커서 따로 묶는다.
+const ComparePage = lazy(() => import('./pages/ComparePage.jsx'));
 
 export default function App() {
   return (
@@ -27,6 +32,7 @@ export default function App() {
             <Route path="h/:hullNo" element={<HullPage />} />
             <Route path="e/:entryId" element={<EntryPage />} />
             <Route path="v/:fileId" element={<ViewerPage />} />
+            <Route path="compare" element={<Suspense fallback={null}><ComparePage /></Suspense>} />
             <Route path="inbox" element={<InboxPage />} />
             <Route path="tags" element={<TagsPage />} />
             <Route path="trash" element={<TrashPage />} />
@@ -35,6 +41,7 @@ export default function App() {
               <Route path="admin" element={<Navigate to="/admin/users" replace />} />
               <Route path="admin/users" element={<UsersPage />} />
               <Route path="admin/ops" element={<OpsPage />} />
+              <Route path="admin/vocab" element={<VocabPage />} />
             </Route>
           </Route>
         </Route>

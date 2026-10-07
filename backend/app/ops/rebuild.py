@@ -169,7 +169,7 @@ def _restore_aliases(db: Session, registry: dict) -> int:
     n = 0
     for t in registry.get("tags") or []:
         kind, value, target = t.get("kind"), t.get("value"), t.get("alias_of")
-        if kind not in ("zone", "free") or not value or not target or value == target:
+        if kind not in ("zone", "free", "atype") or not value or not target or value == target:
             continue
         rows = {}
         for v in (value, target):
@@ -184,6 +184,25 @@ def _restore_aliases(db: Session, registry: dict) -> int:
         rows[value].alias_of_id = rows[target].id
         n += 1
     db.flush()
+    return n
+
+
+def _restore_vocab(db: Session, registry: dict) -> int:
+    """08 — 분류 목록 용어(순서·사용 여부). 동의어(alias)는 _restore_aliases 가 이미 되살렸다."""
+    n = 0
+    for t in registry.get("vocab") or []:
+        kind, value = t.get("kind"), str(t.get("value") or "")[:100]
+        if kind not in ("zone", "atype") or not value:
+            continue
+        row = db.query(models.Tag).filter_by(kind=kind, value=value).first()
+        if row is None:
+            row = models.Tag(kind=kind, value=value)
+            db.add(row)
+        row.alias_of_id, row.listed = None, True
+        row.sort_order = t.get("sort_order") if isinstance(t.get("sort_order"), int) else None
+        row.active = t.get("active") is not False
+        db.flush()
+        n += 1
     return n
 
 
@@ -328,6 +347,7 @@ def rebuild(db: Session, storage: StoragePaths, *, force: bool = False) -> dict:
     db.commit()
 
     result["alias_tags"] = _restore_aliases(db, registry)
+    result["vocab_terms"] = _restore_vocab(db, registry)
     result["audit"], result["audit_bad"] = _restore_audit(db, storage)
     db.commit()
 

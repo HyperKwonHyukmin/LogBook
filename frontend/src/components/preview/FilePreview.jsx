@@ -144,7 +144,7 @@ function SheetView({ file }) {
     <div role="tablist" aria-label="시트" className="mb-3 flex h-9 flex-wrap items-stretch gap-x-5 border-b border-n-200">
       {sheets.map((s) => (
         <button key={s} type="button" role="tab" aria-selected={s === active} onClick={() => setPick({ id: file.id, name: s })}
-                className={`-mb-px border-b-2 px-0.5 text-ui font-medium transition-colors duration-120 ease-out
+                className={`-mb-px border-b-2 px-0.5 text-ui font-medium transition-colors duration-150 ease-out
                   ${s === active ? 'border-n-900 text-n-900' : 'border-transparent text-n-500 hover:text-n-900'}`}>
           {s}
         </button>
@@ -220,9 +220,9 @@ export function FileActions({ file, vaultUnc, trashed = false, showPath = false,
  * 파일 미리보기(설계 §6.3) — 형식별 본문. toolbar=true 면 위에 크기·동작 줄을 둔다
  * (파일 이름은 옆 파일 목록에 이미 있어 되풀이하지 않는다). hideTitles: 요약에서 뺄 제목들.
  * BDF(kind=model)는 3D 미리보기(ModelPreview)를 쓴다. inlineModel=false 면 뷰어 대신 썸네일 + 3D 로 보기
- * (좁은 검색 미리보기 패널).
+ * (좁은 검색 미리보기 패널). hull = 소속 자료의 대표 호선(모델의 '비교에 담기').
  */
-export default function FilePreview({ file, vaultUnc, trashed = false, toolbar = true, hideTitles = [], inlineModel = true }) {
+export default function FilePreview({ file, vaultUnc, trashed = false, toolbar = true, hideTitles = [], inlineModel = true, hull = '' }) {
   const ext = extOf(file.name);
   const notice = extractNotice(file.extract);
   // DRM 파일은 서버가 본문을 못 읽는다(시트 API 도 409). 미리보기 대신 사유와 내려받기만 보인다.
@@ -244,7 +244,7 @@ export default function FilePreview({ file, vaultUnc, trashed = false, toolbar =
       {inTrash && <p className="rounded-md bg-n-100 px-3 py-2 text-ui text-n-700">{EXTRACT_LABELS.trashed}</p>}
       {notice && !inTrash && <p className="rounded-md border border-wait-line bg-wait-bg px-3 py-2 text-ui text-wait">{notice}</p>}
       {!inTrash && !model && <SummaryCard summary={file.extract?.summary} hideTitles={hideTitles} />}
-      {model && <ModelPreview file={file} inline={inlineModel} />}
+      {model && <ModelPreview file={file} inline={inlineModel} hull={hull} />}
       {inTrash || model ? null : (
         <div className="rounded-lg bg-n-50 p-3">
           {View ? <View file={file} /> : (

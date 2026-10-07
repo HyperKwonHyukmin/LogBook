@@ -2,16 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SearchX, SlidersHorizontal, X } from 'lucide-react';
 import { api } from '../api/client.js';
-import FacetPanel, { FacetList, valueLabel } from '../components/search/FacetPanel.jsx';
+import FacetPanel, { FacetList, isMonoValue, valueLabel } from '../components/search/FacetPanel.jsx';
 import EntryPreviewPanel from '../components/search/EntryPreviewPanel.jsx';
 import ResultList, { itemKey } from '../components/search/ResultList.jsx';
+import { useBasketBarVisible } from '../components/compare/CompareBasket.jsx';
 import Button, { buttonClass } from '../components/ui/Button.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
 import { ErrorNote } from '../components/ui/Page.jsx';
 import { RowsSkeleton } from '../components/ui/Skeleton.jsx';
 import { Segmented } from '../components/ui/Tabs.jsx';
 import { FACET_LABELS, errorText } from '../lib/labels.js';
-import { FILTER_KEYS, apiQuery, readSearch, writeSearch } from '../lib/search.js';
+import { FILTER_KEYS, SORTS, apiQuery, defaultSort, readSearch, writeSearch } from '../lib/search.js';
+import { selectClass } from '../components/ui/Field.jsx';
 
 const PAGE = 50;
 const PREVIEW_DELAY_MS = 200;
@@ -36,16 +38,16 @@ function AppliedFilters({ filters, applied, facets, onClear, onClearAll }) {
         const label = valueLabel(k, facets?.[k]?.find((f) => f.value === v) || { value: v });
         return (
           <button key={k} type="button" onClick={() => onClear(k)} aria-label={`${FACET_LABELS[k]} ${label} 필터 해제`}
-                  className="inline-flex h-6 items-center gap-1.5 rounded-sm bg-n-100 pl-2 pr-1 text-meta text-n-700 transition-colors duration-120 ease-out hover:bg-n-150 hover:text-n-900 active:bg-n-200">
+                  className="inline-flex h-6 items-center gap-1.5 rounded-sm bg-n-100 pl-2 pr-1 text-meta text-n-700 transition-colors duration-150 ease-out hover:bg-n-150 hover:text-n-900 active:bg-n-200">
             <span className="text-n-500">{FACET_LABELS[k]}</span>
-            <span className={k === 'hull' || k === 'year' ? 'font-mono' : ''}>{label}</span>
+            <span className={isMonoValue(k, v) ? 'font-mono' : ''}>{label}</span>
             <X size={12} aria-hidden="true" className="text-n-500" />
           </button>
         );
       })}
       {keys.length > 1 && (
         <button type="button" onClick={onClearAll}
-                className="h-6 rounded-sm px-1.5 text-meta text-n-600 transition-colors duration-120 hover:bg-n-100 hover:text-n-900">모두 지우기</button>
+                className="h-6 rounded-sm px-1.5 text-meta text-n-600 transition-colors duration-150 hover:bg-n-100 hover:text-n-900">모두 지우기</button>
       )}
     </div>
   );
@@ -67,6 +69,7 @@ export default function SearchPage() {
   const [preview, setPreview] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [attempt, setAttempt] = useState(0); // '다시 시도' 로 같은 검색을 다시 보낸다
+  const basketBar = useBasketBarVisible();
   const reqRef = useRef(0);
   const previewTimer = useRef(null);
 
@@ -136,6 +139,8 @@ export default function SearchPage() {
   const filterCount = FILTER_KEYS.filter((k) => state.filters[k]).length;
   // 미리보기가 열리면 1600px 미만에서는 필터 열을 접고 머리말의 '필터' 단추로 펼친다(1366 에서 결과 열 확보).
   const collapse = !!preview;
+  // 정렬(08) — 주소에 없으면 검색어가 있을 때 관련도, 없을 때 해석 시기
+  const sortValue = state.sort || defaultSort(state.q);
 
   return (
     <div className="relative flex h-full min-h-0">
@@ -170,6 +175,13 @@ export default function SearchPage() {
                    className="h-3.5 w-3.5 cursor-pointer accent-brand" />
             미확정 포함
           </label>
+          <label className="ml-auto flex items-center gap-1.5 text-meta text-n-600">
+            정렬
+            <select aria-label="정렬" value={sortValue} onChange={(e) => update({ sort: e.target.value === defaultSort(state.q) ? '' : e.target.value })}
+                    className={selectClass('h-7 text-meta')}>
+              {SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </label>
         </div>
         {loading && res && (
           <div role="progressbar" aria-label="검색 중" className="absolute inset-x-0 top-12 z-10 h-0.5 overflow-hidden">
@@ -200,12 +212,14 @@ export default function SearchPage() {
           {res && res.items.length > 0 && (
             <>
               <ResultList unit={res.unit} items={res.items} selectedKey={selected && itemKey(selected)}
-                          onSelect={select} onOpen={open} terms={res.terms} />
+                          onSelect={select} onOpen={open} terms={res.terms} filters={res.applied_filters || state.filters} />
               {res.nextOffset < res.total && (
                 <div className="flex justify-center py-4">
                   <Button variant="secondary" onClick={loadMore} disabled={loading} loading={more}>더 보기</Button>
                 </div>
               )}
+              {/* 비교 바구니 띠(07)가 마지막 행·'더 보기' 를 가리지 않게 */}
+              {basketBar && <div aria-hidden="true" className="h-24" />}
             </>
           )}
         </div>

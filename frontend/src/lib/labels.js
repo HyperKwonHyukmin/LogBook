@@ -9,11 +9,16 @@ export const ACTION_LABELS = {
   TAG_ALIAS: '동의어 묶기', TAG_UNALIAS: '동의어 풀기', HULL_UPDATE: '호선 정보 수정',
   TRASH_PURGE: '영구 삭제', JOB_RETRY: '작업 다시 시도',
   OPS_REEXTRACT: '본문 다시 추출', OPS_RECONVERT: 'BDF 다시 변환', OPS_BACKUP: '수동 백업',
+  SOLVE_CHECK: '해석 검증 요청', OPS_SOLVE_CHECK: '해석 검증 일괄',
+  VOCAB_SEED: '분류 목록 기본값', VOCAB_TERM_ADD: '분류 용어 추가', VOCAB_TERM_UPDATE: '분류 용어 수정',
+  VOCAB_REORDER: '분류 순서 변경', VOCAB_MERGE: '분류 값 합치기', VOCAB_SYNONYM_REMOVE: '분류 동의어 빼기',
+  VOCAB_NORMALIZE: '분류 값 일괄 정리',
 };
 
 /** 워커 작업 종류·상태(관리자 운영 화면). */
 export const JOB_TYPE_LABELS = {
   extract_file: '보고서 본문 추출', convert_model: 'BDF 변환', process_batch: '배치 처리', write_meta: '메타 파일 쓰기',
+  solve_check: '해석 검증',
 };
 export const JOB_STATE_LABELS = { queued: '대기', running: '실행 중', done: '완료', failed: '실패' };
 
@@ -65,6 +70,14 @@ export const ERROR_LABELS = {
   not_trashed: '휴지통에 있는 자료가 아닙니다.',
   backup_failed: '백업하지 못했습니다.',
   admin_required: '관리자만 할 수 있습니다.',
+  vocab_not_listed: '목록에 없는 값입니다. ‘기타’를 고르거나 관리자에게 용어 추가를 요청해 주세요.',
+  vocab_exists: '이미 목록에 있는 용어입니다.',
+  vocab_is_synonym: '다른 용어의 동의어로 등록된 값입니다.',
+  vocab_is_term: '이미 목록의 용어입니다. 합칠 수 없습니다.',
+  vocab_conflict: '다른 용어와 표기가 겹칩니다.',
+  value_not_found: '데이터에서 그 값을 찾을 수 없습니다. 새로 고쳐 보세요.',
+  term_not_found: '용어를 찾을 수 없습니다. 새로 고쳐 보세요.',
+  invalid_order: '목록이 바뀌었습니다. 새로 고친 뒤 다시 해 주세요.',
 };
 
 export function errorText(err, fallback = '요청을 처리하지 못했습니다.') {
@@ -82,7 +95,7 @@ export function formatBytes(n) {
 }
 
 export const FACET_LABELS = { hull: '호선', ship_type: '선종', analysis_type: '해석 종류', zone: '구역',
-  year: '연도', uploaded_by: '올린 사람', kind: '파일 종류' };
+  year: '해석 연도', tag: '태그', uploaded_by: '올린 사람', kind: '파일 종류' };
 
 export const EXTRACT_LABELS = {
   queued: '본문 추출 대기 중', failed: '본문을 읽지 못했습니다',

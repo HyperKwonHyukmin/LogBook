@@ -23,3 +23,22 @@ export function parseLbm(buffer) {
   }
   return { header, blocks, width };
 }
+
+/**
+ * 형식 버전(04c §1) — API(ModelSummary.format_version)가 주면 그 값, 없으면 lbm 머리 version, 그것도 없으면 1.
+ */
+export function lbmVersion(lbm, summaryVersion = null) {
+  const v = Number(summaryVersion ?? lbm?.header?.version ?? 1);
+  return Number.isFinite(v) && v > 0 ? v : 1;
+}
+
+/** v2 의 1D 방향 벡터·오프셋 블록(행 수가 beams 와 맞을 때만). 없으면 null. */
+export function beamExtras(lbm) {
+  const nb = (lbm.blocks.beams?.length || 0) / 4;
+  const orient = lbm.blocks.beam_orient;
+  const offsets = lbm.blocks.beam_offsets;
+  return {
+    orient: orient && orient.length === nb * 3 ? orient : null,
+    offsets: offsets && offsets.length === nb * 6 ? offsets : null,
+  };
+}

@@ -80,7 +80,7 @@ export default function AuditLogPage() {
           <h2 className="sticky top-0 z-10 border-b border-n-200 bg-n-0 py-2 text-ui font-semibold text-n-700">{dayLabel(d)}</h2>
           <ul>
             {list.map((r) => (
-              <li key={r.id} className="grid h-9 grid-cols-[72px_120px_112px_minmax(0,1fr)] items-center gap-3 border-b border-n-200 px-1 text-ui transition-colors duration-120 last:border-0 hover:bg-n-25">
+              <li key={r.id} className="grid h-9 grid-cols-[72px_120px_112px_minmax(0,1fr)] items-center gap-3 border-b border-n-200 px-1 text-ui transition-colors duration-150 last:border-0 hover:bg-n-50">
                 <span className="font-mono text-meta text-n-500">{r.at.slice(11, 19)}</span>
                 <span className={`truncate ${r.employee_id && who(r.employee_id) === r.employee_id ? 'font-mono text-meta text-n-700' : 'text-n-800'}`}
                       title={r.employee_id || undefined}>{who(r.employee_id)}</span>

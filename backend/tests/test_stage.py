@@ -2,7 +2,6 @@ import pytest
 
 from app import models
 from app.ingest.inbox import ReadyItem, stage_item
-from app.storage.paths import to_long
 
 
 def test_stage_folder(db, storage, make_user):
@@ -77,7 +76,7 @@ def test_stage_accepts_already_prefixed_paths_from_watcher_scan(db, storage):
     d = storage.inbox / "3496_검토"
     d.mkdir()
     (d / "a.bdf").write_text("GRID", encoding="utf-8")
-    prefixed = type(d)(to_long(d))
+    prefixed = type(d)("\\\\?\\" + str(d))
     assert str(prefixed).startswith("\\\\?\\")
     batch = stage_item(db, storage, ReadyItem("folder", "3496_검토", [prefixed], "a476854"))
     assert (storage.staging / batch.key / "3496_검토" / "a.bdf").is_file()

@@ -10,10 +10,10 @@ export function Page({ children, className = '' }) {
 /** 페이지 머리말 — 제목 + 설명 + 오른쪽 동작, 아래 헤어라인. */
 export function PageHeader({ title, description, actions, children }) {
   return (
-    <header className="mb-5 flex flex-wrap items-end gap-x-4 gap-y-3 border-b border-n-200 pb-4">
+    <header className="mb-6 flex flex-wrap items-end gap-x-4 gap-y-3 border-b border-n-200 pb-5">
       <div className="min-w-0 flex-1">
-        <h1 className="text-title font-semibold tracking-[-0.012em] text-n-900">{title}</h1>
-        {description && <p className="mt-1 text-ui text-n-600">{description}</p>}
+        <h1 className="text-title font-semibold tracking-[-0.018em] text-n-900 [text-wrap:balance]">{title}</h1>
+        {description && <p className="mt-1.5 text-ui text-n-600">{description}</p>}
         {children}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
@@ -41,5 +41,5 @@ export function OkNote({ children, className = '' }) {
 
 /** 섹션 제목(13/600, 대문자·eyebrow 없음). */
 export function SectionTitle({ as: Tag = 'h2', children, className = '' }) {
-  return <Tag className={`text-ui font-semibold text-n-700 ${className}`}>{children}</Tag>;
+  return <Tag className={`text-ui font-semibold text-n-800 ${className}`}>{children}</Tag>;
 }

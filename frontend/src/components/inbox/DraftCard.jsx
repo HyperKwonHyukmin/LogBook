@@ -2,18 +2,21 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Copy, GripVertical, Lock, Scissors, Trash2 } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import ChipInput from '../ui/ChipInput.jsx';
+import VocabInput from '../ui/VocabInput.jsx';
 import { useConfirm } from '../ui/ConfirmDialog.jsx';
 import { Labeled, inputClass, selectClass } from '../ui/Field.jsx';
 import KindBadge from '../ui/KindBadge.jsx';
 import { api } from '../../api/client.js';
 import { errorText, formatBytes } from '../../lib/labels.js';
+import { MODEL_CONVERT_LABELS, draftChecks, modelConvertState } from '../../lib/inboxStatus.js';
+import Spinner from '../ui/Spinner.jsx';
 
 const DRAG_TYPE = 'application/x-logbook-file';
 const hullRule = (v) => /^\d{4}$/.test(v) || '호선은 숫자 4자리입니다.';
 
 
 /** 정리 대기 화면의 초안 Entry 카드 — 추정값을 고치고, 파일을 옮기고, 확정한다(설계 §5.5). */
-const TEXT_FIELDS = ['title', 'analysis_type', 'analysis_period', 'description'];
+const TEXT_FIELDS = ['title', 'analysis_period', 'description']; // 해석 종류·구역은 목록에서 고르는 즉시 저장(08)
 /** 서버 쪽 내용이 실제로 바뀌었을 때만 달라지는 열쇠 — 폴링으로 같은 내용의 새 객체가 와도 입력을 지우지 않는다. */
 const entryKey = (e) => `${e.entry_id}|${e.version}|${e.files.map((f) => f.id).join(',')}`;
 
@@ -103,10 +106,12 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
   /** 칩은 화면 값을 먼저 바꾸고 저장한다 — 서버 새로 부르기 전에 이어서 더해도 앞 값이 빠지지 않게. */
   const setHulls = (v) => { setForm((f) => ({ ...f, hulls: v.map((h) => ({ hull_no: h })) })); patch({ hulls: v }); };
   const setZones = (v) => { setForm((f) => ({ ...f, zones: v })); patch({ zones: v }); };
+  const setAtype = (v) => { setForm((f) => ({ ...f, analysis_type: v })); patch({ analysis_type: v }); };
 
   const disabled = !canEdit || busy; // 버튼용
   const fieldDisabled = !canEdit; // 입력 칸은 저장 중에도 막지 않는다(포커스가 빠지지 않게)
   const hulls = form.hulls.map((h) => h.hull_no);
+  const checks = canEdit ? draftChecks(form, entry) : [];
 
   /** 초안 버리기 — 초안은 휴지통에서 복원할 수 없어 확인 대화상자를 거친다. */
   async function discard() {
@@ -130,7 +135,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
                const { fileId, from } = JSON.parse(raw);
                if (from !== entry.entry_id) moveFile(fileId, entry.entry_id);
              }}
-             className={`rounded-lg border bg-n-0 transition-[border-color,box-shadow] duration-120 ${over ? 'border-brand ring-3 ring-brand-muted' : 'border-n-200'}`}>
+             className={`rounded-lg border bg-n-0 transition-[border-color,box-shadow] duration-150 ${over ? 'border-brand ring-3 ring-brand-muted' : 'border-n-200'}`}>
       {dialog}
       <header className="flex h-11 items-center gap-2.5 border-b border-n-200 px-4">
         <span className="inline-flex items-center gap-1.5 text-meta font-medium text-wait">
@@ -147,16 +152,25 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
           <CheckCircle2 size={14} aria-hidden="true" />확정
         </Button>
       </header>
+      {checks.length > 0 && (
+        <p aria-label="확인할 것" className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 border-b border-n-200 bg-n-50 px-4 py-1.5 text-meta text-n-600">
+          <span className="font-medium text-n-700">확인할 것</span>
+          {checks.map((c, i) => (
+            <span key={c.id} className={c.blocking ? 'font-medium text-err' : ''}>
+              {i > 0 && <span aria-hidden="true" className="mr-1.5 text-n-400">·</span>}{c.text}
+            </span>
+          ))}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-x-4 gap-y-3 px-4 py-4 md:grid-cols-2">
         <Labeled label="제목">
           <input className={inputClass()} value={form.title || ''} disabled={fieldDisabled}
                  onChange={(e) => setForm({ ...form, title: e.target.value })} onBlur={() => saveIfChanged('title')} />
         </Labeled>
-        <Labeled label="해석 종류">
-          <input className={inputClass()} value={form.analysis_type || ''} disabled={fieldDisabled} placeholder="예: 강도, 피로, 진동"
-                 onChange={(e) => setForm({ ...form, analysis_type: e.target.value })} onBlur={() => saveIfChanged('analysis_type')} />
-        </Labeled>
+        <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600">해석 종류
+          <VocabInput kind="atype" label="해석 종류" value={form.analysis_type || null} disabled={fieldDisabled} onChange={setAtype} />
+        </div>
         <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600">호선
           <ChipInput label="호선" kind="hull" mono values={hulls} validate={hullRule} disabled={fieldDisabled}
                      onChange={setHulls} />
@@ -165,7 +179,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
           )}
         </div>
         <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600">구역
-          <ChipInput label="구역" kind="zone" values={form.zones} disabled={fieldDisabled} onChange={setZones} />
+          <VocabInput multiple kind="zone" label="구역" values={form.zones} disabled={fieldDisabled} onChange={setZones} />
         </div>
         <Labeled label="해석 시기">
           <input className={inputClass('font-mono placeholder:font-sans')} value={form.analysis_period || ''} disabled={fieldDisabled} placeholder="YYYY-MM"
@@ -218,7 +232,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
           {entry.files.map((f) => (
             <li key={f.id} draggable={canEdit}
                 onDragStart={(e) => e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ fileId: f.id, from: entry.entry_id }))}
-                className="flex h-9 items-center gap-2.5 border-t border-n-200 px-4 text-ui transition-colors duration-120 hover:bg-n-25">
+                className="flex h-9 items-center gap-2.5 border-t border-n-200 px-4 text-ui transition-colors duration-150 hover:bg-n-50">
               {canEdit && <GripVertical size={14} className="cursor-grab text-n-400" aria-hidden="true" />}
               {canEdit && (
                 <input type="checkbox" aria-label={`${f.rel_path} 선택`} checked={selected.includes(f.id)} disabled={busy}
@@ -230,6 +244,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
               {f.duplicate_of_entry && (
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-xs bg-wait-bg px-1.5 text-micro font-medium text-wait"><Copy size={11} aria-hidden="true" />{f.duplicate_of_entry} 에 이미 있음</span>
               )}
+              <ConvertBadge f={f} />
               {f.drm_encrypted && (
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-xs bg-err-bg px-1.5 text-micro font-medium text-err"><AlertTriangle size={11} aria-hidden="true" />암호화됨</span>
               )}
@@ -247,5 +262,22 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged }) {
       </div>
       {error && <p role="alert" className="border-t border-err-line bg-err-bg px-4 py-2 text-ui text-err">{error}</p>}
     </article>
+  );
+}
+
+const CONVERT_TONE = {
+  queued: 'text-n-600', running: 'text-n-700', done: 'text-n-600', failed: 'text-err', skipped: 'text-n-500', include: 'text-n-500',
+};
+
+/** BDF 파일 줄의 3D 변환 상태(대기·변환 중·준비됨·실패). 모델 파일이 아니면 그리지 않는다. */
+function ConvertBadge({ f }) {
+  const st = modelConvertState(f);
+  if (!st) return null;
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1 text-micro font-medium ${CONVERT_TONE[st]}`}
+          title={st === 'failed' ? f.model?.error || undefined : undefined}>
+      {st === 'running' && <Spinner size={11} />}
+      {MODEL_CONVERT_LABELS[st]}
+    </span>
   );
 }

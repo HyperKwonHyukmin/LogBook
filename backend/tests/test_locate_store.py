@@ -11,7 +11,8 @@ from app.storage.paths import to_long
 def test_file_path_for_staging_and_vault(db, storage, make_entry_file):
     _draft, f1 = make_entry_file(status="draft", name="sub/a.pdf")
     p = file_path(db, storage, f1)
-    assert p.startswith("\\\\?\\") and p.endswith("\\sub\\a.pdf")
+    # 짧은 경로는 접두사 없이 준다(회사 DRM 이 \\?\ 경로의 .pdf 열기를 막는다)
+    assert not p.startswith("\\\\?\\") and p.endswith("\\sub\\a.pdf")
     assert "_staging" in p
 
     entry, f2 = make_entry_file(status="confirmed", name="r.pdf")

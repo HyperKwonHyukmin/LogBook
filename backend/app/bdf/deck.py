@@ -6,6 +6,10 @@
 
 메모리: 파일 바이트는 한 번에 읽지만, 디코드는 줄 단위로 한다(디코드된 거대 문자열 + 전체 줄 목록을
 동시에 들지 않는다). 본 파일과 INCLUDE 를 합친 바이트 상한(max_bytes)을 넘으면 DeckTooLarge.
+
+raw_sink(06 해석 검증): 주면 Bulk 구간의 줄 원문(주석 `$…` 만 뗀 것)을 읽는 순서대로 넘긴다. INCLUDE 줄은
+넘기지 않고 그 자리에서 포함 파일의 줄이 이어지므로, 받은 줄을 이으면 INCLUDE 가 풀린 Bulk 한 덩어리가 된다.
+BEGIN BULK·ENDDATA·빈 줄은 넘기지 않는다.
 """
 import hashlib
 import posixpath
@@ -17,6 +21,13 @@ _SOL = re.compile(r"^\s*SOL\s+([A-Za-z0-9]+)", re.IGNORECASE)
 _BEGIN = re.compile(r"^\s*BEGIN\s+BULK", re.IGNORECASE)
 _ENDDATA = re.compile(r"^\s*ENDDATA", re.IGNORECASE)
 _INCLUDE = re.compile(r"^\s*INCLUDE\b", re.IGNORECASE)
+# BEGIN BULK 이 빠진 덱에서 Bulk 시작으로 보는 카드 이름. LOAD·SPC 처럼 Case Control 에도 쓰이는 이름은
+# '=' 가 있는 줄을 따로 거른다. PARAM 은 Case Control 에 그대로 올 수 있어 넣지 않는다.
+_BULK_START = re.compile(
+    r"^(?:GRID|CBAR|CBEAM|CROD|CONROD|CTUBE|CQUAD4|CQUAD8|CQUADR|CTRIA3|CTRIA6|CTRIAR|CSHEAR|CELAS[1-4]|CBUSH|CGAP|"
+    r"RBE2|RBE3|RBAR|RROD|CONM1|CONM2|CMASS[1-4]|PBAR|PBARL|PBEAM|PBEAML|PROD|PTUBE|PSHELL|PCOMP|PSHEAR|PELAS|PBUSH|"
+    r"MAT1|MAT2|MAT8|MAT9|CORD1[RCS]|CORD2[RCS]|SPC1?|SPCADD|FORCE|MOMENT|GRAV|PLOAD[124]?|TEMPD?)\*?(?:[\s,]|$)",
+    re.IGNORECASE)
 _QUOTED = re.compile(r"'([^']*)'")
 _BARE = re.compile(r"INCLUDE\s+(\S+)", re.IGNORECASE)
 _ABSOLUTE = re.compile(r"^(?:[A-Za-z]:/|//|/)")
@@ -91,9 +102,11 @@ def _continuation(line: str) -> list[str]:
 class DeckReader:
     """opener(rel_posix) → bytes. 본 파일을 못 읽으면 opener 의 예외가 그대로 올라간다."""
 
-    def __init__(self, opener: Callable[[str], bytes], *, max_bytes: int | None = None):
+    def __init__(self, opener: Callable[[str], bytes], *, max_bytes: int | None = None,
+                 raw_sink: Callable[[str], None] | None = None):
         self.opener = opener
         self.max_bytes = max_bytes
+        self.raw_sink = raw_sink
         self.total_bytes = 0
         self._bulk = True       # 벌크 데이터 구간인가 — INCLUDE 사슬을 따라 이어진다
         self._ended = False     # ENDDATA 를 만났다(INCLUDE 안이어도 덱 전체가 끝난다)
@@ -141,11 +154,18 @@ class DeckReader:
                     self.sol = m.group(1).upper()
                 if _BEGIN.match(line):
                     self._bulk = True
+                    continue
+                if _BULK_START.match(line) and "=" not in line:
+                    # BEGIN BULK 없이 Case Control 뒤에 바로 Bulk 가 온 덱(Nastran 은 FATAL) — 여기서부터 카드로 읽는다
+                    self._bulk = True
+                    self.warnings.append("missing_begin_bulk")
                 elif _INCLUDE.match(line):
                     self._include_line(rel, line, lines, depth)
                     if self._ended:
                         break
-                continue
+                    continue
+                else:
+                    continue
             if not line.strip():
                 continue
             if _BEGIN.match(line):
@@ -159,6 +179,8 @@ class DeckReader:
                 if self._ended:
                     break
                 continue
+            if self.raw_sink is not None:
+                self.raw_sink(raw.split("$", 1)[0].rstrip())   # 탭·칸 배치는 원문 그대로
             stripped = line.lstrip()
             if len(stripped) < len(line) and stripped[:1] in ("+", "*", ",") and "," in stripped:
                 line = stripped               # 앞에 공백이 붙은 자유 형식 연속 줄(' +,7,8')

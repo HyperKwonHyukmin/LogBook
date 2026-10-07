@@ -4,6 +4,9 @@ import { vi } from 'vitest';
 import { MemoryRouter, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthContext } from '../auth/AuthContext.jsx';
 import { calls, mockApi } from '../test/mockApi.js';
+import { invalidateVocab } from '../lib/vocab.js';
+
+beforeEach(() => invalidateVocab());
 
 vi.mock('../lib/upload.js', async (orig) => ({ ...(await orig()), uploadBatch: vi.fn(() => Promise.resolve({ key: 'K' })) }));
 import EntryPage from './EntryPage.jsx';
@@ -28,6 +31,12 @@ function renderPage(map, { url = '/e/E000001', storage } = {}) {
     'POST /api/files/2/link?inline=true': { url: '/api/files/2/content?t=a&inline=1' },
     // BDF 는 3D 미리보기(04b) — 변환 상태 'include' 면 안내 한 줄만 보인다.
     'GET /api/files/1/model': { state: 'include' },
+    // 분류 목록(08) — 구역·해석 종류 입력
+    'GET /api/vocab?kind=zone': { kind: 'zone', other: '기타', terms: [
+      { id: 1, value: '선수부', active: true, count: 1, synonyms: [] },
+      { id: 2, value: '선미부', active: true, count: 0, synonyms: [] }] },
+    'GET /api/vocab?kind=atype': { kind: 'atype', other: '기타', terms: [
+      { id: 3, value: '계류 해석', active: true, count: 0, synonyms: [{ id: 4, value: 'Mooring' }] }] },
     ...map,
   });
   render(
@@ -111,7 +120,31 @@ test('휴지통으로 보내면 휴지통 화면으로 간다', async () => {
 test('파일 추가 영역을 연다', async () => {
   renderPage({ 'GET /api/entries/E000001': ENTRY });
   await userEvent.click(await screen.findByRole('button', { name: '파일 추가' }));
-  expect(screen.getByText(/정리 대기에서 확정하면 이 자료에 추가됩니다/)).toBeInTheDocument();
+  expect(screen.getByText(/정리 대기를 거치지 않고 이 자료에 바로 추가됩니다/)).toBeInTheDocument();
+});
+
+test('파일 추가 — 워커가 합치면 목록을 새로 부르고 알린다', async () => {
+  let entryCalls = 0;
+  const fetch = renderPage({
+    'GET /api/entries/E000001': () => { entryCalls += 1; return ENTRY; },
+    'GET /api/batches/K': { key: 'K', state: 'done', excluded: [] },
+  });
+  await userEvent.click(await screen.findByRole('button', { name: '파일 추가' }));
+  await userEvent.upload(screen.getByLabelText('파일 선택'), new File(['%PDF'], '보고서.pdf', { type: 'application/pdf' }));
+  expect(await screen.findByText('파일을 이 자료에 추가했습니다.', {}, { timeout: 4000 })).toBeInTheDocument();
+  expect(calls(fetch)).toContain('GET /api/batches/K');
+  await waitFor(() => expect(entryCalls).toBeGreaterThanOrEqual(2));
+});
+
+test('파일 추가 — 바로 붙이지 못하면 정리 대기로 안내한다', async () => {
+  renderPage({
+    'GET /api/entries/E000001': ENTRY,
+    'GET /api/batches/K': { key: 'K', state: 'processed', excluded: [] },
+  });
+  await userEvent.click(await screen.findByRole('button', { name: '파일 추가' }));
+  await userEvent.upload(screen.getByLabelText('파일 선택'), new File(['%PDF'], '보고서.pdf', { type: 'application/pdf' }));
+  expect(await screen.findByText(/바로 붙이지 못해 정리 대기에 두었습니다/, {}, { timeout: 4000 })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '정리 대기로' })).toHaveAttribute('href', '/inbox');
 });
 
 test('없는 자료', async () => {
@@ -156,7 +189,7 @@ test('칩 저장이 실패하면 서버 값으로 되돌린다', async () => {
   });
   await userEvent.click(await screen.findByRole('button', { name: '구역 고치기' }));
   const box = screen.getByRole('combobox', { name: '구역' });
-  await userEvent.type(box, '선미부,');
+  await userEvent.type(box, '선미부{Enter}');
   expect(await screen.findByRole('alert')).toHaveTextContent('저장하지 못했습니다');
   await waitFor(() => expect(screen.queryByRole('button', { name: '선미부 빼기' })).toBeNull());
   expect(screen.getByRole('button', { name: '선수부 빼기' })).toBeInTheDocument();
@@ -280,4 +313,17 @@ test('올린 사람은 이력에 이름이 있으면 사번 대신 이름으로 
   const uploader = within(rail).getByText('올린 사람').nextElementSibling;
   expect(uploader).toHaveTextContent('김해석');
   expect(uploader).not.toHaveTextContent('A100002');
+});
+
+test('해석 종류는 목록에서 고르고, 태그는 검색 링크다(08)', async () => {
+  const fetch = renderPage({
+    'GET /api/entries/E000001': { ...ENTRY, tags: ['계류'] },
+    'PATCH /api/entries/E000001': (init) => ({ ...ENTRY, tags: ['계류'], analysis_type: JSON.parse(init.body).analysis_type, version: 4 }),
+  });
+  expect(await screen.findByRole('link', { name: '계류' })).toHaveAttribute('href', '/?tag=%EA%B3%84%EB%A5%98');
+  await userEvent.click(screen.getByRole('button', { name: '해석 종류 고치기' }));
+  await userEvent.type(screen.getByRole('combobox', { name: '해석 종류' }), '계류{Enter}');
+  await waitFor(() => expect(calls(fetch)).toContain('PATCH /api/entries/E000001'));
+  const body = JSON.parse(fetch.mock.calls.find(([u, i = {}]) => u === '/api/entries/E000001' && i.method === 'PATCH')[1].body);
+  expect(body).toEqual({ version: 3, analysis_type: '계류 해석' });
 });

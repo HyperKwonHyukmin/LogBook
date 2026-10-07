@@ -35,12 +35,12 @@ export function ToastProvider({ children }) {
             <span className="min-w-0 truncate">{toast.message}</span>
             {toast.action && (
               <button type="button" onClick={() => { dismiss(); toast.action.onClick(); }}
-                      className="h-7 rounded-sm px-2 font-medium text-link-on-dark transition-colors duration-120 ease-out hover:bg-n-800 hover:text-n-0 active:bg-n-700">
+                      className="h-7 rounded-sm px-2 font-medium text-link-on-dark transition-colors duration-150 ease-out hover:bg-n-800 hover:text-n-0 active:bg-n-700">
                 {toast.action.label}
               </button>
             )}
             <button type="button" aria-label="알림 닫기" onClick={dismiss}
-                    className="flex h-7 w-7 items-center justify-center rounded-sm text-n-400 transition-colors duration-120 ease-out hover:bg-n-800 hover:text-n-0">
+                    className="flex h-7 w-7 items-center justify-center rounded-sm text-n-400 transition-colors duration-150 ease-out hover:bg-n-800 hover:text-n-0">
               <X size={14} aria-hidden="true" />
             </button>
           </div>

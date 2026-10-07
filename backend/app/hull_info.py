@@ -6,6 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import audit, jobs, models
+from .vocab import Vocab
 from .entries.service import HULL_PATTERN
 from .storage.paths import StoragePaths
 
@@ -61,16 +62,21 @@ def hull_detail(db: Session, hull_no: str) -> dict:
                            .filter(models.EntryTag.entry_id.in_(ids), models.Tag.kind == "zone")
                            .order_by(models.Tag.value)):
             zones_by_entry[eid].append(value)
+    # 08 — 구역·해석 종류는 분류 목록의 대표 값으로 센다(FEM 해석·FE 해석이 갈라지지 않게)
+    zone_v, type_v = Vocab(db, "zone"), Vocab(db, "atype")
+    for eid, values in zones_by_entry.items():
+        zones_by_entry[eid] = sorted({zone_v.canon(v) for v in values})
     zones, types, people = Counter(), Counter(), Counter()
     months: dict[str, list] = defaultdict(list)
     for e in entries:
         z = zones_by_entry[e.id]
         zones.update(z)
-        if e.analysis_type:
-            types[e.analysis_type] += 1
+        atype = type_v.canon(e.analysis_type)
+        if atype:
+            types[atype] += 1
         if e.uploaded_by:
             people[e.uploaded_by] += 1
-        months[_month(e)].append({"entry_id": e.entry_id, "title": e.title, "analysis_type": e.analysis_type,
+        months[_month(e)].append({"entry_id": e.entry_id, "title": e.title, "analysis_type": atype,
                                   "zones": z, "uploaded_by": e.uploaded_by,
                                   "confirmed_at": e.confirmed_at.isoformat() if e.confirmed_at else None,
                                   "kinds": sorted(kinds_by_entry[e.id])})

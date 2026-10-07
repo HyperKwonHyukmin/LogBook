@@ -159,7 +159,7 @@ export default function UploadZone({ onUploaded, disabled = false, targetEntryId
       <div onDragOver={(e) => { if (!disabled && isOsFileDrag(e)) { e.preventDefault(); if (!u.busy) setOver(true); } }}
            onDragLeave={() => setOver(false)}
            onDrop={(e) => { if (!isOsFileDrag(e) && !e.dataTransfer?.files?.length) return; e.preventDefault(); setOver(false); u.onDrop(e.dataTransfer); }}
-           className={`flex flex-wrap items-center gap-2 rounded-md border border-dashed px-3 py-2.5 transition-colors duration-120
+           className={`flex flex-wrap items-center gap-2 rounded-md border border-dashed px-3 py-2.5 transition-colors duration-150
              ${over ? 'border-brand-ring bg-brand-subtle' : 'border-n-250 bg-n-25'}`}>
         <UploadButtons u={u} />
         <span className="text-meta text-n-500">또는 여기에 폴더·파일을 끌어 놓으세요. 큰 해석 폴더는 탐색기로 <span className="font-mono">00_Inbox</span> 에 복사해도 됩니다.</span>

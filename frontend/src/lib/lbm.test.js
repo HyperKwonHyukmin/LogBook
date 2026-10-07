@@ -21,3 +21,21 @@ test('블록을 형식대로 읽는다', () => {
 test('형식이 아니면 오류', () => {
   expect(() => parseLbm(new Uint8Array([1, 2, 3, 4, 0, 0, 0, 0]).buffer)).toThrow('LBM');
 });
+
+test('v2 블록(방향 벡터·오프셋)과 형식 버전', async () => {
+  const { sampleModelV2, encodeModel } = await import('../test/modelFixtures.js');
+  const { lbmVersion, beamExtras } = await import('./lbm.js');
+  const m = parseLbm(encodeModel(sampleModelV2()));
+  expect(m.header.version).toBe(2);
+  expect(m.width.beam_orient).toBe(3);
+  expect(m.width.beam_offsets).toBe(6);
+  expect(Array.from(m.blocks.beam_orient.slice(6, 9))).toEqual([0, 1, 0]);
+  const ex = beamExtras(m);
+  expect(ex.orient).toBeInstanceOf(Float32Array);
+  expect(ex.offsets[14]).toBe(50);
+  expect(lbmVersion(m)).toBe(2);
+  expect(lbmVersion(m, 1)).toBe(1);      // API 값이 우선
+  expect(lbmVersion({ header: {} })).toBe(1);
+  // 행 수가 안 맞는 블록은 쓰지 않는다
+  expect(beamExtras({ blocks: { beams: new Int32Array(8), beam_orient: new Float32Array(3) } }).orient).toBeNull();
+});

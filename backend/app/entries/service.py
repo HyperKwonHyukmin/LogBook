@@ -8,7 +8,7 @@ from pathlib import Path, PurePosixPath
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from .. import audit, jobs, models
+from .. import audit, jobs, models, vocab
 from ..storage.paths import StoragePaths, long_join, to_long
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,9 @@ def file_to_dict(f: models.File, duplicate_entries: dict[int, str] | None = None
             "extract": {"state": x.state, "error": x.error, "summary": x.summary} if x else None,
             # BDF 변환 상태(04a) — 모델 파일이 아니거나 변환 기록이 없으면 None
             "model": ({"state": s.state, "error": s.error, "counts": s.counts, "bbox": s.bbox,
-                       "missing": s.missing or [], "warnings": (s.warnings or [])[:10]} if s else None)}
+                       "missing": s.missing or [], "warnings": (s.warnings or [])[:10],
+                       # lbm 형식 버전(04c) — 변환 결과가 없으면 None, 04c 이전 결과(NULL)는 1
+                       "format_version": (s.format_version or 1) if s.key else None} if s else None)}
 
 
 def _entry_ref(db: Session, entry_pk: int | None) -> dict | None:
@@ -184,6 +186,13 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
         raise HTTPException(status_code=422, detail="invalid_period")
     if entry.status == "confirmed" and "title" in patch and not (patch["title"] or "").strip():
         raise HTTPException(status_code=422, detail="title_required")  # M6
+    # 08 — 해석 종류·구역은 통제 어휘: 동의어·표기 변형은 용어로 바꾸고, 목록 밖 새 값은 관리자만
+    if "analysis_type" in patch:
+        patch = {**patch, "analysis_type": vocab.normalize_input(
+            db, "atype", patch["analysis_type"], current=entry.analysis_type, admin=bool(user.is_admin))}
+    if "zones" in patch:
+        patch = {**patch, "zones": vocab.normalize_inputs(
+            db, "zone", patch["zones"] or [], current=zones_of(db, entry), admin=bool(user.is_admin))}
     before = snapshot(db, entry) if entry.status == "confirmed" else None
     for field_name in EDITABLE_FIELDS:
         if field_name in patch:
@@ -238,6 +247,31 @@ def _check_confirmer(db: Session, user: models.User, entry: models.Entry) -> mod
     if user.is_admin and batch and batch.received_at <= datetime.now() - timedelta(days=ADMIN_TAKEOVER_DAYS):
         return batch
     raise HTTPException(status_code=403, detail="not_uploader")
+
+
+def auto_merge_batch(db: Session, storage: StoragePaths, batch: models.Batch) -> int:
+    """확정 자료의 [파일 추가]로 올린 배치(target_entry_id)는 정리 대기를 거치지 않고 곧장 그 자료에 합친다.
+    올린 사람이 확정하는 것과 같다(confirm 의 merge 경로 — 감사 ENTRY_FILES_ADDED, 이력, 모델 재변환).
+    대상이 그 사이 휴지통에 가는 등 합치지 못하면 초안을 정리 대기에 그대로 남긴다(사람이 판단). 합친 초안 수."""
+    if not batch.target_entry_id or batch.state != "processed":
+        return 0
+    user = db.query(models.User).filter_by(employee_id=batch.uploader).first() if batch.uploader else None
+    if user is None:
+        return 0
+    merged = 0
+    drafts = db.query(models.Entry).filter_by(batch_id=batch.id, status="draft").order_by(models.Entry.id).all()
+    for draft in drafts:
+        if draft.merge_into_id != batch.target_entry_id:
+            continue
+        try:
+            confirm(db, storage, draft, user)
+            merged += 1
+        except Exception as exc:  # noqa: BLE001 — 합치기 실패는 배치 처리 실패가 아니다(초안이 남는다)
+            db.rollback()
+            logger.warning("배치 %s 자동 추가 실패 — 정리 대기에 남김: %s", batch.key,
+                           getattr(exc, "detail", exc))
+            break
+    return merged
 
 
 def _finish_batch(db: Session, storage: StoragePaths, batch: models.Batch | None) -> None:

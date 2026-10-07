@@ -183,13 +183,13 @@ def test_folder_with_only_excluded_files_never_ready(storage):
 def test_folder_name_ending_in_dot_is_still_recognized(storage):
     from pathlib import Path
 
-    from app.storage.paths import to_long
+    from app.storage.paths import walk_root
 
     name = "3496_검토."
     # to_long() 은 접두 없는 경로에 os.path.abspath() 를 거치는데, 그 안에서 쓰는
     # GetFullPathNameW 가 끝 점을 지워 버린다. 부모만 접두하고 이름은 손으로 이어붙여
     # 정규화를 한 번도 안 태운다(item 5 가 말하는 "이미 접두된 경로" 상태를 직접 만듦).
-    long_path = to_long(storage.inbox) + "\\" + name
+    long_path = walk_root(storage.inbox) + "\\" + name
     try:
         os.mkdir(long_path)
     except OSError as exc:

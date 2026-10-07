@@ -125,7 +125,7 @@ def test_write_chunk_only_uploader_and_uploading_state(db, storage, make_user):
     assert e.value.status_code == 409 and e.value.detail == "not_uploading"
 
 
-def test_finish_moves_to_staging_and_queues_processing(db, storage, make_user):
+def test_finish_moves_to_staging_and_queues_processing(db, storage, make_user, skip_if_local_drm):
     user, b = _begin(db, storage, make_user)
     service.write_chunk(db, storage, user, b.key, "9999_시험/a.bdf", 0, b"GRID")
     service.write_chunk(db, storage, user, b.key, "9999_시험/r.pdf", 0, b"%PDF-1.4")

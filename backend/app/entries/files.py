@@ -14,7 +14,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from .. import models
-from ..storage.paths import StoragePaths, long_join, to_long
+from ..storage.paths import StoragePaths, long_join, to_long, walk_root
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ def move_all(moves: list[tuple[Path, Path]]) -> Callable[[], None]:
 
 
 def remove_empty_dirs(root: Path) -> None:
-    long_root = to_long(root)
+    long_root = walk_root(root)
     if not os.path.isdir(long_root):
         return
     for dirpath, _dirs, _files in os.walk(long_root, topdown=False):

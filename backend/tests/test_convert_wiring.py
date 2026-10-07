@@ -1,5 +1,7 @@
 import os
 
+import pytest
+
 from app import jobs, models
 from app.entries import service
 from app.entries.locate import file_path
@@ -13,7 +15,7 @@ def test_heavy_jobs_claimed_last(db):
     jobs.enqueue(db, "write_meta", 3)
     db.commit()
     assert jobs.claim_next(db).type == "write_meta"
-    assert set(jobs.HEAVY_JOB_TYPES) == {"extract_file", "convert_model"}
+    assert set(jobs.HEAVY_JOB_TYPES) == {"extract_file", "convert_model", "solve_check"}  # 06 해석 검증 추가
 
 
 def test_process_batch_enqueues_convert(db, storage):
@@ -125,3 +127,59 @@ def test_normal_confirm_requeues_models(db, storage, make_user, setup_entry_with
     db.commit()
     service.confirm(db, storage, e, u)
     assert db.query(models.Job).filter_by(type="convert_model", target_id=f.id).count() == 1
+
+
+def test_cli_enqueue_convert_outdated(db, make_entry_file):
+    """04c: --outdated 는 변환이 끝난(done) 모델 중 형식 버전이 NULL(v1)·현재보다 낮은 것만 넣는다."""
+    from app.bdf.lbm import VERSION
+    from app.cli import enqueue_convert_all
+
+    files = [make_entry_file(name=f"{n}.bdf", kind="model")[1] for n in "abcdef"]
+    a, b, c, d, e, _none = files
+    db.add_all([models.ModelSummary(file_id=a.id, state="done", key="k" * 64),                    # NULL = v1
+                models.ModelSummary(file_id=b.id, state="done", key="k" * 64, format_version=1),
+                models.ModelSummary(file_id=c.id, state="done", key="k" * 64, format_version=VERSION),
+                models.ModelSummary(file_id=d.id, state="failed", error="x"),                     # --outdated 대상 아님
+                models.ModelSummary(file_id=e.id, state="include")])
+    db.commit()
+    assert enqueue_convert_all(db, outdated=True) == 2
+    queued = {j.target_id for j in db.query(models.Job).filter_by(type="convert_model")}
+    assert queued == {a.id, b.id}
+    assert enqueue_convert_all(db, outdated=True) == 0      # 이미 대기 중이면 또 넣지 않는다
+
+
+def test_cli_main_enqueue_convert_outdated(db, make_entry_file, capsys):
+    from app.cli import main
+
+    _e, a = make_entry_file(name="a.bdf", kind="model")
+    db.add(models.ModelSummary(file_id=a.id, state="done", key="k" * 64))
+    db.commit()
+    assert main(["enqueue-convert", "--outdated"]) == 0
+    assert "1건" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        main(["enqueue-convert", "--outdated", "--force"])   # 둘은 함께 쓸 수 없다
+
+
+def test_force_reconvert_upgrades_v1_model(client, db, storage, make_user, auth_headers, make_entry_file):
+    """관리 화면 'BDF 다시 변환'(force) 으로도 옛 형식 모델이 v2 로 다시 변환된다."""
+    from app.convert.job import model_paths, run_convert
+    from app.entries.locate import file_path
+
+    make_user("A100001", is_admin=True)
+    h = auth_headers("A100001")
+    _e, f = make_entry_file(name="m.bdf", kind="model")
+    p = file_path(db, storage, f)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w") as fh:
+        fh.write("GRID,1,,0.,0.,0.\nGRID,2,,1000.,0.,0.\nCBAR,1,1,1,2,0.,0.,1.\nPBAR,1,1,100.\n")
+    run_convert(db, storage, f)
+    s = db.get(models.ModelSummary, f.id)
+    s.format_version = None
+    db.commit()
+    db.query(models.Job).delete()
+    db.commit()
+    assert client.post("/api/admin/ops/reconvert", json={"force": True}, headers=h).json() == {"queued": 1}
+    run_convert(db, storage, f)
+    db.refresh(s)
+    assert s.state == "done" and s.format_version == 2
+    assert os.path.exists(model_paths(storage, s.key)[0])

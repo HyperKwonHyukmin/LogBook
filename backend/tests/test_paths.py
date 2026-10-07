@@ -18,20 +18,30 @@ def _wait_for_inflight(sp, timeout=2.0):
         future.result(timeout=timeout)
 
 
-def test_to_long_unc():
-    assert to_long(r"\\server\share\a") == r"\\?\UNC\server\share\a"
+def test_to_long_short_paths_stay_plain():
+    # 회사 DRM 이 \\?\ 접두 경로로 공유 폴더의 .pdf·.zip 을 열지 못하게 해 짧은 경로는 접두사 없이 쓴다
+    assert to_long(r"\\server\share\a.pdf") == r"\\server\share\a.pdf"
+    assert to_long(r"C:\a\b") == r"C:\a\b"
 
 
-def test_to_long_local():
-    assert to_long(r"C:\a\b") == r"\\?\C:\a\b"
+def test_to_long_strips_prefix_from_short_paths():
+    assert to_long(r"\\?\UNC\server\share\a") == r"\\server\share\a"
+    assert to_long(r"\\?\C:\a\b") == r"C:\a\b"
 
 
-def test_to_long_idempotent():
-    assert to_long(r"\\?\UNC\server\share") == r"\\?\UNC\server\share"
+def test_to_long_long_paths_get_prefix():
+    long_unc = "\\\\server\\share\\" + "\\".join(["x" * 50] * 5) + "\\a.pdf"
+    assert to_long(long_unc) == "\\\\?\\UNC\\" + long_unc[2:]
+    assert to_long(to_long(long_unc)) == to_long(long_unc)
+
+
+def test_to_long_keeps_prefix_for_trailing_dot_or_space_segments():
+    assert to_long(r"\\?\C:\root\model.\a.bdf") == r"\\?\C:\root\model.\a.bdf"
+    assert to_long("\\\\?\\UNC\\srv\\sh\\a \\b") == "\\\\?\\UNC\\srv\\sh\\a \\b"
 
 
 def test_to_long_normalizes_relative_segments():
-    assert to_long("C:/a/../b") == r"\\?\C:\b"
+    assert to_long("C:/a/../b") == r"C:\b"
 
 
 def test_layout_names_match_design():
@@ -251,12 +261,18 @@ def test_long_join_joins_without_renormalizing(tmp_path):
     # to_long() 은 base 에만 걸린다 — rel 조각은 GetFullPathNameW 를 다시 타지 않으므로
     # 끝 공백·점이 있는 이름도 그대로 보존된다(I1).
     got = long_join(tmp_path, "model./a.bdf")
-    assert got == to_long(tmp_path) + "\\model.\\a.bdf"
+    # 끝 점 조각이 있으면 접두사를 붙여야 이름이 잘리지 않는다
+    assert got == "\\\\?\\" + str(tmp_path) + "\\model.\\a.bdf"
 
 
 def test_long_join_accepts_already_prefixed_base():
-    got = long_join(to_long(r"C:\root"), "a/b")
-    assert got == r"\\?\C:\root\a\b"
+    got = long_join(r"\\?\C:\root", "a/b")
+    assert got == r"C:\root\a\b"
+
+
+def test_long_join_long_result_gets_prefix():
+    got = long_join(r"\\server\share", "/".join(["x" * 60] * 4) + "/a.pdf")
+    assert got.startswith("\\\\?\\UNC\\server\\share\\")
 
 
 @pytest.mark.parametrize("bad", ["..", ".", "", "a/../b", "a/./b", "C:/x", "/abs"])

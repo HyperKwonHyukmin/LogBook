@@ -46,7 +46,7 @@ def test_write_failure_does_not_raise(db, storage, monkeypatch):
 
 
 def test_alias_and_hull_update_write_registry(client, db, storage, make_user, auth_headers):
-    make_user("A100001")
+    make_user("A100001", is_admin=True)  # 구역 동의어는 관리자만(08)
     h = auth_headers("A100001")
     a, b = models.Tag(kind="zone", value="A"), models.Tag(kind="zone", value="B")
     db.add_all([a, b])
@@ -58,7 +58,7 @@ def test_alias_and_hull_update_write_registry(client, db, storage, make_user, au
 
 
 def test_read_missing_returns_empty(storage):
-    assert read_registry(storage) == {"version": 1, "users": [], "hulls": [], "tags": []}
+    assert read_registry(storage) == {"version": 1, "users": [], "hulls": [], "tags": [], "vocab": []}
 
 
 def test_user_changes_write_registry(client, db, storage, make_user, auth_headers):

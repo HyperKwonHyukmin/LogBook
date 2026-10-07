@@ -38,10 +38,12 @@ def corpus(db, make_entry_file):
     return {"e1": e1, "e2": e2, "e3": e3, "e4": e4, "f1": f1, "f2": f2}
 
 
-def test_empty_query_lists_confirmed_recent_first(db, corpus):
+def test_empty_query_lists_confirmed_by_analysis_period(db, corpus):
+    # 08 — 검색어가 없으면 해석 시기 순(시기 없는 E2 는 뒤로). 최근 등록 순은 sort=recent
     res = _q(db)
-    assert _ids(res) == [corpus["e2"].entry_id, corpus["e1"].entry_id]
-    assert res["total"] == 2
+    assert _ids(res) == [corpus["e1"].entry_id, corpus["e2"].entry_id]
+    assert res["total"] == 2 and res["sort"] == "period"
+    assert _ids(_q(db, sort="recent")) == [corpus["e2"].entry_id, corpus["e1"].entry_id]
 
 
 def test_drafts_included_on_request_never_trash(db, corpus):
@@ -109,7 +111,8 @@ def test_filters_and_disjunctive_facets(db, corpus):
 
 def test_other_filters(db, corpus):
     assert _ids(_q(db, filters={"ship_type": "LNGC"})) == [corpus["e2"].entry_id]
-    assert _ids(_q(db, filters={"year": "2026"})) == [corpus["e2"].entry_id, corpus["e1"].entry_id]
+    # 08 — 해석 연도는 해석 시기만 본다(E2 는 시기가 없어 확정일 2026 이어도 걸리지 않는다)
+    assert _ids(_q(db, filters={"year": "2026"})) == [corpus["e1"].entry_id]
     assert _ids(_q(db, filters={"uploaded_by": "A100002"})) == [corpus["e2"].entry_id]
     assert _ids(_q(db, filters={"kind": "model"})) == [corpus["e1"].entry_id]
     assert _ids(_q(db, filters={"analysis_type": "Strength"})) == [corpus["e2"].entry_id]
@@ -135,7 +138,7 @@ def test_hull_suggestion(db, corpus):
 
 def test_paging(db, corpus):
     res = _q(db, limit=1, offset=1)
-    assert res["total"] == 2 and _ids(res) == [corpus["e1"].entry_id]
+    assert res["total"] == 2 and _ids(res) == [corpus["e2"].entry_id]  # 해석 시기 순의 두 번째
 
 
 def test_file_unit(db, corpus):
