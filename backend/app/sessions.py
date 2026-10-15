@@ -11,11 +11,17 @@ from sqlalchemy.orm import Session
 from . import models
 
 
-def create(db: Session, employee_id: str, *, hours: int) -> str:
+def create(db: Session, employee_id: str, *, hours: int, wb_ref: str | None = None,
+           expires_at: datetime | None = None) -> str:
+    """세션 하나를 만든다. 18 — WorkBench 자동 로그인은 wb_ref(WorkBench 세션 연결 고리)를 남기고,
+    만료를 WorkBench 세션 만료(expires_at)보다 늦지 않게 자른다(지금+hours 와 expires_at 중 이른 쪽)."""
     token = str(uuid.uuid4())
     now = datetime.now()
-    db.add(models.UserSession(token=token, employee_id=employee_id,
-                              created_at=now, expires_at=now + timedelta(hours=hours)))
+    expires = now + timedelta(hours=hours)
+    if expires_at is not None and expires_at < expires:
+        expires = expires_at
+    db.add(models.UserSession(token=token, employee_id=employee_id, created_at=now, expires_at=expires,
+                              wb_ref=wb_ref))
     db.commit()
     return token
 
@@ -37,6 +43,13 @@ def revoke(db: Session, token: str) -> None:
     if s is not None:
         db.delete(s)
         db.commit()
+
+
+def revoke_wb_ref(db: Session, wb_ref: str) -> int:
+    """18 — WorkBench 에서 로그아웃한 세션(wb_ref)으로 만든 LogBook 세션을 모두 지운다. 지운 수."""
+    deleted = db.query(models.UserSession).filter_by(wb_ref=wb_ref).delete(synchronize_session=False)
+    db.commit()
+    return deleted
 
 
 def revoke_all(db: Session, employee_id: str) -> int:

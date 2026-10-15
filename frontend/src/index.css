@@ -61,6 +61,9 @@
   --color-brand-subtle: #EDF3FB;   /* 선택 행 (brand 글자 13.5:1) */
   --color-brand-muted: #D9E4F4;
   --color-brand-ring: #7F97B8;
+  /* 15 — Hi-TESS 시그니처 민트(WorkBench 잠금 로고의 'WorkBench' 글자색). 네이비 위 워드마크 'LogBook' 전용 — navy-900 10.0:1.
+     흰 바탕 대비가 모자라(1.5:1) 흰 면·장식에는 쓰지 않는다 */
+  --color-brand-mint: #6BE8C1;
 
   /* 의미 색 */
   --color-ok: #007A30;    --color-ok-bg: #EAF5EE;   --color-ok-on-dark: #5FD38D;
@@ -70,6 +73,7 @@
   --color-err: #B42318;   --color-err-bg: #FDEEEC;  --color-err-line: #F4C7C1;
   --color-err-press: #FBDCD8; --color-err-strong: #9A1D14;
   --color-hit: #FFEDB3;
+  --color-fav: #B26B00;   /* 즐겨찾기 별(10) — 흰 바탕 4.2:1, brand-subtle 3.8:1 (아이콘 전용) */
   --color-spark: #00E600;
   /* 3D 뷰어 — Model Builder Studio 와 같은 바탕(#1A1A2E 깊은 남보라, 04c 후속). 엔진 BACKGROUND 와 같은 값 */
   --color-viewer: #1A1A2E;
@@ -84,6 +88,12 @@
   --color-on-viewer-subtle: #9497B0;  /* 보조 글자·숫자 5.4:1 (viewer-active 위에서는 쓰지 않는다) */
   --color-wait-on-dark: #F3C27A;      /* 뷰포트 위 주의 글자 9.4:1 */
   --color-link-on-dark: #9DB7DD;
+  /* 16 판 변경 3D 보기 — 뷰어 위 범례 색 칸 전용(엔진 lib/pidPalette.js DIFF_COLORS 와 같은 값).
+     viewer-raised(#22223A) 대비: add 7.4:1 · chg 7.6:1 · del 4.9:1 · same 2.5:1(색 칸·장식만, 글자 금지) */
+  --color-diff-add: #35C9A0;
+  --color-diff-chg: #F5A524;
+  --color-diff-del: #F0607A;
+  --color-diff-same: #5B6178;
   --color-scrim: rgb(19 23 30 / 0.30);
 
   /* 파일 종류 */
@@ -172,6 +182,31 @@ html { scrollbar-color: var(--color-n-300) transparent; }
 /* 지연 등장 — 300ms 안에 끝나는 로딩에는 스켈레톤을 보이지 않는다 */
 .appear-late { animation: lb-fade 150ms var(--ease-out) 300ms both; }
 
+/* 누를 수 있는 것은 손가락 커서(Tailwind 4 는 button 기본 커서가 default 다).
+   base 층에 두어 cursor-text·cursor-not-allowed 같은 유틸리티가 그대로 이긴다. */
+@layer base {
+  :where(button:not(:disabled), a[href], summary, [role="button"]:not([aria-disabled="true"]),
+         [role="tab"]:not([aria-disabled="true"]), [role="menuitem"]:not([aria-disabled="true"]),
+         [role="option"]:not([aria-disabled="true"]), [role="treeitem"], label[for],
+         input[type="checkbox"]:not(:disabled), input[type="radio"]:not(:disabled), select:not(:disabled)) {
+    cursor: pointer;
+  }
+  :where(button:disabled, [aria-disabled="true"]) { cursor: not-allowed; }
+}
+
+/* 아이콘 마우스오버 — 누를 수 있는 것 안의 아이콘이 살짝 커져 '눌린다'는 신호를 준다.
+   transform 대신 scale 속성을 써서 회전(접힘 화살표 -rotate-90·스피너)과 겹치지 않게 한다. */
+:is(button, a[href], [role="button"], [role="menuitem"], [role="tab"]) svg:not(.animate-spin) {
+  transition: scale 150ms ease-out, color 150ms ease-out;
+}
+:is(button:not(:disabled), a[href], [role="button"]:not([aria-disabled="true"]), [role="menuitem"], [role="tab"]):hover
+  svg:not(.animate-spin) {
+  scale: 1.15;
+}
+:is(button:not(:disabled), a[href], [role="button"]:not([aria-disabled="true"])):active svg:not(.animate-spin) {
+  scale: 0.95;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -180,4 +215,9 @@ html { scrollbar-color: var(--color-n-300) transparent; }
   }
   .animate-skeleton { opacity: 0.7; }
   .progress-indeterminate { animation: none !important; transform: none !important; width: 100% !important; opacity: 0.35; }
+  :is(button, a[href], [role="button"], [role="menuitem"], [role="tab"]) svg { scale: none !important; }
 }
+
+/* 미리보기 폭 끌기(09) — 끄는 동안 iframe(PDF)·3D 캔버스가 포인터를 삼키지 않게, 글자 선택·커서도 고정 */
+body[data-resizing] { cursor: col-resize; user-select: none; }
+body[data-resizing] iframe, body[data-resizing] canvas, body[data-resizing] embed, body[data-resizing] object { pointer-events: none; }

@@ -1,6 +1,7 @@
 """하루 한 번 운영 작업(설계 §12) — 워커가 매 주기 부르지만 실제로는 날짜가 바뀐 뒤 첫 번에만 돈다.
 
-순서: 레지스트리 쓰기 → 백업(+보관 개수 정리) → 휴지통 비우기 → 상태 기록.
+순서: 레지스트리 쓰기 → entry.json 재동기화(리뷰 8) → 백업(+보관 개수 정리) → 휴지통 비우기 → 상태 기록.
+- registry.json 쓰기가 실패한 날은 RETRY_MINUTES 마다 레지스트리만 다시 쓴다(백업은 다시 돌리지 않는다).
 - 백업이 실패해도 나머지는 하고 last_backup 에 사유를 남긴다(관리자 운영 화면에 보인다).
   그날은 완료로 치지 않고 RETRY_MINUTES 뒤 다시 시도한다(매 주기 반복하지 않게).
 - 워커가 둘 떠 있어도 한쪽만 돌도록 last_daily 행을 잠그고 확인한 뒤 '시도 중' 표시를 커밋한다(리뷰 I8).
@@ -15,6 +16,7 @@ from .. import models
 from ..config import settings
 from ..storage.paths import StoragePaths
 from .backup import BackupError, prune_backups, run_backup
+from .metasync import resync_entry_meta
 from .purge import purge_expired
 from .registry import write_registry
 from .state import heartbeat, set_state
@@ -67,8 +69,18 @@ def run_daily(db: Session, storage: StoragePaths, now: datetime | None = None, *
     now = (now or datetime.now()).replace(microsecond=0)
     last = _claim(db, now)
     if last is None:
-        return {"ran": False}
+        retried = _retry_registry(db, storage, now)
+        return {"ran": False} if retried is None else {"ran": False, "registry_retry": retried}
     registry_ok = write_registry(db, storage)
+    heartbeat(db)
+    try:
+        meta = resync_entry_meta(db, storage, beat=lambda: heartbeat(db))
+    except Exception as exc:  # noqa: BLE001 — 재동기화 실패로 백업을 건너뛰지 않는다
+        db.rollback()
+        log.warning("entry.json 재동기화 실패: %s", exc)
+        meta = {"error": str(exc)[:200]}
+    if meta.get("rewritten") or meta.get("failed"):
+        log.info("entry.json 재동기화: %s", meta)
     heartbeat(db)
     try:
         b = run_backup(storage, runner=backup_runner, now=now)
@@ -82,10 +94,38 @@ def run_daily(db: Session, storage: StoragePaths, now: datetime | None = None, *
     heartbeat(db)
     set_state(db, "last_backup", backup)
     row = _lock_row(db)
-    value = {**(row.value or {}), "attempt_at": now.isoformat(), "purged": purged}
+    value = {**(row.value or {}), "attempt_at": now.isoformat(), "purged": purged,
+             "registry": registry_ok, "registry_retry_at": None, "meta": meta}
     if backup["ok"]:
         # 백업이 된 날만 완료로 친다 — 실패하면 RETRY_MINUTES 뒤 다시 시도한다
         value.update({"date": now.date().isoformat(), "at": now.isoformat()})
     row.value = value
     db.commit()
-    return {"ran": True, "backup": backup, "purged": purged, "registry": registry_ok}
+    return {"ran": True, "backup": backup, "purged": purged, "registry": registry_ok, "meta": meta}
+
+
+def _retry_registry(db: Session, storage: StoragePaths, now: datetime) -> bool | None:
+    """오늘 일일 작업에서 registry.json 쓰기가 실패했으면 RETRY_MINUTES 마다 그것만 다시 쓴다.
+    다른 변경이 생기면 그때도 다시 쓰지만, 조용한 날에는 다음 날까지 낡은 채로 남기 때문이다.
+    시도하지 않았으면 None, 했으면 성공 여부."""
+    row = _lock_row(db)
+    last = dict(row.value or {})
+    if last.get("date") != now.date().isoformat() or last.get("registry") is not False:
+        db.rollback()
+        return None
+    at = last.get("registry_retry_at") or last.get("attempt_at")
+    try:
+        at = datetime.fromisoformat(at) if at else None
+    except ValueError:
+        at = None
+    if at is not None and now - at < timedelta(minutes=RETRY_MINUTES):
+        db.rollback()
+        return None
+    row.value = {**last, "registry_retry_at": now.isoformat()}
+    db.commit()   # 잠금을 오래 쥐지 않게 먼저 '시도함'을 남긴다
+    ok = write_registry(db, storage)
+    if ok:
+        row = _lock_row(db)
+        row.value = {**(row.value or {}), "registry": True}
+        db.commit()
+    return ok

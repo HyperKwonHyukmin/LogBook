@@ -33,13 +33,15 @@ export function useAddFilesWatch({ onMerged }) {
         setWatch({ state: 'failed', key, message: errorText(err, '추가 상태를 확인하지 못했습니다.') });
         return;
       }
-      const excluded = (b.excluded || []).length;
+      // 17 — 워커가 완전 동일 BDF 로 뺀 파일(큰 파일·경합). 제외 수와 따로 알린다
+      const duplicates = (b.excluded || []).filter((x) => x.reason === 'duplicate_model');
+      const excluded = (b.excluded || []).filter((x) => !String(x.reason || '').startsWith('duplicate_')).length;
       if (b.state === 'done') {
-        setWatch({ state: 'done', key, excluded });
+        setWatch({ state: 'done', key, excluded, duplicates });
         mergedRef.current?.();
         return;
       }
-      if (b.state === 'processed') { setWatch({ state: 'inbox', key, excluded }); return; }
+      if (b.state === 'processed') { setWatch({ state: 'inbox', key, excluded, duplicates }); return; }
       if (b.state === 'failed') { setWatch({ state: 'failed', key, message: b.error || '처리하지 못했습니다.' }); return; }
       if (polls >= MAX_POLLS) { setWatch({ state: 'slow', key }); return; }
       setWatch({ state: 'working', key, workerDown: b.queue?.worker_alive === false });

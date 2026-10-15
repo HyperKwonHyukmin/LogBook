@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { batchName, collectFromInput, hasDrmHeader, uploadBatch } from './upload.js';
+import { batchName, blockedPaths, collectFromInput, hasDrmHeader, uploadBatch } from './upload.js';
 
 function file(name, content, relPath = '') {
   const f = new File([content], name);
@@ -42,7 +42,7 @@ test('조각으로 올리고 DRM 파일은 거부 목록으로 마친다', async
     { file: file('a.bdf', 'GRID'), relPath: '9999_시험/a.bdf' },
     { file: file('enc.pdf', 'HHIDRMC..'), relPath: '9999_시험/enc.pdf' },
   ], { onProgress: progress, chunkSize: 2 });
-  expect(res).toEqual({ key: 'K1', uploaded: 1, rejected: ['9999_시험/enc.pdf'] });
+  expect(res).toEqual({ key: 'K1', uploaded: 1, rejected: ['9999_시험/enc.pdf'], skipped: [], blocked: [], deferred: 0 });
   expect(calls.filter((c) => c.includes('/chunk'))).toHaveLength(2); // 4바이트 / 2바이트 조각
   const finish = fetch.mock.calls.find(([u]) => u.endsWith('/finish'));
   expect(JSON.parse(finish[1].body)).toEqual({
@@ -139,14 +139,54 @@ test('서버 크기가 파일보다 크면 처음(offset 0)부터 한 번 다시
   expect(chunkUrls[1]).toContain('offset=0');
 });
 
-test('finish 응답을 못 받았어도 서버가 이미 받았으면(DELETE 409 not_uploading) 성공으로 본다', async () => {
+test('finish 응답을 못 받았어도 다시 보낸 마무리가 409 not_uploading(이미 받음)이면 성공으로 본다', async () => {
+  let finishes = 0;
   routeFetch((url, init) => {
     if (url === '/api/uploads') return { ...ok({ key: 'K8' }), status: 201 };
     if (url.includes('/chunk')) return ok({ size: 4 });
-    if (url.endsWith('/finish')) throw new TypeError('network');
-    if (init.method === 'DELETE') return fail(409, 'not_uploading');
-    throw new Error(url);
+    if (url.endsWith('/finish')) { finishes += 1; if (finishes === 1) throw new TypeError('network'); return fail(409, 'not_uploading'); }
+    throw new Error(`${init.method} ${url}`);
   });
   const res = await uploadBatch([{ file: file('a.bdf', 'ABCD'), relPath: 'a.bdf' }], { sleep: noSleep() });
-  expect(res).toEqual({ key: 'K8', uploaded: 1, rejected: [] });
+  expect(res).toEqual({ key: 'K8', uploaded: 1, rejected: [], skipped: [], blocked: [], deferred: 0 });
+  expect(fetch.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
+});
+
+// ---- 17 완전 동일 BDF ----
+
+const DUP = {
+  name: '9999_시험/copy.bdf', reason: 'duplicate_model', scope: 'existing', includes: ['9999_시험/mesh.inc'],
+  matches: [{ entry_id: 'E000101', entry_title: '9001 기존 검토', entry_status: 'confirmed', rel_path: 'm.bdf' }],
+  total: 1, hidden: false,
+};
+
+test('17 서버가 막은 BDF 는 blocked 로 돌려주고 올린 수에서 뺀다(함께 빠진 INCLUDE 포함)', async () => {
+  routeFetch((url) => {
+    if (url === '/api/uploads') return { ...ok({ key: 'K17' }), status: 201 };
+    if (url.includes('/chunk')) return ok({ size: 1 });
+    if (url.endsWith('/finish')) return ok({ key: 'K17', state: 'staged', blocked: [DUP], deferred: 1 });
+    throw new Error(url);
+  });
+  const res = await uploadBatch([
+    { file: file('copy.bdf', 'G'), relPath: '9999_시험/copy.bdf' },
+    { file: file('mesh.inc', 'G'), relPath: '9999_시험/mesh.inc' },
+    { file: file('r.f06', 'R'), relPath: '9999_시험/r.f06' },
+  ]);
+  expect(res).toEqual({ key: 'K17', uploaded: 1, rejected: [], skipped: [], blocked: [DUP], deferred: 1 });
+  expect(blockedPaths([DUP])).toEqual(['9999_시험/copy.bdf', '9999_시험/mesh.inc']);
+});
+
+test('17 모두 막히면 key 는 null(배치 없음), force 는 마무리 본문에 실린다', async () => {
+  routeFetch((url) => {
+    if (url === '/api/uploads') return { ...ok({ key: 'K18' }), status: 201 };
+    if (url.includes('/chunk')) return ok({ size: 1 });
+    if (url.endsWith('/finish')) return ok({ key: null, state: 'blocked', blocked: [DUP], deferred: 0 });
+    throw new Error(url);
+  });
+  const res = await uploadBatch([{ file: file('copy.bdf', 'G'), relPath: '9999_시험/copy.bdf' }], { force: true });
+  expect(res.key).toBeNull();
+  expect(res.uploaded).toBe(0);
+  const finish = fetch.mock.calls.find(([u]) => u.endsWith('/finish'));
+  expect(JSON.parse(finish[1].body).force).toBe(true);
+  expect(fetch.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
 });

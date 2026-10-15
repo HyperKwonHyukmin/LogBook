@@ -11,7 +11,8 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from .. import audit, models
-from ..entries.service import _clear_dangling_references
+from ..entries.service import _clear_dangling_references, _write_meta_or_queue
+from ..report_catalog import purge_files as purge_report_files
 from ..storage.paths import StoragePaths, long_join
 
 log = logging.getLogger(__name__)
@@ -45,12 +46,23 @@ def purge_entry(db: Session, storage: StoragePaths, entry: models.Entry, actor: 
         raise HTTPException(status_code=503, detail="storage_error")
     file_ids = [i for (i,) in db.query(models.File.id).filter_by(entry_id=entry.id)]
     before = {"title": entry.title, "files": len(file_ids), "trash_rel": entry.trash_rel}
+    # 21 — 보고서 정보·연결도 함께 지운다. 이 자료의 모델을 '보고서에 사용한 모델'로 잇던 다른 자료는 entry.json 을 다시 쓴다
+    relinked = purge_report_files(db, file_ids)
     if file_ids:
         # 다른 파일이 이 파일들을 중복 원본으로 가리키면 FK 위반이 난다 — 참조만 비운다
         db.query(models.File).filter(models.File.duplicate_of_id.in_(file_ids)).update(
             {"duplicate_of_id": None}, synchronize_session=False)
-        for model in (models.FileText, models.FileExtract, models.ModelSummary, models.SolveCheck):
+        for model in (models.FileText, models.FileExtract, models.ModelSummary, models.SolveCheck,
+                      models.ModelRevision):
             db.query(model).filter(model.file_id.in_(file_ids)).delete(synchronize_session=False)
+        # 14 — 판 비교 행(상세 파일은 내용 key 라 다른 쌍이 쓸 수 있어 남긴다)과 그 작업
+        diff_ids = [i for (i,) in db.query(models.RevisionDiff.id).filter(
+            models.RevisionDiff.file_a.in_(file_ids) | models.RevisionDiff.file_b.in_(file_ids))]
+        if diff_ids:
+            db.query(models.Job).filter(models.Job.type == "revision_diff",
+                                        models.Job.target_id.in_(diff_ids)).delete(synchronize_session=False)
+            db.query(models.RevisionDiff).filter(models.RevisionDiff.id.in_(diff_ids)).delete(
+                synchronize_session=False)
         db.query(models.DownloadToken).filter(models.DownloadToken.file_id.in_(file_ids)).delete(
             synchronize_session=False)
         # 이 파일들의 작업은 대상이 없어지므로 상태와 상관없이 지운다(실패 목록에 '#id' 로 남지 않게)
@@ -61,12 +73,17 @@ def purge_entry(db: Session, storage: StoragePaths, entry: models.Entry, actor: 
                                 models.Job.target_id == entry.id).delete(synchronize_session=False)
     db.query(models.EntryHull).filter_by(entry_id=entry.id).delete(synchronize_session=False)
     db.query(models.EntryTag).filter_by(entry_id=entry.id).delete(synchronize_session=False)
+    db.query(models.ModelRevision).filter_by(entry_id=entry.id).delete(synchronize_session=False)
     _clear_dangling_references(db, entry.id)
     entry_id = entry.entry_id
     db.delete(entry)
     db.flush()
     audit.record(db, storage, actor=actor, action="TRASH_PURGE", target_type="entry", target_id=entry_id,
                  before=before, ip=ip)
+    for pk in relinked:
+        other = db.get(models.Entry, pk)
+        if other is not None and other.status == "confirmed":
+            _write_meta_or_queue(db, storage, other)
 
 
 def purge_expired(db: Session, storage: StoragePaths, days: int, now: datetime | None = None) -> int:

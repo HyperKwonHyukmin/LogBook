@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import audit, models
+from . import access, audit, models
 from .storage.paths import StoragePaths
 
 TAG_KINDS = ("zone", "free")
@@ -54,14 +54,20 @@ def tag_to_dict(db: Session, tag: models.Tag, count: int | None = None) -> dict:
     return d
 
 
-def list_tags(db: Session, kind: str) -> list[dict]:
-    counts = dict(
-        db.query(models.EntryTag.tag_id, func.count(models.EntryTag.entry_id))
-        .join(models.Entry, models.Entry.id == models.EntryTag.entry_id)
-        .filter(models.Entry.status.in_(("draft", "confirmed")))
-        .group_by(models.EntryTag.tag_id).all())
+def list_tags(db: Session, kind: str, user=None) -> list[dict]:
+    """태그와 사용 건수. 건수는 user 가 볼 수 있는 Entry 만 센다(13). 자유 태그 중 볼 수 없는 Entry 에만
+    쓰인 것은 이름도 빼고(태그 이름이 비공개 내용일 수 있다), 동의어 묶음의 대표·동의어는 남긴다."""
+    user = user if user is not None else access.SYSTEM
+    base = (db.query(models.EntryTag.tag_id, func.count(models.EntryTag.entry_id))
+            .join(models.Entry, models.Entry.id == models.EntryTag.entry_id)
+            .filter(models.Entry.status.in_(("draft", "confirmed"))))
+    counts = dict(base.filter(access.visible_entries_filter(user)).group_by(models.EntryTag.tag_id).all())
+    used_any = set(counts) if access.is_admin(user) else {
+        i for (i,) in db.query(models.EntryTag.tag_id).distinct()}
     tags = db.query(models.Tag).filter_by(kind=kind).order_by(models.Tag.value).all()
-    return [tag_to_dict(db, t, counts.get(t.id, 0)) for t in tags]
+    linked = {t.alias_of_id for t in tags if t.alias_of_id} | {t.id for t in tags if t.alias_of_id}
+    return [tag_to_dict(db, t, counts.get(t.id, 0)) for t in tags
+            if kind != "free" or t.id in counts or t.id not in used_any or t.id in linked]
 
 
 def _write_registry(db: Session, storage: StoragePaths) -> None:

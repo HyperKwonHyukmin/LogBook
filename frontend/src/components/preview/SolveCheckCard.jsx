@@ -121,6 +121,8 @@ export default function SolveCheckCard({ fileId, fileName, initial = null, ready
   const [requesting, setRequesting] = useState(false);
   const [reqError, setReqError] = useState('');
   const detailsId = useId();
+  // 15 — LV2 이상, LV1 은 자기가 올린 자료만 요청한다. 파일 카드는 누가 올렸는지 모르므로 단추는 열어 두고
+  // 서버가 거부하면(403 level2_required) 그 이유를 아래 줄에 보인다(errorText)
 
   // tick 0 = 아직 묻지 않는다(미검증이면 요약만으로 충분). 1 이상이면 자세한 행을 받는다.
   useEffect(() => {

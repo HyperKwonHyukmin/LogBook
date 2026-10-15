@@ -6,11 +6,15 @@ import { errorText, formatBytes, formatDateTime } from '../../lib/labels.js';
 import FilePreview, { FileActions } from '../preview/FilePreview.jsx';
 import { buttonClass } from '../ui/Button.jsx';
 import KindBadge from '../ui/KindBadge.jsx';
+import { FavoriteToggle } from '../favorites/Favorites.jsx';
 import { Bar } from '../ui/Skeleton.jsx';
-import { HullChip, StatusDot, TagLink } from '../ui/Status.jsx';
+import { FilterLink, HullChip, StatusDot, TagLink } from '../ui/Status.jsx';
+import { AccessBadge } from '../access/AccessPanel.jsx';
+import RevisionBrief from '../revisions/RevisionBrief.jsx';
+import { briefFromSeries } from '../../lib/revisions.js';
 
 /** 오른쪽 미리보기 패널(설계 §6.4 "떠나지 않고 본다"). 파일을 고르면 그 파일을 미리 본다. */
-export default function EntryPreviewPanel({ entryId, fileId, onClose }) {
+export default function EntryPreviewPanel({ entryId, fileId, onClose, width, panelRef, resizer }) {
   const [entry, setEntry] = useState(null);
   const [error, setError] = useState('');
   const [picked, setPicked] = useState(fileId || null);
@@ -28,13 +32,15 @@ export default function EntryPreviewPanel({ entryId, fileId, onClose }) {
   const detailHref = `/e/${entryId}${file || fileId ? `?file=${file?.id ?? fileId}` : ''}`;
 
   return (
-    <aside aria-label="미리보기"
-           className="flex w-[clamp(360px,34vw,480px)] shrink-0 animate-panel flex-col border-l border-n-200 bg-n-0">
+    <aside ref={panelRef} aria-label="미리보기" style={width ? { width } : undefined}
+           className={`relative flex shrink-0 animate-panel flex-col border-l border-n-200 bg-n-0 ${width ? '' : 'w-[clamp(360px,34vw,480px)]'}`}>
+      {resizer}
       <div className="border-b border-n-200 px-4 pb-3 pt-3">
         <div className="flex items-start gap-2">
           <h2 className="line-clamp-2 min-w-0 flex-1 pt-0.5 text-body font-semibold tracking-[-0.005em] text-n-900">
             {entry?.title || (!error && <Bar className="mt-1 h-3.5 w-3/4" />)}
           </h2>
+          {entry && <FavoriteToggle entryId={entry.entry_id} initial={entry.favorite} disabled={entry.status === 'trashed'} />}
           <Link to={detailHref} aria-label="상세 열기" title="상세 열기 (Enter)" className={buttonClass('ghost', 'icon-sm')}>
             <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
@@ -45,20 +51,21 @@ export default function EntryPreviewPanel({ entryId, fileId, onClose }) {
         {entry && (
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-n-600">
             {entry.hulls.map((h) => <HullChip key={h.hull_no} hull={h.hull_no} title={h.ship_type || undefined} />)}
-            {entry.zones?.length > 0 && <span>{entry.zones.join(', ')}</span>}
-            {entry.analysis_type && <span>{entry.analysis_type}</span>}
+            {entry.zones?.map((z) => <FilterLink key={z} field="zone" value={z} />)}
+            {entry.analysis_type && <FilterLink field="analysis_type" value={entry.analysis_type} />}
             <StatusDot status={entry.status} />
+            <AccessBadge item={entry} />
             <span className="font-mono text-n-500">{entry.entry_id}</span>
           </div>
         )}
         {entry && (
           <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-meta text-n-500">
-            {entry.analysis_period ? <span className="tnum">해석 <span className="font-mono text-n-700">{entry.analysis_period}</span></span>
-              : <span>해석 시기 미입력</span>}
             {entry.confirmed_at && <span className="tnum">확정 <span className="font-mono">{formatDateTime(entry.confirmed_at).slice(0, 10)}</span></span>}
             {entry.tags?.map((t) => <TagLink key={t} tag={t} small />)}
           </div>
         )}
+        {/* 14 — 판 묶음 한 줄(자세한 흐름·비교는 상세에서) */}
+        {entry && <RevisionBrief brief={briefFromSeries(entry.revisions)} />}
       </div>
       {error && <p role="alert" className="m-4 rounded-md border border-err-line bg-err-bg px-3 py-2 text-ui text-err">{error}</p>}
       {!entry && !error && (

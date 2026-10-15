@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { errorText } from './labels.js';
+import { invalidateWbEligibility } from './wbTargets.js';
 
 const sameId = (a, b) => String(a || '').toUpperCase() === String(b || '').toUpperCase();
 
@@ -23,6 +24,8 @@ export function useEntry(entryId) {
   /** 지금 보고 있는 Entry 의 응답만 화면에 반영한다. */
   const apply = useCallback((e) => {
     if (!e || !sameId(e.entry_id, idRef.current)) return e;
+    // 18-b — 저장으로 구역·태그가 바뀌었을 수 있다: WorkBench 보내기 판정을 다시 묻게 한다(태그를 붙이면 바로 보낼 수 있게)
+    if (versionRef.current && e.version !== versionRef.current) invalidateWbEligibility(e.entry_id);
     versionRef.current = e.version; setEntry(e); setStatus('ready');
     return e;
   }, []);
@@ -75,5 +78,20 @@ export function useEntry(entryId) {
     return run;
   }, [entryId, apply, load]);
 
-  return { entry, status, error, setError, save, reload: load };
+  /**
+   * 고치기 화면의 [변경 완료](11) — 바뀐 칸 전부를 한 번의 PATCH 로, 고치기 시작할 때의 version 으로 보낸다.
+   * 충돌(409)이어도 스스로 다시 불러오지 않는다(고친 내용을 지키고 화면이 사용자에게 묻는다). 실패는 throw.
+   */
+  const commit = useCallback((patch, version) => {
+    const gen = genRef.current;
+    const run = queueRef.current.then(async () => {
+      const e = await api(`/entries/${encodeURIComponent(entryId)}`, { method: 'PATCH', body: { ...patch, version } });
+      if (gen === genRef.current) apply(e);
+      return e;
+    });
+    queueRef.current = run.catch(() => false);
+    return run;
+  }, [entryId, apply]);
+
+  return { entry, status, error, setError, save, commit, reload: load };
 }

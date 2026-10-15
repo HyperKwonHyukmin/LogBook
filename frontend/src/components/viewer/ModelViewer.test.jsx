@@ -182,3 +182,23 @@ test('모델을 못 받으면 미리 만든 엔진을 해제한다', async () =>
   expect(await screen.findByRole('alert')).toHaveTextContent('재변환');
   expect(engine.dispose).toHaveBeenCalled();
 });
+
+// 11 — 재배포 뒤 3D 엔진 묶음(viewerEngine)을 못 받은 것을 'WebGL 없음'으로 오해하지 않는다
+test('엔진 묶음을 못 받았고 새로 고침도 이미 해 봤으면 [새로 고침] 안내(WebGL 문구 아님)', async () => {
+  sessionStorage.setItem('logbook_chunk_reload_at', String(Date.now())); // 방금 새로 고침해 봤다
+  mockApi({ 'GET /api/files/7/model.lbm': { __binary: lbmBuffer() } });
+  const factory = () => Promise.reject(new TypeError('Failed to fetch dynamically imported module: /assets/viewerEngine-old.js'));
+  render(<ViewerEngineContext.Provider value={factory}><ModelViewer fileId={7} /></ViewerEngineContext.Provider>);
+  expect(await screen.findByRole('alert')).toHaveTextContent('새 버전이 배포되어 3D 화면을 불러오지 못했습니다');
+  expect(screen.getByRole('button', { name: '새로 고침' })).toBeInTheDocument();
+  expect(screen.queryByText(/이 브라우저에서 3D 를 표시할 수 없습니다/)).toBeNull();
+  sessionStorage.clear();
+});
+
+test('WebGL 을 만들지 못하면 예전처럼 브라우저 안내', async () => {
+  mockApi({ 'GET /api/files/7/model.lbm': { __binary: lbmBuffer() } });
+  const factory = () => Promise.reject(new Error('Error creating WebGL context.'));
+  render(<ViewerEngineContext.Provider value={factory}><ModelViewer fileId={7} /></ViewerEngineContext.Provider>);
+  expect(await screen.findByRole('alert')).toHaveTextContent('이 브라우저에서 3D 를 표시할 수 없습니다.');
+  expect(screen.queryByRole('button', { name: '새로 고침' })).toBeNull();
+});

@@ -1,11 +1,17 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Activity, Anchor, History, Inbox, ListTree, Search, Tag, Trash2, Users } from 'lucide-react';
+import { Activity, Anchor, ClipboardCheck, Columns2, FileText, History, Inbox, ListTree, Search, Send, Star, Tags, Trash2, Users } from 'lucide-react';
+
+// 10 — 검색과 즐겨찾기는 같은 화면('/')이고 주소의 fav=1 로 갈린다
+const isFav = (search) => new URLSearchParams(search).get('fav') === '1';
 
 const GROUPS = [
   { items: [
-    { to: '/', label: '검색', icon: Search, end: true },
+    { to: '/', label: '검색', icon: Search, match: (path, search) => path === '/' && !isFav(search) },
+    { to: '/?fav=1', label: '즐겨찾기', icon: Star, match: (path, search) => path === '/' && isFav(search) },
+    { to: '/reports', label: '문서', icon: FileText },
     { to: '/hulls', label: '호선', icon: Anchor, also: ['/h/'] }, // 호선 화면(/h/9999)도 '호선' 메뉴 아래
-    { to: '/tags', label: '태그', icon: Tag },
+    { to: '/browse', label: '분류', icon: Tags, also: ['/tags'] }, // 09 — 속성별 값 둘러보기(태그 동의어 화면 포함)
+    { to: '/compares', label: '최근 비교', icon: Columns2, also: ['/compare'] }, // 11 — 비교 화면(/compare)도 이 메뉴 아래
   ] },
   { label: '작업', items: [
     { to: '/inbox', label: '정리 대기', icon: Inbox },
@@ -22,7 +28,7 @@ const linkClass = ({ isActive }) =>
     ? 'bg-navy-700 text-on-navy'
     : 'text-on-navy-muted hover:bg-navy-800 hover:text-on-navy active:bg-navy-700'}`;
 
-function Item({ to, label, icon: Icon, end, also, pathname }) {
+function Item({ to, label, icon: Icon, end, also, match, pathname, search }) {
   const body = (active) => (
     <>
       <Icon size={16} strokeWidth={1.75} aria-hidden="true"
@@ -30,6 +36,13 @@ function Item({ to, label, icon: Icon, end, also, pathname }) {
       {label}
     </>
   );
+  // 주소 질의까지 봐야 하는 메뉴(검색·즐겨찾기)는 NavLink 대신 직접 판정한다(NavLink 는 질의를 보지 않는다).
+  if (match) {
+    const active = match(pathname, search);
+    return (
+      <Link to={to} aria-current={active ? 'page' : undefined} className={`group ${linkClass({ isActive: active })}`}>{body(active)}</Link>
+    );
+  }
   // NavLink 는 자기 경로가 아닐 때 aria-current 를 지우므로, also 로만 활성인 경우는 Link 에 직접 단다.
   if (also?.some((p) => pathname.startsWith(p))) {
     return <Link to={to} aria-current="page" className={`group ${linkClass({ isActive: true })}`}>{body(true)}</Link>;
@@ -45,13 +58,13 @@ function GroupLabel({ children }) {
 
 export default function SideNav({ isAdmin, storage }) {
   const reachable = storage?.reachable !== false;
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   return (
     <nav aria-label="주 메뉴" className="on-navy flex w-[208px] shrink-0 flex-col overflow-y-auto bg-navy-900 px-2 pb-3 pt-1">
       {GROUPS.map((g, gi) => (
         <div key={gi} className="flex flex-col gap-0.5">
           {g.label && <GroupLabel>{g.label}</GroupLabel>}
-          {g.items.map((it) => <Item key={it.to} {...it} pathname={pathname} />)}
+          {g.items.map((it) => <Item key={it.to} {...it} pathname={pathname} search={search} />)}
         </div>
       ))}
       <div className="min-h-4 flex-1" />
@@ -61,6 +74,9 @@ export default function SideNav({ isAdmin, storage }) {
           <Item to="/admin/users" label="사용자 관리" icon={Users} pathname={pathname} />
           <Item to="/admin/ops" label="운영" icon={Activity} pathname={pathname} />
           <Item to="/admin/vocab" label="분류 목록" icon={ListTree} pathname={pathname} />
+          <Item to="/admin/wb-targets" label="WorkBench 연결 규칙" icon={Send} pathname={pathname} />
+          {/* 20 — 기존 자료를 필수 분류·제목 형식에 맞추기 */}
+          <Item to="/admin/cleanup" label="자료 정비" icon={ClipboardCheck} pathname={pathname} />
         </div>
       )}
       <div role="status" title={reachable ? '공유 폴더에 연결되어 있습니다' : '공유 폴더에 연결할 수 없습니다'}

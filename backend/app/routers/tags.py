@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from .. import models, tags
+from .. import access, models, tags
 from ..database import get_db
 from ..dependencies import client_ip, get_storage, require_auth
 from ..storage.paths import StoragePaths
@@ -23,15 +23,17 @@ def _tag(db: Session, tag_id: int) -> models.Tag:
 
 
 def _guard_vocab(user: models.User, tag: models.Tag) -> None:
-    """구역·해석 종류는 통제 어휘(08) — 동의어 묶기·풀기는 관리자만(분류 목록 화면). 자유 태그는 누구나."""
-    if tag.kind != "free" and not user.is_admin:
+    """구역·해석 종류는 통제 어휘(08) — 동의어 묶기·풀기는 LV3 만(분류 목록 화면). 자유 태그 동의어는 공용 데이터라
+    LV2 이상(15)."""
+    access.require_shared_writer(user)
+    if tag.kind != "free" and not access.is_admin(user):
         raise HTTPException(status_code=403, detail="admin_required")
 
 
 @router.get("")
 def list_tags(kind: str = Query(default="zone", pattern="^(zone|free)$"),
               db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
-    return tags.list_tags(db, kind)
+    return tags.list_tags(db, kind, user)
 
 
 @router.post("/{tag_id}/alias")

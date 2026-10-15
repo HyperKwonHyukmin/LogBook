@@ -74,3 +74,10 @@ export const SELECTION_COLORS = { core: '#00E5FF', outline: '#001318' };
 
 /** 축 표시(gizmo) — Studio ThreeViewport 의 축 글자 색. */
 export const AXIS_COLORS = { x: '#FF4444', y: '#44CC44', z: '#4488FF' };
+
+/**
+ * 판 변경 3D 보기(16) 색 — Okabe–Ito 계열(파랑 쪽 초록·주황·붉은 분홍)을 뷰어 바탕(#1A1A2E)에 맞춰 밝혔다.
+ * 색만으로 말하지 않는다: 삭제는 반투명 + 점선, 절점은 원·고리·네모로도 갈린다(범례 글자 함께).
+ * ⚠ index.css 의 --color-diff-* (범례 색 칸)와 같은 값.
+ */
+export const DIFF_COLORS = { added: '#35C9A0', changed: '#F5A524', removed: '#F0607A', unchanged: '#5B6178' };

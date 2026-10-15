@@ -6,5 +6,5 @@ import App from './App.jsx';
 test('비로그인 사용자는 로그인 화면으로 이동한다', async () => {
   vi.stubGlobal('fetch', vi.fn());
   render(<MemoryRouter initialEntries={['/hulls']}><App /></MemoryRouter>);
-  expect(await screen.findByRole('tab', { name: '로그인' })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: '로그인' })).toBeInTheDocument();   // 15 — 가입 탭 없이 로그인 단추만
 });

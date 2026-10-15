@@ -4,6 +4,8 @@ import { vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { calls, mockApi } from '../test/mockApi.js';
 import SearchPage from './SearchPage.jsx';
+import { FavoritesProvider } from '../components/favorites/Favorites.jsx';
+import { ToastProvider } from '../components/ui/Toast.jsx';
 
 const ITEM = { entry_id: 'E000001', title: '계류 구조 검토', status: 'confirmed', analysis_type: 'Mooring',
   analysis_period: '2026-08', hulls: ['9999'], ship_types: [], zones: ['선수부'], tags: [], uploaded_by: 'A100001',
@@ -48,14 +50,15 @@ test('필터를 누르면 주소에 들어가고, 호선 제안으로 좁힐 수
   mockApi({
     'GET /api/search?q=9999&limit=50&offset=0': { ...RES, hull_suggestion: { hull_no: '9999', known: true } },
     'GET /api/search?q=9999&hull=9999&limit=50&offset=0': { ...RES, hull_suggestion: null },
-    'GET /api/search?q=9999&hull=9998&limit=50&offset=0': { ...RES, hull_suggestion: null },
+    'GET /api/search?q=9999&hull=9999&hull=9998&limit=50&offset=0': { ...RES, hull_suggestion: null },
   });
   renderAt('/?q=9999');
   await userEvent.click(await screen.findByRole('button', { name: /호선 9999 로 좁히기/ }));
   expect(screen.getByTestId('loc').textContent).toBe('/?q=9999&hull=9999');
   await screen.findByText('결과 2건');
+  // 19 — 같은 칸의 다른 값은 더해진다(OR)
   await userEvent.click(within(screen.getByRole('group', { name: '호선' })).getByRole('button', { name: /9998/ }));
-  expect(screen.getByTestId('loc').textContent).toBe('/?q=9999&hull=9998');
+  expect(screen.getByTestId('loc').textContent).toBe('/?q=9999&hull=9999&hull=9998');
 });
 
 test('결과를 고르면 미리보기 패널이 열리고, Enter 로 상세로 간다', async () => {
@@ -267,19 +270,23 @@ test('파일 보기의 모델 행에는 변환된 것만 썸네일을 보인다'
 });
 
 const ROW = { ...ITEM, entry_id: 'E000005', title: '선미 구조 국부 강도', hulls: ['9002'], ship_types: ['벌크선'],
-  zones: ['선미부'], analysis_type: 'FE 해석', analysis_period: '2026-01', tags: ['응력'], snippets: [],
+  zones: ['선미부'], analysis_type: 'FE 해석', posted_at: '2026-10-06T09:30:00', tags: ['응력'], snippets: [],
   kind_counts: { model: 2, report: 1, drawing: 0, result: 0, other: 0 }, thumb: null };
 
-test('결과 한 행 — 통제 값 줄·종류별 파일 수·태그 링크·해석 시기(08)', async () => {
-  mockApi({ 'GET /api/search?limit=50&offset=0': { ...RES, terms: [], hull_suggestion: null, items: [ROW, { ...ROW, entry_id: 'E000006', analysis_period: null, tags: [] }] } });
+test('결과 한 행 — 통제 값 줄·종류별 파일 수·태그 링크·올린 날짜(15)', async () => {
+  mockApi({ 'GET /api/search?limit=50&offset=0': { ...RES, terms: [], hull_suggestion: null, items: [ROW, { ...ROW, entry_id: 'E000006', analysis_period: '2025-01', posted_at: null, tags: [] }] } });
   renderAt('/');
   const row = (await screen.findAllByText('선미 구조 국부 강도'))[0].closest('[role="option"]');
   expect(within(row).getByRole('link', { name: '9002' })).toBeInTheDocument();
-  expect(within(row).getByText('선미부 · FE 해석 · 벌크선')).toBeInTheDocument();
-  expect(within(row).getByLabelText('파일 BDF 2, 보고서 1, 도면 0, 결과 0')).toBeInTheDocument();
+  expect(within(row).getByRole('link', { name: '선미부' })).toHaveAttribute('href', '/?zone=%EC%84%A0%EB%AF%B8%EB%B6%80');
+  expect(within(row).getByRole('link', { name: 'FE 해석' })).toHaveAttribute('href', '/?analysis_type=FE+%ED%95%B4%EC%84%9D');
+  expect(within(row).getByRole('link', { name: '벌크선' })).toHaveAttribute('href', '/?ship_type=%EB%B2%8C%ED%81%AC%EC%84%A0');
+  expect(within(row).getByLabelText('파일 BDF 2, 문서 1, 도면 0, 결과 0')).toBeInTheDocument();
   expect(within(row).getByRole('link', { name: '#응력' })).toHaveAttribute('href', '/?tag=%EC%9D%91%EB%A0%A5');
-  expect(row).toHaveTextContent('해석 2026-01');
-  expect(screen.getByText('해석 시기 미입력')).toBeInTheDocument();
+  expect(row).toHaveTextContent('올림 2026-10-06');
+  // 15 — 해석 시기는 보이지 않는다(응답에 남아 있어도)
+  expect(screen.queryByText(/해석 시기/)).toBeNull();
+  expect(screen.queryByText(/2025-01/)).toBeNull();
 });
 
 test('호선 하나로 거른 검색이면 그 호선 칩은 행에서 뺀다', async () => {
@@ -289,25 +296,225 @@ test('호선 하나로 거른 검색이면 그 호선 칩은 행에서 뺀다', 
   expect(within(row).queryByRole('link', { name: '9002' })).toBeNull();
 });
 
-test('정렬 — 기본은 검색어가 없으면 해석 시기, 바꾸면 주소에 담는다', async () => {
+test('정렬 — 기본은 검색어가 없으면 최신순(올린 날짜), 해석 시기 정렬은 없다(15)', async () => {
   mockApi({
     'GET /api/search?limit=50&offset=0': { ...RES, hull_suggestion: null },
-    'GET /api/search?sort=recent&limit=50&offset=0': { ...RES, hull_suggestion: null },
+    'GET /api/search?sort=relevance&limit=50&offset=0': { ...RES, hull_suggestion: null },
   });
   renderAt('/');
   const sort = await screen.findByRole('combobox', { name: '정렬' });
-  expect(sort).toHaveValue('period');
+  expect(sort).toHaveValue('recent');
+  expect([...sort.options].map((o) => o.textContent)).toEqual(['관련도', '최신순', '호선순', '제목순']);   // 19 — 호선순·제목순
+  await userEvent.selectOptions(sort, 'relevance');
+  expect(screen.getByTestId('loc').textContent).toBe('/?sort=relevance');
   await userEvent.selectOptions(sort, 'recent');
-  expect(screen.getByTestId('loc').textContent).toBe('/?sort=recent');
-  await userEvent.selectOptions(sort, 'period');
   expect(screen.getByTestId('loc').textContent).toBe('/');
 });
 
-test('해석 연도 필터의 시기 미상과 태그 필터 이름', async () => {
-  mockApi({ 'GET /api/search?year=unknown&tag=%EC%9D%91%EB%A0%A5&limit=50&offset=0': { ...RES, hull_suggestion: null,
-    facets: { ...FACETS, year: [{ value: '2026', count: 1 }, { value: 'unknown', count: 1 }], tag: [{ value: '응력', count: 1 }] } } });
+test('옛 주소의 해석 연도(year=)는 버리고 태그 필터 이름은 보인다(15)', async () => {
+  mockApi({ 'GET /api/search?tag=%EC%9D%91%EB%A0%A5&limit=50&offset=0': { ...RES, hull_suggestion: null,
+    facets: { ...FACETS, tag: [{ value: '응력', count: 1 }] } } });
   renderAt('/?year=unknown&tag=응력');
-  expect(await screen.findByRole('button', { name: '해석 연도 시기 미상 필터 해제' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '태그 응력 필터 해제' })).toBeInTheDocument();
-  expect(within(screen.getByRole('group', { name: '해석 연도' })).getByText('시기 미상')).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: '태그 응력 필터 해제' })).toBeInTheDocument();
+  expect(screen.queryByRole('group', { name: '해석 연도' })).toBeNull();
+  expect(screen.queryByText('시기 미상')).toBeNull();
+});
+
+test('미리보기 폭은 손잡이로 ←/→ 조절하고 기억하며, 두 번 누르면 기본 폭으로 돌아간다(09)', async () => {
+  mockApi({ 'GET /api/search?q=a&limit=50&offset=0': RES, 'GET /api/entries/E000001': ENTRY,
+            'GET /api/files/11/text': { state: null, summary: null, chunks: [] } });
+  renderAt('/?q=a');
+  await userEvent.click((await screen.findByText('계류 구조 검토')).closest('[role="option"]'));
+  const panel = await screen.findByRole('complementary', { name: '미리보기' });
+  const handle = within(panel).getByRole('separator', { name: '미리보기 폭 조절' });
+  expect(handle).toHaveAttribute('aria-orientation', 'vertical');
+  expect(Number(handle.getAttribute('aria-valuemin'))).toBe(360);
+  const start = Number(handle.getAttribute('aria-valuenow'));
+  handle.focus();
+  await userEvent.keyboard('{ArrowLeft}');
+  expect(Number(handle.getAttribute('aria-valuenow'))).toBe(start + 16);
+  expect(panel.style.width).toBe(`${start + 16}px`);
+  expect(localStorage.getItem('logbook.searchPreviewWidth.v1')).toBe(String(start + 16));
+  await userEvent.keyboard('{Home}');
+  expect(handle).toHaveAttribute('aria-valuenow', '360');
+  await userEvent.dblClick(handle);
+  expect(Number(handle.getAttribute('aria-valuenow'))).toBe(start);
+  expect(localStorage.getItem('logbook.searchPreviewWidth.v1')).toBeNull();
+});
+
+test('미리보기 패널의 구역·해석 종류는 그 값으로 찾는 링크다(09)', async () => {
+  mockApi({ 'GET /api/search?q=a&limit=50&offset=0': RES,
+            'GET /api/entries/E000001': { ...ENTRY, zones: ['선미부'], analysis_type: 'FE 해석' },
+            'GET /api/files/11/text': { state: null, summary: null, chunks: [] } });
+  renderAt('/?q=a');
+  await userEvent.click((await screen.findByText('계류 구조 검토')).closest('[role="option"]'));
+  const panel = await screen.findByRole('complementary', { name: '미리보기' });
+  await userEvent.click(await within(panel).findByRole('link', { name: '선미부' }));
+  expect(screen.getByTestId('loc').textContent).toBe('/?zone=%EC%84%A0%EB%AF%B8%EB%B6%80');
+});
+
+test('결과 행의 대표 모델·보고서 줄과 요약 띠(09) — 막대를 누르면 필터가 걸린다', async () => {
+  const model = { file_id: 7, elements: 1020, nodes: 900, size: [24000, 18200, 9600], sol: '101', groups: null,
+    families: { beam: 700, shell: 300, rigid: 20, mass: 0, other: 0 }, solve: { state: 'pass', status: 'pass', error_types: [], stale: false } };
+  const summary = { total: 2, analysis_type: [{ value: 'FE 해석', count: 2 }], analysis_type_values: 1, hull: [{ value: '9002', count: 2 }],
+    hull_values: 1,
+    solve: { pass: 1, fail: 0, error: 0, stale: 0, pending: 0, none: 0, no_model: 1 },
+    model_size: { min: 1020, max: 1020, models: 1, buckets: [{ min: 0, max: 1000, count: 0 }, { min: 1000, max: 10000, count: 1 },
+      { min: 10000, max: 50000, count: 0 }, { min: 50000, max: null, count: 0 }] } };
+  mockApi({
+    'GET /api/search?limit=50&offset=0': { ...RES, terms: [], hull_suggestion: null, summary,
+      items: [{ ...ROW, model, report: { file_id: 3, name: 'a.pdf', title: '선미 검토', unit: 'page', count: 24, author: null } },
+        { ...ROW, entry_id: 'E000006', snippets: [{ file_id: 11, name: 'r.pdf', locator: 'page:2', text: '응력 결과', highlights: [] }],
+          report: { file_id: 4, name: 'b.pdf', title: '숨는 보고서', unit: 'page', count: 3, author: null } }] },
+    'GET /api/search?analysis_type=FE+%ED%95%B4%EC%84%9D&limit=50&offset=0': { ...RES, hull_suggestion: null },
+  });
+  renderAt('/');
+  const rows = within(await screen.findByRole('listbox', { name: '검색 결과' })).getAllByRole('option');
+  expect(within(rows[0]).getByText(/요소 구성 보 700/)).toBeInTheDocument();
+  expect(within(rows[0]).getByText('「선미 검토」')).toBeInTheDocument();
+  // 발췌가 있으면 보고서 줄 대신 발췌
+  expect(within(rows[1]).queryByText('「숨는 보고서」')).toBeNull();
+  expect(within(rows[1]).getByText('응력 결과')).toBeInTheDocument();
+  const strip = screen.getByRole('region', { name: '결과 요약' });
+  await userEvent.click(within(strip).getByRole('button', { name: /FE 해석/ }));
+  expect(screen.getByTestId('loc').textContent).toBe('/?analysis_type=FE+%ED%95%B4%EC%84%9D');
+});
+
+// ---- 10 — 즐겨찾기 ----
+
+function renderWithFavorites(url) {
+  return render(
+    <ToastProvider>
+      <FavoritesProvider>
+        <MemoryRouter initialEntries={[url]}>
+          <Routes>
+            <Route path="/" element={<><SearchPage /><Probe /></>} />
+            <Route path="*" element={<Probe />} />
+          </Routes>
+        </MemoryRouter>
+      </FavoritesProvider>
+    </ToastProvider>,
+  );
+}
+
+test('결과 행의 별을 누르면 즐겨찾기에 넣고, 행 선택·미리보기는 열리지 않는다(10)', async () => {
+  const fetch = mockApi({ 'GET /api/search?q=a&limit=50&offset=0': { ...RES, items: [{ ...ITEM, favorite: false }, { ...DRAFT, favorite: true }] },
+                          'PUT /api/favorites/E000001': { entry_id: 'E000001', favorite: true } });
+  renderWithFavorites('/?q=a');
+  const row = (await screen.findByText('계류 구조 검토')).closest('[role="option"]');
+  const star = within(row).getByRole('button', { name: '즐겨찾기 추가' });
+  expect(star).toHaveAttribute('aria-pressed', 'false');
+  // 이미 즐겨찾기한 행은 '해제' 단추가 켜져 있다
+  expect(within(screen.getByText('초안 자료').closest('[role="option"]')).getByRole('button', { name: '즐겨찾기 해제' }))
+    .toHaveAttribute('aria-pressed', 'true');
+  await userEvent.click(star);
+  expect(within(row).getByRole('button', { name: '즐겨찾기 해제' })).toHaveAttribute('aria-pressed', 'true');
+  expect(row).toHaveAttribute('aria-selected', 'false');
+  expect(screen.queryByRole('complementary', { name: '미리보기' })).not.toBeInTheDocument();
+  await waitFor(() => expect(calls(fetch)).toContain('PUT /api/favorites/E000001'));
+  expect(calls(fetch).some((c) => c.startsWith('GET /api/entries/'))).toBe(false);
+});
+
+test('즐겨찾기 저장이 실패하면 별을 되돌리고 알린다(10)', async () => {
+  mockApi({ 'GET /api/search?q=a&limit=50&offset=0': { ...RES, items: [{ ...ITEM, favorite: false }] },
+            'PUT /api/favorites/E000001': { __status: 409, detail: 'entry_trashed' } });
+  renderWithFavorites('/?q=a');
+  const row = (await screen.findByText('계류 구조 검토')).closest('[role="option"]');
+  await userEvent.click(within(row).getByRole('button', { name: '즐겨찾기 추가' }));
+  expect(await screen.findByText('휴지통에 있는 자료입니다.')).toBeInTheDocument();
+  expect(within(row).getByRole('button', { name: '즐겨찾기 추가' })).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('행과 미리보기의 별은 같은 값을 보인다(10)', async () => {
+  mockApi({ 'GET /api/search?q=a&limit=50&offset=0': { ...RES, items: [{ ...ITEM, favorite: false }] },
+            'GET /api/entries/E000001': { ...ENTRY, favorite: false },
+            'GET /api/files/11/text': { state: null, summary: null, chunks: [] },
+            'DELETE /api/favorites/E000001': { entry_id: 'E000001', favorite: false },
+            'PUT /api/favorites/E000001': { entry_id: 'E000001', favorite: true } });
+  renderWithFavorites('/?q=a');
+  const row = (await screen.findByText('계류 구조 검토')).closest('[role="option"]');
+  await userEvent.click(row);
+  const panel = await screen.findByRole('complementary', { name: '미리보기' });
+  await userEvent.click(await within(panel).findByRole('button', { name: '즐겨찾기 추가' }));
+  expect(within(row).getByRole('button', { name: '즐겨찾기 해제' })).toHaveAttribute('aria-pressed', 'true');
+  await userEvent.click(within(row).getByRole('button', { name: '즐겨찾기 해제' }));
+  expect(within(panel).getByRole('button', { name: '즐겨찾기 추가' })).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('즐겨찾기만 — 주소 fav=1, 미확정 포함을 숨기고 즐겨찾기한 순 정렬을 쓴다(10)', async () => {
+  mockApi({
+    'GET /api/search?limit=50&offset=0': { ...RES, hull_suggestion: null },
+    'GET /api/search?fav=1&limit=50&offset=0': { ...RES, total: 1, items: [{ ...ITEM, favorite: true }], hull_suggestion: null, favorites_only: true },
+  });
+  renderAt('/');
+  await screen.findByText('결과 2건');
+  await userEvent.click(screen.getByRole('checkbox', { name: '즐겨찾기만' }));
+  expect(screen.getByTestId('loc').textContent).toBe('/?fav=1');
+  expect(await screen.findByRole('heading', { name: '즐겨찾기 1건' })).toBeInTheDocument();
+  expect(screen.queryByRole('checkbox', { name: '미확정 포함' })).not.toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: '정렬' })).toHaveValue('favorited');
+});
+
+test('즐겨찾기가 비어 있으면 넣는 방법을 알려 준다(10)', async () => {
+  mockApi({ 'GET /api/search?fav=1&limit=50&offset=0': { ...RES, total: 0, items: [], hull_suggestion: null, favorites_only: true } });
+  renderAt('/?fav=1');
+  expect(await screen.findByRole('heading', { name: '즐겨찾기한 자료가 없습니다' })).toBeInTheDocument();
+  expect(screen.getByText(/별 단추를 누르면 여기에 모입니다/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '검색으로 가기' })).toHaveAttribute('href', '/');
+});
+
+test('즐겨찾기 중 검색어로 거른 결과가 없으면 일반 안내를 보인다(10)', async () => {
+  mockApi({ 'GET /api/search?fav=1&q=zz&limit=50&offset=0': { ...RES, total: 0, items: [], hull_suggestion: null } });
+  renderAt('/?fav=1&q=zz');
+  expect(await screen.findByRole('heading', { name: '즐겨찾기 중 맞는 자료가 없습니다' })).toBeInTheDocument();
+});
+
+test('미리보기 폭을 바꾸면 서버 사용자 설정에도 (늦게 한 번) 보낸다(10)', async () => {
+  const fetch = mockApi({ 'GET /api/search?q=a&limit=50&offset=0': RES, 'GET /api/entries/E000001': ENTRY,
+                          'GET /api/files/11/text': { state: null, summary: null, chunks: [] },
+                          'PUT /api/me/prefs': (init) => JSON.parse(init.body) });
+  renderAt('/?q=a');
+  await userEvent.click((await screen.findByText('계류 구조 검토')).closest('[role="option"]'));
+  const panel = await screen.findByRole('complementary', { name: '미리보기' });
+  const handle = within(panel).getByRole('separator', { name: '미리보기 폭 조절' });
+  const start = Number(handle.getAttribute('aria-valuenow'));
+  handle.focus();
+  await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
+  await waitFor(() => expect(calls(fetch)).toContain('PUT /api/me/prefs'), { timeout: 2000 });
+  const puts = fetch.mock.calls.filter(([u, i]) => u === '/api/me/prefs' && i?.method === 'PUT');
+  expect(puts).toHaveLength(1);
+  expect(JSON.parse(puts[0][1].body)).toEqual({ 'search.previewWidth': start + 32 });
+});
+
+test('즐겨찾기로 바꾼 직후 응답 전에는 옛 검색 건수를 즐겨찾기 건수로 보이지 않는다(10)', async () => {
+  let release;
+  mockApi({
+    'GET /api/search?limit=50&offset=0': { ...RES, hull_suggestion: null },
+    'GET /api/search?fav=1&limit=50&offset=0': () => new Promise((r) => { release = () => r({ ...RES, total: 1, items: [ITEM], hull_suggestion: null, favorites_only: true }); }),
+  });
+  renderAt('/');
+  await screen.findByText('결과 2건');
+  await userEvent.click(screen.getByRole('checkbox', { name: '즐겨찾기만' }));
+  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^즐겨찾기$/);
+  release();
+  expect(await screen.findByRole('heading', { name: '즐겨찾기 1건' })).toBeInTheDocument();
+});
+
+test('한 칸 여러 값(19) — 값마다 칩, 칩은 그 값만 해제, 동의어 주소는 대표 값으로 해제', async () => {
+  mockApi({
+    'GET /api/search?hull=9999&hull=9998&limit=50&offset=0': { ...RES, hull_suggestion: null, applied_filters: { hull: ['9999', '9998'] } },
+    'GET /api/search?hull=9998&limit=50&offset=0': { ...RES, hull_suggestion: null, applied_filters: { hull: ['9998'] } },
+    'GET /api/search?zone=ER&limit=50&offset=0': { ...RES, hull_suggestion: null, applied_filters: { zone: ['Engine Room'] } },
+    'GET /api/search?limit=50&offset=0': { ...RES, hull_suggestion: null, applied_filters: {} },
+  });
+  const { unmount } = renderAt('/?hull=9999&hull=9998');
+  await screen.findByText('결과 2건');
+  expect(screen.getByText('또는')).toBeInTheDocument();
+  expect(within(screen.getByRole('group', { name: '호선' })).getAllByRole('button', { pressed: true })).toHaveLength(2);
+  await userEvent.click(screen.getByRole('button', { name: '호선 9999 필터 해제' }));
+  expect(screen.getByTestId('loc').textContent).toBe('/?hull=9998');
+  unmount();
+  renderAt('/?zone=ER');
+  await userEvent.click(await screen.findByRole('button', { name: '구역 Engine Room 필터 해제' }));
+  expect(screen.getByTestId('loc').textContent).toBe('/');
 });

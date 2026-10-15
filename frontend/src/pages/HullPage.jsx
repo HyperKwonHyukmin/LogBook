@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Anchor, Search } from 'lucide-react';
 import { api } from '../api/client.js';
 import { buttonClass } from '../components/ui/Button.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
 import InlineText from '../components/ui/InlineText.jsx';
+import { AuthContext } from '../auth/AuthContext.jsx';
+import { canWriteShared } from '../lib/levels.js';
 import KindBadge from '../components/ui/KindBadge.jsx';
+import { FavoriteToggle } from '../components/favorites/Favorites.jsx';
+import { AccessBadge } from '../components/access/AccessPanel.jsx';
 import { ErrorNote, Page, SectionTitle } from '../components/ui/Page.jsx';
 import { Bar } from '../components/ui/Skeleton.jsx';
 import { errorText } from '../lib/labels.js';
@@ -48,6 +52,10 @@ export default function HullPage() {
   const navigate = useNavigate();
   const [hull, setHull] = useState(null);
   const [missing, setMissing] = useState(false);
+  // 13 — Guest 는 선종·메모를 고치지 못한다(보기만). 로그인 정보가 없으면(시험) 막지 않는다
+  const me = useContext(AuthContext)?.user;
+  // 15 — 호선 선종·메모는 공용 정보라 LV2 이상
+  const readOnly = !!me && !canWriteShared(me);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -97,9 +105,9 @@ export default function HullPage() {
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-ui">
             <span className="flex items-center gap-1.5"><span className="text-n-500">선종</span>
-              <InlineText label="선종" value={hull.ship_type} onSave={(v) => saveHull({ ship_type: v || null })} className="text-n-900" /></span>
+              <InlineText label="선종" value={hull.ship_type} disabled={readOnly} onSave={(v) => saveHull({ ship_type: v || null })} className="text-n-900" /></span>
             <span className="flex min-w-0 items-center gap-1.5"><span className="text-n-500">메모</span>
-              <InlineText label="메모" value={hull.memo} onSave={(v) => saveHull({ memo: v || null })} className="text-n-900" /></span>
+              <InlineText label="메모" value={hull.memo} disabled={readOnly} onSave={(v) => saveHull({ memo: v || null })} className="text-n-900" /></span>
           </div>
           <p className="tnum mt-2 flex flex-wrap items-center gap-x-2 text-ui text-n-600">
             {stat(s.entries, '자료')}<span aria-hidden="true" className="text-n-300">·</span>
@@ -131,16 +139,19 @@ export default function HullPage() {
               <ul className="overflow-hidden rounded-lg border border-n-200">
                 {m.entries.map((e) => (
                   <li key={e.entry_id} onClick={() => navigate(`/e/${e.entry_id}`)}
-                      className="grid h-11 cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto_72px_44px] items-center gap-3 border-b border-n-200 px-3 text-ui transition-colors duration-150 last:border-0 hover:bg-n-50">
+                      className="group/row grid h-11 cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto_72px_44px_28px] items-center gap-3 border-b border-n-200 px-3 text-ui transition-colors duration-150 last:border-0 hover:bg-n-50">
                     <span className="flex min-w-0 items-center gap-2">
                       <Link to={`/e/${e.entry_id}`} onClick={(ev) => ev.stopPropagation()}
                             className="truncate font-semibold text-n-900 hover:underline">{e.title}</Link>
                       {e.analysis_type && <span className="shrink-0 text-meta text-n-500">{e.analysis_type}</span>}
+                      {/* 15 — 공유·블록 배지(볼 수 있는 사람에게만 실린다) */}
+                      <AccessBadge item={e} compact />
                     </span>
                     <span className="truncate text-meta text-n-500">{e.zones.join(', ')}</span>
                     <span className="flex gap-1">{e.kinds.map((k) => <KindBadge key={k} kind={k} />)}</span>
                     <span className="text-right font-mono text-meta text-n-500">{e.entry_id}</span>
                     <span className="text-right font-mono text-meta text-n-500">{mmdd(e.confirmed_at)}</span>
+                    <FavoriteToggle entryId={e.entry_id} initial={e.favorite} stop reveal />
                   </li>
                 ))}
               </ul>

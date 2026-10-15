@@ -20,6 +20,8 @@ class Proposal:
     file_keys: list[int]
     best_hull: str | None
     hull_candidates: list[dict] = field(default_factory=list)
+    # 20 — 제목 초안의 원천(폴더 이름 또는 확장자 뗀 파일 이름) — entries.title_source
+    source: str = ""
 
 
 def _names(files: list[FileInfo]) -> list[str]:
@@ -42,9 +44,11 @@ def _title_from_filename(name: str) -> str:
 
 def _make(label: str, files: list[FileInfo], known: set[str]) -> Proposal:
     cands = extract_hull_candidates(_names(files), known)
-    title = _title(label) or _title_from_filename(PurePosixPath(files[0].rel_path).name)
+    first = PurePosixPath(files[0].rel_path).name
+    title = _title(label) or _title_from_filename(first)
+    source = label if label else os.path.splitext(first)[0]
     return Proposal(title=title, file_keys=[f.key for f in files], best_hull=best_hull(cands),
-                    hull_candidates=[c.as_dict() for c in cands])
+                    hull_candidates=[c.as_dict() for c in cands], source=source[:255])
 
 
 def propose(files: list[FileInfo], known: set[str]) -> list[Proposal]:

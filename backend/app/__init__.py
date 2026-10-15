@@ -1,1 +1,1 @@
-"""Logbook 백엔드."""
+"""Hi-TESS LogBook 백엔드."""

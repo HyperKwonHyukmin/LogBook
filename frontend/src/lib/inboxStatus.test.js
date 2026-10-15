@@ -23,7 +23,7 @@ test('대기 사유 — 앞 배치, 다른 작업, 곧 시작, 재시도', () =>
 test('워커가 꺼져 있으면 그대로 알린다', () => {
   const s = stagedStatus(staged({ ...alive, worker_alive: false }));
   expect(s.workerDown).toBe(true);
-  expect(s.line).toMatch(/워커\)이 꺼져 있어 기다리는 중입니다 — 관리자에게 알려 주세요/);
+  expect(s.line).toMatch(/워커\)이 꺼져 있어 기다리는 중입니다. 관리자에게 알려 주세요/);
   expect(s.steps.every((x) => x.state === 'todo')).toBe(true);
 });
 
@@ -42,10 +42,23 @@ test('BDF 변환 상태 — 작업이 도는 중이면 변환 중, 상태별 개
   expect(hasPendingConvert({ entries: [{ files: [bdf('done')] }] })).toBe(false);
 });
 
-test('초안 확인할 것 — 제목은 확정을 막는다, 호선·해석 종류·암호화·중복은 권고', () => {
+test('초안 확인할 것 — 제목은 확정을 막는다, (BDF 없는 자료의) 호선·해석 종류·암호화·중복은 권고', () => {
   const entry = { files: [{ drm_encrypted: true }, { duplicate_of_entry: 'E000001' }] };
   const c = draftChecks({ title: ' ', hulls: [], analysis_type: '' }, entry);
   expect(c.map((x) => x.id)).toEqual(['title', 'hull', 'type', 'drm', 'dup']);
   expect(c.find((x) => x.id === 'title').blocking).toBe(true);
   expect(draftChecks({ title: '검토', hulls: [{ hull_no: '3496' }], analysis_type: '강도' }, { files: [] })).toEqual([]);
+});
+
+test('20 — BDF 자료는 호선(또는 공용)·구역·해석 종류가 확정을 막는다', () => {
+  const entry = { files: [{ kind: 'model' }] };
+  const c = draftChecks({ title: '검토', hulls: [], zones: [], analysis_type: '' }, entry);
+  expect(c.map((x) => [x.id, !!x.blocking])).toEqual([['hull', true], ['zone', true], ['type', true]]);
+  const shared = draftChecks({ title: '검토', hulls: [], no_hull: true, zones: ['선수부'], analysis_type: '강도 평가' }, entry);
+  expect(shared).toEqual([]);
+  // 기존 자료에 추가하는 초안은 그 자료의 분류를 따른다
+  expect(draftChecks({ title: '검토', hulls: [], zones: [], analysis_type: '' }, { ...entry, merge_into: { entry_id: 'E1' } })).toEqual([]);
+  // 21 — 프로젝트가 있으면 BDF 자료도 호선 없이 확정할 수 있다
+  const project = draftChecks({ title: '검토', hulls: [], project: '크레인 연구', zones: ['선수부'], analysis_type: '강도 평가' }, entry);
+  expect(project.filter((x) => x.blocking)).toEqual([]);
 });

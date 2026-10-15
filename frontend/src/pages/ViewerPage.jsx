@@ -11,6 +11,8 @@ import KindBadge from '../components/ui/KindBadge.jsx';
 import { Bar } from '../components/ui/Skeleton.jsx';
 import { DraftBadge } from '../components/ui/Status.jsx';
 import { CompareToggle } from '../components/compare/CompareBasket.jsx';
+import { SendToWorkbenchButton } from '../components/workbench/WorkbenchSend.jsx';
+import { WidgetBoundary } from '../components/ui/ErrorBoundary.jsx';
 
 // three 가 든 뷰어는 따로 묶는다.
 const ModelViewer = lazy(() => import('../components/viewer/ModelViewer.jsx'));
@@ -70,6 +72,7 @@ export default function ViewerPage() {
         ) : !error && <Bar className="h-3.5 w-60" />}
         {stale && <span className="hidden shrink-0 text-meta text-n-500 md:inline">{stale}</span>}
         {isModel && <CompareToggle file={{ id: file.id, name: file.name }} className="ml-auto" />}
+        {isModel && <SendToWorkbenchButton file={file} entryId={file.entry_id} />}
         <Button variant="ghost" size="sm" className={isModel ? '' : 'ml-auto'} onClick={close}>
           <X size={14} aria-hidden="true" />닫기
         </Button>
@@ -84,11 +87,13 @@ export default function ViewerPage() {
       {msg && <div className="mx-auto mt-12 w-full max-w-[520px] px-6"><ModelNote title={msg.title} busy={msg.busy}>{msg.text}</ModelNote></div>}
       {isModel && !msg && !summary && !error && <div className="min-h-0 flex-1 bg-viewer" />}
       {viewable && (
-        <Suspense fallback={<div className="min-h-0 flex-1 bg-viewer" />}>
-          <ModelViewer key={summary.key || 'model'} fileId={file.id} variant="full" formatVersion={summary.format_version ?? null}
-                       solve={summary.solve || null} modelDone={summary.state === 'done'} fileName={file.name}
-                       className="min-h-0 flex-1" />
-        </Suspense>
+        <WidgetBoundary what="3D 뷰어" tone="dark" resetKey={`${file.id}:${summary.key}`} className="min-h-0 flex-1">
+          <Suspense fallback={<div className="min-h-0 flex-1 bg-viewer" />}>
+            <ModelViewer key={summary.key || 'model'} fileId={file.id} variant="full" formatVersion={summary.format_version ?? null}
+                         solve={summary.solve || null} modelDone={summary.state === 'done'} fileName={file.name}
+                         className="min-h-0 flex-1" />
+          </Suspense>
+        </WidgetBoundary>
       )}
     </div>
   );

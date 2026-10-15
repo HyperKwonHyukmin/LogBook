@@ -1,16 +1,17 @@
 """배치 처리: 제외·해시·분류·DRM·중복 → 묶음 제안 → 초안 Entry (설계 §5.2~5.4)."""
 import logging
 import os
-import re
 from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import audit, models
+from ..entries import naming
 from ..entries.files import remove_empty_dirs
-from ..convert.job import enqueue_convert
+from ..convert.job import enqueue_convert, set_signature
 from ..extract.job import enqueue_extract
 from ..storage.paths import StoragePaths, to_long, walk_root
+from . import duplicates
 from .hashing import sha256_of
 from .proposal import FileInfo, propose
 from .rules import classify, is_excluded, safe_ext
@@ -21,14 +22,12 @@ MAX_NAME = 255       # models.File.name 컬럼 길이
 logger = logging.getLogger(__name__)
 
 DRM_MAGIC = b"HHIDRMC"
-WORD = re.compile(r"[0-9A-Za-z가-힣]+")
-
-
 def _words(title: str) -> set[str]:
-    return {w.lower() for w in WORD.findall(title or "")}
+    return naming.title_words(title)
 
 
 def _find_similar(db: Session, hull_no: str | None, title: str) -> int | None:
+    """올리기 때 '비슷한 기존 자료에 추가할까요?' 제안(suggested_entry_id). 확정 때 경고는 entries.quality.similar_entries."""
     if not hull_no:
         return None
     mine = _words(title)
@@ -40,13 +39,44 @@ def _find_similar(db: Session, hull_no: str | None, title: str) -> int | None:
     )
     for e in rows:
         theirs = _words(e.title)
-        if mine and theirs and len(mine & theirs) / len(mine | theirs) >= 0.5:
+        if naming.jaccard(mine, theirs) >= 0.5:
             return e.id
     return None
 
 
 def _noop_progress(step: str, done: int = 0, total: int = 0, force: bool = False) -> None:
     return None
+
+
+def _block_duplicates(db: Session, storage: StoragePaths, batch: models.Batch,
+                      rows: dict[int, models.File]) -> tuple[list[dict], dict[int, object]]:
+    """이 배치의 BDF 중 이미 있는 자료(확정·정리 대기, 이 배치 밖)의 BDF 와 완전히 같은 것과, 이 배치 안에서 앞 파일과 같은 것을
+    File 행에서 뺀다(rows 에서도). 원본은 지우지 않는다 — _staging/<key> 에 그대로 남는다(탐색기로 넣은 사람은 원본을 옮겨
+    버렸을 수 있다. 경로 길이·읽기 실패 제외와 같은 규칙). 돌려주는 것: (excluded 항목, 남은 본 BDF 의 서명 {file_id: Signature})."""
+    root = storage.staging / batch.key
+    model_rows = [f for f in rows.values() if f.kind == "model" and not f.drm_encrypted]
+    if not model_rows:
+        return [], {}
+    probes, _deferred = duplicates.probe(root, [(f.rel_path, f.size) for f in model_rows],
+                                         sha={f.rel_path: f.sha256 for f in model_rows})
+    listed = [(f.rel_path, f.size) for f in rows.values()]
+    blocked = duplicates.decide(db, probes, files=listed, exclude_batch_id=batch.id)
+    by_rel = {f.rel_path.casefold(): f for f in rows.values()}
+    for b in blocked:
+        for rel in (b.rel, *b.includes):
+            f = by_rel.get(rel.casefold())
+            if f is not None and f.id in rows:
+                rows.pop(f.id)
+                db.delete(f)
+    if blocked:
+        db.flush()
+        logger.info("배치 %s: 완전 동일 BDF %d개를 제외(원본은 _staging 에 둠)", batch.key, len(blocked))
+    fragments = {i.casefold() for p in probes for i in p.includes}
+    signatures = {by_rel[p.rel.casefold()].id: p.sig for p in probes
+                  if p.sig is not None and p.rel.casefold() not in fragments
+                  and by_rel[p.rel.casefold()].id in rows}
+    sizes = {r.casefold(): s for r, s in listed}
+    return duplicates.records(blocked, sizes, kept=True), signatures
 
 
 def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progress=None) -> None:
@@ -117,19 +147,33 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
         rows[f.id] = f
         infos.append(FileInfo(key=f.id, rel_path=rel))
 
+    # 17 — 완전 동일 BDF(탐색기로 넣은 것·큰 파일·동시 업로드 경합). 웹 업로드 마무리가 이미 막은 것은 여기 오지 않는다
     progress("propose", total, total, force=True)
+    signatures: dict[int, object] = {}
+    if not batch.allow_duplicates:
+        blocked_records, signatures = _block_duplicates(db, storage, batch, rows)
+        excluded.extend(blocked_records)
+        infos = [i for i in infos if i.key in rows]
+
     known = {h for (h,) in db.query(models.Hull.hull_no)}
     created = 0
     for p in propose(infos, known):
-        entry = models.Entry(title=p.title, status="draft", batch_id=batch.id, uploaded_by=batch.uploader,
-                             hull_evidence=p.hull_candidates, merge_into_id=batch.target_entry_id)
+        # 20 — 호선을 알면 제목 초안을 형식(`3496 · 구별자`)으로, 모르면 예전처럼 폴더/파일 이름. 구역·해석 종류는
+        # 사람이 정리 대기에서 고르고, 그때 (사람이 제목을 고치지 않았으면) 제목도 따라 바뀐다
+        title = naming.title_draft(p.source, hulls=[p.best_hull] if p.best_hull else []) if p.best_hull else p.title
+        entry = models.Entry(title=title or p.title, status="draft", batch_id=batch.id, uploaded_by=batch.uploader,
+                             hull_evidence=p.hull_candidates, merge_into_id=batch.target_entry_id,
+                             # Targeted upload proposals are temporary. Only their uploader/admin
+                             # may see them until files inherit the selected Entry's visibility.
+                             access="blocked" if batch.target_entry_id is not None else "normal",
+                             title_source=p.source or None)
         db.add(entry)
         db.flush()
         entry.entry_id = f"E{entry.id:06d}"
         if p.best_hull:
             db.add(models.EntryHull(entry_id=entry.id, hull_no=p.best_hull, is_primary=True))
         if batch.target_entry_id is None:
-            entry.suggested_entry_id = _find_similar(db, p.best_hull, p.title)
+            entry.suggested_entry_id = _find_similar(db, p.best_hull, entry.title)
         for key in p.file_keys:
             rows[key].entry_id = entry.id
         created += 1
@@ -139,6 +183,14 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
     for f in rows.values():
         enqueue_extract(db, f)
         enqueue_convert(db, f)
+    if signatures:
+        # 17 — 서명을 변환 전에 적어 둔다: 다음 배치·확정 재검사·정리 대기 칩이 변환을 기다리지 않는다.
+        # 변환이 끝나면 같은 값으로 덮거나(include·요소 없음이면) 지운다.
+        db.flush()
+        for fid, sig in signatures.items():
+            row = db.get(models.ModelSummary, fid)
+            if row is not None:
+                set_signature(row, sig)
 
     # 웹 업로드가 미리 적어 둔 DRM 거부 목록 등을 지우지 않는다(process_batch 는 배치당 한 번만 돈다).
     batch.excluded = list(batch.excluded or []) + excluded
@@ -152,3 +204,14 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
     else:
         batch.state = "processed"
     db.commit()
+    blocked = [x for x in excluded if x.get("reason") == duplicates.REASON_MODEL]
+    if blocked:
+        # 17 — 워커가 뺀 동일 BDF 도 활동 로그에 남긴다(웹 업로드 마무리와 같은 동작 이름, 대상 자료는 적지 않는다).
+        # 배치 처리 트랜잭션은 위에서 끝났다 — 감사 실패가 처리 결과를 되돌리지 않게 따로 커밋한다
+        try:
+            audit.record(db, storage, actor=batch.uploader, action="UPLOAD_DUPLICATE_BLOCKED", target_type="batch",
+                         target_id=batch.key, after={"name": batch.original_name, "files": [x["name"] for x in blocked],
+                                                     "source": batch.source, "kept": True})
+        except Exception:
+            db.rollback()
+            logger.exception("배치 %s 의 동일 BDF 감사 기록 실패(처리는 완료됨)", batch.key)

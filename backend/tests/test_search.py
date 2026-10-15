@@ -1,3 +1,4 @@
+from app.access import SYSTEM
 from datetime import datetime
 
 import pytest
@@ -8,7 +9,7 @@ from app.search import SearchQuery, get_search
 
 def _q(db, q="", **kw):
     filters = kw.pop("filters", {})
-    return get_search().search(db, SearchQuery(q=q, filters=filters, **kw))
+    return get_search().search(db, SearchQuery(q=q, filters=filters, **({"user": SYSTEM} | kw)))
 
 
 def _ids(res):
@@ -38,12 +39,14 @@ def corpus(db, make_entry_file):
     return {"e1": e1, "e2": e2, "e3": e3, "e4": e4, "f1": f1, "f2": f2}
 
 
-def test_empty_query_lists_confirmed_by_analysis_period(db, corpus):
-    # 08 — 검색어가 없으면 해석 시기 순(시기 없는 E2 는 뒤로). 최근 등록 순은 sort=recent
+def test_empty_query_lists_confirmed_by_posted_date(db, corpus):
+    # 15 — 검색어가 없으면 최신순(올린 날짜 = 확정일). 해석 시기(E1 에만 있음)는 순서에 쓰지 않는다.
+    # 옛 주소의 sort=period 도 최신순으로 받는다
     res = _q(db)
-    assert _ids(res) == [corpus["e1"].entry_id, corpus["e2"].entry_id]
-    assert res["total"] == 2 and res["sort"] == "period"
-    assert _ids(_q(db, sort="recent")) == [corpus["e2"].entry_id, corpus["e1"].entry_id]
+    assert _ids(res) == [corpus["e2"].entry_id, corpus["e1"].entry_id]
+    assert res["total"] == 2 and res["sort"] == "recent"
+    res = _q(db, sort="period")
+    assert res["sort"] == "recent" and _ids(res) == [corpus["e2"].entry_id, corpus["e1"].entry_id]
 
 
 def test_drafts_included_on_request_never_trash(db, corpus):
@@ -111,16 +114,23 @@ def test_filters_and_disjunctive_facets(db, corpus):
 
 def test_other_filters(db, corpus):
     assert _ids(_q(db, filters={"ship_type": "LNGC"})) == [corpus["e2"].entry_id]
-    # 08 — 해석 연도는 해석 시기만 본다(E2 는 시기가 없어 확정일 2026 이어도 걸리지 않는다)
-    assert _ids(_q(db, filters={"year": "2026"})) == [corpus["e1"].entry_id]
+    # 15 — 해석 연도(year) 필터는 없앴다 — 보내도 거르지 않는다
+    assert _ids(_q(db, filters={"year": "2019"})) == [corpus["e2"].entry_id, corpus["e1"].entry_id]
     assert _ids(_q(db, filters={"uploaded_by": "A100002"})) == [corpus["e2"].entry_id]
     assert _ids(_q(db, filters={"kind": "model"})) == [corpus["e1"].entry_id]
     assert _ids(_q(db, filters={"analysis_type": "Strength"})) == [corpus["e2"].entry_id]
 
 
-def test_year_prefers_analysis_period(db, corpus, make_entry_file):
+def test_analysis_period_is_not_used(db, corpus, make_entry_file):
+    """15 — 열에 해석 시기가 남아 있어도 필터·건수·정렬·행에 쓰이지 않는다."""
     e, _ = make_entry_file(title="옛 해석", period="2019-03", confirmed_at=datetime(2026, 9, 9))
-    assert _ids(_q(db, filters={"year": "2019"})) == [e.entry_id]
+    res = _q(db)
+    assert _ids(res)[0] == e.entry_id                       # 올린 날짜가 가장 늦다
+    assert "year" not in res["facets"] and "years" not in res["summary"]
+    assert all("analysis_period" not in i for i in res["items"])
+    assert res["items"][0]["posted_at"] == "2026-09-09T00:00:00"
+    f = _q(db, "", unit="file")["items"][0]
+    assert "analysis_period" not in f and f["posted_at"]
 
 
 def test_uploaded_by_facet_has_name(db, corpus, make_user):
@@ -138,7 +148,7 @@ def test_hull_suggestion(db, corpus):
 
 def test_paging(db, corpus):
     res = _q(db, limit=1, offset=1)
-    assert res["total"] == 2 and _ids(res) == [corpus["e2"].entry_id]  # 해석 시기 순의 두 번째
+    assert res["total"] == 2 and _ids(res) == [corpus["e1"].entry_id]  # 최신순의 두 번째
 
 
 def test_file_unit(db, corpus):
@@ -152,9 +162,10 @@ def test_file_unit(db, corpus):
 
 def test_item_shape(db, corpus):
     item = _q(db, "9999")["items"][0]
-    for key in ("entry_id", "title", "status", "analysis_type", "analysis_period", "hulls", "zones", "tags",
+    for key in ("entry_id", "title", "status", "analysis_type", "posted_at", "hulls", "zones", "tags",
                 "uploaded_by", "confirmed_at", "file_count", "kinds", "score", "matched", "snippets"):
         assert key in item
+    assert "analysis_period" not in item
     assert item["file_count"] == 2 and sorted(item["kinds"]) == ["model", "report"]
 
 
@@ -240,6 +251,7 @@ def test_applied_filters_normalizes_zone_alias(db, corpus):
     db.add(models.EntryTag(entry_id=corpus["e1"].id, tag_id=er.id))
     db.commit()
     res = _q(db, filters={"zone": "ER", "hull": "9999", "bogus": "x"})
-    assert res["applied_filters"] == {"zone": "Engine Room", "hull": "9999"}
+    # 19 — 칸마다 값 목록
+    assert res["applied_filters"] == {"zone": ["Engine Room"], "hull": ["9999"]}
     assert _ids(res) == [corpus["e1"].entry_id]
     assert _q(db)["applied_filters"] == {}

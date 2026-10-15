@@ -6,7 +6,7 @@ from starlette.concurrency import run_in_threadpool
 
 from .. import models
 from ..database import get_db
-from ..dependencies import get_storage, require_auth
+from ..dependencies import get_storage, require_writer
 from ..storage.paths import StoragePaths
 from ..uploads import service
 
@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 class BeginBody(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     target_entry_id: str | None = None
+    target_status: str | None = Field(default=None, pattern="^(draft|confirmed)$")
 
 
 class DeclaredFile(BaseModel):
@@ -31,19 +32,22 @@ class RejectedFile(BaseModel):
 class FinishBody(BaseModel):
     files: list[DeclaredFile]
     rejected: list[RejectedFile] = []
+    # 17 — LV3 '그래도 올리기': 완전 동일 BDF 도 받는다(감사 UPLOAD_DUPLICATE_FORCED). 그 밖 등급은 403
+    force: bool = False
 
 
 @router.post("", status_code=201)
 def begin(body: BeginBody, db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage),
-          user: models.User = Depends(require_auth)):
-    b = service.begin(db, storage, user, name=body.name, target_entry_id=body.target_entry_id)
+          user: models.User = Depends(require_writer)):
+    b = service.begin(db, storage, user, name=body.name, target_entry_id=body.target_entry_id,
+                      target_status=body.target_status)
     return {"key": b.key, "state": b.state}
 
 
 @router.put("/{key}/chunk")
 async def chunk(key: str, request: Request, path: str = Query(...), offset: int = Query(ge=0),
                 db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage),
-                user: models.User = Depends(require_auth)):
+                user: models.User = Depends(require_writer)):
     too_large = HTTPException(status_code=413, detail="chunk_too_large")
     # 본문을 다 받기 전에 크기를 끊는다 — 먼저 Content-Length, 없거나 거짓이면 받는 도중에.
     declared = request.headers.get("content-length")
@@ -61,14 +65,14 @@ async def chunk(key: str, request: Request, path: str = Query(...), offset: int 
 
 @router.post("/{key}/finish")
 def finish(key: str, body: FinishBody, db: Session = Depends(get_db),
-           storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
-    b = service.finish(db, storage, user, key, files=[f.model_dump() for f in body.files],
-                       rejected=[r.model_dump() for r in body.rejected])
-    return {"key": b.key, "state": b.state}
+           storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_writer)):
+    # 17 — {key(모두 막히면 None), state: staged|blocked, blocked: [막힌 BDF 와 같은 기존 자료], deferred}
+    return service.finish(db, storage, user, key, files=[f.model_dump() for f in body.files],
+                          rejected=[r.model_dump() for r in body.rejected], force=body.force)
 
 
 @router.delete("/{key}", status_code=204)
 def cancel(key: str, db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage),
-           user: models.User = Depends(require_auth)):
+           user: models.User = Depends(require_writer)):
     service.cancel(db, storage, user, key)
     return Response(status_code=204)

@@ -22,11 +22,19 @@ mimetypes.add_type("text/css", ".css")
 mimetypes.add_type("font/woff2", ".woff2")
 
 
-def _bytes_response(path: Path) -> Response:
+# 캐시 규칙 — 재배포 뒤 열린 탭이 사라진 묶음 파일을 부르지 않게(프론트 lib/chunkReload.js 와 짝).
+# index.html(SPA 진입·대체 응답)은 매번 서버에 확인하게 해 늘 새 해시 이름을 받게 하고,
+# 해시가 붙은 assets/ 파일은 이름이 곧 버전이라 오래 캐시한다. 그 밖(favicon 등)은 브라우저 기본에 맡긴다.
+NO_CACHE = "no-cache"
+IMMUTABLE = "public, max-age=31536000, immutable"
+
+
+def _bytes_response(path: Path, cache_control: str | None = None) -> Response:
     media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     if media_type.startswith("text/") or media_type == "application/javascript":
         media_type += "; charset=utf-8"
-    return Response(content=path.read_bytes(), media_type=media_type)
+    headers = {"Cache-Control": cache_control} if cache_control else None
+    return Response(content=path.read_bytes(), media_type=media_type, headers=headers)
 
 
 def mount_spa(app: FastAPI, dist: Path | None) -> None:
@@ -35,30 +43,35 @@ def mount_spa(app: FastAPI, dist: Path | None) -> None:
     root = dist.resolve()
     index = root / "index.html"
 
+    def index_response() -> Response:
+        return _bytes_response(index, NO_CACHE)
+
     @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
     def spa(full_path: str):
         if full_path.lower() == "api" or full_path.lower().startswith("api/"):
             raise HTTPException(status_code=404, detail="not_found")
 
         if not full_path:
-            return _bytes_response(index)
+            return index_response()
 
         # 백슬래시(UNC·윈도 경로 구분자)나 콜론(드라이브 문자)이 있으면 파일시스템을
         # 전혀 건드리지 않고 바로 index 로 돌린다.
         if "\\" in full_path or ":" in full_path:
-            return _bytes_response(index)
+            return index_response()
 
         rel = PurePosixPath(full_path)
         if rel.is_absolute() or ".." in rel.parts:
-            return _bytes_response(index)
+            return index_response()
 
         candidate = root.joinpath(*rel.parts)
         if candidate.is_file() and candidate.resolve().is_relative_to(root):
-            return _bytes_response(candidate)
+            if rel.parts == ("index.html",):
+                return index_response()
+            return _bytes_response(candidate, IMMUTABLE if rel.parts[0] == "assets" else None)
 
         # assets/ 아래거나 확장자가 있는 요청인데 실제 파일이 없으면 404 —
         # 오타난 정적 자산 요청을 SPA 라우트로 착각해 index.html 을 주지 않는다.
         if full_path.startswith("assets/") or "." in rel.name:
             raise HTTPException(status_code=404, detail="not_found")
 
-        return _bytes_response(index)
+        return index_response()

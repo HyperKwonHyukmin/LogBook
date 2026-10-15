@@ -16,6 +16,8 @@ const ENTRY = {
   ],
 };
 const OTHER = { entry_id: 'E000011', title: '다른 묶음' };
+// 20 — BDF 자료는 호선·구역·해석 종류가 있어야 확정 단추가 열린다
+const READY = { ...ENTRY, zones: ['선수부'], analysis_type: '강도 평가' };
 // 분류 목록(08) — 해석 종류·구역 입력이 받아 간다
 const VOCAB = {
   '/api/vocab?kind=atype': { kind: 'atype', other: '기타', terms: [
@@ -42,28 +44,6 @@ function mockFetch(map) {
   }));
 }
 const bodyOf = (method, url) => JSON.parse(fetch.mock.calls.find(([u, i = {}]) => u === url && i.method === method)[1].body);
-
-test('제목을 고치고 칸을 벗어나면 version 과 함께 저장한다', async () => {
-  mockFetch({ 'PATCH /api/entries/E000010': { ...ENTRY, title: '새 제목', version: 4 } });
-  const onChanged = vi.fn();
-  render(<DraftCard entry={ENTRY} siblings={[OTHER]} canEdit onChanged={onChanged} />);
-  const title = screen.getByLabelText('제목');
-  await userEvent.clear(title);
-  await userEvent.type(title, '새 제목');
-  await userEvent.tab();
-  expect(bodyOf('PATCH', '/api/entries/E000010')).toEqual({ version: 3, title: '새 제목' });
-  expect(onChanged).toHaveBeenCalled();
-});
-
-test('버전 충돌이면 안내하고 새로 부른다', async () => {
-  mockFetch({ 'PATCH /api/entries/E000010': { __status: 409, detail: 'version_conflict' } });
-  const onChanged = vi.fn();
-  render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={onChanged} />);
-  await userEvent.type(screen.getByLabelText('제목'), '!');
-  await userEvent.tab();
-  expect(await screen.findByRole('alert')).toHaveTextContent('다른 사람이 먼저 고쳤습니다');
-  expect(onChanged).toHaveBeenCalled();
-});
 
 test('중복 파일에 기존 Entry 번호를 보여 준다', () => {
   mockFetch({});
@@ -107,7 +87,7 @@ test('확정과 버리기', async () => {
   mockFetch({ 'POST /api/entries/E000010/confirm': { ...ENTRY, status: 'confirmed' },
               'DELETE /api/entries/E000010': { ...ENTRY, status: 'trashed' } });
   const onChanged = vi.fn();
-  render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={onChanged} />);
+  render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={onChanged} />);
   await userEvent.click(screen.getByRole('button', { name: '확정' }));
   await userEvent.click(screen.getByRole('button', { name: '버리기' }));
   // 초안은 복원할 수 없어 확인 대화상자를 거친다.
@@ -150,76 +130,108 @@ test('같은 내용의 새 entry 객체로 다시 그려도(폴링) 저장 전 �
   expect(screen.getByRole('checkbox', { name: '9999_시험/a.bdf 선택' })).toBeChecked();
 });
 
-test('제목을 고친 뒤 곧바로 확정을 누르면 저장이 끝난 다음 확정한다', async () => {
+/* ── 11 — 고친 칸은 바로 저장하지 않는다: [변경 저장] 또는 [저장하고 확정] 이 한 번의 PATCH 로 ── */
+
+const patches = () => fetch.mock.calls.filter(([, i = {}]) => i.method === 'PATCH').map(([, i]) => JSON.parse(i.body));
+
+test('고쳐도 칸을 벗어날 때 저장하지 않고, [변경 저장] 이 바뀐 칸 전부를 한 번에 보낸다', async () => {
+  mockFetch({ 'PATCH /api/entries/E000010': { ...ENTRY, title: '새 제목', analysis_type: '피로 평가', hulls: [{ hull_no: '9999' }, { hull_no: '9998' }], version: 4 } });
+  const onChanged = vi.fn();
+  const onDirty = vi.fn();
+  render(<DraftCard entry={ENTRY} siblings={[OTHER]} canEdit onChanged={onChanged} onDirtyChange={onDirty} />);
+  const title = screen.getByLabelText('제목');
+  await userEvent.clear(title);
+  await userEvent.type(title, '새 제목');
+  await userEvent.tab();
+  // 해석 종류는 목록에서 고른다(08) — 동의어 '피로 해석' 을 쳐도 용어 '피로 평가'
+  await userEvent.type(screen.getByLabelText('해석 종류'), '피로 해석');
+  await userEvent.keyboard('{Enter}');
+  await userEvent.type(screen.getByRole('combobox', { name: '호선' }), '9998{Enter}');
+  expect(patches()).toHaveLength(0);
+  expect(onDirty).toHaveBeenLastCalledWith('E000010', true);
+  const bar = screen.getByRole('status', { name: '저장하지 않은 변경' });
+  expect(bar).toHaveTextContent('저장하지 않은 변경 3칸 · 제목, 해석 종류, 호선');
+  expect(screen.getByRole('button', { name: '저장하고 확정' })).toBeInTheDocument();
+  await userEvent.click(within(bar).getByRole('button', { name: '변경 저장' }));
+  await vi.waitFor(() => expect(patches()).toEqual([{ version: 3, title: '새 제목', analysis_type: '피로 평가', hulls: ['9999', '9998'] }]));
+  await vi.waitFor(() => expect(screen.queryByRole('status', { name: '저장하지 않은 변경' })).toBeNull());
+  expect(onChanged).toHaveBeenCalled();
+  expect(onDirty).toHaveBeenLastCalledWith('E000010', false);
+});
+
+test('되돌리기는 서버 값으로 돌아간다(PATCH 없음)', async () => {
+  mockFetch({});
+  render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={() => {}} />);
+  await userEvent.type(screen.getByLabelText('설명'), '메모');
+  await userEvent.click(screen.getByRole('button', { name: '되돌리기' }));
+  expect(screen.getByLabelText('설명')).toHaveValue('');
+  expect(screen.getByRole('button', { name: '확정' })).toBeInTheDocument();
+  expect(patches()).toHaveLength(0);
+});
+
+test('저장하지 않은 변경이 있으면 [저장하고 확정] 이 저장이 끝난 다음 확정한다', async () => {
   const q = deferredFetch();
   const onChanged = vi.fn();
-  render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={onChanged} />);
+  render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={onChanged} />);
   await userEvent.type(screen.getByLabelText('제목'), '!');
-  await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  await userEvent.click(screen.getByRole('button', { name: '저장하고 확정' }));
   await vi.waitFor(() => expect(q.map((c) => c.key)).toEqual(['PATCH /api/entries/E000010']));
+  expect(q[0].body).toEqual({ version: 3, title: '9999 연결시험!' });
   q[0].resolve({ ...ENTRY, title: '9999 연결시험!', version: 4 });
   await vi.waitFor(() => expect(q.map((c) => c.key)).toEqual(['PATCH /api/entries/E000010', 'POST /api/entries/E000010/confirm']));
   q[1].resolve({ ...ENTRY, status: 'confirmed' });
-  await vi.waitFor(() => expect(onChanged).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
 });
 
-test('빠르게 두 칸을 저장하면 두 번째 PATCH 는 첫 응답의 version 을 쓴다', async () => {
-  const q = deferredFetch();
-  render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={() => {}} />);
+test('저장이 실패(충돌)하면 확정하지 않고 알리고 새로 부른다', async () => {
+  mockFetch({ 'PATCH /api/entries/E000010': { __status: 409, detail: 'version_conflict' } });
+  const onChanged = vi.fn();
+  render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={onChanged} />);
   await userEvent.type(screen.getByLabelText('제목'), '!');
-  await userEvent.tab();
-  const kind = screen.getByLabelText('해석 종류');
-  expect(kind).toHaveFocus();
-  expect(kind).toBeEnabled();
-  // 해석 종류는 목록에서 고른다(08) — 동의어 '피로 해석' 을 쳐도 용어 '피로 평가' 로 저장
-  await userEvent.type(kind, '피로 해석');
-  await userEvent.keyboard('{Enter}');
-  expect(q).toHaveLength(1);
-  q[0].resolve({ ...ENTRY, title: '9999 연결시험!', version: 4 });
-  await vi.waitFor(() => expect(q).toHaveLength(2));
-  expect(q[1].body).toEqual({ version: 4, analysis_type: '피로 평가' });
+  await userEvent.click(screen.getByRole('button', { name: '저장하고 확정' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('저장하지 못해 확정하지 않았습니다. 다른 사람이 먼저 고쳤습니다');
+  expect(fetch.mock.calls.some(([u]) => u.endsWith('/confirm'))).toBe(false);
+  expect(onChanged).toHaveBeenCalled();
+  // 고친 글자는 남는다
+  expect(screen.getByLabelText('제목')).toHaveValue('9999 연결시험!');
 });
 
-test('첫 저장이 끝나기 전에 호선 칩을 둘 더해도 두 번째 PATCH 에 모두 실린다', async () => {
-  const q = deferredFetch();
-  render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={() => {}} />);
-  const hull = screen.getByRole('combobox', { name: '호선' });
-  await userEvent.type(hull, '9998{Enter}');
-  await userEvent.type(hull, '9997{Enter}');
-  expect(screen.getByRole('button', { name: '9998 빼기' })).toBeInTheDocument();
-  await vi.waitFor(() => expect(q).toHaveLength(1));
-  expect(q[0].body).toEqual({ version: 3, hulls: ['9999', '9998'] });
-  q[0].resolve({ ...ENTRY, version: 4 });
-  await vi.waitFor(() => expect(q).toHaveLength(2));
-  expect(q[1].body).toEqual({ version: 4, hulls: ['9999', '9998', '9997'] });
+test('해석 시기 칸은 없다(15)', () => {
+  mockFetch({});
+  render(<DraftCard entry={{ ...ENTRY, analysis_period: '2026-09' }} siblings={[]} canEdit onChanged={() => {}} />);
+  expect(screen.queryByLabelText('해석 시기')).toBeNull();
+  expect(screen.queryByText('2026-09')).toBeNull();
 });
 
-test('합치기 응답(이 Entry)의 version 을 다음 저장에 쓰고, 나누기 응답(새 Entry)의 version 은 쓰지 않는다', async () => {
+test('공개 범위 — 기본 일반, 블록은 LV3(can_block)에게만, 고르면 그 한 칸만 바로 저장', async () => {
+  mockFetch({ 'PATCH /api/entries/E000010': { ...ENTRY, version: 4, access: 'shared' } });
+  const onChanged = vi.fn();
+  const { unmount } = render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={onChanged} />);
+  const select = screen.getByRole('combobox', { name: '공개 범위' });
+  expect(select).toHaveValue('normal');
+  expect([...select.options].map((o) => o.value)).toEqual(['shared', 'normal']);
+  await userEvent.selectOptions(select, 'shared');
+  await vi.waitFor(() => expect(onChanged).toHaveBeenCalled());
+  expect(bodyOf('PATCH', '/api/entries/E000010')).toEqual({ version: 3, access: 'shared' });
+  unmount();
+  render(<DraftCard entry={{ ...ENTRY, can_block: true }} siblings={[]} canEdit onChanged={() => {}} />);
+  expect([...screen.getByRole('combobox', { name: '공개 범위' }).options].map((o) => o.value)).toEqual(['shared', 'normal', 'blocked']);
+});
+
+test('나누기 전에 바뀐 칸을 먼저 저장하고, 합치기 응답(이 Entry)의 version 을 다음 저장에 쓴다', async () => {
   const q = deferredFetch();
   render(<DraftCard entry={ENTRY} siblings={[OTHER]} canEdit onChanged={() => {}} />);
   await userEvent.selectOptions(screen.getByLabelText('다른 묶음과 합치기'), 'E000011');
   await vi.waitFor(() => expect(q).toHaveLength(1));
   q[0].resolve({ ...ENTRY, version: 7 });
+  await userEvent.type(screen.getByLabelText('제목'), '!');
   await userEvent.click(screen.getByRole('checkbox', { name: '9999_시험/r.pdf 선택' }));
   await userEvent.click(screen.getByRole('button', { name: '새 묶음으로 나누기' }));
   await vi.waitFor(() => expect(q).toHaveLength(2));
-  q[1].resolve({ entry_id: 'E000012', version: 1 });
-  await userEvent.type(screen.getByLabelText('제목'), '!');
-  await userEvent.tab();
+  expect(q[1]).toMatchObject({ key: 'PATCH /api/entries/E000010', body: { version: 7, title: '9999 연결시험!' } });
+  q[1].resolve({ ...ENTRY, title: '9999 연결시험!', version: 8 });
   await vi.waitFor(() => expect(q).toHaveLength(3));
-  expect(q[2].body).toEqual({ version: 7, title: '9999 연결시험!' });
-});
-
-test('앞선 저장이 실패한 채로 확정을 누르면 확정하지 않고 그 이유를 다시 알린다', async () => {
-  mockFetch({ 'PATCH /api/entries/E000010': { __status: 422, detail: 'invalid_period' } });
-  render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={() => {}} />);
-  await userEvent.type(screen.getByLabelText('해석 시기'), '2026/09');
-  await userEvent.tab();
-  expect(await screen.findByRole('alert')).toHaveTextContent('해석 시기는 YYYY-MM 형식입니다.');
-  await userEvent.click(screen.getByRole('button', { name: '확정' }));
-  await vi.waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('저장하지 못한 내용이 있어 확정하지 않았습니다'));
-  expect(screen.getByRole('alert')).toHaveTextContent('해석 시기는 YYYY-MM 형식입니다.');
-  expect(fetch.mock.calls.some(([u]) => u.endsWith('/confirm'))).toBe(false);
+  expect(q[2]).toMatchObject({ key: 'POST /api/entries/E000010/split', body: { file_ids: [2] } });
 });
 
 test('구역은 목록에서 칩으로 고르고, 동의어를 치면 대표 용어가 들어간다', async () => {
@@ -229,5 +241,107 @@ test('구역은 목록에서 칩으로 고르고, 동의어를 치면 대표 용
   await userEvent.type(zone, 'fwd');
   expect(await screen.findByRole('option', { name: /선수부/ })).toHaveTextContent('FWD 의 대표 용어');
   await userEvent.keyboard('{Enter}');
-  expect(bodyOf('PATCH', '/api/entries/E000010')).toEqual({ version: 3, zones: ['선수부'] });
+  await userEvent.click(screen.getByRole('button', { name: '변경 저장' }));
+  await vi.waitFor(() => expect(bodyOf('PATCH', '/api/entries/E000010')).toEqual({ version: 3, zones: ['선수부'] }));
+});
+
+const SAME_REF = { file_id: 9, name: 'a_원본.bdf', rel_path: '9999/a_원본.bdf', entry_id: 'E000123',
+  entry_title: '9999 원본', entry_status: 'confirmed' };
+
+test('같은 BDF(12) — 동일 BDF 는 주의 칩(링크), 형상만 같으면 옅은 정보 칩', () => {
+  mockFetch({});
+  const entry = { ...ENTRY, files: [
+    { ...ENTRY.files[0], model: { state: 'done', same_model: [SAME_REF, { ...SAME_REF, file_id: 10, entry_id: 'E000124' }],
+      same_model_total: 2, same_geometry: [], same_geometry_total: 0 } },
+    { ...ENTRY.files[0], id: 3, rel_path: '9999_시험/b.bdf', name: 'b.bdf',
+      model: { state: 'done', same_model: [], same_model_total: 0,
+        same_geometry: [{ ...SAME_REF, differs: ['material'] }], same_geometry_total: 1 } },
+    { ...ENTRY.files[0], id: 4, rel_path: '9999_시험/c.bdf', name: 'c.bdf',
+      model: { state: 'queued', same_model: [], same_model_total: 0, same_geometry: [], same_geometry_total: 0 } },
+  ] };
+  render(<DraftCard entry={entry} siblings={[]} canEdit onChanged={() => {}} />);
+  const dup = screen.getByRole('link', { name: /동일 BDF 있음: E000123 a_원본\.bdf 외 1/ });
+  expect(dup).toHaveAttribute('href', '/e/E000123');
+  expect(dup.title).toContain('E000124 / 9999/a_원본.bdf');
+  const shape = screen.getByRole('link', { name: /같은 형상: E000123 a_원본\.bdf/ });
+  expect(shape.title).toContain('재료 다름');
+  expect(screen.getAllByRole('link', { name: /동일 BDF 있음|같은 형상/ })).toHaveLength(2);   // 변환 전(c.bdf)은 없음
+});
+
+test('초안 안에 판 묶음이 있으면 흐름 한 줄(14)', () => {
+  mockFetch({});
+  const entry = { ...ENTRY, revisions: [{ key: 'n:a', items: [
+    { file_id: 1, name: 'a.bdf', display: 'R0', is_latest: false },
+    { file_id: 3, name: 'a_r1.bdf', display: 'R1', is_latest: true }] }] };
+  render(<DraftCard entry={entry} siblings={[]} canEdit onChanged={() => {}} />);
+  const line = screen.getByRole('list', { name: '판 묶음' });
+  expect(line).toHaveTextContent('판R0 a.bdf→R1 a_r1.bdf최신');
+});
+
+test('판 묶음이 없으면 흐름 줄도 없다', () => {
+  mockFetch({});
+  render(<DraftCard entry={{ ...ENTRY, revisions: [] }} siblings={[]} canEdit onChanged={() => {}} />);
+  expect(screen.queryByRole('list', { name: '판 묶음' })).toBeNull();
+});
+
+/* ── 20 — 필수 분류·공용 호선·제목 형식·비슷한 제목 ── */
+
+test('BDF 자료는 구역·해석 종류가 없으면 확정 단추가 잠기고 이유를 보인다', () => {
+  mockFetch({});
+  render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={() => {}} />);
+  const btn = screen.getByRole('button', { name: '확정' });
+  expect(btn).toBeDisabled();
+  expect(btn).toHaveAttribute('title', expect.stringContaining('구역 없음'));
+  expect(screen.getByLabelText('확인할 것')).toHaveTextContent('해석 종류 없음: BDF 자료는 해석 종류가 필요합니다');
+});
+
+test('확정 409 required_fields 는 빠진 칸을 사람 말로 보인다', async () => {
+  mockFetch({ 'POST /api/entries/E000010/confirm': { __status: 409, detail: { code: 'required_fields', missing: ['zone'] } } });
+  render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={() => {}} />);
+  await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('빠진 칸: 구역');
+});
+
+test("'호선 없음(공용)' 을 고르면 호선을 비우고, 바뀐 칸 하나로 저장한다", async () => {
+  mockFetch({ 'PATCH /api/entries/E000010': { ...READY, hulls: [], no_hull: true, version: 4 } });
+  render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={() => {}} />);
+  await userEvent.click(screen.getByRole('checkbox', { name: /호선 없음\(공용\)/ }));
+  expect(screen.queryByText('9999')).toBeNull();
+  // 공용이면 호선 없이도 확정을 막지 않는다
+  expect(screen.getByRole('button', { name: '저장하고 확정' })).toBeEnabled();
+  await userEvent.click(screen.getByRole('button', { name: '변경 저장' }));
+  await vi.waitFor(() => expect(patches()).toEqual([{ version: 3, hulls: [], no_hull: true }]));
+});
+
+test('제목이 초안 그대로면 값을 바꿀 때 "저장하면 형식대로" 안내, 직접 고친 제목이면 [형식대로 다시 만들기]', async () => {
+  mockFetch({ 'PATCH /api/entries/E000010': { ...READY, title: '9999 · 선수부 · 강도 평가 · 시험', version: 4 } });
+  const auto = { ...READY, title: '9999 · 시험', title_draft: '9999 · 선수부 · 강도 평가 · 시험', title_is_auto: true };
+  const { unmount } = render(<DraftCard entry={{ ...auto, title_draft: auto.title, zones: [], analysis_type: null }} siblings={[]} canEdit onChanged={() => {}} />);
+  await userEvent.type(screen.getByLabelText('설명'), 'x');
+  expect(screen.queryByText(/저장하면 제목이 형식대로/)).toBeNull();   // 분류 값이 아니면 안내 없음
+  await userEvent.type(screen.getByLabelText('해석 종류'), '피로 해석');
+  await userEvent.keyboard('{Enter}');
+  expect(await screen.findByText(/저장하면 제목이 형식대로 바뀝니다/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '형식대로 다시 만들기' })).toBeNull();
+  unmount();
+  render(<DraftCard entry={{ ...auto, title: '직접 지은 제목', title_is_auto: false }} siblings={[]} canEdit onChanged={() => {}} />);
+  expect(screen.getByText('9999 · 선수부 · 강도 평가 · 시험')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '형식대로 다시 만들기' }));
+  await vi.waitFor(() => expect(patches()).toEqual([{ version: 3, title_auto: true }]));
+});
+
+test('같은 호선의 같은·비슷한 제목 — 경고와 자료 링크, [새 판이면 이 자료에 추가] 는 합치기 제안과 같은 PATCH', async () => {
+  mockFetch({ 'PATCH /api/entries/E000010': { ...READY, version: 4 } });
+  const entry = { ...READY, suggested_entry: null, similar_entries: [
+    { entry_id: 'E000077', title: '9999 연결시험', match: 'same' },
+    { entry_id: 'E000078', title: '9999 연결시험 2차', match: 'similar' }] };
+  render(<DraftCard entry={entry} siblings={[]} canEdit onChanged={() => {}} />);
+  const box = screen.getByRole('region', { name: '비슷한 제목' });
+  expect(within(box).getByRole('link', { name: 'E000077' })).toHaveAttribute('href', '/e/E000077');
+  expect(box).toHaveTextContent('같은 제목');
+  expect(box).toHaveTextContent('비슷한 제목');
+  // 막지 않는다
+  expect(screen.getByRole('button', { name: '확정' })).toBeEnabled();
+  await userEvent.click(within(box).getByRole('button', { name: 'E000078 에 새 판으로 추가' }));
+  await vi.waitFor(() => expect(patches()).toEqual([{ version: 3, merge_into_id: 'E000078' }]));
 });

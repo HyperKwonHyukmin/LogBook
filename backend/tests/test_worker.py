@@ -28,7 +28,7 @@ def test_run_once_end_to_end(db, storage, make_user):
     assert run_once(db, storage, w) == {"staged": 1, "processed": 3, "failed": 0}
     db.expire_all()
     [e] = db.query(models.Entry).all()
-    assert e.title == "3496 Mooring 검토" and e.uploaded_by == "A476854"
+    assert e.title == "3496 · Mooring 검토" and e.uploaded_by == "A476854"
     [x] = db.query(models.FileExtract).all()
     assert db.get(models.File, x.file_id).name == "검토.pdf" and x.state == "failed"
     [s] = db.query(models.ModelSummary).all()

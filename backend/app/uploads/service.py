@@ -10,7 +10,9 @@ from datetime import datetime, timedelta
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from .. import audit, jobs, models
+from .. import access, audit, jobs, models
+from ..config import settings
+from ..ingest import duplicates
 from ..ingest.inbox import new_batch_key
 from ..ingest.process import MAX_NAME, MAX_REL_PATH
 from ..storage.paths import StoragePaths, long_join, to_long, walk_root
@@ -43,14 +45,19 @@ def clean_rel(rel: str) -> str:
 
 
 def begin(db: Session, storage: StoragePaths, user: models.User, *, name: str,
-          target_entry_id: str | None) -> models.Batch:
+          target_entry_id: str | None, target_status: str | None = None) -> models.Batch:
     if not storage.check_reachable():
         raise HTTPException(status_code=503, detail="storage_unreachable")
     target = None
     if target_entry_id:
-        target = db.query(models.Entry).filter_by(entry_id=target_entry_id.strip().upper()).first()
-        if target is None or target.status != "confirmed":
+        target = (db.query(models.Entry).filter_by(entry_id=target_entry_id.strip().upper())
+                  .with_for_update().populate_existing().first())
+        # 13 — 볼 수 없는 자료는 없는 것과 같고, 파일 추가는 수정이라 올린 사람·관리자 이상만
+        if target is None or target.status not in ("draft", "confirmed") or not access.can_view_entry(user, target, db=db):
             raise HTTPException(status_code=422, detail="target_not_confirmed")
+        access.ensure_can_edit(user, target)
+        if target_status is not None and target.status != target_status:
+            raise HTTPException(status_code=409, detail="attachment_target_changed")
     key = new_batch_key()
     os.makedirs(to_long(storage.web_inbox / key), exist_ok=True)
     batch = models.Batch(key=key, source="web", original_name=(name or "").strip()[:255] or key,
@@ -131,15 +138,21 @@ def _rename_with_retry(src: str, dst: str) -> None:
 
 
 def finish(db: Session, storage: StoragePaths, user: models.User, key: str, *,
-           files: list[dict], rejected: list[dict]) -> models.Batch:
+           files: list[dict], rejected: list[dict], force: bool = False) -> dict:
+    """업로드를 마친다. 17 — 폴더를 옮기기 전에 BDF 마다 완전 동일 검사(ingest.duplicates)를 해, 이미 있는 자료(확정·정리 대기)의
+    BDF 와 완전히 같은 파일은 받지 않는다(업로드 폴더에서 지운다 — 원본은 올린 사람 PC 에 있다). 남는 파일이 없으면 배치 행과
+    폴더를 지우고 state='blocked'. force(LV3 만)면 막지 않고 받으며 배치에 allow_duplicates 를 남긴다(워커·확정도 막지 않는다).
+    돌려주는 것: {key, state, blocked: [보는 사람 권한으로 설명한 막힌 파일], deferred: 동기 상한을 넘겨 워커에 맡긴 BDF 수}."""
     batch = _uploading(db, user, key)
     if not files:
         raise HTTPException(status_code=422, detail="no_files")
+    if force and not access.is_admin(user):
+        raise HTTPException(status_code=403, detail="level3_required")
     # 입력 검증은 전부 폴더를 옮기기 전에 끝낸다(옮긴 뒤 실패하면 되돌리기가 필요해진다).
     excluded = [{"name": clean_rel(r["rel_path"]), "size": 0, "reason": r.get("reason") or "drm"}
                 for r in rejected]
     root = walk_root(storage.web_inbox / key)
-    declared: set[str] = set()
+    declared: dict[str, tuple[str, int]] = {}
     for f in files:
         rel = clean_rel(f["rel_path"])
         if rel.casefold() in declared:
@@ -147,12 +160,45 @@ def finish(db: Session, storage: StoragePaths, user: models.User, key: str, *,
         path = long_join(storage.web_inbox / key, rel)
         if not os.path.exists(path) or os.path.getsize(path) != int(f["size"]):
             raise HTTPException(status_code=422, detail={"code": "incomplete", "rel_path": rel})
-        declared.add(rel.casefold())
-    _remove_undeclared(root, declared)
+        declared[rel.casefold()] = (rel, int(f["size"]))
+    _remove_undeclared(root, set(declared))
+
+    # 17 — 완전 동일 BDF. 상한(바이트·초)을 넘긴 BDF 는 deferred — 워커 process_batch 가 같은 검사를 한다
+    upload_root = storage.web_inbox / key
+    listed = list(declared.values())
+    probes, deferred = duplicates.probe(upload_root, listed, max_bytes=settings.dup_sync_max_bytes,
+                                        max_seconds=settings.dup_sync_seconds)
+    found = duplicates.decide(db, probes, files=listed, deferred=deferred)
+    blocked: list[duplicates.Blocked] = [] if force else found
+    if blocked:
+        for b in blocked:
+            for rel in (b.rel, *b.includes):
+                declared.pop(rel.casefold(), None)
+                try:
+                    os.remove(long_join(upload_root, rel))
+                except FileNotFoundError:
+                    pass
+        _remove_undeclared(root, set(declared))   # 비게 된 하위 폴더 정리
+    sizes = {r.casefold(): s for r, s in listed}
+    blocked_records = duplicates.records(blocked, sizes, kept=False)
+    shown = [duplicates.public_record(db, r, user) for r in blocked_records if r["reason"] == duplicates.REASON_MODEL]
+
+    if not declared:
+        # 모두 막혔다 — 배치를 만들지 않는다(행·폴더 정리). 폴더를 못 지우면 행을 'uploading' 으로 남겨
+        # cleanup_stale(24시간)이 다시 지우게 한다(행을 먼저 지우면 _web 에 고아 폴더가 남는다).
+        removed = _remove_folder(to_long(upload_root), to_long(storage.web_inbox))
+        if removed:
+            db.delete(batch)
+        else:
+            log.warning("모두 막힌 업로드 %s 폴더를 지우지 못했습니다 — cleanup_stale 이 다시 지웁니다", key)
+        _audit_blocked(db, storage, user, key, batch.original_name, blocked)
+        return {"key": None, "state": "blocked", "blocked": shown, "deferred": len(deferred)}
+
     dest = to_long(storage.staging / key)
     _rename_with_retry(root, dest)  # 같은 공유 폴더 안 rename — 평문 유지(PoC 실험 2)
     try:
-        batch.excluded = excluded
+        batch.excluded = excluded + blocked_records
+        batch.allow_duplicates = bool(force)
         batch.state = "staged"
         db.flush()
         jobs.enqueue(db, "process_batch", batch.id)
@@ -168,11 +214,40 @@ def finish(db: Session, storage: StoragePaths, user: models.User, key: str, *,
     try:
         audit.record(db, storage, actor=user.employee_id, action="BATCH_RECEIVED", target_type="batch",
                      target_id=key, after={"name": batch.original_name, "files": len(declared),
-                                           "source": "web", "rejected": len(excluded)})
+                                           "source": "web", "rejected": len(excluded),
+                                           "duplicates_blocked": len(blocked)})
+        if blocked:
+            _audit_blocked(db, storage, user, key, batch.original_name, blocked)
+        if force and found:
+            # LV3 '그래도 올리기' — 무엇을 어느 자료와 같은 채로 받았는지 남긴다(관리자 동작이라 대상 번호를 적는다)
+            audit.record(db, storage, actor=user.employee_id, action="UPLOAD_DUPLICATE_FORCED", target_type="batch",
+                         target_id=key, after={"name": batch.original_name, "files": [
+                             {"name": b.rel, "scope": b.scope, "same_as": b.same_as,
+                              "entries": _entry_ids(db, b.file_ids)} for b in found]})
     except Exception:
         db.rollback()
         log.exception("업로드 %s 의 감사 기록 실패(업로드는 완료됨)", key)
-    return batch
+    return {"key": batch.key, "state": batch.state, "blocked": shown, "deferred": len(deferred)}
+
+
+def _entry_ids(db: Session, file_ids: list[int]) -> list[str]:
+    if not file_ids:
+        return []
+    rows = (db.query(models.Entry.entry_id).join(models.File, models.File.entry_id == models.Entry.id)
+            .filter(models.File.id.in_(file_ids)).distinct().all())
+    return sorted(e for (e,) in rows if e)
+
+
+def _audit_blocked(db: Session, storage: StoragePaths, user: models.User, key: str, name: str,
+                   blocked: list) -> None:
+    """막힌 업로드 감사 — 파일 이름·수만(대상 자료는 적지 않는다: 활동 로그를 보는 사람이 그 자료를 볼 수 없을 수 있다)."""
+    try:
+        audit.record(db, storage, actor=user.employee_id, action="UPLOAD_DUPLICATE_BLOCKED", target_type="batch",
+                     target_id=key, after={"name": name, "files": [b.rel for b in blocked],
+                                           "includes": duplicates.include_paths(blocked)})
+    except Exception:
+        db.rollback()
+        log.exception("업로드 %s 의 차단 감사 기록 실패", key)
 
 
 def _remove_folder(path: str, parent: str) -> bool:

@@ -1,4 +1,5 @@
 import { useContext, useEffect, useId, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ChevronDown, Plus, X } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { AuthContext } from '../../auth/AuthContext.jsx';
@@ -27,9 +28,10 @@ function useTerms(kind) {
  * - 이미 저장된 목록 밖 값은 그대로 보이고(흐린 표시) 빼거나 바꿀 수 있다.
  * single: value / onChange(값|null). multiple: values / onChange(배열).
  * compact: 평소에는 값만 보이고 눌러서 고친다(Entry 상세 속성 레일).
+ * valueHref(v): compact 읽기 상태의 값을 링크로(09 — 그 값으로 찾기). 고치기는 옆 단추가 따로 맡는다.
  */
 export default function VocabInput({ kind, label, value = null, values = [], multiple = false, onChange,
-                                     disabled = false, compact = false, placeholder = '목록에서 고르기' }) {
+                                     disabled = false, compact = false, placeholder = '목록에서 고르기', valueHref }) {
   const isAdmin = !!useContext(AuthContext)?.user?.is_admin;
   const [terms, reload] = useTerms(kind);
   const [editing, setEditing] = useState(!compact);
@@ -121,10 +123,14 @@ export default function VocabInput({ kind, label, value = null, values = [], mul
       <div className="flex min-h-7 min-w-0 flex-wrap items-center gap-1">
         {multiple ? chosen.map((v) => (
           <span key={v} title={outside(v) ? outsideNote : undefined}
-                className={`${chipBase} px-2 ${outside(v) ? 'text-n-500' : ''}`}>{v}</span>
+                className={`${chipBase} px-2 ${outside(v) ? 'text-n-500' : ''} ${valueHref ? 'transition-colors duration-150 hover:bg-n-150' : ''}`}>
+            {valueHref ? <Link to={valueHref(v)} title={`‘${v}’ 로 찾기`} className="truncate rounded-xs hover:underline">{v}</Link> : v}
+          </span>
         )) : !empty && (
           <span title={outside(value) ? outsideNote : undefined}
-                className={`min-w-0 truncate text-ui ${outside(value) ? 'text-n-600' : 'text-n-900'}`}>{value}</span>
+                className={`min-w-0 truncate text-ui ${outside(value) ? 'text-n-600' : 'text-n-900'}`}>
+            {valueHref ? <Link to={valueHref(value)} title={`‘${value}’ 로 찾기`} className="rounded-xs underline-offset-2 hover:text-brand hover:underline">{value}</Link> : value}
+          </span>
         )}
         {!disabled && (
           <button ref={openBtnRef} type="button" aria-label={`${label} 고치기`} title="목록에서 고르기" onClick={() => setEditing(true)}

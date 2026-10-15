@@ -20,5 +20,7 @@ export function fakeEngine(pick = 0) {
     setCameraState: vi.fn(),
     onCameraChange: vi.fn(() => () => {}),
     setPidHighlight: vi.fn(() => 1),
+    // 16 판 변경 보기
+    setDiff: vi.fn(), setDiffLayers: vi.fn(), setDiffFocus: vi.fn(), frameDiff: vi.fn(() => true),
   };
 }

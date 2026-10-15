@@ -1,9 +1,10 @@
 ﻿<#
 .SYNOPSIS
-  Logbook API·워커를 Windows 작업 스케줄러에 등록한다(145 서버용).
+  Logbook API·워커·보고서 색인 워커를 Windows 작업 스케줄러에 등록한다(145 서버용).
 
 .DESCRIPTION
-  - 작업 'Logbook API'·'Logbook Worker' 를 "시작 시 실행(30초 지연)" 으로 등록한다. 프로세스가 끝나면
+  - 작업 'Logbook API'·'Logbook Worker'·'Logbook Report Index'(22 — 보고서 본문 색인) 를 "시작 시 실행(30초 지연)" 으로
+    등록한다. 보고서 색인을 쓰지 않으면 -SkipReportIndex. 프로세스가 끝나면
     run-*.ps1 이 스스로 60초 뒤 다시 띄운다(작업 스케줄러의 재시작은 종료 코드로는 동작하지 않는다).
   - 공유 폴더 권한이 있는 도메인 계정으로 돌린다(SYSTEM 은 공유 폴더를 못 읽는다).
     그 계정에는 '일괄 작업으로 로그온'(SeBatchLogonRight) 권한이 있어야 한다.
@@ -15,13 +16,15 @@
 .EXAMPLE
   .\install-tasks.ps1 -User HHI\a476854 -WhatIf     # 할 일만 보여 준다(등록하지 않는다)
   .\install-tasks.ps1 -User HHI\a476854             # 등록(작업마다 비밀번호를 묻는다)
-  .\install-tasks.ps1 -Uninstall                    # 두 작업을 지운다
+  .\install-tasks.ps1 -User HHI\a476854 -SkipReportIndex   # API·워커만(보고서 색인 워커 없이)
+  .\install-tasks.ps1 -Uninstall                    # 세 작업을 지운다
 #>
 [CmdletBinding()]
 param(
     [string]$User,
     [switch]$WhatIf,
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    [switch]$SkipReportIndex
 )
 $ErrorActionPreference = 'Stop'
 
@@ -30,6 +33,9 @@ $Tasks = @(
     @{ Name = 'Logbook API';    Script = (Join-Path $PSScriptRoot 'run-api.ps1') },
     @{ Name = 'Logbook Worker'; Script = (Join-Path $PSScriptRoot 'run-worker.ps1') }
 )
+# 22 — 보고서 본문 색인 워커(따로 도는 프로세스, 색인은 서버 로컬 SQLite). 지울 때는 늘 함께 지운다
+$ReportIndexTask = @{ Name = 'Logbook Report Index'; Script = (Join-Path $PSScriptRoot 'run-report-index.ps1') }
+if ($Uninstall -or -not $SkipReportIndex) { $Tasks += $ReportIndexTask }
 $FirewallName = 'Logbook 9095'
 $FirewallProfiles = 'Domain,Private'
 
@@ -145,3 +151,6 @@ if ($exists) {
     Write-Host "방화벽 규칙 '$FirewallName'(프로필 $FirewallProfiles)을 만들었습니다."
 }
 Write-Host "지금 시작하려면: Start-ScheduledTask -TaskName 'Logbook API'; Start-ScheduledTask -TaskName 'Logbook Worker'"
+if (-not $SkipReportIndex) {
+    Write-Host "보고서 색인 워커: Start-ScheduledTask -TaskName 'Logbook Report Index'  (로그 backend\logs\report-index-console.log)"
+}

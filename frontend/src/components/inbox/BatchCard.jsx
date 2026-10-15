@@ -2,6 +2,7 @@ import { AlertCircle, Check, ChevronRight, FolderInput, Globe } from 'lucide-rea
 import Button from '../ui/Button.jsx';
 import Spinner from '../ui/Spinner.jsx';
 import DraftCard from './DraftCard.jsx';
+import { DuplicateTargets } from './DuplicateBlocked.jsx';
 import { BATCH_STATE_LABELS, EXCLUDE_REASON_LABELS } from '../../lib/labels.js';
 import { MODEL_CONVERT_LABELS, convertCounts, stagedStatus } from '../../lib/inboxStatus.js';
 
@@ -43,10 +44,57 @@ function StepList({ steps }) {
   );
 }
 
-/** 분석 중(staged) — 지금 하는 일 한 줄 + 꺼진 워커 알림 + '무엇을 하나요?' 펼침. */
+/**
+ * 분석 중(staged) 진행 패널 — 작은 머리줄 글자만으로는 '지금 정리 중' 이 잘 보이지 않아(사용자 의견) 따로 띄운다.
+ * 큰 스피너 + 제목 + 지금 하는 일 + 단계 4칸 + 진행 막대(파일 확인 단계는 n/N 만큼, 그 밖은 흐르는 막대).
+ */
+function StagedPanel({ status }) {
+  const running = !!status.current;
+  const wait = status.tone === 'wait';
+  const title = running ? '정리하는 중입니다' : wait ? '정리를 다시 시도하려고 기다리는 중입니다' : '정리를 기다리는 중입니다';
+  const at = status.steps.findIndex((s) => s.state === 'current');
+  const pct = status.fraction != null && at >= 0 ? Math.round(((at + status.fraction) / status.steps.length) * 100) : null;
+  return (
+    <div role="status" aria-label="정리 진행"
+         className={`overflow-hidden rounded-lg border ${wait ? 'border-wait-line bg-wait-bg' : 'border-brand-muted bg-brand-subtle'}`}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+        <Spinner size={22} className={`shrink-0 ${wait ? 'text-wait' : 'text-brand'}`} />
+        <div className="min-w-0 flex-1">
+          <p className={`text-body font-semibold ${wait ? 'text-wait' : 'text-n-900'}`}>{title}</p>
+          <p className="text-ui text-n-700">{status.line}</p>
+        </div>
+        {running && (
+          <ol aria-label="처리 단계" className="flex flex-wrap items-center gap-x-1 gap-y-1 text-meta">
+            {status.steps.map((s, i) => (
+              <li key={s.id} aria-current={s.state === 'current' ? 'step' : undefined} className="flex items-center gap-1">
+                {i > 0 && <ChevronRight size={12} className="text-n-400" aria-hidden="true" />}
+                <span className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 ${
+                  s.state === 'current' ? 'bg-n-0 font-semibold text-brand shadow-xs'
+                    : s.state === 'done' ? 'text-n-700' : 'text-n-500'}`}>
+                  {s.state === 'done' && <Check size={12} aria-hidden="true" />}
+                  {s.label}
+                  {s.state === 'done' && <span className="sr-only"> (끝남)</span>}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+      <div className={`h-1 overflow-hidden ${wait ? 'bg-wait-line' : 'bg-brand-muted'}`}
+           role="progressbar" aria-label="정리 진행률" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined}>
+        {pct != null
+          ? <div className="h-full bg-brand transition-[width] duration-300 ease-out" style={{ width: `${pct}%` }} />
+          : !wait && <div className="progress-indeterminate h-full w-[30%] animate-progress bg-brand" />}
+      </div>
+    </div>
+  );
+}
+
+/** 분석 중(staged) — 진행 패널(또는 꺼진 워커 알림) + '무엇을 하나요?' 펼침. */
 function StagedDetail({ status }) {
   return (
     <>
+      {!status.workerDown && <StagedPanel status={status} />}
       {status.workerDown && (
         <p role="status" className="flex items-start gap-1.5 rounded-md border border-wait-line bg-wait-bg px-3 py-2 text-ui text-wait">
           <AlertCircle size={14} className="mt-[3px] shrink-0" aria-hidden="true" />
@@ -81,12 +129,13 @@ function ProcessedDetail({ converts }) {
 }
 
 /** 한 번에 올라온 배치 = 섹션 — 머리(출처·받은 시각·상태·지금 하는 일) + 설명 + 제외 목록 + 초안들. */
-export default function BatchCard({ batch, me, isAdmin, onChanged, onClaim }) {
+export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChanged, onClaim, onDirtyChange }) {
   const mine = batch.uploader === me;
   const drafts = batch.entries || [];
   const SourceIcon = batch.source === 'web' ? Globe : FolderInput;
   const staged = batch.state === 'staged' ? stagedStatus(batch) : null;
   const converts = convertCounts(drafts.flatMap((d) => d.files || []));
+  const dupCount = (batch.excluded || []).filter((x) => x.reason === 'duplicate_model').length;
   return (
     <section aria-label={`배치 ${batch.original_name}`} className="flex flex-col gap-3">
       <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1">
@@ -97,9 +146,6 @@ export default function BatchCard({ batch, me, isAdmin, onChanged, onClaim }) {
           {batch.state === 'staged' ? <Spinner size={12} /> : <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />}
           {BATCH_STATE_LABELS[batch.state] || batch.state}
         </span>
-        {staged && !staged.workerDown && (
-          <span role="status" className={`text-meta ${staged.tone === 'wait' ? 'text-wait' : 'text-n-600'}`}>{staged.line}</span>
-        )}
         {drafts.length > 0 && (
           <span className="text-meta text-n-500">
             초안 <span className="font-mono">{drafts.length}</span>개 · 확인 후 확정하세요
@@ -115,35 +161,55 @@ export default function BatchCard({ batch, me, isAdmin, onChanged, onClaim }) {
           <span className="text-meta text-n-500">파일 소유 계정 <span className="font-mono text-n-700">{batch.owner_account}</span></span>
         )}
         <div className="flex-1" />
-        {!batch.uploader && <Button size="sm" onClick={() => onClaim(batch.key)}>내가 올렸어요</Button>}
+        {!batch.uploader && canWrite && <Button size="sm" onClick={() => onClaim(batch.key)}>내가 올렸어요</Button>}
       </div>
       {staged && <StagedDetail status={staged} />}
-      {batch.state === 'processed' && drafts.length > 0 && <ProcessedDetail converts={converts} />}
+      {batch.attachment_target && <p role="status" className="text-meta text-n-600">
+        <span className="font-mono">{batch.attachment_target}</span> 초안에 파일을 첨부 중입니다. 해당 초안의 파일 목록에 함께 표시됩니다.
+      </p>}
+      {batch.state === 'processed' && drafts.length > 0 && !batch.attachment_target && <ProcessedDetail converts={converts} />}
       {batch.state === 'failed' && (
         <p className="flex items-center gap-1.5 rounded-md border border-err-line bg-err-bg px-3 py-2 text-ui text-err">
           <AlertCircle size={14} aria-hidden="true" />처리하지 못했습니다: {batch.error}
         </p>
       )}
+      {batch.state === 'done' && drafts.length === 0 && dupCount > 0 && (
+        // 17 — 탐색기로 넣은 BDF 가 모두 이미 있는 자료와 같아 초안 없이 끝난 배치(서버가 며칠 남겨 둔다)
+        <p className="text-meta text-n-600">이미 있는 자료와 같은 BDF 뿐이라 초안을 만들지 않았습니다. 아래 목록에서 같은 자료를 열어 보세요.</p>
+      )}
       {batch.excluded?.length > 0 && (
-        <details className="group rounded-md border border-n-200 text-meta text-n-600">
+        // 17 — 동일 BDF 로 뺀 파일이 있으면 펼쳐 둔다(왜 초안에 없는지 바로 보이게). 대상은 서버가 권한으로 거른 것
+        <details open={dupCount > 0 || undefined} className="group rounded-md border border-n-200 text-meta text-n-600">
           <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 px-3 hover:bg-n-50 [&::-webkit-details-marker]:hidden">
             <ChevronRight size={14} className="text-n-400 transition-transform duration-150 group-open:rotate-90" aria-hidden="true" />
             제외된 파일 <span className="font-mono">{batch.excluded.length}</span>개
+            {dupCount > 0 && <span className="text-n-600">· 동일 BDF <span className="font-mono">{dupCount}</span>개는 올리지 않았습니다</span>}
           </summary>
-          <ul className="space-y-0.5 border-t border-n-200 px-3 py-2">
+          <ul className="space-y-1.5 border-t border-n-200 px-3 py-2">
             {batch.excluded.map((x) => (
-              <li key={x.name} className="flex flex-wrap gap-x-2">
-                <span className="text-n-800">{x.name}</span>
-                {x.reason && <span className="text-wait">{EXCLUDE_REASON_LABELS[x.reason] || x.reason}</span>}
+              <li key={x.name} className="flex min-w-0 flex-col gap-0.5">
+                <span className="flex flex-wrap gap-x-2">
+                  <span className="break-all text-n-800">{x.name}</span>
+                  {x.reason && (
+                    <span className={x.reason.startsWith('duplicate_') ? 'text-n-700' : 'text-wait'}>
+                      {EXCLUDE_REASON_LABELS[x.reason] || x.reason}
+                      {x.reason === 'duplicate_include' && x.of && <> ({x.of})</>}
+                    </span>
+                  )}
+                </span>
+                {x.reason === 'duplicate_model' && <DuplicateTargets item={x} />}
+                {x.reason === 'duplicate_model' && x.kept && (
+                  <span className="text-n-600">원본은 서버 보관 폴더(<span className="font-mono">10_Vault\_staging\{batch.key}</span>)에 남겨 두었습니다.</span>
+                )}
               </li>
             ))}
           </ul>
         </details>
       )}
       {drafts.map((d) => (
-        <DraftCard key={d.entry_id} entry={d} canEdit={mine || isAdmin}
+        <DraftCard key={d.entry_id} entry={d} canEdit={canWrite && (mine || isAdmin)}
                    siblings={drafts.filter((s) => s.entry_id !== d.entry_id).map((s) => ({ entry_id: s.entry_id, title: s.title }))}
-                   onChanged={onChanged} />
+                   onChanged={onChanged} onDirtyChange={onDirtyChange} />
       ))}
     </section>
   );

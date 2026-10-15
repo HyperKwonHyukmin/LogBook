@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import access, models
 from ..config import APP_VERSION
 from ..database import get_db
 from ..dependencies import get_storage, require_auth
@@ -30,6 +30,17 @@ def list_audit(
     user: models.User = Depends(require_auth),
 ):
     q = db.query(models.AuditLog)
+    if not access.is_admin(user):
+        # 13 — 볼 수 없는 Entry(와 그 파일)에 대한 기록은 SQL 조건으로 뺀다(limit 건수가 맞게).
+        # 숨은 번호·파일 id 는 먼저 읽어 값 목록으로 넘긴다 — 표끼리 문자열을 직접 비교하면 정렬 규칙(collation)이 섞인다
+        E, F = models.Entry, models.File
+        hidden = ~access.visible_entries_filter(user)
+        hidden_entries = [e for (e,) in db.query(E.entry_id).filter(E.entry_id.isnot(None), hidden)]
+        hidden_files = [str(i) for (i,) in db.query(F.id).join(E, E.id == F.entry_id).filter(hidden)]
+        if hidden_entries:
+            q = q.filter(~((models.AuditLog.target_type == "entry") & models.AuditLog.target_id.in_(hidden_entries)))
+        if hidden_files:
+            q = q.filter(~((models.AuditLog.target_type == "file") & models.AuditLog.target_id.in_(hidden_files)))
     if action:
         q = q.filter_by(action=action)
     if employee_id:

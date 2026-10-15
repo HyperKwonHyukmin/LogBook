@@ -15,7 +15,7 @@ def test_heavy_jobs_claimed_last(db):
     jobs.enqueue(db, "write_meta", 3)
     db.commit()
     assert jobs.claim_next(db).type == "write_meta"
-    assert set(jobs.HEAVY_JOB_TYPES) == {"extract_file", "convert_model", "solve_check"}  # 06 해석 검증 추가
+    assert set(jobs.HEAVY_JOB_TYPES) == {"extract_file", "convert_model", "revision_diff", "solve_check"}  # 06 해석 검증·14 판 비교
 
 
 def test_process_batch_enqueues_convert(db, storage):

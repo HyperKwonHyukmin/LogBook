@@ -1,4 +1,4 @@
-"""Logbook ORM 모델.
+"""Hi-TESS LogBook ORM 모델.
 
 User·UserSession 은 WorkBench models.py 에서 가져와 축소했다(company·is_developer 제거,
 is_active 대신 status=pending/active/disabled). 감사 로그는 WorkBench activity_log 와 달리
@@ -27,6 +27,14 @@ from sqlalchemy.dialects import mysql
 from .database import Base
 
 USER_STATUSES = ("pending", "active", "disabled")
+# 13 — 사용자 등급(낮은 순). 15 부터 쓰지 않는다(level 로 대체) — 재구축·이전이 옛 값을 읽을 때만
+USER_ROLES = ("guest", "member", "viewer_all", "admin", "master")
+# 15 — LogBook 등급 LV1(게스트)·LV2(일반)·LV3(관리자). 판단은 access.py 한 곳
+USER_LEVELS = (1, 2, 3)
+# 15 — 자료 공개 단계: 공유(LV1 이상) · 일반(LV2 이상, 기본) · 블록(LV3 만). 옛 13 값(public/private)은 이전 대상
+ENTRY_ACCESS = ("shared", "normal", "blocked")
+LEGACY_ENTRY_ACCESS = ("public", "private")
+PRIVATE_MIN_ROLES = ("viewer_all", "admin")
 
 
 def _now() -> datetime:
@@ -46,7 +54,14 @@ class User(Base):
     department = Column(String(100), nullable=True)
     position = Column(String(50), nullable=True)
     status = Column(String(10), nullable=False, default="pending")
-    is_admin = Column(Boolean, nullable=False, default=False)
+    is_admin = Column(Boolean, nullable=False, default=False)   # 호환용 — 실효 LV3 이면 True(아래 _sync_level)
+    # 13 — 등급(guest|member|viewer_all|admin|master). 15 부터 쓰지 않는다(이전 원천으로만 남긴다)
+    role = Column(String(12), nullable=False, server_default=sa_text("'member'"))
+    # 15 — LogBook 등급(1·2·3, 저장값). 실효 등급은 access.level_of = WorkBench 관리자면 3, 아니면 이 값.
+    # 기존 DB 에는 database.ensure_columns 가 NULL 로 더하고 migrate_levels 가 role·is_admin·status 로 채운다
+    level = Column(Integer, nullable=True, default=1)
+    # 15 — WorkBench users.is_admin 의 캐시(로그인·매 요청 확인 때 맞춘다). 참이면 실효 LV3
+    wb_admin = Column(Boolean, nullable=False, default=False, server_default=sa_text("0"))
     login_count = Column(Integer, nullable=False, default=0)
     last_login = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=_now)
@@ -59,6 +74,9 @@ class UserSession(Base):
     employee_id = Column(String(20), nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=_now)
     expires_at = Column(DateTime, nullable=False)
+    # 18 — WorkBench 자동 로그인(/sso)으로 만든 세션의 연결 고리 = sha256(WorkBench 토큰) hex.
+    # WorkBench 에서 로그아웃하면 이 값으로 LogBook 세션을 함께 지운다(/api/integration/logout). 사번 로그인은 NULL
+    wb_ref = Column(String(64), nullable=True, index=True)
 
 
 class AuditLog(Base):
@@ -103,7 +121,7 @@ class Entry(Base):
     title = Column(String(200), nullable=False, default="")
     analysis_type = Column(String(50), nullable=True)
     description = Column(Text, nullable=True)
-    analysis_period = Column(String(7), nullable=True)  # YYYY-MM
+    analysis_period = Column(String(7), nullable=True)  # YYYY-MM — 15 부터 쓰지 않는다(값 보존용으로 열만 남김)
     status = Column(String(10), nullable=False, default="draft")
     batch_id = Column(Integer, ForeignKey("batches.id"), nullable=True, index=True)
     merge_into_id = Column(Integer, ForeignKey("entries.id"), nullable=True)
@@ -115,8 +133,34 @@ class Entry(Base):
     vault_rel = Column(String(40), nullable=True)   # "2026/E000123"
     trash_rel = Column(String(80), nullable=True)   # "E000123_20260929-101500"
     version = Column(Integer, nullable=False, default=1)
+    # 15 — 공개 단계 shared|normal|blocked(access.py). 13 의 public/private 는 database.migrate_access 가 옮긴다.
+    # 기존 DB 의 열 기본값('public')은 그대로 두고 앱이 늘 값을 넣는다(옛 값도 '일반'으로 다룬다)
+    access = Column(String(10), nullable=False, default="normal", server_default=sa_text("'normal'"))
+    # 13 — 15 부터 쓰지 않는다(이전 원천으로만 남긴다)
+    private_min_role = Column(String(12), nullable=False, default="viewer_all",
+                              server_default=sa_text("'viewer_all'"))
+    # 20 — '호선 없음(공용)' 을 명시로 고른 자료. 참이면 BDF 자료도 호선 없이 확정할 수 있다(호선 칸 = '공용')
+    no_hull = Column(Boolean, nullable=False, default=False, server_default=sa_text("0"))
+    # 20 — 제목 초안의 원천(올라온 폴더 이름 또는 확장자 뗀 파일 이름). 20 이전 자료는 NULL — 파일 경로로 추정한다
+    title_source = Column(String(255), nullable=True)
     created_at = Column(DateTime, nullable=False, default=_now)
     updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
+
+
+class EntryGrant(Base):
+    """Entry 개별 열람 허락(13, 15 규칙) — 올린 사람 또는 LV3 가 WorkBench 활성 사용자에게 준다(블록 자료는 LV3 만).
+    공개 단계와 무관하게 그 사람은 이 Entry 를 본다(LV1 이 일반 자료, LV2 가 블록 자료를 보게 하는 수단).
+
+    registry.json(grants)에 남겨 재구축 뒤에도 되살린다. entry.json(공유 폴더 Entry 폴더)에는 넣지 않는다."""
+
+    __tablename__ = "entry_grants"
+    __table_args__ = (UniqueConstraint("entry_id", "employee_id", name="uq_entry_grants_entry_user"),)
+
+    id = Column(Integer, primary_key=True)
+    entry_id = Column(Integer, ForeignKey("entries.id", ondelete="CASCADE"), nullable=False, index=True)
+    employee_id = Column(String(20), nullable=False, index=True)
+    granted_by = Column(String(20), nullable=True)
+    granted_at = Column(DateTime, nullable=False, default=_now)
 
 
 class EntryHull(Base):
@@ -134,7 +178,8 @@ class Tag(Base):
     __table_args__ = (UniqueConstraint("kind", "value", name="uq_tags_kind_value"),)
 
     id = Column(Integer, primary_key=True)
-    kind = Column(String(10), nullable=False)  # zone | free | atype(해석 종류 사전 — Entry 와 잇지 않는다, 08)
+    # zone | free | atype(해석 종류 사전 — Entry 와 잇지 않는다, 08) | project(21 — 자료의 프로젝트, 자료당 하나)
+    kind = Column(String(10), nullable=False)
     value = Column(String(100), nullable=False)
     alias_of_id = Column(Integer, ForeignKey("tags.id"), nullable=True)
     # 08 통제 어휘 — listed=1 인 대표 태그가 목록 용어다. 기존 DB 에는 database.ensure_columns 가 더한다
@@ -168,6 +213,8 @@ class Batch(Base):
     )
     excluded = Column(JSON, nullable=True)
     error = Column(Text, nullable=True)
+    # 17 — LV3 가 '그래도 올리기' 로 올린 배치: 워커 처리·확정 재검사가 완전 동일 BDF 를 막지 않는다
+    allow_duplicates = Column(Boolean, nullable=False, default=False, server_default="0")
     received_at = Column(DateTime, nullable=False, default=_now)
     processed_at = Column(DateTime, nullable=True)
 
@@ -274,6 +321,15 @@ class ModelSummary(Base):
     missing = Column(JSON, nullable=True)    # 찾지 못한 INCLUDE 이름
     # key 의 lbm 형식 버전(bdf.lbm.VERSION). NULL = 04c 이전 변환(v1). 기존 DB 에는 database.ensure_columns 가 더한다
     format_version = Column(Integer, nullable=True)
+    # 내용 서명(12) — 범주별 정규화 sha256(bdf.signature). 파일명·주석·줄 형식·카드 순서와 무관하다.
+    # 같은 모델 = geometry·property·material·load 모두 같음, 같은 형상 = geometry 만 같음(entries/same_model.py).
+    # NULL = 12 이전 변환 → `enqueue-convert --missing-signature` 로 채운다. 기존 DB 에는 ensure_columns 가 더한다.
+    sig_version = Column(Integer, nullable=True)
+    sig_geometry = Column(String(64), nullable=True, index=True)
+    sig_property = Column(String(64), nullable=True)
+    sig_material = Column(String(64), nullable=True)
+    sig_load = Column(String(64), nullable=True)
+    sig_other = Column(String(64), nullable=True)
     updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
 
 
@@ -313,3 +369,171 @@ class SolveCheck(Base):
     requested_by = Column(String(20), nullable=True)
     requested_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
+
+
+class Favorite(Base):
+    """즐겨찾기(10) — 사용자별로 서버에 둬서 다른 PC·브라우저에서도 같은 목록이 보인다.
+
+    Entry 가 휴지통에 가면 행은 남기고 목록에서만 숨긴다(복원하면 그대로 돌아온다). 영구 삭제·합치기로
+    Entry 행이 지워질 때는 entries.service._clear_dangling_references 가 함께 지운다(FK CASCADE 도 건다).
+    개인 편의 정보라 registry.json·재구축(05) 대상이 아니다."""
+
+    __tablename__ = "favorites"
+    __table_args__ = (UniqueConstraint("employee_id", "entry_id", name="uq_favorites_user_entry"),)
+
+    id = Column(Integer, primary_key=True)
+    employee_id = Column(String(20), nullable=False, index=True)
+    entry_id = Column(Integer, ForeignKey("entries.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False, default=_now)
+
+
+class UserPref(Base):
+    """사용자 화면 설정(10) — 열쇠 하나에 JSON 값 하나. 받는 열쇠는 prefs.PREF_KEYS 에 적은 것뿐이다.
+
+    브라우저 localStorage 는 빠른 사본이고, 여기 값이 있으면 다른 PC 에서도 같은 설정으로 시작한다.
+    재구축(05) 대상이 아니다(없으면 기본값으로 동작한다)."""
+
+    __tablename__ = "user_prefs"
+
+    employee_id = Column(String(20), primary_key=True)
+    key = Column(String(40), primary_key=True)
+    value = Column(JSON, nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
+
+
+class CompareHistory(Base):
+    """최근 비교(11) — 사용자가 /compare 로 연 모델 묶음(2~4개). 사용자별로 서버에 둬서 다른 PC 에서도 보인다.
+
+    같은 모델 묶음(순서 무관, ids_key = 정렬한 파일 id)은 한 행 — 다시 열면 순서는 마지막에 연 순서로,
+    open_count·last_opened_at 만 고친다. 사용자당 최근 compares.KEEP 개만 남긴다. 파일이 영구 삭제되면
+    읽을 때 그 id 를 빼고, 남은 모델이 둘보다 적으면 행을 지운다(파일 FK 를 걸지 않는다 — JSON 목록).
+    개인 편의 정보라 registry.json·재구축(05) 대상이 아니다."""
+
+    __tablename__ = "compare_history"
+    __table_args__ = (UniqueConstraint("employee_id", "ids_key", name="uq_compare_history_user_ids"),)
+
+    id = Column(Integer, primary_key=True)
+    employee_id = Column(String(20), nullable=False, index=True)
+    file_ids = Column(JSON, nullable=False)          # 마지막에 연 순서의 파일 id 목록
+    ids_key = Column(String(100), nullable=False)    # 정렬한 id 를 쉼표로 — 같은 묶음 찾기
+    open_count = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, nullable=False, default=_now)
+    last_opened_at = Column(DateTime, nullable=False, default=_now)
+
+
+class ModelRevision(Base):
+    """판 묶음(14) — 한 Entry 안 모델 파일이 어느 계열(series)의 몇 번째 판인가.
+
+    대상 파일(모델, INCLUDE 조각 제외)마다 한 행. series_key 가 NULL 이면 계열이 없다(혼자인 파일).
+    manual = 사용자가 '판 정리'로 정한 행 — 자동 추정(revisions.series.sync)은 manual 이 아닌 행만 다시 정한다.
+    label 은 사용자가 준 판 이름만 담는다(자동 이름 R0·R1… 은 읽을 때 계산). 사용자 정리는 entry.json 에도 남긴다(재구축)."""
+
+    __tablename__ = "model_revisions"
+
+    file_id = Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), primary_key=True)
+    entry_id = Column(Integer, ForeignKey("entries.id", ondelete="CASCADE"), nullable=False, index=True)
+    series_key = Column(String(64), nullable=True)
+    rev_order = Column(Integer, nullable=False, default=0)
+    is_latest = Column(Boolean, nullable=False, default=False)
+    label = Column(String(20), nullable=True)
+    manual = Column(Boolean, nullable=False, default=False)
+    updated_by = Column(String(20), nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
+
+
+DIFF_STATES = ("queued", "running", "done", "error")
+
+
+class RevisionDiff(Base):
+    """두 모델 비교 결과(14 B) — 앞 판 file_a → 뒤 판 file_b, ID 단위.
+
+    key_a·key_b = 비교한 원본 바이트 sha(model_summaries.key), rule_version = revisions.diff.VERSION.
+    셋이 지금 값과 같으면 캐시로 쓰고, 다르면 낡은 결과(다시 비교). 상세(ID 목록·문장)는 파생 폴더
+    `20_Derived/_diff/<k[:2]>/<k>.rdiff`(gzip JSON). 다시 계산하면 나오는 파생값이라 재구축(05) 대상이 아니다."""
+
+    __tablename__ = "revision_diffs"
+    __table_args__ = (UniqueConstraint("file_a", "file_b", name="uq_revision_diffs_pair"),)
+
+    id = Column(Integer, primary_key=True)
+    file_a = Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_b = Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), nullable=False, index=True)
+    key_a = Column(String(64), nullable=True)
+    key_b = Column(String(64), nullable=True)
+    rule_version = Column(Integer, nullable=True)
+    state = Column(String(10), nullable=False, default="queued")
+    summary = Column(JSON, nullable=True)
+    error = Column(String(500), nullable=True)
+    elapsed = Column(Float, nullable=True)
+    requested_by = Column(String(20), nullable=True)
+    requested_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+
+
+class WbTargetRule(Base):
+    """18-b — WorkBench 앱(target)별 보내기 제한. Entry 의 구역·태그 중 하나라도 맞으면 보낼 수 있다(OR).
+
+    행이 없거나 두 목록이 모두 비면 제한하지 않는다. 알려진 target 목록·판정은 wb_targets.py 한 곳.
+    registry.json(wb_target_rules)에도 남겨 재구축 때 되살린다."""
+
+    __tablename__ = "wb_target_rules"
+
+    target = Column(String(20), primary_key=True)   # gmu | truss (wb_targets.TARGETS)
+    zones = Column(JSON, nullable=True)             # 구역 목록 용어 값
+    tags = Column(JSON, nullable=True)              # 자유 태그(입력한 그대로 — 판정 때 동의어를 푼다)
+    updated_by = Column(String(20), nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
+
+
+# 21 — 문서 분류 값(이 순서가 화면의 고르기 순서다 — 프런트는 GET /api/reports 의 document_type_options 로 받는다).
+# 23 — 발표자료·회의자료·계산서를 더했다. 화면 상단 빠른 구분(보고서/발표자료/기타)은 report_catalog.DOCUMENT_TYPE_GROUPS
+REPORT_DOCUMENT_TYPES = ("해석 보고서", "연구 보고서", "시험 보고서", "기술 검토", "발표자료", "회의자료", "계산서",
+                         "지침", "기타")
+
+
+class ReportMeta(Base):
+    """21 — 보고서 파일 하나의 분류(문서 분류). 행이 없으면 '미분류'(version 0).
+    23 — 행이 없는 .ppt/.pptx 는 '발표자료'로 **추정해 보여 준다**(저장하지 않는다 — report_catalog.effective_document_type).
+    행이 있고 document_type 이 NULL 이면 사용자가 '미분류'로 저장한 것이라 추정하지 않는다.
+
+    파일 id 기준이라 파일이 자료 사이를 옮겨 가도(합치기 확정 등) 그대로 따라간다. 휴지통에 가도 남고(복원하면 그대로),
+    영구 삭제(ops/purge)·FK CASCADE 로 함께 지운다. 재구축 원천은 보고서가 든 자료의 entry.json `reports`."""
+
+    __tablename__ = "report_meta"
+
+    file_id = Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), primary_key=True)
+    document_type = Column(String(50), nullable=True)
+    version = Column(Integer, nullable=False, default=1)   # 동시 저장 확인(PUT 의 version 과 같아야 한다)
+    updated_by = Column(String(20), nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
+
+
+class ReportModelLink(Base):
+    """21 — '보고서에 사용한 모델'(사용자가 명시로 연결). 같은 자료의 모델은 연결하지 않아도 관련 모델로 보인다.
+
+    보고서·모델 모두 파일 id 기준. 어느 쪽이든 영구 삭제되면 행도 지운다(ops/purge·FK CASCADE). 휴지통에 간 모델은
+    행을 남기고 화면에서만 숨긴다(복원하면 다시 보인다). 재구축 원천은 보고서 자료의 entry.json `reports[].models`
+    (모델이 든 자료 번호 + 상대경로 + sha256)."""
+
+    __tablename__ = "report_model_links"
+    __table_args__ = (UniqueConstraint("report_file_id", "model_file_id", name="uq_report_model_links_pair"),)
+
+    id = Column(Integer, primary_key=True)
+    report_file_id = Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), nullable=False, index=True)
+    model_file_id = Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_by = Column(String(20), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=_now)
+
+
+# ---- 15: is_admin(호환 열) = 실효 LV3 ----
+# is_admin 은 예전 코드·테스트가 쓰던 호환 열이다. 저장 직전에 level·wb_admin 으로 맞춘다(읽는 코드는 없다).
+from sqlalchemy import event  # noqa: E402
+
+
+def _sync_level(_mapper, _conn, user: "User") -> None:
+    if user.level not in USER_LEVELS:
+        user.level = 1
+    user.is_admin = bool(user.wb_admin) or user.level == 3
+
+
+event.listen(User, "before_insert", _sync_level)
+event.listen(User, "before_update", _sync_level)

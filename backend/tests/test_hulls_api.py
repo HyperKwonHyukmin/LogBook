@@ -32,9 +32,10 @@ def test_hull_detail(client, db, make_entry_file, make_user, auth_headers):
     assert d["stats"]["zones"] == [{"value": "선수부", "count": 1}]
     people = {p["employee_id"]: p for p in d["stats"]["people"]}
     assert people["A100002"]["name"] == "김해석" and people["A100002"]["count"] == 1
-    assert [m["month"] for m in d["timeline"]] == ["2026-09", "2026-08"]
-    assert d["timeline"][0]["entries"][0]["entry_id"] == e2.entry_id
-    assert d["timeline"][1]["entries"][0]["zones"] == ["선수부"]
+    # 15 — 타임라인 월 = 올린 날짜(확정일). e1 의 해석 시기(2026-08)는 쓰지 않는다
+    assert [m["month"] for m in d["timeline"]] == ["2026-09"]
+    assert [x["entry_id"] for x in d["timeline"][0]["entries"]] == [e2.entry_id, e1.entry_id]
+    assert d["timeline"][0]["entries"][1]["zones"] == ["선수부"]
 
 
 def test_hull_detail_404(client, make_user, auth_headers):

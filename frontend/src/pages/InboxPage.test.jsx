@@ -122,3 +122,35 @@ test('가져가기에 실패하면 새로 부른 뒤에도 사유가 남는다',
   await new Promise((r) => { setTimeout(r, 20); });
   expect(screen.getByRole('alert')).toHaveTextContent('이미 다른 사람이 가져갔습니다');
 });
+
+test('초안 카드에 저장하지 않은 변경이 있으면 탭을 바꿀 때 묻는다(11)', async () => {
+  renderPage({ 'GET /api/batches?scope=mine': MINE, 'GET /api/batches?scope=unclaimed': UNCLAIMED,
+               'GET /api/vocab?kind=atype': { kind: 'atype', other: '기타', terms: [] },
+               'GET /api/vocab?kind=zone': { kind: 'zone', other: '기타', terms: [] } });
+  const card = await screen.findByRole('article', { name: /E000010/ });
+  await userEvent.type(within(card).getByLabelText('설명'), '메모');
+  await userEvent.click(screen.getByRole('tab', { name: /주인 없는 배치/ }));
+  const dlg = await screen.findByRole('alertdialog', { name: '저장하지 않은 변경이 있습니다' });
+  await userEvent.click(within(dlg).getByRole('button', { name: '계속 고치기' }));
+  expect(within(card).getByLabelText('설명')).toHaveValue('메모');
+  await userEvent.click(screen.getByRole('tab', { name: /주인 없는 배치/ }));
+  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '버리고 떠나기' }));
+  expect(await screen.findByText('주인 없음')).toBeInTheDocument();
+});
+
+test('LV1(게스트)도 올린다 — 올리기 단추·끌어 놓기 안내가 보인다(15)', async () => {
+  vi.stubGlobal('fetch', vi.fn((url, init = {}) => {
+    if (`${init.method || 'GET'} ${url}` !== 'GET /api/batches?scope=mine') throw new Error(`unexpected ${url}`);
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) });
+  }));
+  render(
+    <AuthContext.Provider value={{ user: { employee_id: 'G100001', name: '손님', level: 1 }, isAdmin: false, canWrite: true }}>
+      <MemoryRouter initialEntries={['/inbox']}>
+        <Routes><Route path="/inbox" element={<InboxPage />} /></Routes>
+      </MemoryRouter>
+    </AuthContext.Provider>,
+  );
+  expect(await screen.findByText('정리할 자료가 없습니다')).toBeInTheDocument();
+  expect(screen.getByText(/끌어 놓거나/)).toBeInTheDocument();
+  expect(screen.queryByText(/등급은 자료를 올릴 수 없습니다/)).toBeNull();
+});

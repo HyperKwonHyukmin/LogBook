@@ -7,7 +7,7 @@ from app.storage.paths import to_long
 
 
 def _seed(db):
-    db.add(models.User(employee_id="A100001", name="홍길동", department="구조", status="active", is_admin=True))
+    db.add(models.User(employee_id="A100001", name="홍길동", department="구조", status="active", level=3))
     db.add(models.Hull(hull_no="9999", ship_type="LNGC", memo="174K"))
     bow = models.Tag(kind="zone", value="선수부")
     db.add(bow)
@@ -21,7 +21,8 @@ def test_build_registry(db):
     _seed(db)
     r = build_registry(db)
     assert r["version"] == 1
-    assert r["users"][0]["employee_id"] == "A100001" and r["users"][0]["is_admin"] is True
+    assert r["users"][0]["employee_id"] == "A100001" and r["users"][0]["level"] == 3
+    assert r["users"][0]["wb_admin"] is False and "role" not in r["users"][0]
     assert r["hulls"] == [{"hull_no": "9999", "ship_type": "LNGC", "memo": "174K"}]
     assert r["tags"] == [{"kind": "zone", "value": "FWD", "alias_of": "선수부"}]
 
@@ -58,22 +59,23 @@ def test_alias_and_hull_update_write_registry(client, db, storage, make_user, au
 
 
 def test_read_missing_returns_empty(storage):
-    assert read_registry(storage) == {"version": 1, "users": [], "hulls": [], "tags": [], "vocab": []}
+    assert read_registry(storage) == {"version": 1, "users": [], "hulls": [], "tags": [], "vocab": [],
+                                      "entry_access": [], "grants": [], "wb_target_rules": []}
 
 
-def test_user_changes_write_registry(client, db, storage, make_user, auth_headers):
-    """가입 신청·승인·관리자 지정·create_admin 뒤에도 registry.json 이 갱신된다."""
+def test_user_changes_write_registry(client, db, storage, make_user, auth_headers, wb):
+    """처음 로그인(LV1)·등급 지정·create_admin 뒤에도 registry.json 이 갱신된다(15)."""
     from app.cli import create_admin
 
-    make_user("A100001", is_admin=True)
+    make_user("A100001", level=3)
     h = auth_headers("A100001")
-    client.post("/api/auth/register", json={"employee_id": "A100002", "name": "김철수"})
+    wb("A100002", name="김철수")
+    client.post("/api/auth/login", json={"employee_id": "A100002"})     # 처음 들어온 WorkBench 가입자
     users = {u["employee_id"]: u for u in read_registry(storage)["users"]}
-    assert users["A100002"]["status"] == "pending"
-    client.post("/api/admin/users/A100002/approve", headers=h)
-    client.put("/api/admin/users/A100002/admin", json={"is_admin": True}, headers=h)
+    assert users["A100002"]["status"] == "active" and users["A100002"]["level"] == 1
+    client.put("/api/admin/users/A100002/level", json={"level": 3}, headers=h)
     users = {u["employee_id"]: u for u in read_registry(storage)["users"]}
-    assert users["A100002"]["status"] == "active" and users["A100002"]["is_admin"] is True
+    assert users["A100002"]["level"] == 3
     create_admin(db, storage, "A100003", "이영희", None)
     assert "A100003" in {u["employee_id"] for u in read_registry(storage)["users"]}
 

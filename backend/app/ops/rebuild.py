@@ -1,8 +1,9 @@
 """재구축(설계 §2.1·§4.1·§9) — 공유 폴더만으로 빈 DB 를 다시 채운다.
 
 원천:
-- 90_System\\registry.json — 사용자·호선 선종/메모·태그 동의어
-- 10_Vault\\<연도>\\<EntryID>\\entry.json — 확정 Entry
+- 90_System\\registry.json — 사용자(등급 포함)·호선 선종/메모·태그 동의어·비공개 범위·열람 허락(13)·
+  WorkBench 보내기 제한 규칙(18-b)
+- 10_Vault\\<연도>\\<EntryID>\\entry.json — 확정 Entry(21 — 프로젝트 `project`, 보고서 정보·연결 `reports`)
 - 95_Trash\\<EntryID>_<시각>\\entry.json — 휴지통 Entry(draft_… 는 entry.json 이 없어 건너뛴다)
 - 90_System\\audit\\*.jsonl — 감사 로그
 - 10_Vault\\_staging\\<key> — 미확정 초안 대신 '주인 없는 배치'로 다시 처리한다
@@ -24,7 +25,8 @@ from ..convert.job import enqueue_convert
 from ..entries.service import HULL_PATTERN, set_tags
 from ..extract.job import enqueue_extract
 from ..ingest.rules import safe_ext
-from ..models import FILE_KINDS, USER_STATUSES
+from ..report_catalog import restore_reports
+from ..models import ENTRY_ACCESS, FILE_KINDS, LEGACY_ENTRY_ACCESS, USER_LEVELS, USER_STATUSES
 from ..storage.paths import StoragePaths, long_join, to_long
 from .autoinc import fix_autoinc
 from .registry import read_registry
@@ -70,6 +72,30 @@ def _dt(value) -> datetime | None:
         return None
 
 
+def _level_of(u: dict) -> int:
+    """registry 사용자 → LogBook 등급(15). 15 이전 registry 는 database.migrate_levels 와 같은 규칙으로
+    (승인 대기·비활성·guest → 1, master·admin·is_admin → 3, viewer_all·member(13 이전은 role 없음) → 2)."""
+    if u.get("level") in USER_LEVELS:
+        return u["level"]
+    if u.get("status") in ("pending", "disabled"):
+        return 1
+    role = u.get("role")
+    if role in ("master", "admin") or u.get("is_admin"):
+        return 3
+    if role in ("viewer_all", "member") or role is None:
+        return 2
+    return 1
+
+
+def access_value(a: str | None, min_role: str | None = None) -> str:
+    """entry.json·registry 의 공개 값 → 15 공개 단계. 13 값(public/private+최소 등급)은 database.migrate_access 규칙."""
+    if a in ENTRY_ACCESS:
+        return a
+    if a == "private":
+        return "blocked" if min_role == "admin" else "normal"
+    return "normal"
+
+
 def _restore_users(db: Session, registry: dict) -> int:
     known = {e for (e,) in db.query(models.User.employee_id)}
     n = 0
@@ -80,7 +106,7 @@ def _restore_users(db: Session, registry: dict) -> int:
         status = u.get("status") if u.get("status") in USER_STATUSES else "pending"
         db.add(models.User(employee_id=eid, name=(u.get("name") or eid)[:50],
                            department=u.get("department"), position=u.get("position"),
-                           status=status, is_admin=bool(u.get("is_admin")),
+                           status=status, level=_level_of(u), wb_admin=bool(u.get("wb_admin")),
                            created_at=_dt(u.get("created_at")) or models._now()))
         known.add(eid)
         n += 1
@@ -118,13 +144,18 @@ def _restore_entry(db: Session, storage: StoragePaths, data: dict, *, status: st
                    updated_at: datetime | None = None) -> tuple[models.Entry, list[models.File], int]:
     """entry.json 하나로 Entry·호선·태그·파일 행을 만든다. 디스크에 없는 파일도 행은 만들고 센다."""
     entry_id = data["entry_id"]
-    e = models.Entry(
+    acc = access_value(data.get("access"), data.get("private_min_role"))
+    e = models.Entry(access=acc,
         id=int(entry_id[1:]), entry_id=entry_id, title=(data.get("title") or "")[:200],
         analysis_type=data.get("analysis_type"), description=data.get("description"),
+        # 15 — 해석 시기는 화면에서 뺐지만 옛 entry.json 에 있으면 열에 그대로 둔다(값 보존)
         analysis_period=data.get("analysis_period"), status=status, batch_id=batch.id,
         uploaded_by=data.get("uploaded_by"), confirmed_by=data.get("confirmed_by"),
         confirmed_at=_dt(data.get("confirmed_at")), vault_rel=vault_rel, trash_rel=trash_rel,
-        version=int(data.get("version") or 1))
+        version=int(data.get("version") or 1),
+        # 20 — 호선 없음(공용)·제목 초안의 원래 이름(없으면 기본값 — 20 이전 entry.json)
+        no_hull=bool(data.get("no_hull")), title_source=(str(data["title_source"])[:255]
+                                                         if data.get("title_source") else None))
     if updated_at is not None:
         # 휴지통 Entry 는 버린 시각(폴더 이름)을 넣는다 — 재구축 시각이면 90일 보관 기간이 처음부터 다시 센다(리뷰 I10)
         e.updated_at = updated_at
@@ -141,6 +172,8 @@ def _restore_entry(db: Session, storage: StoragePaths, data: dict, *, status: st
         _ensure_hull(db, no, h.get("ship_type"))
     set_tags(db, e, "zone", [str(z) for z in data.get("zones") or []])
     set_tags(db, e, "free", [str(t) for t in data.get("tags") or []])
+    if data.get("project"):   # 21 — 프로젝트(자료의 소속)
+        set_tags(db, e, "project", [" ".join(str(data["project"]).split())[:100]])
     files: list[models.File] = []
     missing = 0
     for fd in data.get("files") or []:
@@ -162,14 +195,44 @@ def _restore_entry(db: Session, storage: StoragePaths, data: dict, *, status: st
             missing += 1
             log.warning("재구축: 디스크에 없는 파일 — %s %s", entry_id, rel)
     db.flush()
+    # 14 — 사용자가 정리한 판 배치(entry.json revisions). 자동 추정은 다음 읽기·변환 때 다시 계산된다
+    from ..revisions.series import restore_manual
+    restore_manual(db, e, files, data.get("revisions"))
+    db.flush()
     return e, files, missing
+
+
+def _restore_access(db: Session, registry: dict) -> tuple[int, int]:
+    """13·15 — registry.json 의 공개 단계(공유·블록)·열람 허락을 Entry 에 입힌다(entry.json 보다 registry 를 믿는다 —
+    둘 다 바뀔 때마다 쓰지만, entry.json 은 휴지통·초안에 없을 수 있다). 없는 Entry 는 건너뛴다."""
+    by_id = {eid: pk for pk, eid in db.query(models.Entry.id, models.Entry.entry_id)}
+    n_access = n_grants = 0
+    for a in registry.get("entry_access") or []:
+        pk = by_id.get(str(a.get("entry_id") or ""))
+        if pk is None or a.get("access") not in ENTRY_ACCESS + LEGACY_ENTRY_ACCESS:
+            continue
+        e = db.get(models.Entry, pk)
+        e.access = access_value(a["access"], a.get("private_min_role"))
+        n_access += 1
+    seen: set[tuple[int, str]] = set()
+    for g in registry.get("grants") or []:
+        pk = by_id.get(str(g.get("entry_id") or ""))
+        who = str(g.get("employee_id") or "").strip().upper()
+        if pk is None or not who or (pk, who) in seen:
+            continue
+        seen.add((pk, who))
+        db.add(models.EntryGrant(entry_id=pk, employee_id=who, granted_by=g.get("granted_by"),
+                                 granted_at=_dt(g.get("granted_at")) or models._now()))
+        n_grants += 1
+    db.flush()
+    return n_access, n_grants
 
 
 def _restore_aliases(db: Session, registry: dict) -> int:
     n = 0
     for t in registry.get("tags") or []:
         kind, value, target = t.get("kind"), t.get("value"), t.get("alias_of")
-        if kind not in ("zone", "free", "atype") or not value or not target or value == target:
+        if kind not in ("zone", "free", "atype", "project") or not value or not target or value == target:
             continue
         rows = {}
         for v in (value, target):
@@ -201,6 +264,29 @@ def _restore_vocab(db: Session, registry: dict) -> int:
         row.alias_of_id, row.listed = None, True
         row.sort_order = t.get("sort_order") if isinstance(t.get("sort_order"), int) else None
         row.active = t.get("active") is not False
+        db.flush()
+        n += 1
+    return n
+
+
+def _restore_wb_rules(db: Session, registry: dict) -> int:
+    """18-b — WorkBench 앱별 보내기 제한 규칙. registry 에 있는 대상은 그 값으로 덮는다(비운 규칙도 빈 채로 —
+    서버가 먼저 기동하며 넣은 기본 규칙을 이긴다). 모르는 대상·형식이 틀린 행은 건너뛴다."""
+    from ..wb_targets import TARGETS
+
+    n = 0
+    for r in registry.get("wb_target_rules") or []:
+        target = r.get("target") if isinstance(r, dict) else None
+        if target not in TARGETS:
+            continue
+        zones = [str(v)[:100] for v in r.get("zones") or [] if isinstance(v, str) and v.strip()]
+        tags = [str(v)[:100] for v in r.get("tags") or [] if isinstance(v, str) and v.strip()]
+        row = db.get(models.WbTargetRule, target)
+        if row is None:
+            row = models.WbTargetRule(target=target)
+            db.add(row)
+        row.zones, row.tags = zones, tags
+        row.updated_by = str(r.get("updated_by"))[:20] if r.get("updated_by") else None
         db.flush()
         n += 1
     return n
@@ -291,6 +377,8 @@ def rebuild(db: Session, storage: StoragePaths, *, force: bool = False) -> dict:
     db.commit()
 
     seen: set[str] = set()
+    # 21 — 보고서 정보·연결은 다른 자료의 모델을 가리킬 수 있어 모든 자료를 되살린 뒤에 잇는다
+    pending_reports: list[tuple[str, list]] = []
 
     def add(data: dict | None, folder_id: str, **kw) -> bool:
         if (data is None or data.get("entry_id") != folder_id or not ENTRY_ID_PATTERN.fullmatch(folder_id)
@@ -309,6 +397,8 @@ def rebuild(db: Session, storage: StoragePaths, *, force: bool = False) -> dict:
             return False
         result["files"] += len(files)
         result["missing_files"] += missing
+        if data.get("reports"):
+            pending_reports.append((folder_id, data["reports"]))
         if (result["entries"] + result["trashed"]) % COMMIT_EVERY == COMMIT_EVERY - 1:
             db.commit()
         return True
@@ -346,8 +436,17 @@ def rebuild(db: Session, storage: StoragePaths, *, force: bool = False) -> dict:
             result["trashed"] += 1
     db.commit()
 
+    try:
+        with db.begin_nested():
+            result.update(restore_reports(db, pending_reports))
+    except Exception as exc:  # noqa: BLE001 — 보고서 정보가 깨져 있어도 자료 재구축은 끝낸다
+        log.warning("재구축: 보고서 정보·연결을 되살리지 못함 — %s", exc)
+    db.commit()
+
+    result["access_entries"], result["grants"] = _restore_access(db, registry)
     result["alias_tags"] = _restore_aliases(db, registry)
     result["vocab_terms"] = _restore_vocab(db, registry)
+    result["wb_target_rules"] = _restore_wb_rules(db, registry)
     result["audit"], result["audit_bad"] = _restore_audit(db, storage)
     db.commit()
 
@@ -363,8 +462,8 @@ def rebuild(db: Session, storage: StoragePaths, *, force: bool = False) -> dict:
             result["jobs"] += 1
     db.commit()
 
-    result["admins"] = [e for (e,) in db.query(models.User.employee_id).filter(models.User.is_admin.is_(True))
-                        .order_by(models.User.employee_id)]
+    result["admins"] = [e for (e,) in db.query(models.User.employee_id)
+                        .filter(models.User.level == 3).order_by(models.User.employee_id)]
     audit.record(db, storage, actor="system", action="DB_REBUILD", target_type="system", target_id="rebuild",
                  after={k: v for k, v in result.items() if k != "missing_in_db"})
     # 새 Entry 번호가 디스크·감사 로그·휴지통에서 본 번호와 겹치지 않게 자동 증가 값을 올린다(리뷰 I6)

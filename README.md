@@ -1,6 +1,8 @@
-# Logbook — 구조해석 항해일지
+# Hi-TESS LogBook — 구조해석 항해일지
 
-구조해석 모델(BDF)·결과·보고서를 호선·선종·구역으로 묶어 보관·검색·확인하는 팀 자료 창고.
+구조해석 모델(BDF)·결과·보고서를 호선·선종·구역으로 묶어 보관·검색·확인하는 팀 자료 창고. Hi-TESS(구조 해석 도구 묶음)의 한 갈래다.
+
+- **사용자 = HiTESS WorkBench 가입자**(15). 같은 MySQL 의 `hitessworkbench.users` 를 **읽기만** 한다 — logbook DB 계정에 `GRANT SELECT ON hitessworkbench.users` 가 필요하다(아래 'WorkBench 사용자 표'). 자체 가입은 없고, 처음 들어오면 LV1(게스트)이다. WorkBench 관리자는 자동 LV3.
 
 - 설계: `docs/specs/2026-09-28-logbook-design.md` · 계획: `docs/plans/` · WorkBench 재사용 목록: `docs/reuse-inventory.md`
 - 데이터 원본: `\\storage.hpc.hd.com\a476854\00_PROJECT\AA_300_CF44\999_LogBook`
@@ -34,10 +36,16 @@ FLUSH PRIVILEGES;
     npm run build                         # dist 는 커밋한다(145 에 Node 불필요)
 
     cd ..\backend
-    .venv\Scripts\python.exe -m app.cli create-admin <사번> <이름> [부서]
+    .venv\Scripts\python.exe -m app.cli create-admin <사번> <이름> [부서]   # WorkBench 관리자가 아니면서 LV3 가 필요할 때만
     .venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 9095
 
 프론트 개발 서버(핫 리로드)는 `cd frontend; npm run dev` → http://localhost:5180 (/api 는 9095 로 전달).
+
+백엔드 테스트 DB(`logbook_test`) 초기화 방식(`backend/tests/conftest.py`): 스키마는 pytest 세션 시작 때 한 번만
+만들고, 테스트 사이에는 손댄 표의 데이터만 비운다(DELETE + `AUTO_INCREMENT=1`, FULLTEXT 표는 TRUNCATE — id 는
+새 표처럼 1번부터). 전체 실행 ~29분 → ~4.5분. **스키마를 바꾸는 테스트**(ALTER TABLE·DROP INDEX·일부 표 drop 후
+`init_schema` 등)에는 `@pytest.mark.fresh_schema` 를 단다 — 그 테스트만 앞뒤로 drop_all/create_all 한다.
+표시를 빠뜨리면 테스트 끝에 스키마 지문을 비교해 표를 다시 만들고 "fresh_schema 를 달 것" 경고를 남긴다.
 
 ## 145 서버 (첫 배포)
 
@@ -65,6 +73,20 @@ FLUSH PRIVILEGES;
     .venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 9095
 
 업데이트: `git pull` 후 서버 재시작. 첫 배포 점검: 팀원 PC 에서 http://10.14.42.145:9095 접속(안 되면 145 방화벽 9095 인바운드 허용), 화면 좌측 하단 "999_LogBook 연결됨" 확인.
+
+## WorkBench 사용자 표 (15)
+
+LogBook 은 로그인·매 요청 확인에 WorkBench 의 users 표를 **SELECT 만** 한다(INSERT·UPDATE·DDL 없음 — `tests/test_wb_users_15.py` 가 고정).
+표 이름은 `LOGBOOK_WB_USERS_TABLE`(기본 `hitessworkbench.users`), 활성 여부 캐시는 `LOGBOOK_WB_CACHE_SECONDS`(기본 60초). root 로 한 번:
+
+```sql
+GRANT SELECT ON hitessworkbench.users TO '<logbook 계정>'@'<호스트>';
+FLUSH PRIVILEGES;
+SHOW GRANTS FOR '<logbook 계정>'@'<호스트>';
+```
+
+확인: 관리자 화면 '운영' 의 'WorkBench 사용자 표' 가 '연결됨 · 활성 N명'. 권한이 없으면 로그인이 'WorkBench 사용자 정보를 읽을 수 없습니다'(503)로 실패한다.
+개발 PC 테스트는 `logbook_test` 안의 가짜 표 `wb_users`(conftest 가 만든다)를 쓴다 — 실제 `hitessworkbench` 에 접속하지 않는다.
 
 ## 운영 참고 (145)
 

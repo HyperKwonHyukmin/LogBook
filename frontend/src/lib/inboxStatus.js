@@ -10,7 +10,7 @@ export const BATCH_STEPS = [
   { id: 'scan', label: '파일 목록 훑기', detail: '올린 폴더 안의 파일을 모두 셉니다.' },
   {
     id: 'files', label: '파일마다 확인',
-    detail: '임시·잠금 파일(~$ 등)을 빼고, 종류(BDF·결과·보고서·도면)를 나누고, DRM 이 걸렸는지 보고, '
+    detail: '임시·잠금 파일(~$ 등)을 빼고, 종류(BDF·결과·문서·도면)를 나누고, DRM 이 걸렸는지 보고, '
       + '지문(SHA-256)을 계산해 이미 보관된 파일과 겹치는지 확인합니다.',
   },
   {
@@ -19,7 +19,7 @@ export const BATCH_STEPS = [
   },
   {
     id: 'queue', label: '본문 추출·3D 변환 예약',
-    detail: '보고서 본문 색인과 BDF 3D 변환은 오래 걸려 따로 예약합니다. 초안이 먼저 나타나고 변환은 이어서 진행됩니다.',
+    detail: '문서 본문 색인과 BDF 3D 변환은 오래 걸려 따로 예약합니다. 초안이 먼저 나타나고 변환은 이어서 진행됩니다.',
   },
 ];
 
@@ -33,7 +33,7 @@ const STEP_LINES = {
 /**
  * 분석 중(staged) 배치의 한 줄 상태와 단계 표.
  * @returns {{ line: string, tone: 'normal'|'wait', workerDown: boolean, current: string|null,
- *             steps: Array<{ id, label, detail, state: 'done'|'current'|'todo' }> }}
+ *             steps: Array<{ id, label, detail, state: 'done'|'current'|'todo' }>, fraction: number|null }}
  */
 export function stagedStatus(batch) {
   const q = batch.queue || {};
@@ -47,13 +47,13 @@ export function stagedStatus(batch) {
   if (current) {
     line = STEP_LINES[current](p);
   } else if (workerDown) {
-    line = '처리 프로그램(워커)이 꺼져 있어 기다리는 중입니다 — 관리자에게 알려 주세요.';
+    line = '처리 프로그램(워커)이 꺼져 있어 기다리는 중입니다. 관리자에게 알려 주세요.';
     tone = 'wait';
   } else if (q.job_state === 'running') {
     line = '처리를 시작했습니다';
     current = 'scan';
   } else if (q.job_state === 'failed') {
-    line = '처리하지 못했습니다 — 관리자에게 알려 주세요.';
+    line = '처리하지 못했습니다. 관리자에게 알려 주세요.';
     tone = 'wait';
   } else if (q.last_error) {
     line = `처리 중 문제가 생겨 다시 시도를 기다리는 중입니다(${q.attempts}번 시도)`;
@@ -63,11 +63,13 @@ export function stagedStatus(batch) {
   } else if (q.busy_with?.length) {
     line = `워커가 하던 작업(${q.busy_with.map((t) => JOB_TYPE_LABELS[t] || t).join('·')})을 마치면 시작합니다`;
   } else {
-    line = '곧 시작합니다 — 워커가 30초마다 새 배치를 확인합니다';
+    line = '곧 시작합니다. 워커가 30초마다 새 배치를 확인합니다';
   }
   const at = BATCH_STEPS.findIndex((s) => s.id === current);
   const steps = BATCH_STEPS.map((s, i) => ({ ...s, state: at < 0 ? 'todo' : i < at ? 'done' : i === at ? 'current' : 'todo' }));
-  return { line, tone, workerDown: workerDown && !current, current, steps };
+  // 파일 확인 단계만 n/N 을 알 수 있다 — 진행 막대를 그만큼 채운다(나머지 단계는 흐르는 막대)
+  const fraction = current === 'files' && p?.total ? Math.min(1, (p.done || 0) / p.total) : null;
+  return { line, tone, workerDown: workerDown && !current, current, steps, fraction };
 }
 
 /** BDF 3D 변환 상태 — 파일 하나. 모델 파일이 아니거나 기록이 없으면 null. */
@@ -106,17 +108,29 @@ export function hasPendingConvert(batch) {
 
 /**
  * 초안에서 사람이 확인할 것 — 확정을 막는 것(blocking)과 권하는 것.
- * form: 화면에서 고치는 중인 값(제목·호선·해석 종류), entry: 서버 값(파일).
+ * form: 화면에서 고치는 중인 값(제목·호선·호선 없음(공용)·구역·해석 종류), entry: 서버 값(파일).
+ * 20 — BDF 가 있는 자료는 호선(또는 '호선 없음(공용)')·구역·해석 종류가 확정을 막는다(서버 409 required_fields 와 같은 규칙).
+ * 21 — 프로젝트가 있으면 호선 대신 인정한다(독립 프로젝트 모델).
+ * BDF 없는 자료(보고서만 등)는 호선·해석 종류를 권하기만 한다.
+ * 기존 자료에 파일을 더하는 초안(merge_into)은 그 자료의 분류를 따르므로 보지 않는다.
  * @returns {Array<{ id, text, blocking?: boolean }>}
  */
 export function draftChecks(form, entry) {
   const out = [];
-  if (!(form.title || '').trim()) out.push({ id: 'title', text: '제목 없음 — 확정하려면 필요합니다', blocking: true });
-  if (!(form.hulls || []).length) out.push({ id: 'hull', text: '호선 없음 — 호선으로 찾을 수 있게 넣어 주세요' });
-  if (!(form.analysis_type || '').trim()) out.push({ id: 'type', text: '해석 종류 없음' });
+  if (!(form.title || '').trim()) out.push({ id: 'title', text: '제목 없음: 확정하려면 필요합니다', blocking: true });
   const files = entry.files || [];
+  const bdf = !entry.merge_into && files.some((f) => f.kind === 'model' && f.location !== 'trash');
+  const noHull = !(form.hulls || []).length && !form.no_hull && !String(form.project ?? '').trim();
+  if (bdf) {
+    if (noHull) out.push({ id: 'hull', text: "호선 없음: BDF 자료는 호선(또는 프로젝트·'호선 없음(공용)')이 필요합니다", blocking: true });
+    if (!(form.zones || []).length) out.push({ id: 'zone', text: '구역 없음: BDF 자료는 구역이 필요합니다', blocking: true });
+    if (!(form.analysis_type || '').trim()) out.push({ id: 'type', text: '해석 종류 없음: BDF 자료는 해석 종류가 필요합니다', blocking: true });
+  } else if (!entry.merge_into) {
+    if (noHull) out.push({ id: 'hull', text: '호선 없음: 호선으로 찾을 수 있게 넣어 주세요' });
+    if (!(form.analysis_type || '').trim()) out.push({ id: 'type', text: '해석 종류 없음' });
+  }
   const drm = files.filter((f) => f.drm_encrypted).length;
-  if (drm) out.push({ id: 'drm', text: `암호화 파일 ${drm}개 — 본문·3D 를 읽지 못합니다` });
+  if (drm) out.push({ id: 'drm', text: `암호화 파일 ${drm}개: 본문·3D 를 읽지 못합니다` });
   const dup = files.filter((f) => f.duplicate_of_entry).length;
   if (dup) out.push({ id: 'dup', text: `이미 보관된 파일 ${dup}개` });
   return out;

@@ -8,14 +8,17 @@ from pathlib import Path, PurePosixPath
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from .. import audit, jobs, models, vocab
+from .. import access, audit, jobs, models, vocab
 from ..storage.paths import StoragePaths, long_join, to_long
+from ..revisions.series import refresh as refresh_revisions, series_brief
+from .same_model import find_same_models
+from . import quality
 
 logger = logging.getLogger(__name__)
 
 HULL_PATTERN = re.compile(r"^[0-9]{4}$")
-EDITABLE_FIELDS = ("title", "analysis_type", "description", "analysis_period")
-PERIOD_PATTERN = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])$")
+# 15 — 해석 시기(analysis_period)는 뺐다(열은 남지만 받지도 보이지도 않는다)
+EDITABLE_FIELDS = ("title", "analysis_type", "description")
 
 
 def hulls_of(db: Session, entry: models.Entry) -> list[models.EntryHull]:
@@ -34,11 +37,48 @@ def zones_of(db: Session, entry: models.Entry) -> list[str]:
     return tags_of(db, entry, "zone")
 
 
-def file_to_dict(f: models.File, duplicate_entries: dict[int, str] | None = None,
+# 21 — 프로젝트(자료의 소속 — 호선 대신 독립 프로젝트로 묶는 자료). 자유 값 + 자동완성, 자료당 하나.
+# 태그 kind='project' 로 둔다(구역처럼 entry_tags 로 잇고, 동의어 묶기·재구축 registry 를 그대로 쓴다)
+PROJECT_MAX = 100
+
+
+def clean_project(value) -> str:
+    """앞뒤·연속 공백 정리 + 길이 제한."""
+    return " ".join(str(value or "").split())[:PROJECT_MAX]
+
+
+def project_of(db: Session, entry: models.Entry) -> str | None:
+    values = tags_of(db, entry, "project")
+    return values[0] if values else None
+
+
+def set_project(db: Session, entry: models.Entry, value) -> None:
+    """프로젝트 바꾸기(빈 값이면 지운다). 이미 있는 이름(대소문자 무시)·동의어는 그 대표 이름으로 맞춘다."""
+    from ..tags import root_value
+
+    v = clean_project(value)
+    if v:
+        v = root_value(db, "project", v)
+    set_tags(db, entry, "project", [v] if v else [])
+
+
+def file_rank(f: models.File, model_rows: dict[int, models.ModelSummary] | None = None) -> int:
+    """파일 목록 순서 — 해석 모델을 맨 위에 둬 목록에서 바로 열어 보게 한다.
+    0 = 변환된 모델(본 BDF, 3D 로 열림) · 1 = 그 밖의 모델 파일(변환 전·INCLUDE) · 2 = 나머지."""
+    if model_rows and f.id in model_rows:
+        return 0
+    return 1 if f.kind == "model" else 2
+
+
+def file_to_dict(f: models.File, duplicate_entries: dict[int, str | None] | None = None,
                  extracts: dict[int, models.FileExtract] | None = None,
-                 model_rows: dict[int, models.ModelSummary] | None = None) -> dict:
+                 model_rows: dict[int, models.ModelSummary] | None = None,
+                 same_models: dict[int, dict] | None = None) -> dict:
     x = (extracts or {}).get(f.id)
     s = (model_rows or {}).get(f.id)
+    # 같은 BDF(12) — 서명이 없으면(변환 전·실패·include) 빈 목록
+    same = (same_models or {}).get(f.id) or {"same_model": [], "same_model_total": 0,
+                                             "same_geometry": [], "same_geometry_total": 0}
     return {"id": f.id, "rel_path": f.rel_path, "name": f.name, "kind": f.kind, "size": f.size,
             "sha256": f.sha256, "drm_encrypted": f.drm_encrypted, "duplicate_of_id": f.duplicate_of_id,
             "duplicate_of_entry": (duplicate_entries or {}).get(f.duplicate_of_id),
@@ -48,62 +88,144 @@ def file_to_dict(f: models.File, duplicate_entries: dict[int, str] | None = None
             "model": ({"state": s.state, "error": s.error, "counts": s.counts, "bbox": s.bbox,
                        "missing": s.missing or [], "warnings": (s.warnings or [])[:10],
                        # lbm 형식 버전(04c) — 변환 결과가 없으면 None, 04c 이전 결과(NULL)는 1
-                       "format_version": (s.format_version or 1) if s.key else None} if s else None)}
+                       "format_version": (s.format_version or 1) if s.key else None, **same} if s else None)}
 
 
-def _entry_ref(db: Session, entry_pk: int | None) -> dict | None:
+def _entry_ref(db: Session, entry_pk: int | None, viewer=None) -> dict | None:
+    """다른 Entry 를 가리키는 짧은 참조. viewer 가 볼 수 없는 Entry 면 None(존재를 숨긴다, 13)."""
     if entry_pk is None:
         return None
     e = db.get(models.Entry, entry_pk)
-    return {"entry_id": e.entry_id, "title": e.title} if e else None
+    if e is None or (viewer is not None and not access.can_view_entry(viewer, e, db=db)):
+        return None
+    return {"entry_id": e.entry_id, "title": e.title}
 
 
-def entry_to_dict(db: Session, entry: models.Entry) -> dict:
+def grants_of(db: Session, entry: models.Entry) -> list[dict]:
+    """Entry 의 개별 열람 허락 목록(15) — 이름·등급·효력. 효력 = 대상이 지금 WorkBench 활성 사용자.
+    WorkBench 표를 읽을 수 없으면 LogBook 에 남은 이름만 싣고 효력은 None(모름)."""
+    from .. import wb_users
+
+    rows = (db.query(models.EntryGrant).filter_by(entry_id=entry.id)
+            .order_by(models.EntryGrant.granted_at, models.EntryGrant.id).all())
+    ids = [g.employee_id for g in rows]
+    users = {u.employee_id: u for u in db.query(models.User).filter(models.User.employee_id.in_(ids or [""]))}
+    try:
+        wb = wb_users.fetch_many(db, ids)
+    except wb_users.WbUnavailable:
+        wb = None
+    out = []
+    for g in rows:
+        u, w = users.get(g.employee_id), (wb or {}).get(g.employee_id)
+        level = 3 if (w is not None and w.is_admin) else ((u.level or 1) if u is not None else 1)
+        out.append({"employee_id": g.employee_id,
+                    "name": (w.name if w is not None else None) or (u.name if u is not None else None),
+                    "level": level,
+                    "effective": None if wb is None else bool(w is not None and w.is_active),
+                    "granted_by": g.granted_by, "granted_at": g.granted_at.isoformat() if g.granted_at else None})
+    return out
+
+
+def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
+    """Entry 사전. viewer(요청한 사용자)를 주면 그가 볼 수 없는 다른 Entry 참조(바이트 동일 파일의 소속·
+    같은 BDF·합치기 제안)를 숨기고, 공개 범위를 바꿀 수 있으면 열람 허락 목록을 싣는다(13).
+    viewer 가 None 이면 내부용(entry.json·감사 스냅숏) — 숨기지 않는다. API 응답에는 반드시 viewer 를 준다."""
     hulls = hulls_of(db, entry)
     ship = {h.hull_no: h.ship_type for h in
             db.query(models.Hull).filter(models.Hull.hull_no.in_([x.hull_no for x in hulls]))} if hulls else {}
     files = db.query(models.File).filter_by(entry_id=entry.id).order_by(models.File.rel_path).all()
     dup_ids = [f.duplicate_of_id for f in files if f.duplicate_of_id]
-    dup_entries = dict(
-        db.query(models.File.id, models.Entry.entry_id).join(models.Entry, models.Entry.id == models.File.entry_id)
-        .filter(models.File.id.in_(dup_ids)).all()) if dup_ids else {}
+    dup_rows = (db.query(models.File.id, models.Entry.id, models.Entry.entry_id)
+                .join(models.Entry, models.Entry.id == models.File.entry_id)
+                .filter(models.File.id.in_(dup_ids)).all()) if dup_ids else []
+    seen_pks = access.visible_entry_pks(db, viewer, {pk for _f, pk, _e in dup_rows}) if viewer is not None else None
+    # 13 — 볼 수 없는 Entry 에 있는 같은 파일은 '어디에 있는지' 를 숨긴다(소속 번호 None)
+    dup_entries = {fid: (eid if seen_pks is None or pk in seen_pks else None) for fid, pk, eid in dup_rows}
     extracts = {x.file_id: x for x in db.query(models.FileExtract)
                 .filter(models.FileExtract.file_id.in_([f.id for f in files]))} if files else {}
     model_rows = {s.file_id: s for s in db.query(models.ModelSummary)
                   .filter(models.ModelSummary.file_id.in_([f.id for f in files]))} if files else {}
-    return {
+    files = sorted(files, key=lambda f: file_rank(f, model_rows))  # 안정 정렬 — 같은 순위 안은 rel_path 순
+    same_models = find_same_models(db, model_rows, files, viewer=viewer)
+    suggested = _entry_ref(db, entry.suggested_entry_id, viewer)
+    merge_into = _entry_ref(db, entry.merge_into_id, viewer)
+    # 20 — 필수 분류(BDF 자료는 호선·구역·해석 종류)
+    zones = zones_of(db, entry)
+    project = project_of(db, entry)
+    missing = quality.missing_fields(has_bdf=any(f.kind == "model" and f.location != "trash" for f in files),
+                                     hulls=[h.hull_no for h in hulls], no_hull=bool(entry.no_hull), zones=zones,
+                                     analysis_type=entry.analysis_type, project=project)
+    d = {
         "id": entry.id, "entry_id": entry.entry_id, "status": entry.status, "title": entry.title,
-        "analysis_type": entry.analysis_type, "description": entry.description,
-        "analysis_period": entry.analysis_period, "version": entry.version,
+        "analysis_type": entry.analysis_type, "description": entry.description, "version": entry.version,
         "hulls": [{"hull_no": h.hull_no, "ship_type": ship.get(h.hull_no), "is_primary": bool(h.is_primary)}
                   for h in hulls],
-        "zones": zones_of(db, entry),
+        "no_hull": bool(entry.no_hull),
+        # 21 — 프로젝트(자료의 소속). 보고서 화면의 '자료 소속'은 호선·프로젝트·공용에서 파생한다(report_catalog.scope_of)
+        "project": project,
+        "zones": zones,
         "tags": tags_of(db, entry, "free"),
         "hull_evidence": entry.hull_evidence or [],
         "uploaded_by": entry.uploaded_by, "confirmed_by": entry.confirmed_by,
         "confirmed_at": entry.confirmed_at.isoformat() if entry.confirmed_at else None,
         "batch_id": entry.batch_id, "merge_into_id": entry.merge_into_id,
-        "suggested_entry_id": entry.suggested_entry_id, "vault_rel": entry.vault_rel,
-        "files": [file_to_dict(f, dup_entries, extracts, model_rows) for f in files],
-        "suggested_entry": _entry_ref(db, entry.suggested_entry_id),
-        "merge_into": _entry_ref(db, entry.merge_into_id),
+        "suggested_entry_id": entry.suggested_entry_id if (viewer is None or suggested) else None,
+        "vault_rel": entry.vault_rel,
+        "files": [file_to_dict(f, dup_entries, extracts, model_rows, same_models) for f in files],
+        "suggested_entry": suggested,
+        "merge_into": merge_into,
+        # 14 — 판 묶음(저장된 행만 읽는다 — 정리 대기 카드의 짧은 흐름 줄). 상세 화면은 /revisions 를 따로 읽는다
+        "revisions": series_brief(db, entry.id),
+        **access.access_brief(entry),
+        # 20 — 빠진 필수 칸(BDF 자료만 — 초안이면 확정을 막는다)·제목 초안(형식대로 만든 제목)
+        "required_missing": missing,
+        "title_source": entry.title_source,
+        "title_draft": None,
     }
+    if entry.status != "trashed":
+        ctx = quality.TitleContext(db)
+        d["title_draft"] = ctx.draft(entry)
+        # 초안 제목이 초안 그대로(사람이 고치지 않음)면 값을 바꿀 때 제목이 따라 바뀐다(update_entry)
+        d["title_is_auto"] = entry.status == "draft" and ctx.is_auto(entry)
+    if viewer is not None:
+        if not merge_into:
+            d["merge_into_id"] = None
+        d["can_edit"] = access.can_edit_entry(viewer, entry)
+        # 15 — 공유/일반·허락은 올린 사람 + LV3(블록된 자료는 LV3 만), 블록 지정·해제는 LV3 만
+        d["can_manage_access"] = access.can_manage_access(viewer, entry) and entry.status != "trashed"
+        d["can_block"] = access.is_admin(viewer) and entry.status != "trashed"
+        if d["can_manage_access"]:
+            d["grants"] = grants_of(db, entry)
+        # 20 — '보완 필요'(확정 자료에 빠진 필수 칸)는 고칠 수 있는 사람(올린 사람·LV3)에게만
+        d["needs_fix"] = missing if (entry.status == "confirmed" and d["can_edit"]) else []
+        # 20 — 확정 전 같은 호선의 같은·비슷한 제목(막지 않는다). 기존 자료에 추가하는 초안은 보지 않는다
+        if entry.status == "draft" and not entry.merge_into_id:
+            d["similar_entries"] = quality.similar_entries(db, entry, viewer)
+    if entry.status == "draft":
+        from .draft_attachments import pending_batches
+        d["pending_attachments"] = [{"key": b.key, "state": b.state}
+                                    for b in pending_batches(db, entry.id)]
+    return d
 
 
 def snapshot(db: Session, entry: models.Entry) -> dict:
     d = entry_to_dict(db, entry)
-    return {k: d[k] for k in ("title", "analysis_type", "description", "analysis_period", "zones", "tags")} | {
-        "hulls": [h["hull_no"] for h in d["hulls"]]}
+    return {k: d[k] for k in ("title", "analysis_type", "description", "zones", "tags")} | {
+        "hulls": [h["hull_no"] for h in d["hulls"]]} | ({"no_hull": True} if d["no_hull"] else {}) | (
+        {"project": d["project"]} if d["project"] else {})   # 21 — 프로젝트(있을 때만)
 
 
 def can_edit_draft(user: models.User, entry: models.Entry) -> bool:
-    return user.is_admin or (entry.uploaded_by is not None and entry.uploaded_by == user.employee_id)
+    """초안 — 올린 사람 또는 관리자 이상(guest 는 아무것도 못 고친다, 13)."""
+    return access.can_edit_entry(user, entry)
 
 
 def ensure_editable(user: models.User, entry: models.Entry) -> None:
+    """초안·확정 모두 올린 사람 또는 관리자 이상(13 — 예전에는 확정 자료를 누구나 고쳤다). guest 는 403."""
+    access.require_writer(user)
     if entry.status == "trashed":
         raise HTTPException(status_code=409, detail="entry_trashed")
-    if entry.status == "draft" and not can_edit_draft(user, entry):
+    if not access.can_edit_entry(user, entry):
         raise HTTPException(status_code=403, detail="not_uploader")
 
 
@@ -160,7 +282,7 @@ def set_zones(db: Session, entry: models.Entry, values: list[str]) -> None:
     set_tags(db, entry, "zone", values)
 
 
-def _set_merge_into(db: Session, entry: models.Entry, value: str | None) -> None:
+def _set_merge_into(db: Session, entry: models.Entry, value: str | None, user: models.User | None = None) -> None:
     """PATCH 로 초안의 merge_into_id 를 바꾼다(I9) — 확정 시점에 대상이 이미 휴지통이거나
     없어졌으면 confirm() 이 409 target_not_confirmed 로 막지만, 그때까지는 손 쓸 방법이
     없었다. 이제 사용자가 이 필드를 비워(null) 그 초안을 일반 확정으로 되돌릴 수 있다."""
@@ -170,29 +292,51 @@ def _set_merge_into(db: Session, entry: models.Entry, value: str | None) -> None
         entry.merge_into_id = None
         return
     target = db.query(models.Entry).filter_by(entry_id=str(value).upper()).first()
-    if target is None:
+    # 13 — 볼 수 없는 Entry 는 없는 것과 같다
+    if target is None or (user is not None and not access.can_view_entry(user, target, db=db)):
         raise HTTPException(status_code=422, detail="merge_target_not_found")
     entry.merge_into_id = target.id
 
 
-def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User,
-                 patch: dict, ip: str | None = None) -> models.Entry:
+# 20 — 이 칸이 바뀌면 (사람이 고치지 않은) 초안 제목을 형식대로 다시 만든다
+TITLE_VALUE_FIELDS = ("hulls", "no_hull", "zones", "analysis_type", "project")   # 21 — 프로젝트(호선 대신 제목 머리)
+# 21 — 확정 자료에서 프로젝트만 바뀐 수정은 감사 동작 이름을 따로 남긴다(활동 로그에서 '프로젝트 변경'으로 보인다)
+PROJECT_ACTION = "ENTRY_PROJECT"
+
+
+def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User | None,
+                 patch: dict, ip: str | None = None, *, action: str = "ENTRY_UPDATE",
+                 system_actor: str | None = None) -> models.Entry:
+    """Entry 고치기(초안·확정 공용).
+
+    20 — patch.no_hull('호선 없음(공용)'), patch.title_auto(제목을 형식대로 다시 만들기). 초안은 제목이 초안 그대로
+    (사람이 고치지 않음)면 호선·구역·해석 종류를 바꿀 때 제목도 따라 바뀐다. action·system_actor — 관리 정비
+    (자료 정비 화면·CLI)가 같은 경로로 고치며 감사 동작 이름을 달리 남긴다. system_actor 가 있으면 권한 검사 없이
+    그 이름으로 기록한다(서버 콘솔 CLI 전용 — API 는 넘기지 않는다)."""
     entry = _lock(db, entry)
-    ensure_editable(user, entry)
+    if system_actor is None:
+        ensure_editable(user, entry)
+    elif entry.status == "trashed":
+        raise HTTPException(status_code=409, detail="entry_trashed")
+    actor = system_actor or user.employee_id
+    admin = True if system_actor is not None else access.is_admin(user)
     if patch.get("version") != entry.version:
         raise HTTPException(status_code=409, detail="version_conflict")
-    period = patch.get("analysis_period")
-    if period and not PERIOD_PATTERN.fullmatch(period):
-        raise HTTPException(status_code=422, detail="invalid_period")
+    if patch.get("no_hull") and patch.get("hulls"):
+        raise HTTPException(status_code=422, detail="no_hull_with_hulls")
+    ctx = quality.TitleContext(db)
+    old_title = (entry.title or "").strip()
+    # 바꾸기 전 값 기준으로 '초안 제목이 초안 그대로인가' — 사람이 고친 제목은 덮지 않는다
+    was_auto = entry.status == "draft" and ctx.is_auto(entry)
     if entry.status == "confirmed" and "title" in patch and not (patch["title"] or "").strip():
         raise HTTPException(status_code=422, detail="title_required")  # M6
     # 08 — 해석 종류·구역은 통제 어휘: 동의어·표기 변형은 용어로 바꾸고, 목록 밖 새 값은 관리자만
     if "analysis_type" in patch:
         patch = {**patch, "analysis_type": vocab.normalize_input(
-            db, "atype", patch["analysis_type"], current=entry.analysis_type, admin=bool(user.is_admin))}
+            db, "atype", patch["analysis_type"], current=entry.analysis_type, admin=admin)}
     if "zones" in patch:
         patch = {**patch, "zones": vocab.normalize_inputs(
-            db, "zone", patch["zones"] or [], current=zones_of(db, entry), admin=bool(user.is_admin))}
+            db, "zone", patch["zones"] or [], current=zones_of(db, entry), admin=admin)}
     before = snapshot(db, entry) if entry.status == "confirmed" else None
     for field_name in EDITABLE_FIELDS:
         if field_name in patch:
@@ -200,17 +344,43 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
             setattr(entry, field_name, (value or "").strip() if field_name == "title" else (value or None))
     if "hulls" in patch:
         set_hulls(db, entry, patch["hulls"] or [])
+        if patch["hulls"]:
+            entry.no_hull = False   # 호선을 넣으면 '공용' 표시는 풀린다
+    if patch.get("no_hull") is not None:
+        entry.no_hull = bool(patch["no_hull"])
+        if entry.no_hull and "hulls" not in patch:
+            set_hulls(db, entry, [])   # '호선 없음(공용)' 을 고르면 호선을 비운다
     if "zones" in patch:
         set_zones(db, entry, patch["zones"] or [])
     if "tags" in patch:
         set_tags(db, entry, "free", patch["tags"] or [])
+    if "project" in patch:
+        set_project(db, entry, patch["project"])
     if "merge_into_id" in patch:
-        _set_merge_into(db, entry, patch["merge_into_id"])
+        _set_merge_into(db, entry, patch["merge_into_id"], user)
+    if patch.get("access"):
+        if entry.status != "draft":
+            # 확정 자료의 공개 단계는 set_access(감사 ENTRY_ACCESS)로만 바꾼다
+            raise HTTPException(status_code=422, detail="use_access_endpoint")
+        if patch["access"] != access.access_of(entry):
+            access.ensure_can_manage_access(user, entry, patch["access"])
+            _apply_access(entry, patch["access"])
+    db.flush()
+    # 20 — 제목 초안 따라가기: [형식대로 다시 만들기](title_auto), 또는 초안 제목이 초안 그대로이고 값이 바뀌었을 때
+    title_kept = "title" not in patch or (patch["title"] or "").strip() == old_title
+    if patch.get("title_auto") or (was_auto and title_kept and any(k in patch for k in TITLE_VALUE_FIELDS)):
+        new_title = ctx.draft(entry)
+        if new_title:
+            entry.title = new_title
     entry.version += 1
     db.flush()
     if entry.status == "confirmed":
-        audit.record(db, storage, actor=user.employee_id, action="ENTRY_UPDATE", target_type="entry",
-                     target_id=entry.entry_id, before=before, after=snapshot(db, entry), ip=ip)
+        after = snapshot(db, entry)
+        changed = {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
+        if action == "ENTRY_UPDATE" and changed == {"project"}:
+            action = PROJECT_ACTION
+        audit.record(db, storage, actor=actor, action=action, target_type="entry",
+                     target_id=entry.entry_id, before=before, after=after, ip=ip)
         db.commit()
         _write_meta_or_queue(db, storage, entry)
     else:
@@ -236,15 +406,17 @@ def _write_meta_or_queue(db: Session, storage: StoragePaths, entry: models.Entry
     except OSError as exc:
         logger.warning("entry.json/_INFO.txt 쓰기 실패 — 재시도 작업을 큐에 등록: %s (%s)",
                        entry.entry_id, exc)
-        jobs.enqueue(db, "write_meta", entry.id)
+        if not jobs.has_queued(db, "write_meta", entry.id):   # 끊김이 길면 수정마다 쌓이지 않게
+            jobs.enqueue(db, "write_meta", entry.id)
         db.commit()
 
 
 def _check_confirmer(db: Session, user: models.User, entry: models.Entry) -> models.Batch | None:
+    access.require_writer(user)
     batch = db.get(models.Batch, entry.batch_id) if entry.batch_id else None
     if entry.uploaded_by and entry.uploaded_by == user.employee_id:
         return batch
-    if user.is_admin and batch and batch.received_at <= datetime.now() - timedelta(days=ADMIN_TAKEOVER_DAYS):
+    if access.is_admin(user) and batch and batch.received_at <= datetime.now() - timedelta(days=ADMIN_TAKEOVER_DAYS):
         return batch
     raise HTTPException(status_code=403, detail="not_uploader")
 
@@ -258,6 +430,10 @@ def auto_merge_batch(db: Session, storage: StoragePaths, batch: models.Batch) ->
     user = db.query(models.User).filter_by(employee_id=batch.uploader).first() if batch.uploader else None
     if user is None:
         return 0
+    target = db.get(models.Entry, batch.target_entry_id, populate_existing=True)
+    if target is not None and target.status == "draft":
+        from .draft_attachments import attach_processed_batch
+        return attach_processed_batch(db, storage, batch, user)
     merged = 0
     drafts = db.query(models.Entry).filter_by(batch_id=batch.id, status="draft").order_by(models.Entry.id).all()
     for draft in drafts:
@@ -302,41 +478,77 @@ def _clear_dangling_references(db: Session, entry_id: int) -> None:
         {"suggested_entry_id": None}, synchronize_session=False)
     db.query(models.Batch).filter_by(target_entry_id=entry_id).update(
         {"target_entry_id": None}, synchronize_session=False)
+    # 10 — 즐겨찾기는 Entry 와 함께 사라진다(영구 삭제·합치기). 휴지통 이동은 여기를 거치지 않아 남는다
+    db.query(models.Favorite).filter_by(entry_id=entry_id).delete(synchronize_session=False)
+
+
+def _recheck_duplicates(db: Session, user: models.User, batch: models.Batch, files: list[models.File],
+                        force: bool) -> list[dict]:
+    """17 — 확정 직전 재검사: 들어온 뒤 그 사이 생긴 완전 동일 BDF(옛 모델이 서명을 얻음·관리자 강제 업로드 등)가 있으면 409.
+    LV3 force 면 통과시키고 감사에 남길 목록을 돌려준다. allow_duplicates 배치(LV3 '그래도 올리기')는 보지 않는다."""
+    from ..ingest import duplicates
+
+    if batch.allow_duplicates:
+        return []
+    found = duplicates.entry_duplicates(db, files, exclude_batch_id=batch.id)
+    if not found:
+        return []
+    if force:
+        return [{"name": f.rel_path, "entries": sorted({d["entry_id"] for d in
+                                                        duplicates.describe(db, ids, None, limit=50)["matches"]})}
+                for f, ids in found]
+    raise HTTPException(status_code=409, detail={
+        "code": "duplicate_model",
+        "files": [{"file_id": f.id, "name": f.name, "rel_path": f.rel_path, **duplicates.describe(db, ids, user)}
+                  for f, ids in found]})
 
 
 def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User,
-            ip: str | None = None) -> models.Entry:
-    from .files import entry_dir, move_all, rel_move_pairs, unique_rel
+            ip: str | None = None, force: bool = False) -> models.Entry:
+    """초안 확정(새 Entry) 또는 기존 자료에 합치기(merge_into_id). force = LV3 가 완전 동일 BDF 409 를 넘긴다(17)."""
+    from .files import entry_dir, move_all, plan_rel, rel_move_pairs
 
+    if force and not access.is_admin(user):
+        raise HTTPException(status_code=403, detail="level3_required")
     entry = _lock(db, entry)
     if entry.status != "draft":
         raise HTTPException(status_code=409, detail="not_draft")
     batch = _check_confirmer(db, user, entry)
     if batch is None:
         raise HTTPException(status_code=409, detail="no_batch")  # M7
+    from .draft_attachments import ensure_no_pending
+    ensure_no_pending(db, entry)
     files = db.query(models.File).filter_by(entry_id=entry.id).all()
     staging_root = storage.staging / batch.key
+    forced = _recheck_duplicates(db, user, batch, files, force)
+    extra = {"duplicates_forced": forced} if forced else {}
 
     if entry.merge_into_id:
         target = db.get(models.Entry, entry.merge_into_id)
-        if target is None or target.status != "confirmed":
+        # 13 — 볼 수 없는 대상은 없는 것과 같고, 남의 자료에는 파일을 더하지 못한다(수정 권한)
+        if target is None or target.status != "confirmed" or not access.can_view_entry(user, target, db=db):
             raise HTTPException(status_code=409, detail="target_not_confirmed")
+        if not access.can_edit_entry(user, target):
+            raise HTTPException(status_code=403, detail="not_uploader")
         target = _lock(db, target)
         if target.status != "confirmed":
             raise HTTPException(status_code=409, detail="target_not_confirmed")
         files_root = entry_dir(storage, target) / "files"
         planned: set[str] = set()
-        plans = [(f, unique_rel(files_root, f.rel_path, planned)) for f in files]
+        # 대상 자료가 이미 쓰는 이름 — 중단된 앞선 시도가 옮겨 둔 사본을 찾을 때 남의 파일을 집지 않게(리뷰 7)
+        taken = {r.casefold() for (r,) in db.query(models.File.rel_path).filter_by(entry_id=target.id)}
+        plans = [(f, plan_rel(staging_root, files_root, f, planned, taken)) for f in files]
         undo = move_all(rel_move_pairs(staging_root, files_root, plans))
         try:
             for f, r in plans:
                 f.entry_id, f.rel_path, f.location = target.id, r, "vault"
+            db.query(models.ModelRevision).filter_by(entry_id=entry.id).delete(synchronize_session=False)
             _clear_dangling_references(db, entry.id)
             db.delete(entry)
             target.version += 1
             db.flush()
             audit.record(db, storage, actor=user.employee_id, action="ENTRY_FILES_ADDED", target_type="entry",
-                         target_id=target.entry_id, after={"files": [r for _, r in plans]}, ip=ip)
+                         target_id=target.entry_id, after={"files": [r for _, r in plans]} | extra, ip=ip)
         except Exception:
             db.rollback()
             undo()
@@ -349,11 +561,16 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
         from ..convert.job import requeue_entry_models  # 순환 import 방지
         requeue_entry_models(db, target.id)
         db.commit()
+        refresh_revisions(db, target.id)   # 14 — 새 파일을 판 묶음에(변환이 끝나면 워커가 다시 맞춘다)
         _write_meta_or_queue(db, storage, target)
         return target
 
     if not (entry.title or "").strip():
         raise HTTPException(status_code=422, detail="title_required")
+    # 20 — BDF 자료는 호선(또는 호선 없음(공용))·구역·해석 종류가 있어야 확정한다. 기존 자료에 합치기(위)는 보지 않는다
+    missing = quality.missing_required(db, entry)
+    if missing:
+        raise HTTPException(status_code=409, detail={"code": "required_fields", "missing": missing})
     now = _now()
     entry.vault_rel = f"{now.year}/{entry.entry_id}"
     files_root = entry_dir(storage, entry) / "files"
@@ -365,7 +582,8 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
         _ensure_hulls(db, entry)
         db.flush()
         audit.record(db, storage, actor=user.employee_id, action="ENTRY_CONFIRM", target_type="entry",
-                     target_id=entry.entry_id, after=snapshot(db, entry) | {"files": len(files)}, ip=ip)
+                     target_id=entry.entry_id,
+                     after=snapshot(db, entry) | {"files": len(files)} | access_snapshot(entry) | extra, ip=ip)
     except Exception:
         db.rollback()
         undo()
@@ -383,16 +601,45 @@ def _stamp() -> str:
     return f"{datetime.now():%Y%m%d-%H%M%S}"
 
 
+_STAMP_RE = re.compile(r"^[0-9]{8}-[0-9]{6}$")
+
+
+def _resume_trash_rel(storage: StoragePaths, prefix: str, has_moved) -> str | None:
+    """중단된 앞선 휴지통 이동이 만든 폴더(`<prefix><시각>`)를 찾는다(리뷰 7) — 새 시각으로 다시 옮기면
+    이미 옮겨진 파일을 못 찾아 영영 실패한다. has_moved(폴더 경로)가 참인 가장 최근 폴더, 없으면 None."""
+    try:
+        with os.scandir(to_long(storage.trash)) as it:
+            names = [e.name for e in it if e.is_dir() and e.name.startswith(prefix)
+                     and _STAMP_RE.fullmatch(e.name[len(prefix):])]
+    except OSError:
+        return None
+    for name in sorted(names, reverse=True):
+        if has_moved(storage.trash / name):
+            return name
+    return None
+
+
 def trash(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User,
           ip: str | None = None) -> models.Entry:
     from .files import entry_dir, move_all, rel_move_pairs
 
     entry = _lock(db, entry)
+    access.require_writer(user)
     if entry.status == "trashed":
         raise HTTPException(status_code=409, detail="entry_trashed")
     files = db.query(models.File).filter_by(entry_id=entry.id).all()
+    if entry.status == "draft":
+        from .draft_attachments import ensure_no_pending
+        ensure_no_pending(db, entry)
     if entry.status == "confirmed":
+        if not access.can_edit_entry(user, entry):   # 13 — 올린 사람 또는 관리자 이상
+            raise HTTPException(status_code=403, detail="not_uploader")
         rel = f"{entry.entry_id}_{_stamp()}"
+        if not os.path.exists(to_long(entry_dir(storage, entry))):
+            # 앞선 시도가 폴더는 옮겼는데 DB 반영 전에 멈췄다 — 그 폴더로 이어서 끝낸다
+            rel = _resume_trash_rel(storage, f"{entry.entry_id}_",
+                                    lambda d: os.path.isfile(to_long(d / "entry.json"))
+                                    or os.path.isdir(to_long(d / "files"))) or rel
         undo = move_all([(entry_dir(storage, entry), storage.trash / rel)])
         action = "ENTRY_TRASH"
     else:
@@ -401,6 +648,11 @@ def trash(db: Session, storage: StoragePaths, entry: models.Entry, user: models.
         batch = db.get(models.Batch, entry.batch_id)
         rel = f"draft_{entry.entry_id}_{_stamp()}"
         src_root = storage.staging / batch.key
+        gone = [f for f in files if not os.path.exists(long_join(src_root, f.rel_path))]
+        if gone:
+            # 앞선 시도가 일부를 휴지통으로 옮기고 멈췄다 — 그 폴더로 이어서 끝낸다
+            rel = _resume_trash_rel(storage, f"draft_{entry.entry_id}_",
+                                    lambda d: os.path.exists(long_join(d, gone[0].rel_path))) or rel
         undo = move_all(rel_move_pairs(src_root, storage.trash / rel, [(f, f.rel_path) for f in files]))
         action = "DRAFT_DISCARD"
     try:
@@ -427,10 +679,12 @@ def restore(db: Session, storage: StoragePaths, entry: models.Entry, user: model
     from .files import entry_dir, move_all
 
     entry = _lock(db, entry)
+    access.ensure_can_edit(user, entry)   # 13 — 올린 사람 또는 관리자 이상
     if entry.status != "trashed" or not entry.vault_rel:
         raise HTTPException(status_code=409, detail="not_restorable")
     dest = entry_dir(storage, entry)
-    if os.path.exists(to_long(dest)):
+    # 자리에 폴더가 있어도 휴지통 쪽 폴더가 없으면 앞선 복원이 옮기고 멈춘 것이다 — move_all 이 이어서 끝낸다(리뷰 7)
+    if os.path.exists(to_long(dest)) and os.path.exists(to_long(storage.trash / entry.trash_rel)):
         raise HTTPException(status_code=409, detail="vault_conflict")
     undo = move_all([(storage.trash / entry.trash_rel, dest)])
     try:
@@ -487,6 +741,7 @@ def _reenqueue_convert(db: Session, entry: models.Entry) -> None:
 
 
 def _require_draft_owner(user: models.User, *entries: models.Entry) -> None:
+    access.require_writer(user)
     for e in entries:
         if e.status != "draft":
             raise HTTPException(status_code=409, detail="not_draft")
@@ -497,20 +752,29 @@ def _require_draft_owner(user: models.User, *entries: models.Entry) -> None:
 def split(db: Session, entry: models.Entry, user: models.User, file_ids: list[int]) -> models.Entry:
     entry = _lock(db, entry)
     _require_draft_owner(user, entry)
+    from .draft_attachments import ensure_no_pending
+    ensure_no_pending(db, entry)
     files = db.query(models.File).filter(models.File.id.in_(file_ids or [0])).all()
     if not files or len(files) != len(set(file_ids)) or any(f.entry_id != entry.id for f in files):
         raise HTTPException(status_code=422, detail="file_not_in_entry")
     new = models.Entry(title=entry.title, status="draft", batch_id=entry.batch_id, uploaded_by=entry.uploaded_by,
-                       hull_evidence=entry.hull_evidence, merge_into_id=entry.merge_into_id)
+                       hull_evidence=entry.hull_evidence, merge_into_id=entry.merge_into_id,
+                       access=access.access_of(entry), no_hull=bool(entry.no_hull),
+                       title_source=entry.title_source)
     db.add(new)
     db.flush()
     new.entry_id = f"E{new.id:06d}"
     for h in hulls_of(db, entry):
         db.add(models.EntryHull(entry_id=new.id, hull_no=h.hull_no, is_primary=h.is_primary))
+    project = project_of(db, entry)
+    if project:   # 21 — 프로젝트도 호선처럼 소속이라 쪼갠 초안이 물려받는다
+        set_project(db, new, project)
     for f in files:
         f.entry_id = new.id
     entry.version += 1
     db.commit()
+    refresh_revisions(db, entry.id)   # 14 — 판 묶음은 Entry 안에서만
+    refresh_revisions(db, new.id)
     return new
 
 
@@ -522,13 +786,18 @@ def merge(db: Session, entry: models.Entry, other: models.Entry, user: models.Us
     else:
         other, entry = _lock(db, other), _lock(db, entry)
     _require_draft_owner(user, entry, other)
+    from .draft_attachments import ensure_no_pending
+    ensure_no_pending(db, entry)
+    ensure_no_pending(db, other)
     if entry.id == other.id or entry.batch_id != other.batch_id:
         raise HTTPException(status_code=422, detail="different_batch")
     db.query(models.File).filter_by(entry_id=other.id).update({"entry_id": entry.id}, synchronize_session=False)
     _clear_dangling_references(db, other.id)
+    db.query(models.ModelRevision).filter_by(entry_id=other.id).delete(synchronize_session=False)
     db.delete(other)
     entry.version += 1
     db.commit()
+    refresh_revisions(db, entry.id)
     return entry
 
 
@@ -537,9 +806,103 @@ def move_file(db: Session, f: models.File, target: models.Entry, user: models.Us
     source = _lock(db, source)
     target = _lock(db, target)
     _require_draft_owner(user, source, target)
+    from .draft_attachments import ensure_no_pending
+    ensure_no_pending(db, source)
+    ensure_no_pending(db, target)
     if source.batch_id != target.batch_id:
         raise HTTPException(status_code=422, detail="different_batch")
     f.entry_id = target.id
     source.version += 1
     target.version += 1
     db.commit()
+    refresh_revisions(db, source.id)
+    refresh_revisions(db, target.id)
+
+
+# ---- 13·15: 공개 단계·열람 허락 ----
+
+def _apply_access(entry: models.Entry, value) -> None:
+    if value not in models.ENTRY_ACCESS:
+        raise HTTPException(status_code=422, detail="invalid_access")
+    entry.access = value
+
+
+def access_snapshot(entry: models.Entry) -> dict:
+    return {"access": access.access_of(entry)}
+
+
+def _after_access_change(db: Session, storage: StoragePaths, entry: models.Entry) -> None:
+    """공개 범위·허락이 바뀌면 registry.json(재구축 원천)과 entry.json 을 다시 쓴다."""
+    from ..ops.registry import write_registry  # 순환 import 방지
+
+    write_registry(db, storage)
+    if entry.status == "confirmed":
+        _write_meta_or_queue(db, storage, entry)
+
+
+def set_access(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User, value: str,
+               version: int | None = None, ip: str | None = None) -> models.Entry:
+    """공개 단계 바꾸기 — 공유↔일반은 올린 사람 + LV3, 블록 지정·해제는 LV3 만. 감사 ENTRY_ACCESS(before/after)."""
+    entry = _lock(db, entry)
+    access.ensure_can_manage_access(user, entry, value)
+    if entry.status == "trashed":
+        raise HTTPException(status_code=409, detail="entry_trashed")
+    if version is not None and version != entry.version:
+        raise HTTPException(status_code=409, detail="version_conflict")
+    before = access_snapshot(entry)
+    _apply_access(entry, value)
+    after = access_snapshot(entry)
+    if after == before:
+        db.rollback()
+        return entry
+    entry.version += 1
+    db.flush()
+    audit.record(db, storage, actor=user.employee_id, action="ENTRY_ACCESS", target_type="entry",
+                 target_id=entry.entry_id, before=before, after=after, ip=ip)
+    _after_access_change(db, storage, entry)
+    return entry
+
+
+def grant(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User, employee_id: str,
+          ip: str | None = None) -> models.EntryGrant:
+    """개별 열람 허락(15) — 올린 사람 또는 LV3 가(블록 자료는 LV3 만) WorkBench 활성 사용자에게. 감사 ENTRY_GRANT.
+    이미 있으면 그대로(여러 번 불러도 같다). LogBook 에 들어온 적 없는 사람에게도 줄 수 있다(사번으로 남는다)."""
+    from .. import wb_users
+
+    access.ensure_can_manage_access(user, entry)
+    if entry.status == "trashed":
+        raise HTTPException(status_code=409, detail="entry_trashed")
+    eid = (employee_id or "").strip().upper()
+    try:
+        target = wb_users.fetch(db, eid)
+    except wb_users.WbUnavailable:
+        raise HTTPException(status_code=503, detail="wb_unavailable")
+    if target is None:
+        raise HTTPException(status_code=404, detail="user_not_found")
+    if not target.is_active:
+        raise HTTPException(status_code=422, detail="grant_user_inactive")
+    row = db.query(models.EntryGrant).filter_by(entry_id=entry.id, employee_id=eid).first()
+    if row is not None:
+        return row
+    row = models.EntryGrant(entry_id=entry.id, employee_id=eid, granted_by=user.employee_id)
+    db.add(row)
+    db.flush()
+    audit.record(db, storage, actor=user.employee_id, action="ENTRY_GRANT", target_type="entry",
+                 target_id=entry.entry_id, after={"employee_id": eid}, ip=ip)
+    _after_access_change(db, storage, entry)
+    return row
+
+
+def revoke(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User, employee_id: str,
+           ip: str | None = None) -> None:
+    """열람 허락 회수 — 올린 사람 또는 LV3(블록 자료는 LV3 만). 없으면 404. 감사 ENTRY_REVOKE."""
+    access.ensure_can_manage_access(user, entry)
+    eid = (employee_id or "").strip().upper()
+    n = (db.query(models.EntryGrant).filter_by(entry_id=entry.id, employee_id=eid)
+         .delete(synchronize_session=False))
+    if not n:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="grant_not_found")
+    audit.record(db, storage, actor=user.employee_id, action="ENTRY_REVOKE", target_type="entry",
+                 target_id=entry.entry_id, before={"employee_id": eid}, ip=ip)
+    _after_access_change(db, storage, entry)

@@ -8,10 +8,17 @@ from app.entries import service
 def test_trash_and_restore_confirmed(db, storage, make_user, setup_entry_with_files):
     u = make_user("A100001")
     other = make_user("B200002")
+    admin = make_user("C300003", is_admin=True)
     _, e = setup_entry_with_files()
     service.confirm(db, storage, e, u)
     base = storage.vault / e.vault_rel.replace("/", "\\")
-    service.trash(db, storage, e, other)  # 누구나 휴지통
+    # 13 — 확정 자료의 휴지통·복원은 올린 사람 또는 관리자 이상(남은 403)
+    with pytest.raises(HTTPException) as ei:
+        service.trash(db, storage, e, other)
+    assert ei.value.status_code == 403
+    db.rollback()
+    other = admin
+    service.trash(db, storage, e, other)
     db.expire_all()
     e = db.get(models.Entry, e.id)
     assert e.status == "trashed" and not base.exists()
@@ -92,8 +99,9 @@ def test_merge_deleting_draft_clears_dangling_references(db, storage, make_user,
     dangling_merge.entry_id = f"E{dangling_merge.id:06d}"
     dangling_suggest.entry_id = f"E{dangling_suggest.id:06d}"
 
+    # 24 — 진행 중인 첨부 배치(staged 등)는 병합을 막는다. 여기서는 끝난 배치의 남은 참조만 본다
     dangling_batch = models.Batch(key="20260929-000000-dddd", source="inbox", original_name="y",
-                                  target_entry_id=victim.id)
+                                  target_entry_id=victim.id, state="done")
     db.add(dangling_batch)
     db.commit()
 

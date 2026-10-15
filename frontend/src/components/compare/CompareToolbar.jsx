@@ -37,7 +37,7 @@ function Toggle({ pressed, onClick, icon: Icon, children, title }) {
  * 초기화·끝내기는 화면 단위 동작이라 머리줄에 둔다(툴바가 1366 폭에서 두 줄이 되지 않게).
  * shared = { colorMode, renderMode, clip, view, projection, sync: { on, mode } }
  */
-export default function CompareToolbar({ shared, onChange, onView, onFit, disabled = false }) {
+export default function CompareToolbar({ shared, onChange, onView, onFit, disabled = false, diffMode = false }) {
   const { clip, sync } = shared;
   const setClip = (patch) => onChange({ clip: { ...clip, ...patch } });
   return (
@@ -54,8 +54,14 @@ export default function CompareToolbar({ shared, onChange, onView, onFit, disabl
       <Segmented label="표시 방식" items={RENDER_ITEMS} value={shared.renderMode} disabled={disabled}
                  onChange={(renderMode) => onChange({ renderMode })} />
       <Label>색</Label>
-      <Segmented label="색 기준" items={COLOR_ITEMS} value={shared.colorMode} disabled={disabled}
-                 onChange={(colorMode) => onChange({ colorMode })} />
+      {diffMode ? (
+        // 16 변경 보기 — 색은 변경 범주(추가·변경·삭제)로 고정
+        <span className="inline-flex h-7 items-center rounded-md bg-n-100 px-2.5 text-meta font-medium text-n-700"
+              title="변경 보기에서는 색이 변경 범주(추가·변경·삭제)로 고정됩니다">변경 범주</span>
+      ) : (
+        <Segmented label="색 기준" items={COLOR_ITEMS} value={shared.colorMode} disabled={disabled}
+                   onChange={(colorMode) => onChange({ colorMode })} />
+      )}
       <Sep />
       <Toggle pressed={clip.on} onClick={() => setClip({ on: !clip.on })} icon={Scissors} title="축 평면으로 자르기(각 모델 범위의 비율 위치)">
         자르기
@@ -73,12 +79,12 @@ export default function CompareToolbar({ shared, onChange, onView, onFit, disabl
           </Toggle>
         </>
       )}
-      <Sep />
-      <Toggle pressed={sync.on} onClick={() => onChange({ sync: { ...sync, on: !sync.on } })} icon={sync.on ? Link2 : Link2Off}
+      {!diffMode && <Sep />}
+      {!diffMode && <Toggle pressed={sync.on} onClick={() => onChange({ sync: { ...sync, on: !sync.on } })} icon={sync.on ? Link2 : Link2Off}
               title="마지막으로 조작한 칸의 카메라를 나머지가 따라갑니다">
         카메라 동기화
-      </Toggle>
-      {sync.on && (
+      </Toggle>}
+      {!diffMode && sync.on && (
         <Segmented label="동기화 기준" items={SYNC_ITEMS} value={sync.mode}
                    onChange={(mode) => onChange({ sync: { ...sync, mode } })} />
       )}

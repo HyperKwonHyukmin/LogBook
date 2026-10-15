@@ -1,5 +1,5 @@
 # backend/app/worker.py
-"""Logbook 워커 — Inbox 감시와 배치 처리(설계 §2: API 와 별도 프로세스).
+"""Hi-TESS LogBook 워커 — Inbox 감시와 배치 처리(설계 §2: API 와 별도 프로세스).
 
 실행 (backend 폴더): .venv\\Scripts\\python.exe -m app.worker
 """
@@ -11,13 +11,16 @@ from logging.handlers import RotatingFileHandler
 
 from sqlalchemy.orm import Session
 
-from . import jobs, models
+from . import isolated, jobs, models
 from .database import SessionLocal, init_schema
 from .dependencies import get_storage
 from .convert.job import mark_failed as mark_convert_failed
 from .convert.job import run_convert
 from .solve.job import mark_failed as mark_solve_failed
 from .solve.job import run_solve_check
+from .revisions.job import mark_failed as mark_diff_failed
+from .revisions.job import run_revision_diff
+from .revisions.service import after_model_change
 from .entries.files import write_entry_files
 from .entries.service import auto_merge_batch
 from .extract.job import mark_failed, run_extract
@@ -97,18 +100,27 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
             elif job.type == "write_meta":
                 entry = db.get(models.Entry, job.target_id)
                 if entry is None:
-                    raise RuntimeError(f"Entry 를 찾을 수 없음: {job.target_id}")
-                write_entry_files(db, storage, entry)
+                    # 그 사이 영구 삭제·합치기로 사라졌다 — 쓸 것이 없다(오래 재시도하는 작업이라 실패로 남기지 않는다)
+                    log.info("entry.json 쓰기 대상이 없어 건너뜀: %s", job.target_id)
+                else:
+                    write_entry_files(db, storage, entry)
             elif job.type == "extract_file":
                 f = db.get(models.File, job.target_id)
                 if f is None:
                     raise RuntimeError(f"파일을 찾을 수 없음: {job.target_id}")
-                run_extract(db, storage, f)
+                with isolated.heartbeat_scope(job_heartbeat(job.id)):
+                    run_extract(db, storage, f)
             elif job.type == "convert_model":
                 f = db.get(models.File, job.target_id)
                 if f is None:
                     raise RuntimeError(f"파일을 찾을 수 없음: {job.target_id}")
-                run_convert(db, storage, f)
+                with isolated.heartbeat_scope(job_heartbeat(job.id)):
+                    run_convert(db, storage, f)
+                # 14 — 조각 여부·형상 서명이 이때 정해진다: 판 묶음을 다시 맞추고 인접 비교를 넣는다
+                after_model_change(db, db.get(models.File, job.target_id))
+            elif job.type == "revision_diff":
+                # 두 덱을 다시 읽는다(큰 모델 수십 초) — 단계마다 박동
+                run_revision_diff(db, storage, job.target_id, heartbeat=job_heartbeat(job.id))
             elif job.type == "solve_check":
                 # 최대 LOGBOOK_SOLVE_TIMEOUT(30분) 걸린다 — 실행 중 1분마다 박동을 남겨 '멈춘 작업'(10분)
                 # 복구와 운영 화면의 '워커 멈춤'(10분)에 걸리지 않게 한다
@@ -118,6 +130,16 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
             jobs.complete(db, job)
             stats["processed"] += 1
             heartbeat(db, stats)  # 작업 1건마다(긴 변환이 이어져도 멈춤으로 보이지 않게)
+        except isolated.HeavyTimeout as exc:
+            # 제한 시간을 넘긴 파일 — 다시 돌려도 또 멈추므로 재시도하지 않고 바로 최종 실패로 끝낸다(리뷰 9).
+            # 자식 프로세스는 이미 끝났고, 워커는 다음 작업으로 넘어간다
+            db.rollback()
+            job = db.get(models.Job, job.id)
+            jobs.fail(db, job, str(exc), max_attempts=job.attempts)
+            _final_failure(db, job, str(exc))
+            stats["failed"] += 1
+            log.error("작업 시간 초과로 중단: %s %s — %s", job.type, job.target_id, exc)
+            heartbeat(db, stats)
         except Exception as exc:  # 작업 하나의 실패가 워커를 멈추지 않게
             db.rollback()
             job = db.get(models.Job, job.id)
@@ -148,6 +170,8 @@ def _final_failure(db: Session, job: models.Job, error: str) -> None:
     elif job.type == "solve_check":
         # 끝내 못 돌린 해석 검증 — queued/running 으로 남지 않게 error 로
         mark_solve_failed(db, job.target_id, error)
+    elif job.type == "revision_diff":
+        mark_diff_failed(db, job.target_id, error)
 
 
 def job_heartbeat(job_id: int, session_factory=None):

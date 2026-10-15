@@ -1,4 +1,5 @@
 """08 — 검색: 통제 어휘 대표 값, 태그 필터, 해석 연도, 정렬, 결과 행 필드."""
+from app.access import SYSTEM
 from datetime import datetime
 
 from app import models, vocab
@@ -7,7 +8,7 @@ from app.search import SearchQuery, get_search
 
 def _q(db, q="", **kw):
     filters = kw.pop("filters", {})
-    return get_search().search(db, SearchQuery(q=q, filters=filters, **kw))
+    return get_search().search(db, SearchQuery(q=q, filters=filters, **({"user": SYSTEM} | kw)))
 
 
 def _ids(res):
@@ -44,13 +45,14 @@ def test_facets_use_canonical_terms(db, storage, make_entry_file):
     vocab.seed(db, storage)
     res = _q(db)
     assert {f["value"]: f["count"] for f in res["facets"]["analysis_type"]} == {"FE 해석": 2, "강도 평가": 1}
-    assert res["facets"]["zone"] == [{"value": "선미부", "count": 2}]
+    # 19 — 값에 동의어(aliases)가 실릴 수 있다 — 값·건수만 본다
+    assert [(f["value"], f["count"]) for f in res["facets"]["zone"]] == [("선미부", 2)]
     items = {i["entry_id"]: i for i in res["items"]}
     assert items[a.entry_id]["analysis_type"] == "FE 해석" and items[a.entry_id]["zones"] == ["선미부"]
     # 용어로 거르면 동의어·표기 변형 값도, 동의어로 거르면 그 용어 전체가 걸린다
     assert sorted(_ids(_q(db, filters={"analysis_type": "FE 해석"}))) == sorted([a.entry_id, b.entry_id])
     r = _q(db, filters={"analysis_type": "FEM"})
-    assert sorted(_ids(r)) == sorted([a.entry_id, b.entry_id]) and r["applied_filters"]["analysis_type"] == "FE 해석"
+    assert sorted(_ids(r)) == sorted([a.entry_id, b.entry_id]) and r["applied_filters"]["analysis_type"] == ["FE 해석"]
     assert _ids(_q(db, filters={"analysis_type": "강도 평가"})) == [c.entry_id]
     assert sorted(_ids(_q(db, filters={"zone": "선미부"}))) == sorted([a.entry_id, b.entry_id])
 
@@ -69,35 +71,43 @@ def test_tag_filter_and_facet(db, make_entry_file):
     root = _free(db, a, "계류")
     _free(db, b, "계류력", alias_of=root)
     res = _q(db)
-    assert res["facets"]["tag"] == [{"value": "계류", "count": 2}]
+    # 19 — 칸 안 찾기용 동의어가 함께 실린다
+    assert res["facets"]["tag"] == [{"value": "계류", "count": 2, "aliases": ["계류력"]}]
     r = _q(db, filters={"tag": "계류력"})
-    assert sorted(_ids(r)) == sorted([a.entry_id, b.entry_id]) and r["applied_filters"]["tag"] == "계류"
+    assert sorted(_ids(r)) == sorted([a.entry_id, b.entry_id]) and r["applied_filters"]["tag"] == ["계류"]
     assert res["items"][0]["tags"] in (["계류"], ["계류력"])
 
 
-def test_year_is_analysis_year_only(db, make_entry_file):
+def test_year_filter_is_gone(db, make_entry_file):
+    """15 — 해석 연도 필터·facet(시기 미상 포함)은 해석 시기와 함께 없앴다. 옛 year= 값은 무시된다."""
     a, _ = make_entry_file(title="가", period="2025-11", confirmed_at=datetime(2026, 9, 1))
     b, _ = make_entry_file(title="나", period=None, confirmed_at=datetime(2026, 9, 2))
     res = _q(db)
-    assert {f["value"]: f["count"] for f in res["facets"]["year"]} == {"2025": 1, "unknown": 1}
-    assert _ids(_q(db, filters={"year": "2026"})) == []
-    assert _ids(_q(db, filters={"year": "unknown"})) == [b.entry_id]
+    assert "year" not in res["facets"]
+    assert _ids(_q(db, filters={"year": "2026"})) == [b.entry_id, a.entry_id]
+    assert _ids(_q(db, filters={"year": "unknown"})) == [b.entry_id, a.entry_id]
 
 
 def test_sort_default_and_choices(db, make_entry_file):
+    """15 — 정렬은 관련도 | 최신순(올린 날짜). 해석 시기 값은 순서에 영향이 없고, 옛 sort=period 는 최신순."""
     old = make_entry_file(title="강도 옛", period="2019-03", confirmed_at=datetime(2026, 9, 9))[0]
     new = make_entry_file(title="강도 새", period="2025-11", confirmed_at=datetime(2026, 9, 1))[0]
     none = make_entry_file(title="강도", period=None, confirmed_at=datetime(2026, 9, 20))[0]
+    by_posted = [none.entry_id, old.entry_id, new.entry_id]
     res = _q(db)
-    assert res["sort"] == "period" and _ids(res) == [new.entry_id, old.entry_id, none.entry_id]
+    assert res["sort"] == "recent" and _ids(res) == by_posted
     res = _q(db, sort="recent")
-    assert res["sort"] == "recent" and _ids(res) == [none.entry_id, old.entry_id, new.entry_id]
+    assert res["sort"] == "recent" and _ids(res) == by_posted
     res = _q(db, "강도")
     assert res["sort"] == "relevance" and _ids(res)[0] == none.entry_id   # 제목이 정확히 같음
     res = _q(db, "강도", sort="period")
-    assert _ids(res) == [new.entry_id, old.entry_id, none.entry_id]
+    assert res["sort"] == "recent" and _ids(res) == by_posted
     files = _q(db, unit="file", sort="period")
-    assert [i["entry_id"] for i in files["items"]] == [new.entry_id, old.entry_id, none.entry_id]
+    assert [i["entry_id"] for i in files["items"]] == by_posted
+    # 초안의 올린 날짜는 등록일(확정일이 없다)
+    d = make_entry_file(status="draft", title="초안")[0]
+    res = _q(db, include_drafts=True)
+    assert _ids(res)[0] == d.entry_id and res["items"][0]["posted_at"]
 
 
 def test_row_fields_kind_counts_and_thumb(db, make_entry_file):

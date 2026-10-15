@@ -10,17 +10,24 @@ import { Tabs } from '../components/ui/Tabs.jsx';
 import BatchCard from '../components/inbox/BatchCard.jsx';
 import { PageDropOverlay, UploadButtons, UploadFeedback, useUploader } from '../components/inbox/UploadZone.jsx';
 import { errorText } from '../lib/labels.js';
+import { READ_ONLY_REASON } from '../lib/levels.js';
 import { hasPendingConvert } from '../lib/inboxStatus.js';
+import { useConfirm } from '../components/ui/ConfirmDialog.jsx';
+import { LEAVE_TEXT, useUnsavedGuard } from '../lib/useUnsavedGuard.js';
 
 const tabId = (id) => `inbox-tab-${id}`;
 const TABS = [{ id: 'mine', label: '내 배치', tabId: tabId('mine') }, { id: 'unclaimed', label: '주인 없는 배치', tabId: tabId('unclaimed') }];
 const PANEL_ID = 'inbox-tabpanel';
+// 올리던 중에 이 화면을 떠났다가 끝나면 셸이 띄우는 토스트(올리기는 셸 저장소에서 계속된다)
+const INBOX_AWAY = { title: '정리 대기로 올리기', message: '올렸습니다. 정리 대기에서 묶음 제안을 확인하세요.', to: '/inbox', label: '정리 대기로' };
 const POLL_MS = 5000;
 /** BDF 3D 변환만 기다릴 때는 느긋하게 — 변환은 한 건에 수십 초~분 걸린다. */
 const CONVERT_POLL_MS = 15000;
 
 export default function InboxPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, canWrite: ctxCanWrite } = useAuth();
+  // 15 — 올리기는 로그인한 누구나(LV1 이상). canWrite 가 거짓인 경우는 안전한 기본값으로만 남겼다
+  const canWrite = ctxCanWrite !== false;
   const storage = useOutletContext()?.storage;
   const [tab, setTab] = useState('mine');
   const [batches, setBatches] = useState([]);
@@ -28,6 +35,21 @@ export default function InboxPage() {
   const [error, setError] = useState('');
 
   const requestRef = useRef(0);
+  // 11 — 초안 카드의 저장하지 않은 변경(카드 번호 묶음). 있으면 화면·탭을 떠날 때 묻는다
+  const [dirtyCards, setDirtyCards] = useState(() => new Set());
+  const [confirm, dialog] = useConfirm();
+  const onDirtyChange = useCallback((id, dirty) => setDirtyCards((cur) => {
+    if (cur.has(id) === dirty) return cur;
+    const next = new Set(cur);
+    if (dirty) next.add(id); else next.delete(id);
+    return next;
+  }), []);
+  useUnsavedGuard(dirtyCards.size > 0, confirm);
+  async function changeTab(next) {
+    if (next === tab) return;
+    if (dirtyCards.size > 0 && !(await confirm(LEAVE_TEXT))) return;
+    setTab(next);
+  }
 
   // 가장 마지막 요청의 응답만 쓴다 — 탭을 빨리 바꾸면 늦게 온 이전 탭 응답이 목록을 덮을 수 있다.
   const load = useCallback(() => {
@@ -47,7 +69,8 @@ export default function InboxPage() {
   useEffect(() => { setLoading(true); load(); }, [load]);
   // 분석 중(staged) 배치가 있으면 워커가 끝낼 때까지 주기적으로 다시 부른다(진행 단계·n/N 도 함께 바뀐다).
   // 초안의 BDF 3D 변환만 남았으면 더 느리게 부른다.
-  const waiting = batches.some((b) => b.state === 'staged');
+  const waiting = batches.some((b) => b.state === 'staged'
+    || b.entries?.some((e) => e.pending_attachments?.some((p) => p.state !== 'failed')));
   const converting = !waiting && batches.some(hasPendingConvert);
   const pollMs = waiting ? POLL_MS : converting ? CONVERT_POLL_MS : 0;
   useEffect(() => {
@@ -60,7 +83,7 @@ export default function InboxPage() {
     if (latestRef.current.tab === 'mine') reload();
     else setTab('mine'); // 탭이 바뀌면 effect 가 내 배치를 부른다
   }
-  const uploader = useUploader({ onUploaded, disabled: storage?.reachable === false });
+  const uploader = useUploader({ scope: 'inbox', onUploaded, disabled: !canWrite || storage?.reachable === false, away: INBOX_AWAY });
 
   async function claim(key) {
     let message = '';
@@ -71,24 +94,31 @@ export default function InboxPage() {
 
   return (
     <Page>
-      <PageDropOverlay u={uploader} />
+      {dialog}
+      {canWrite && <PageDropOverlay u={uploader} />}
       <PageHeader title="정리 대기"
-        description="올린 자료의 묶음 제안을 확인하고 확정하세요. 확정 전에도 검색에는 미분류로 보입니다. 이 화면 어디에나 폴더를 끌어 놓아도 올라갑니다."
-        actions={<UploadButtons u={uploader} />} />
-      <div className="mb-4 empty:hidden"><UploadFeedback u={uploader} /></div>
-      <Tabs label="배치 구분" items={TABS} value={tab} onChange={setTab} controls={PANEL_ID} />
+        description={canWrite
+          ? '올린 자료의 묶음 제안을 확인하고 확정하세요. 확정 전에도 검색에는 미분류로 보입니다. 이 화면 어디에나 폴더를 끌어 놓아도 올라갑니다.'
+          : READ_ONLY_REASON}
+        actions={canWrite ? <UploadButtons u={uploader} /> : null} />
+      {/* 올릴 수 없으면 '공유 폴더에 연결되면 올릴 수 있습니다' 같은 올리기 안내를 띄우지 않는다 */}
+      {canWrite && <div className="mb-4 empty:hidden"><UploadFeedback u={uploader} /></div>}
+      <Tabs label="배치 구분" items={TABS} value={tab} onChange={changeTab} controls={PANEL_ID} />
       <div role="tabpanel" id={PANEL_ID} aria-labelledby={tabId(tab)} className="flex flex-col gap-8 pt-5">
         {error && <ErrorNote>{error}</ErrorNote>}
         {loading && <BlockSkeleton className="h-32" />}
         {!loading && batches.length === 0 && !error && (
           <EmptyState icon={Inbox} title="정리할 자료가 없습니다">
-            {tab === 'mine'
+            {tab === 'mine' && !canWrite
+              ? '올린 자료가 없습니다.'
+              : tab === 'mine'
               ? <>폴더나 파일을 이 화면에 끌어 놓거나 위의 단추로 고르세요. 탐색기로 <span className="font-mono">999_LogBook\00_Inbox</span> 에 복사하면 1~2분 뒤 여기에 나타납니다.</>
               : '주인을 찾지 못한 배치가 없습니다.'}
           </EmptyState>
         )}
         {batches.map((b) => (
-          <BatchCard key={b.key} batch={b} me={user.employee_id} isAdmin={isAdmin} onChanged={reload} onClaim={claim} />
+          <BatchCard key={b.key} batch={b} me={user.employee_id} isAdmin={isAdmin} canWrite={canWrite} onChanged={reload} onClaim={claim}
+                   onDirtyChange={onDirtyChange} />
         ))}
       </div>
     </Page>

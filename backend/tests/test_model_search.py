@@ -1,3 +1,4 @@
+from app.access import SYSTEM
 import os
 
 from app.convert.job import run_convert
@@ -15,7 +16,7 @@ def test_fingerprint_is_searchable(db, storage, make_entry_file):
     with open(p, "w") as fh:
         fh.write(MESH)
     run_convert(db, storage, f)
-    res = get_search().search(db, SearchQuery(q="100x100x10x10"))
+    res = get_search().search(db, SearchQuery(q="100x100x10x10", user=SYSTEM))
     assert [i["entry_id"] for i in res["items"]] == [e.entry_id]
     snip = res["items"][0]["snippets"][0]
     assert snip["locator"] == "model" and "PBEAML L 100x100x10x10" in snip["text"]
@@ -32,7 +33,7 @@ def test_file_items_carry_model_state_and_key(db, storage, make_entry_file):
         fh.write(MESH)
     run_convert(db, storage, f)
     key = db.get(models.ModelSummary, f.id).key
-    res = get_search().search(db, SearchQuery(q="", unit="file"))
+    res = get_search().search(db, SearchQuery(q="", unit="file", user=SYSTEM))
     by = {i["name"]: i for i in res["items"]}
     assert (by["m.bdf"]["model_state"], by["m.bdf"]["model_key"]) == ("done", key)
     assert (by["r.pdf"]["model_state"], by["r.pdf"]["model_key"]) == (None, None)

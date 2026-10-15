@@ -1,111 +1,60 @@
-"""관리자 사용자 관리. WorkBench routers/users.py 에서 이식했다.
+"""사용자 관리(15, LV3 전용) — WorkBench 활성 사용자 목록과 LogBook 등급 지정.
 
-비활성화는 상태 변경과 세션 폐기를 한 트랜잭션으로 확정한다(부분 성공 방지).
-관리자는 자기 자신을 비활성화하거나 관리자 권한을 내릴 수 없다(관리자 0명 사고 방지).
-"""
+가입 승인·거절·비활성·활성은 없앴다(활성 여부는 WorkBench 가 정한다). 등급 규칙은 roles.py 한 곳."""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from .. import audit, models
+from .. import access, models, roles, wb_users
 from ..database import get_db
 from ..dependencies import client_ip, get_storage, require_admin
-from ..ops.registry import write_registry
-from ..schemas import AdminFlagRequest, user_snapshot, user_to_dict
+from ..schemas import LevelRequest, user_to_dict
 from ..storage.paths import StoragePaths
 
 router = APIRouter(prefix="/api/admin/users", tags=["admin-users"])
 
 
-def _get(db: Session, employee_id: str) -> models.User:
-    user = db.query(models.User).filter_by(employee_id=employee_id.upper()).first()
-    if user is None:
-        raise HTTPException(status_code=404, detail="user_not_found")
-    return user
-
-
-def _set_status(db, storage, request, admin, employee_id, status, action, *,
-                required_current=None, wrong_status_detail=None):
-    user = _get(db, employee_id)
-    if user.employee_id == admin.employee_id and status != "active":
-        raise HTTPException(status_code=400, detail="cannot_change_self")
-    if required_current is not None and user.status != required_current:
-        raise HTTPException(status_code=409, detail=wrong_status_detail)
-    before = user_snapshot(user)
-    user.status = status
-    if status != "active":
-        db.query(models.UserSession).filter_by(employee_id=user.employee_id).delete(
-            synchronize_session=False
-        )
-    audit.record(db, storage, actor=admin.employee_id, action=action, target_type="user",
-                 target_id=user.employee_id, before=before, after=user_snapshot(user),
-                 ip=client_ip(request))
-    db.refresh(user)
-    write_registry(db, storage)  # 사용자 목록을 registry.json 에도 남긴다(05 — 재구축 원천)
-    return user_to_dict(user)
+def _row(wb: wb_users.WbUser | None, local: models.User | None, employee_id: str) -> dict:
+    stored = (local.level or 1) if local is not None else 1
+    wb_admin = bool(wb.is_admin) if wb is not None else bool(local and local.wb_admin)
+    return {
+        "employee_id": employee_id,
+        "name": (wb.name if wb is not None else None) or (local.name if local is not None else None),
+        "department": wb.department if wb is not None else (local.department if local is not None else None),
+        "position": wb.position if wb is not None else (local.position if local is not None else None),
+        "wb_active": bool(wb is not None and wb.is_active),
+        "wb_admin": wb_admin,
+        # 실효 등급 — WorkBench 관리자면 3(잠김), 아니면 저장값(LogBook 에 들어온 적 없으면 1)
+        "level": 3 if wb_admin else stored,
+        "stored_level": stored,
+        "known": local is not None,
+        "login_count": (local.login_count or 0) if local is not None else 0,
+        "last_login": local.last_login.isoformat() if local is not None and local.last_login else None,
+    }
 
 
 @router.get("")
-def list_users(status: str | None = None, db: Session = Depends(get_db),
-               admin: models.User = Depends(require_admin)):
-    q = db.query(models.User)
-    if status:
-        q = q.filter_by(status=status)
-    return [user_to_dict(u) for u in q.order_by(models.User.created_at.desc(), models.User.id.desc())]
+def list_users(q: str = "", db: Session = Depends(get_db), admin: models.User = Depends(require_admin)):
+    """WorkBench 활성 사용자 + LogBook 에 행이 있는데 WorkBench 활성이 아닌 사람(wb_active False — 맨 뒤).
+    WorkBench 표를 읽을 수 없으면 503 wb_unavailable."""
+    try:
+        active = wb_users.list_active(db, q)
+        locals_ = {u.employee_id: u for u in db.query(models.User)}
+        rest = [e for e in locals_ if e not in {w.employee_id for w in active}]
+        if q.strip():
+            ql = q.strip().casefold()
+            rest = [e for e in rest if e.casefold().startswith(ql) or (locals_[e].name or "").casefold().startswith(ql)]
+        others = wb_users.fetch_many(db, rest)
+    except wb_users.WbUnavailable:
+        raise HTTPException(status_code=503, detail="wb_unavailable")
+    rows = [_row(w, locals_.get(w.employee_id), w.employee_id) for w in active]
+    rows += sorted((_row(others.get(e), locals_[e], e) for e in rest), key=lambda r: (r["name"] or "", r["employee_id"]))
+    return rows
 
 
-@router.post("/{employee_id}/approve")
-def approve(employee_id: str, request: Request, db: Session = Depends(get_db),
-            storage: StoragePaths = Depends(get_storage),
-            admin: models.User = Depends(require_admin)):
-    return _set_status(db, storage, request, admin, employee_id, "active", "USER_APPROVE",
-                       required_current="pending", wrong_status_detail="not_pending")
-
-
-@router.post("/{employee_id}/enable")
-def enable(employee_id: str, request: Request, db: Session = Depends(get_db),
-           storage: StoragePaths = Depends(get_storage),
-           admin: models.User = Depends(require_admin)):
-    return _set_status(db, storage, request, admin, employee_id, "active", "USER_ENABLE",
-                       required_current="disabled", wrong_status_detail="not_disabled")
-
-
-@router.post("/{employee_id}/disable")
-def disable(employee_id: str, request: Request, db: Session = Depends(get_db),
-            storage: StoragePaths = Depends(get_storage),
-            admin: models.User = Depends(require_admin)):
-    return _set_status(db, storage, request, admin, employee_id, "disabled", "USER_DISABLE",
-                       required_current="active", wrong_status_detail="not_active")
-
-
-@router.post("/{employee_id}/reject")
-def reject(employee_id: str, request: Request, db: Session = Depends(get_db),
-           storage: StoragePaths = Depends(get_storage),
-           admin: models.User = Depends(require_admin)):
-    user = _get(db, employee_id)
-    if user.status != "pending":
-        raise HTTPException(status_code=409, detail="not_pending")
-    before = user_snapshot(user)
-    target = user.employee_id
-    db.delete(user)
-    audit.record(db, storage, actor=admin.employee_id, action="USER_REJECT", target_type="user",
-                 target_id=target, before=before, ip=client_ip(request))
-    write_registry(db, storage)
-    return {"ok": True}
-
-
-@router.put("/{employee_id}/admin")
-def set_admin(employee_id: str, body: AdminFlagRequest, request: Request,
+@router.put("/{employee_id}/level")
+def set_level(employee_id: str, body: LevelRequest, request: Request,
               db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage),
               admin: models.User = Depends(require_admin)):
-    user = _get(db, employee_id)
-    if user.employee_id == admin.employee_id and not body.is_admin:
-        raise HTTPException(status_code=400, detail="cannot_change_self")
-    before = user_snapshot(user)
-    user.is_admin = body.is_admin
-    audit.record(db, storage, actor=admin.employee_id,
-                 action="USER_ADMIN_GRANT" if body.is_admin else "USER_ADMIN_REVOKE",
-                 target_type="user", target_id=user.employee_id, before=before,
-                 after=user_snapshot(user), ip=client_ip(request))
-    db.refresh(user)
-    write_registry(db, storage)
-    return user_to_dict(user)
+    """등급 바꾸기 — 감사 USER_LEVEL. 자기 자신 400, WorkBench 관리자 409 wb_admin_locked."""
+    user = roles.set_level(db, storage, admin, employee_id, body.level, client_ip(request))
+    return user_to_dict(user) | {"level": access.level_of(user)}

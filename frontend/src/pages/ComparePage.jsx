@@ -1,16 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Columns2, LogOut, Plus, RotateCcw } from 'lucide-react';
+import { api } from '../api/client.js';
 import ComparePane from '../components/compare/ComparePane.jsx';
 import ComparePanel from '../components/compare/ComparePanel.jsx';
 import CompareToolbar from '../components/compare/CompareToolbar.jsx';
 import { useCompareBasket } from '../components/compare/CompareBasket.jsx';
 import Button, { buttonClass } from '../components/ui/Button.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
+import { WidgetBoundary } from '../components/ui/ErrorBoundary.jsx';
+import { Segmented } from '../components/ui/Tabs.jsx';
+import DiffPane from '../components/revisions/DiffView.jsx';
+import { diffHref } from '../lib/revisionDiff3d.js';
 import { BASKET_MAX, compareHref, parseIds } from '../lib/compareBasket.js';
 import { compareLayout } from '../lib/compareLayout.js';
 import { syncCamera } from '../lib/cameraSync.js';
 import { VIEW_KEYS } from '../lib/viewFrame.js';
+import { RECORD_DELAY_MS, recordCompare } from '../lib/recentCompares.js';
+import { RecentCompareShortList } from '../components/compare/RecentCompares.jsx';
 
 /** 네 모델의 요소 수 합이 이보다 크면 3D 단면이 느릴 수 있다고 알린다(시작은 늘 '선'). */
 export const HEAVY_ELEMENTS = 2_000_000;
@@ -36,8 +43,38 @@ function useWindowSize() {
   return size;
 }
 
+const VIEW_MODES = [{ id: 'side', label: '나란히' }, { id: 'diff', label: '변경 보기' }];
+
 /**
- * 모델 화면분할 비교(/compare?ids=…, 07). 주소가 원본이고 바구니는 그것을 따라간다.
+ * 두 모델이 같은 자료의 같은 계열(14 판)인가 — 그러면 '변경 보기' 토글을 연다. order = 계열 순서(앞 판 → 뒤 판).
+ * @returns {{ order: number[] } | null}
+ */
+function useSeriesPair(ids, infos) {
+  const ea = infos[ids[0]]?.file?.entry_id;
+  const eb = infos[ids[1]]?.file?.entry_id;
+  const key = ids.length === 2 && ea && ea === eb ? `${ea}:${ids.join(',')}` : '';
+  const [res, setRes] = useState(null);
+  useEffect(() => {
+    setRes(null);
+    if (!key) return undefined;
+    let live = true;
+    api(`/entries/${encodeURIComponent(ea)}/revisions`).then((d) => {
+      if (!live) return;
+      for (const s of d?.series || []) {
+        const pos = ids.map((id) => s.items.findIndex((x) => x.file_id === id));
+        if (pos.every((p) => p >= 0)) {
+          setRes({ order: pos[0] < pos[1] ? [ids[0], ids[1]] : [ids[1], ids[0]] });
+          return;
+        }
+      }
+    }).catch(() => { /* 판 정보는 덧붙는 것 — 못 읽으면 토글만 없다 */ });
+    return () => { live = false; };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return res;
+}
+
+/**
+ * 모델 화면분할 비교(/compare?ids=…, 07). 16 — 두 판이면 '변경 보기'(view=diff, 한 화면에 변경 색 표시). 주소가 원본이고 바구니는 그것을 따라간다.
  * 칸마다 기존 뷰어 엔진 하나(최대 4) + 공통 툴바 + 카메라 동기화 + 아래 비교 패널.
  */
 export default function ComparePage() {
@@ -47,6 +84,7 @@ export default function ComparePage() {
   const basket = useCompareBasket();
   const idsKey = params.get('ids') || '';
   const ids = useMemo(() => parseIds(idsKey), [idsKey]);
+  const diffMode = params.get('view') === 'diff' && ids.length === 2;
   const win = useWindowSize();
 
   // 주소로 열면 바구니를 그 목록으로 맞춘다. 주소에 목록이 없으면 바구니 목록으로 연다.
@@ -54,6 +92,13 @@ export default function ComparePage() {
   useEffect(() => {
     if (ids.length) syncIds(ids);
     else if (basket.ids.length) navigate(compareHref(basket.ids), { replace: true });
+  }, [idsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 11 — 2개 이상 모델로 열면 '최근 비교'에 남긴다(같은 묶음은 한 줄). 칸을 빼며 지나가는 묶음은 남기지 않게 잠시 뒤에
+  useEffect(() => {
+    if (ids.length < 2) return undefined;
+    const t = setTimeout(() => { recordCompare(ids).catch(() => {}); }, RECORD_DELAY_MS);
+    return () => clearTimeout(t);
   }, [idsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [shared, setShared] = useState(DEFAULT_SHARED);
@@ -118,6 +163,12 @@ export default function ComparePage() {
   }), [schedule]);
 
   const onInfo = useCallback((id, info) => setInfos((cur) => ({ ...cur, [id]: info })), []);
+  const pair = useSeriesPair(ids, infos);
+  /** 나란히 ↔ 변경 보기 — 변경 보기는 계열 순서(앞 판 → 뒤 판)로 연다. */
+  const switchView = (mode) => {
+    if (mode === 'diff') navigate(diffHref(...(pair?.order || ids)));
+    else navigate(compareHref(ids));
+  };
   const { patch } = basket;
   // 알게 된 이름·호선을 바구니 칩에도 채운다.
   useEffect(() => {
@@ -241,10 +292,14 @@ export default function ComparePage() {
 
   if (!ids.length) {
     return (
-      <EmptyState icon={Columns2} title="비교할 모델이 없습니다"
-                  action={<Link to="/" className={buttonClass('secondary', 'sm')}>검색으로</Link>}>
-        검색 결과·자료 미리보기·3D 뷰어에서 '비교에 담기'로 BDF 모델을 최대 {BASKET_MAX}개까지 담은 뒤 비교를 여세요.
-      </EmptyState>
+      <div className="h-full overflow-auto pb-10">
+        <EmptyState icon={Columns2} title="비교할 모델이 없습니다"
+                    action={<Link to="/" className={buttonClass('secondary', 'sm')}>검색으로</Link>}>
+          검색 결과·자료 미리보기·3D 뷰어에서 '비교에 담기'로 BDF 모델을 최대 {BASKET_MAX}개까지 담은 뒤 비교를 여세요.
+        </EmptyState>
+        {/* 11 — 전에 연 비교를 바로 다시 연다 */}
+        <RecentCompareShortList />
+      </div>
     );
   }
 
@@ -257,6 +312,9 @@ export default function ComparePage() {
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-n-200 px-4">
         <h1 className="text-body font-semibold tracking-[-0.005em] text-n-900">모델 비교</h1>
         <span className="font-mono text-meta text-n-500">{ids.length}/{BASKET_MAX}</span>
+        {(pair || diffMode) && (
+          <Segmented label="비교 방식" items={VIEW_MODES} value={diffMode ? 'diff' : 'side'} onChange={switchView} />
+        )}
         {heavy && (
           <span className="text-meta text-wait">요소 합계 {num(elementSum)}개 · 3D 단면은 느릴 수 있습니다</span>
         )}
@@ -271,13 +329,24 @@ export default function ComparePage() {
           <LogOut size={14} aria-hidden="true" />끝내기
         </Button>
       </header>
-      <CompareToolbar shared={shared} onChange={changeShared} onView={applyView} onFit={fitAll} />
+      <CompareToolbar shared={shared} onChange={changeShared} onView={applyView} onFit={fitAll} diffMode={diffMode} />
+      {diffMode ? (
+        <div className="flex min-h-0 flex-1 bg-n-50 p-2">
+          <WidgetBoundary what="판 변경 3D" tone="dark" resetKey={idsKey} className="rounded-lg">
+            <DiffPane key={idsKey} a={ids[0]} b={ids[1]} knownHull={basket.items.find((x) => x.id === ids[1])?.hull || ''}
+                      onInfo={onInfo} shared={shared} hub={hub} highlightPid={highlightPid} resetTick={resetTick} />
+          </WidgetBoundary>
+        </div>
+      ) : (
       <div className={`grid min-h-0 flex-1 gap-2 bg-n-50 p-2 ${layout.stacked ? 'overflow-y-auto' : ''}`} style={gridStyle}>
         {ids.map((id) => (
-          <ComparePane key={id} id={id} knownHull={basket.items.find((x) => x.id === id)?.hull || ''}
-                       maximized={maximized === id} hidden={maximized != null && maximized !== id}
-                       onToggleMax={toggleMax} onRemove={remove} onInfo={onInfo} onHover={onHover}
-                       shared={shared} hub={hub} highlightPid={highlightPid} />
+          // 칸 하나가 터져도 다른 칸·비교 표는 살린다
+          <WidgetBoundary key={id} what="이 모델 칸" tone="dark" className="rounded-lg">
+            <ComparePane id={id} knownHull={basket.items.find((x) => x.id === id)?.hull || ''}
+                         maximized={maximized === id} hidden={maximized != null && maximized !== id}
+                         onToggleMax={toggleMax} onRemove={remove} onInfo={onInfo} onHover={onHover}
+                         shared={shared} hub={hub} highlightPid={highlightPid} />
+          </WidgetBoundary>
         ))}
         {hasEmpty && (
           <div className="flex min-h-0 flex-col items-center justify-center rounded-lg border border-dashed border-n-250 bg-n-0 p-6 text-center">
@@ -289,8 +358,11 @@ export default function ComparePage() {
           </div>
         )}
       </div>
-      <ComparePanel models={rows} baseline={baseline} onBaseline={(i) => setBaselineId(ids[i])}
-                    highlightPid={highlightPid} onHighlight={setHighlightPid} maxHeight={Math.round(win.h * 0.6)} />
+      )}
+      <WidgetBoundary what="비교 표" resetKey={idsKey} className="min-h-0 flex-none border-t border-n-200">
+        <ComparePanel models={rows} baseline={baseline} onBaseline={(i) => setBaselineId(ids[i])}
+                      highlightPid={highlightPid} onHighlight={setHighlightPid} maxHeight={Math.round(win.h * 0.6)} />
+      </WidgetBoundary>
     </div>
   );
 }

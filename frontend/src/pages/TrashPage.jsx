@@ -81,7 +81,9 @@ export default function TrashPage() {
                 <span className="font-mono text-meta text-n-600">{r.entry_id}</span>
                 <span className="font-mono text-meta text-n-500">{r.updated_at ? r.updated_at.replace('T', ' ').slice(0, 16) : '—'}</span>
                 <span className="flex items-center justify-end gap-1.5">
-                  {r.restorable ? (
+                  {r.restorable && r.can_restore === false ? (
+                    <span className="text-meta text-n-500">올린 사람·관리자만 복원</span>
+                  ) : r.restorable ? (
                     <Button variant="ghost" size="sm" className={busyId === r.entry_id ? '' : reveal} disabled={busyId === r.entry_id}
                             loading={busyId === r.entry_id} onClick={() => restore(r)}>
                       {busyId !== r.entry_id && <RotateCcw size={14} aria-hidden="true" />}복원

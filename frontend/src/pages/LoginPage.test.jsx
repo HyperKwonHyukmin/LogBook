@@ -18,27 +18,34 @@ function mockFetchOnce(status, body) {
 }
 
 test.each([
-  ['not_registered', '등록되지 않은 사번입니다'],
-  ['pending_approval', '관리자 승인을 기다리는 중입니다'],
-  ['account_disabled', '비활성화된 계정입니다'],
-])('로그인 오류 %s 를 한국어로 보여 준다', async (detail, text) => {
-  mockFetchOnce(detail === 'not_registered' ? 404 : 403, { detail });
+  ['not_registered', 404, 'WorkBench 에 가입된 사번이 아닙니다'],
+  ['wb_inactive', 403, '승인 대기 중이거나 비활성화된 계정'],
+  ['wb_unavailable', 503, 'WorkBench 사용자 정보를 읽을 수 없어'],
+  ['invalid_employee_id', 422, '사번 형식이 올바르지 않습니다'],
+])('로그인 오류 %s 를 한국어로 보여 준다', async (detail, status, text) => {
+  mockFetchOnce(status, { detail });
   renderPage();
   await userEvent.type(screen.getByLabelText('사번'), 'A100001');
   await userEvent.click(screen.getByRole('button', { name: '로그인' }));
   expect(await screen.findByRole('alert')).toHaveTextContent(text);
 });
 
-test('필수 입력 필드에 aria-required 가 있다(네이티브 required 는 쓰지 않는다)', async () => {
+test('이름은 Hi-TESS LogBook, 가입 신청 탭은 없다(WorkBench 가입자만)', () => {
+  vi.stubGlobal('fetch', vi.fn());
+  renderPage();
+  expect(screen.getByRole('region', { name: 'Hi-TESS LogBook' })).toHaveTextContent('Hi-TESS LogBook');
+  expect(screen.getByText('구조해석 항해일지')).toBeInTheDocument();
+  expect(screen.queryByRole('tab')).toBeNull();
+  expect(screen.queryByLabelText('이름')).toBeNull();
+  expect(screen.getByText(/WorkBench 에서 가입·승인된 사번/)).toBeInTheDocument();
+});
+
+test('사번 입력에 aria-required 가 있다(네이티브 required 는 쓰지 않는다)', () => {
   vi.stubGlobal('fetch', vi.fn());
   renderPage();
   const employeeIdInput = screen.getByLabelText('사번');
   expect(employeeIdInput).toHaveAttribute('aria-required', 'true');
   expect(employeeIdInput).not.toHaveAttribute('required');
-  await userEvent.click(screen.getByRole('tab', { name: '가입 신청' }));
-  const nameInput = screen.getByLabelText('이름');
-  expect(nameInput).toHaveAttribute('aria-required', 'true');
-  expect(nameInput).not.toHaveAttribute('required');
 });
 
 test('기억된 사번을 미리 채운다', () => {
@@ -47,59 +54,22 @@ test('기억된 사번을 미리 채운다', () => {
   expect(screen.getByLabelText('사번')).toHaveValue('A476854');
 });
 
-test('가입 신청이 성공하면 승인 대기 안내를 보여 준다', async () => {
-  mockFetchOnce(201, { employee_id: 'A100009', status: 'pending' });
+test('로그인은 /api/auth/login 으로 사번만 보낸다', async () => {
+  mockFetchOnce(200, { token: 't', user: { employee_id: 'A100009', name: '박영수', level: 1 } });
   renderPage();
-  await userEvent.click(screen.getByRole('tab', { name: '가입 신청' }));
+  await userEvent.clear(screen.getByLabelText('사번'));
   await userEvent.type(screen.getByLabelText('사번'), 'A100009');
-  await userEvent.type(screen.getByLabelText('이름'), '박영수');
-  await userEvent.click(screen.getByRole('button', { name: '가입 신청' }));
-  expect(await screen.findByRole('status')).toHaveTextContent('관리자 승인 후');
+  await userEvent.click(screen.getByRole('button', { name: '로그인' }));
   const [url, init] = fetch.mock.calls[0];
-  expect(url).toBe('/api/auth/register');
-  expect(JSON.parse(init.body)).toMatchObject({ employee_id: 'A100009', name: '박영수' });
-});
-
-test('가입 신청 성공 후 로그인 탭으로 전환되고 사번이 남아 있다', async () => {
-  mockFetchOnce(201, { employee_id: 'A100009', status: 'pending' });
-  renderPage();
-  await userEvent.click(screen.getByRole('tab', { name: '가입 신청' }));
-  await userEvent.type(screen.getByLabelText('사번'), 'A100009');
-  await userEvent.type(screen.getByLabelText('이름'), '박영수');
-  await userEvent.click(screen.getByRole('button', { name: '가입 신청' }));
-  await screen.findByRole('status');
-  expect(screen.getByRole('tab', { name: '로그인' })).toHaveAttribute('aria-selected', 'true');
-  expect(screen.getByLabelText('사번')).toHaveValue('A100009');
-  expect(screen.getByRole('status')).toHaveTextContent('관리자 승인 후');
-});
-
-test('사번 형식 오류 메시지를 보여 준다', async () => {
-  mockFetchOnce(422, { detail: 'invalid_employee_id' });
-  renderPage();
-  await userEvent.click(screen.getByRole('tab', { name: '가입 신청' }));
-  await userEvent.type(screen.getByLabelText('사번'), 'bad-id');
-  await userEvent.type(screen.getByLabelText('이름'), '박영수');
-  await userEvent.click(screen.getByRole('button', { name: '가입 신청' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('사번 형식이 올바르지 않습니다');
-});
-
-test('중복 가입 신청 메시지를 보여 준다', async () => {
-  mockFetchOnce(409, { detail: 'already_registered' });
-  renderPage();
-  await userEvent.click(screen.getByRole('tab', { name: '가입 신청' }));
-  await userEvent.type(screen.getByLabelText('사번'), 'A476854');
-  await userEvent.type(screen.getByLabelText('이름'), '박영수');
-  await userEvent.click(screen.getByRole('button', { name: '가입 신청' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('이미 가입 신청된 사번입니다');
+  expect(url).toBe('/api/auth/login');
+  expect(JSON.parse(init.body)).toEqual({ employee_id: 'A100009' });
 });
 
 test('422 오류의 detail 이 문자열이 아니면 공통 입력값 확인 안내를 보여 준다', async () => {
-  mockFetchOnce(422, { detail: [{ loc: ['body', 'name'], msg: 'field required' }] });
+  mockFetchOnce(422, { detail: [{ loc: ['body', 'employee_id'], msg: 'field required' }] });
   renderPage();
-  await userEvent.click(screen.getByRole('tab', { name: '가입 신청' }));
   await userEvent.type(screen.getByLabelText('사번'), 'A100010');
-  await userEvent.type(screen.getByLabelText('이름'), '박영수');
-  await userEvent.click(screen.getByRole('button', { name: '가입 신청' }));
+  await userEvent.click(screen.getByRole('button', { name: '로그인' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('입력값을 확인해 주세요.');
 });
 
@@ -111,43 +81,11 @@ test('네트워크 오류면 서버 연결 실패 안내를 보여 준다', asyn
   expect(await screen.findByRole('alert')).toHaveTextContent('서버에 연결할 수 없습니다.');
 });
 
-test('가입 신청에서 이름이 비어 있으면 요청 없이 안내만 한다', async () => {
+test('18 — WorkBench 로그아웃으로 끊겼으면 한 번 안내한다', () => {
   vi.stubGlobal('fetch', vi.fn());
+  sessionStorage.setItem('logbook_logout_reason', 'wb_logout');
   renderPage();
-  await userEvent.click(screen.getByRole('tab', { name: '가입 신청' }));
-  await userEvent.type(screen.getByLabelText('사번'), 'A100011');
-  await userEvent.click(screen.getByRole('button', { name: '가입 신청' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('이름을 입력해 주세요.');
-  expect(fetch).not.toHaveBeenCalled();
-});
-
-test('탭이 완전한 WAI-ARIA 구조를 갖는다', () => {
-  vi.stubGlobal('fetch', vi.fn());
-  renderPage();
-  const tablist = screen.getByRole('tablist', { name: '로그인 방식' });
-  expect(tablist).toBeInTheDocument();
-  const loginTab = screen.getByRole('tab', { name: '로그인' });
-  const registerTab = screen.getByRole('tab', { name: '가입 신청' });
-  const panel = screen.getByRole('tabpanel');
-  expect(panel).toHaveAttribute('id', 'auth-panel');
-  expect(loginTab).toHaveAttribute('aria-controls', 'auth-panel');
-  expect(registerTab).toHaveAttribute('aria-controls', 'auth-panel');
-  expect(panel).toHaveAttribute('aria-labelledby', loginTab.id);
-  expect(loginTab).toHaveAttribute('tabIndex', '0');
-  expect(registerTab).toHaveAttribute('tabIndex', '-1');
-});
-
-test('화살표 키로 탭을 전환하고 포커스를 옮긴다', async () => {
-  vi.stubGlobal('fetch', vi.fn());
-  renderPage();
-  const loginTab = screen.getByRole('tab', { name: '로그인' });
-  const registerTab = screen.getByRole('tab', { name: '가입 신청' });
-  loginTab.focus();
-  await userEvent.keyboard('{ArrowRight}');
-  expect(registerTab).toHaveFocus();
-  expect(registerTab).toHaveAttribute('aria-selected', 'true');
-  expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', registerTab.id);
-  await userEvent.keyboard('{ArrowLeft}');
-  expect(loginTab).toHaveFocus();
-  expect(loginTab).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('status')).toHaveTextContent('WorkBench에서 로그아웃되어 LogBook도 로그아웃되었습니다.');
+  expect(sessionStorage.getItem('logbook_logout_reason')).toBeNull();
+  sessionStorage.clear();
 });

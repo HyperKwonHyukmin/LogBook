@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CornerDownRight, Link2, Search, Unlink } from 'lucide-react';
+import { ArrowLeft, CornerDownRight, Link2, Search, Unlink } from 'lucide-react';
 import { api } from '../api/client.js';
-import Button from '../components/ui/Button.jsx';
+import Button, { buttonClass } from '../components/ui/Button.jsx';
 import { inputClass, selectClass } from '../components/ui/Field.jsx';
 import { ErrorNote, Page, PageHeader } from '../components/ui/Page.jsx';
 import { RowsSkeleton } from '../components/ui/Skeleton.jsx';
 import { tagHref } from '../components/ui/Status.jsx';
 import { errorText } from '../lib/labels.js';
+import { AuthContext } from '../auth/AuthContext.jsx';
+import { SHARED_WRITE_REASON, canWriteShared } from '../lib/levels.js';
 
 // 구역·해석 종류는 통제 어휘라 관리자의 '분류 목록'(08)으로 옮겼다 — 여기는 자유 태그만.
 const KIND = 'free';
@@ -22,7 +24,7 @@ function groupsOf(tags) {
   return roots.map((r) => ({ root: r, aliases: tags.filter((t) => t.alias_of?.id === r.id) }));
 }
 
-function RootRow({ group, roots, onAlias, busy }) {
+function RootRow({ group, roots, onAlias, busy, readOnly = false }) {
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState('');
   const others = roots.filter((r) => r.id !== group.root.id);
@@ -41,7 +43,7 @@ function RootRow({ group, roots, onAlias, busy }) {
             <Button size="sm" variant="ghost" onClick={() => { setOpen(false); setTarget(''); }}>취소</Button>
           </>
         ) : (
-          others.length > 0 && (
+          others.length > 0 && !readOnly && (
             <Button size="sm" variant="ghost" className={reveal} onClick={() => setOpen(true)}>
               <Link2 size={14} aria-hidden="true" />동의어로 묶기
             </Button>
@@ -60,6 +62,10 @@ export default function TagsPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const reqRef = useRef(0);
+  // 13 — Guest 는 묶기·풀기를 하지 못한다(보기만)
+  const me = useContext(AuthContext)?.user;
+  // 15 — 자유 태그 동의어는 공용 정보라 LV2 이상
+  const readOnly = !!me && !canWriteShared(me);
 
   // 탭을 빨리 바꿔도 마지막 탭의 목록만 쓴다(늦게 온 옛 응답은 버린다).
   const load = useCallback(() => {
@@ -82,7 +88,8 @@ export default function TagsPage() {
 
   return (
     <Page>
-      <PageHeader title="태그" description="자유 태그는 누구나 붙이고 묶습니다. 동의어로 묶은 값은 검색과 필터에서 함께 찾고, 원래 입력한 값은 그대로 남습니다. 값을 누르면 그 태그로 검색합니다. 구역·해석 종류는 관리자가 ‘분류 목록’에서 관리합니다." />
+      <PageHeader title="태그 동의어" description="자유 태그는 누구나 붙이고 묶습니다. 동의어로 묶은 값은 검색과 필터에서 함께 찾고, 원래 입력한 값은 그대로 남습니다. 값을 누르면 그 태그로 검색합니다. 구역·해석 종류는 관리자가 ‘분류 목록’에서 관리합니다."
+                  actions={<Link to="/browse?by=tag" className={buttonClass('ghost', 'sm')}><ArrowLeft size={14} aria-hidden="true" />분류로</Link>} />
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <label className={inputClass('flex w-56 items-center gap-2 px-2')}>
           <Search size={14} className="shrink-0 text-n-500" aria-hidden="true" />
@@ -90,6 +97,7 @@ export default function TagsPage() {
                  className="min-w-0 flex-1 bg-transparent text-ui outline-none focus-visible:outline-none" />
         </label>
       </div>
+      {readOnly && <p className="mb-4 max-w-[880px] text-meta text-n-600">{SHARED_WRITE_REASON}</p>}
       {error && <ErrorNote className="mb-4 max-w-[880px]">{error}</ErrorNote>}
       <div className="max-w-[880px] overflow-hidden rounded-lg border border-n-200">
         <div className={`${COLS} h-9 border-b border-n-200 bg-n-50 px-3 text-meta font-medium text-n-600`}>
@@ -103,7 +111,7 @@ export default function TagsPage() {
           <ul>
             {shown.map((g) => (
               <li key={g.root.id} className="border-b border-n-200 last:border-0">
-                <RootRow group={g} roots={groups.map((x) => x.root)} onAlias={alias} busy={busy} />
+                <RootRow group={g} roots={groups.map((x) => x.root)} onAlias={alias} busy={busy} readOnly={readOnly} />
                 {g.aliases.length > 0 && (
                   <ul className="pb-1">
                     {g.aliases.map((a) => (
@@ -115,9 +123,9 @@ export default function TagsPage() {
                         </span>
                         <span className="text-right font-mono text-meta text-n-500" title="사용 횟수">{a.count}</span>
                         <span className="flex justify-end">
-                          <Button size="sm" variant="ghost" className={reveal} aria-label={`${a.value} 풀기`} disabled={busy} onClick={() => unalias(a)}>
+                          {!readOnly && <Button size="sm" variant="ghost" className={reveal} aria-label={`${a.value} 풀기`} disabled={busy} onClick={() => unalias(a)}>
                             <Unlink size={14} aria-hidden="true" />풀기
-                          </Button>
+                          </Button>}
                         </span>
                       </li>
                     ))}

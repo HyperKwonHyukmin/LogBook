@@ -83,7 +83,7 @@ def test_move_failure_rolls_back(db, storage, make_user, monkeypatch, setup_entr
     assert db.get(models.Entry, e.id).status == "draft"
 
 
-def test_trailing_dot_folder_survives_stage_process_confirm(db, storage, make_user):
+def test_trailing_dot_folder_survives_stage_process_confirm(db, storage, make_user, fill_required):
     """이름 끝에 점이 있는 폴더(3496_검토.)와 그 안의 하위 폴더(model.)가 stage → process
     → confirm 전 구간을 거쳐도 잘리지 않고 그대로 살아남아야 한다(I1)."""
     from app.ingest.inbox import ReadyItem, stage_item
@@ -110,6 +110,7 @@ def test_trailing_dot_folder_survives_stage_process_confirm(db, storage, make_us
               db.query(models.File).filter_by(entry_id=entry.id))
 
     u = db.query(models.User).filter_by(employee_id="A476854").one()
+    fill_required(entry)   # 20 — BDF 자료는 구역·해석 종류가 있어야 확정된다
     service.confirm(db, storage, entry, u)
     db.expire_all()
     entry = db.get(models.Entry, entry.id)

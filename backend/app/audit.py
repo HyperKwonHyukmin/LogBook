@@ -41,15 +41,24 @@ def record(
         after=after,
         ip=ip,
     )
+    line, at = _jsonl_line(row), row.at   # 커밋 전에 만든다 — 커밋 뒤 refresh 가 실패해도 쓸 수 있게
     db.add(row)
     db.commit()
-    db.refresh(row)
-    _append_jsonl(storage, row)
+    # 여기부터는 이미 커밋된 뒤다 — 예외를 올리지 않는다(리뷰 M3). 호출자는 record() 의 예외를 '커밋 안 됨'으로
+    # 보고 파일 이동을 되돌리는데, 커밋 뒤에 되돌리면 DB 는 vault/trash 인데 파일은 옛 자리로 간다
+    try:
+        db.refresh(row)
+    except Exception:  # noqa: BLE001
+        log.warning("감사 행 다시 읽기 실패(커밋은 됨): %s %s", action, target_id, exc_info=True)
+    try:
+        _append_jsonl(storage, line, at)
+    except Exception:  # noqa: BLE001
+        log.warning("감사 로그 파일 기록 실패(DB 기록은 유지): %s %s", action, target_id, exc_info=True)
     return row
 
 
-def _append_jsonl(storage: StoragePaths, row: models.AuditLog) -> None:
-    line = json.dumps(
+def _jsonl_line(row: models.AuditLog) -> str:
+    return json.dumps(
         {
             "at": row.at.isoformat(timespec="seconds"),
             "employee_id": row.employee_id,
@@ -60,10 +69,14 @@ def _append_jsonl(storage: StoragePaths, row: models.AuditLog) -> None:
             "ip": row.ip,
         },
         ensure_ascii=False,
+        default=str,
     )
+
+
+def _append_jsonl(storage: StoragePaths, line: str, at: datetime) -> None:
     try:
         os.makedirs(to_long(storage.audit_dir), exist_ok=True)
-        path = storage.audit_dir / f"{row.at:%Y-%m}.jsonl"
+        path = storage.audit_dir / f"{at:%Y-%m}.jsonl"
         # 단일 uvicorn 워커 가정: append 는 워커가 하나일 때만 원자적으로 안전하다(여러 워커면 줄 섞임 가능).
         with open(to_long(path), "a", encoding="utf-8") as fh:
             fh.write(line + "\n")

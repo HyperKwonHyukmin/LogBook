@@ -1,5 +1,7 @@
 from dataclasses import replace
 
+import pytest
+
 from app.config import load_settings, settings
 from app.database import build_database_url
 
@@ -20,6 +22,7 @@ def test_session_hours_default_is_8(monkeypatch):
     assert load_settings().session_hours == 8
 
 
+@pytest.mark.fresh_schema   # 스키마를 바꾼다(conftest 'DB 초기화')
 def test_ensure_columns_adds_missing_column_idempotently():
     """04c: create_all 은 기존 표에 열을 더하지 않는다 — 04c 이전 DB(model_summaries 에 format_version 없음)에
     init_schema 가 열을 더하고, 두 번째 부르면 아무것도 하지 않는다."""
@@ -37,3 +40,22 @@ def test_ensure_columns_adds_missing_column_idempotently():
     assert "format_version" in columns()
     assert database.init_schema() == []
     assert database.ensure_columns() == []
+
+
+@pytest.mark.fresh_schema   # 스키마를 바꾼다(conftest 'DB 초기화')
+def test_ensure_columns_adds_signature_columns_and_index():
+    """12: 12 이전 DB(서명 열·색인 없음)에 init_schema 가 열과 geometry 색인을 더한다(두 번째는 아무것도 안 함)."""
+    from sqlalchemy import inspect, text
+
+    from app import database
+
+    with database.engine.begin() as conn:
+        conn.execute(text("DROP INDEX ix_model_summaries_sig_geometry ON model_summaries"))
+        conn.execute(text("ALTER TABLE model_summaries DROP COLUMN sig_geometry, DROP COLUMN sig_load"))
+    added = database.init_schema()
+    assert added == ["model_summaries.sig_geometry", "model_summaries.sig_load",
+                     "model_summaries.ix_model_summaries_sig_geometry"]
+    insp = inspect(database.engine)
+    assert {"sig_geometry", "sig_load"} <= {c["name"] for c in insp.get_columns("model_summaries")}
+    assert "ix_model_summaries_sig_geometry" in {i["name"] for i in insp.get_indexes("model_summaries")}
+    assert database.init_schema() == []

@@ -36,7 +36,7 @@ test('상태·큐·실패 작업·백업·휴지통', async () => {
 test('작업 큐 표는 종류 라벨로 개수를 보이고 완료는 접어 둔다', async () => {
   renderPage({ 'GET /api/admin/ops/status': { ...STATUS, jobs: [...STATUS.jobs, { type: 'extract_file', state: 'done', count: 12 }] } });
   const queue = await screen.findByRole('table', { name: '작업 큐' });
-  const row = within(queue).getByText('보고서 본문 추출').closest('tr');
+  const row = within(queue).getByText('문서 본문 추출').closest('tr');
   expect(within(row).getByText('4')).toBeInTheDocument();
   expect(within(queue).queryByText('12')).toBeNull();
   await userEvent.click(screen.getByRole('button', { name: /완료 보기/ }));
@@ -171,4 +171,19 @@ test('작업 큐·실패 작업에 해석 검증 라벨', async () => {
   expect(within(within(queue).getByText('해석 검증').closest('tr')).getByText('3')).toBeInTheDocument();
   const failed = screen.getByRole('table', { name: '실패한 작업' });
   expect(within(within(failed).getByText('deck.bdf').closest('tr')).getByText('해석 검증')).toBeInTheDocument();
+});
+
+test('WorkBench 사용자 표 상태(15) — 연결됨·활성 수 / 읽을 수 없음·원인', async () => {
+  renderPage({ 'GET /api/admin/ops/status': { ...STATUS, wb_users: { table: 'hitessworkbench.users', ok: true, active: 42, admins: 2, error: null } } });
+  const cell = (await screen.findByText('WorkBench 사용자 표')).closest('div');
+  expect(cell).toHaveTextContent('연결됨');
+  expect(cell).toHaveTextContent('활성 42명');
+  expect(cell).toHaveTextContent('hitessworkbench.users');
+});
+
+test('WorkBench 사용자 표를 읽을 수 없으면 원인을 보인다', async () => {
+  renderPage({ 'GET /api/admin/ops/status': { ...STATUS, wb_users: { table: 'hitessworkbench.users', ok: false, active: null, admins: null, error: '권한 없음(GRANT SELECT 필요)' } } });
+  const cell = (await screen.findByText('WorkBench 사용자 표')).closest('div');
+  expect(cell).toHaveTextContent('읽을 수 없음');
+  expect(cell).toHaveTextContent('권한 없음(GRANT SELECT 필요)');
 });

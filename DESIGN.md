@@ -1,6 +1,14 @@
-# Logbook 디자인 시스템
+# Hi-TESS LogBook 디자인 시스템
 
 `PRODUCT.md`(전략·보이스) 아래의 시각 규칙이다. 원본 토큰은 `frontend/src/index.css` 의 `@theme` 한 곳이고, 공용 컴포넌트는 `frontend/src/components/ui/` 에 있다. 방향은 **네이비 크롬(트러스트 블루 상단 바 + 사이드 내비) + 흰 작업면 + 헤어라인**이다. 브랜드는 크롬이라는 넓은 한 면과 호선 칩·주 버튼·선택 상태라는 정확한 자리에만 실리고, 작업면 안은 여전히 카드 대신 여백과 선으로 위계를 만든다.
+
+## 0. 이름과 로고(15)
+
+- 앱 이름은 **Hi-TESS LogBook**(구조 해석 도구 묶음 Hi-TESS 의 한 갈래). 한글 부제 '구조해석 항해일지'는 로그인 브랜드 면에서만 보조로 쓴다.
+- 로고 = Hi-TESS 마크(그림) + 글자 워드마크. WorkBench 의 잠금 그림(`hitess_logo_lockup_transparent.png`)은 'WorkBench' 글자가 박혀 있어 쓰지 않는다.
+  네이비 위: 흰 'Hi-TESS' + `brand-mint` 'LogBook'. 흰 바탕(쓸 일이 생기면): `n-900` 'Hi-TESS' + `brand` 'LogBook'.
+- 파비콘: `public/favicon.png`(마크)·`favicon.ico`(WorkBench `icon.ico`). 앱에 다크 테마는 없다 — 어두운 바탕은 네이비 크롬뿐이고 마크는 그 위에서 3:1 이상이다.
+- 바꾸지 않는 이름: 저장소·패키지·DB(`logbook`)·공유 폴더(`999_LogBook`)·환경변수(`LOGBOOK_*`)·localStorage 키·`Logbook.url`.
 
 ## 1. 토큰
 
@@ -35,14 +43,17 @@
 | `brand-hover` / `brand-press` | #0B2F5E / #011D43 | 주 버튼 상태 |
 | `brand-subtle` / `brand-muted` | #EDF3FB / #D9E4F4 | 선택 행 / 선택+hover, 글자 선택 영역 (`brand` 글자 13.5:1) |
 | `brand-ring` | #7F97B8 | 흰 면 위 포커스 링 |
+| `brand-mint` | #6BE8C1 | **네이비 위 워드마크 'LogBook' 전용**(Hi-TESS 시그니처 민트, WorkBench 잠금 로고의 'WorkBench' 글자색). navy-900 10.0:1. 흰 바탕 1.5:1 이라 흰 면·장식에는 쓰지 않는다 |
 | `ok` / `ok-bg` | #007A30 / #EAF5EE | Heritage Green: **확정·연결됨에만** |
 | `ok-on-navy` | #55CE71 | 네이비 위 연결됨 점. 헤리티지 그린 색상(H 148)을 밝힌 값 (navy-900 7.5:1) |
 | `err-on-navy` | #F8A59B | 네이비 위 끊김 점·글자 (navy-900 7.8:1) |
 | `wait` / `wait-bg` | #A34A07 / #FDF3E7 | 미확정 |
 | `err` / `err-bg` / `err-line` | #B42318 / #FDEEEC / #F4C7C1 | 오류, 위험 동작 |
 | `hit` | #FFEDB3 | 검색 강조 `mark` |
+| `fav` | #B26B00 | 즐겨찾기 별(켜짐 채움) **아이콘 전용**, 흰 바탕 4.2:1 · `brand-subtle` 3.8:1. 꺼진 별은 `n-400` |
 | `k-pdf` · `k-ppt` · `k-xls` · `k-bdf` · `k-res` · `k-doc` (+`-bg`) | | 파일 종류 배지(옅은 바탕 + 진한 글자, 모두 AA) |
 | `viewer` | #0E1A2B | 3D 뷰어 바탕(네이비 크롬과 같은 계열의 깊은 남색) |
+| `diff-add` / `diff-chg` / `diff-del` / `diff-same` | #35C9A0 / #F5A524 / #F0607A / #5B6178 | 16 판 변경 3D 보기 **뷰어 위 범례 색 칸·카드 배지 전용**(엔진 `lib/pidPalette.js` `DIFF_COLORS` 와 같은 값). 추가·변경·삭제·변경 없음. 글자색으로 쓰지 않는다. 색만으로 말하지 않게 모양(채운 칸 · 반투명+점선 · 원 · 네모)과 글자를 함께 쓴다 |
 | `scrim` | rgb(19 23 30 / .30) | 대화상자·서랍 뒤 가림막(블러 없음) |
 
 **표면은 네 층까지만 쓴다.** Chrome(`navy-900`) → Surface(`n-0`) → Sunken(`n-50`, 표 머리·필터 열·미리보기 바탕) → Raised(`n-0` + `shadow-md`/`lg`, 팝오버·메뉴·토스트·대화상자). 정적인 패널에는 그림자를 쓰지 않고 헤어라인만 쓴다.
@@ -74,9 +85,9 @@
 ## 3. 레이아웃
 
 - **셸(네이비 크롬)**: 상단 바 48px 과 사이드 내비 208px 이 `navy-900` 한 면으로 이어진다(둘 사이 선 없음). `<main>` 은 테두리 없이 `n-0` + `rounded-tl-xl` 로 그 안에 끼운 흰 작업면이다. 크롬 요소에는 `.on-navy` 를 달아 포커스 링·글자 선택·스크롤바를 네이비용으로 바꾼다.
-- **상단 바**: 흰 로고 마크(네이비 그림 + 스파크 점)와 흰 'Logbook' 글자, **흰 검색칸**(h-9, 최대 560px, 네이비 돋보기, n-500 플레이스홀더 5.2:1, `Ctrl K` 는 `n-50` 바탕 n-600 글자, hover 는 `navy-600` 3px 링, 포커스는 `on-navy-ring` 3px 링), `inverse` 올리기 단추(흰 바탕 + 네이비 글자, md), 32px 아바타(`navy-700` + `navy-500` 1px 링 + 흰 글자, hover·열림 `navy-600`) 순이다.
+- **상단 바**: Hi-TESS 마크(WorkBench `logo.png` 사본 `src/assets/hitess-mark.png` — 회색 고리 + 빨강·파랑·초록 면, navy-900 위 3.1~4.8:1)와 워드마크 흰 'Hi-TESS' + 민트(`brand-mint`) 'LogBook', **흰 검색칸**(h-9, 최대 560px, 네이비 돋보기, n-500 플레이스홀더 5.2:1, `Ctrl K` 는 `n-50` 바탕 n-600 글자, hover 는 `navy-600` 3px 링, 포커스는 `on-navy-ring` 3px 링), `inverse` 올리기 단추(흰 바탕 + 네이비 글자, md), 32px 아바타(`navy-700` + `navy-500` 1px 링 + 흰 글자, hover·열림 `navy-600`) 순이다.
 - **사이드 내비**: 메뉴 h-8, 라벨 13/500 `on-navy-muted`, 아이콘 16px `on-navy-icon`. hover 는 `navy-800` 채움 + 흰 글자, 현재 메뉴는 `navy-700` 채움 + 흰 글자·아이콘이다(측면 띠, 굵기 변화 없음). 구역 라벨(작업·기록·관리)은 12/500 `on-navy-subtle` 문장형이며 대문자·자간을 쓰지 않는다. 맨 아래 연결 상태는 `navy-700` 윗선 + 8px `ok-on-navy` 점 + mono `999_LogBook` + '연결됨' 글자다(끊기면 `err-on-navy` 점과 '끊김').
-- **로그인**: 좌우 분할(900px 이상 5:7). 왼쪽 `navy-900` 브랜드 면은 흰 로고(32px, 부제 포함)를 위에, 목적 한 줄(26, 32, 1600px 이상 40px / 600 흰 글자, balance)과 `navy-700` 선 아래의 출처 한 줄을 아래에 둔다. 오른쪽 흰 면은 360px 양식(제목 24/32, 로그인·가입 신청 세그먼트, 입력, 주 버튼, 헤어라인 아래 안내 한 줄)이다. 900px 미만에서는 네이비 띠가 위로 쌓인다. 그라데이션·글래스·그림은 쓰지 않는다.
+- **로그인**: 좌우 분할(900px 이상 5:7). 왼쪽 `navy-900` 브랜드 면은 Hi-TESS 로고(마크 36px + 'Hi-TESS LogBook' 18px, 부제 '구조해석 항해일지')를 위에, 목적 한 줄(26, 32, 1600px 이상 40px / 600 흰 글자, balance)과 `navy-700` 선 아래의 출처 한 줄을 아래에 둔다. 오른쪽 흰 면은 360px 양식(제목 24/32, 'WorkBench 와 같은 사번' 한 줄, 사번 입력, 주 버튼, 헤어라인 아래 안내 한 줄)이다. 자체 가입은 없다(15 — 사용자는 WorkBench 가입자). 900px 미만에서는 네이비 띠가 위로 쌓인다. 그라데이션·글래스·그림은 쓰지 않는다.
 - **표준 컨테이너는 한 종류**: `Page` = `mx-auto max-w-[1200px] px-6 py-6`(1441px 이상에서는 `px-8`). 검색을 뺀 모든 화면이 이것을 써서 제목의 x 위치가 고정된다. 좁은 표(태그)도 컨테이너는 같게 두고 표만 `max-w-[880px]` 로 줄인다.
 - **페이지 머리말**: `PageHeader` 는 제목 + 설명(`mt-1`) + 오른쪽 동작으로 이루어지고 아래에 헤어라인과 `mb-5` 를 둔다.
 - **검색만 전폭 3-pane**이다. 필터(232px, `n-50`) | 결과(흰 면) | 미리보기(`clamp(360px,34vw,480px)`). 미리보기가 열리면 **1600px 미만에서 필터 열을 접고** 머리말의 `필터` 단추(서랍)로 바꾼다. 1366px에서 결과 열은 약 460px 이상 남는다.
@@ -90,7 +101,7 @@
 | 버튼 | `ui/Button.jsx` | sm 28 / md 32 / lg 36 / icon 32 / icon-sm 28. 변형은 primary(네이비) · secondary · ghost · danger · danger-solid(확인 대화상자 안에서만) · inverse(**네이비 크롬 위에서만**: 흰 바탕 + 네이비 글자). 비활성은 opacity가 아니라 색(`n-150`/`n-50` 바탕 + `n-500` 글자)으로 칠한다. `loading` 이면 스피너를 두고 `aria-busy` 를 켠다. |
 | 입력 | `ui/Field.jsx` | `inputClass()` 는 h-8, `n-250` 테두리, hover `n-300` 이다. 포커스는 `.field` 가 `border-brand` 와 3px 옅은 링으로, 오류는 `aria-invalid` 에 따라 `err` 로 그린다. 라벨은 위쪽 12/500 n-600. |
 | 탭 | `ui/Tabs.jsx` `Tabs` | 보기 전환(정리 대기, 사용자 상태, XLSX 시트)에 쓴다. 선택은 n-900 글자와 2px n-900 밑줄이며 **강조색을 쓰지 않는다**. ←/→ 로 옮긴다. |
-| 세그먼트 | `ui/Tabs.jsx` `Segmented` | 값 전환(문서\|파일, 구역\|자유 태그, 로그인\|가입 신청)에 쓴다. 선택은 `n-0 + shadow-sm` 이며 **파란 채움을 쓰지 않는다**. |
+| 세그먼트 | `ui/Tabs.jsx` `Segmented` | 값 전환(문서\|파일, 구역\|자유 태그)에 쓴다. 선택은 `n-0 + shadow-sm` 이며 **파란 채움을 쓰지 않는다**. |
 | 상태 | `ui/Status.jsx` | `StatusDot` 은 6px 점과 글자로 표시한다(색만으로 구분하지 않는다). `DraftBadge`, `HullChip`(전역 1종: `brand` 네이비 채움 + 흰 mono 12/500, 높이 20px, hover `navy-700`, 링크. `ChipInput` 의 호선 칩도 같은 모양), `TagChip`(`n-100`). |
 | 파일 배지 | `ui/KindBadge.jsx` | 파일 이름이 있으면 **확장자 라틴 대문자**(PDF/PPTX/XLSX/BDF/F06)를 sans 600으로 쓴다. 종류만 아는 Entry 행은 종류 라벨을 sans로 쓴다. 모노는 쓰지 않는다. |
 | 인라인 편집 | `ui/InlineText.jsx` | "조용한 필드": 값 자체가 단추이고(키보드 진입 가능), hover 시 `n-100` 바탕과 연필 12px이 나타난다. 빈 값은 n-500 "추가"로 쓴다. 형식 힌트(YYYY-MM)는 편집 중 플레이스홀더로만 보인다. 저장에 성공하면 "저장됨"을 1.5초 보인다. ⚠ 단추에 `max-width:%` 를 주지 말 것(버튼은 compressible 이라 폭이 0으로 무너진다). |
@@ -98,6 +109,7 @@
 | 메뉴 | `ui/Menu.jsx` | 계정 메뉴와 Entry `⋯` 동작 메뉴에 쓴다. ↑/↓, Esc, 바깥 누르기를 지원하고, 닫히면 포커스를 단추로 돌려준다. |
 | 토스트 | `ui/Toast.jsx` | 하단 가운데 `n-900` 바탕, 36px 높이로 한 개만 띄운다. `되돌리기` 같은 동작 단추를 하나 둘 수 있고 5초 뒤 닫힌다. `role="status"`. |
 | 확인 대화상자 | `ui/ConfirmDialog.jsx` `useConfirm()` | **되돌릴 수 없는 동작에만** 쓴다(초안 버리기, 가입 거절, 비활성화). 420px, `rounded-xl`, `shadow-lg`, `scrim` 을 쓰고 블러는 없다. 포커스를 가두고, Esc를 누르면 취소된다. |
+| 동일 BDF 안내(17) | `inbox/DuplicateBlocked.jsx` | 업로드·확정에서 '이미 있는 BDF' 로 받지 않은 파일. **오류가 아니라 안내**라 `n-50` 면 + `n-200` 헤어라인 + `n-500` 아이콘이며 `err`·`wait` 색을 쓰지 않는다(`role=alert` 아님). 대상은 Entry 번호 링크(mono)·제목·경로·이름(사번은 title)·상태 칩(`n-100`) 한 줄, 볼 수 없는 대상은 자물쇠 + 익명 문구만. LV3 의 우회는 secondary sm '그래도 올리기'/'그래도 확정'(되돌릴 수 있는 동작이라 확인 대화상자 없음). 업로드 칸·전역 끌어 놓기·[파일 추가]·초안 카드·배치 제외 목록이 같은 조각(`DuplicateTargets`)을 쓴다. |
 | 빈 상태 | `ui/EmptyState.jsx` | 위쪽 정렬(`mt-12`)로, 20px 단색 아이콘(원 배경 없음), 14/600 제목, 13 설명으로 구성하고 필요하면 동작 하나를 둔다. |
 | 스켈레톤 | `ui/Skeleton.jsx` | 실제 행 모양(제목 60%, 메타 40%, 발췌 90%)을 따른다. **300ms 뒤에 나타나고**(`.appear-late`) opacity로만 숨쉬며, 쉬머는 쓰지 않는다. |
 | 페이지 틀 | `ui/Page.jsx` | `Page`, `PageHeader`, `ErrorNote`(err-bg 줄 + 선택적 `다시 시도`), `OkNote`, `SectionTitle`. |

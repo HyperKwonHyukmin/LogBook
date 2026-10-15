@@ -7,6 +7,7 @@ import { isModelPending, modelStaleNote, modelStateMessage } from '../../lib/mod
 import Button, { buttonClass } from '../ui/Button.jsx';
 import { Bar } from '../ui/Skeleton.jsx';
 import Spinner from '../ui/Spinner.jsx';
+import { WidgetBoundary } from '../ui/ErrorBoundary.jsx';
 import ModelThumb from '../viewer/ModelThumb.jsx';
 import ModelNote from './ModelNote.jsx';
 import SolveCheckCard from './SolveCheckCard.jsx';
@@ -144,12 +145,15 @@ function ModelPreviewBody({ file, inline, compare }) {
       )}
       {inline ? (
         <div className={VIEWER_HEIGHT}>
-          <Suspense fallback={<div className="appear-late h-full" aria-hidden="true"><Bar className="h-full" /></div>}>
-            {/* 다시 변환되면(key 바뀜) 뷰어를 새로 띄워 새 결과를 불러온다. */}
-            <ModelViewer key={data.key || 'model'} fileId={file.id} fullscreenHref={`/v/${file.id}`}
-                         formatVersion={data.format_version ?? null}
-                         className="h-full rounded-lg border border-n-200" />
-          </Suspense>
+          {/* 뷰어가 터져도(엔진 오류·사라진 묶음) 미리보기 나머지는 살린다 */}
+          <WidgetBoundary what="3D 뷰어" tone="dark" resetKey={`${file.id}:${data.key}`} className="rounded-lg">
+            <Suspense fallback={<div className="appear-late h-full" aria-hidden="true"><Bar className="h-full" /></div>}>
+              {/* 다시 변환되면(key 바뀜) 뷰어를 새로 띄워 새 결과를 불러온다. */}
+              <ModelViewer key={data.key || 'model'} fileId={file.id} fullscreenHref={`/v/${file.id}`}
+                           formatVersion={data.format_version ?? null}
+                           className="h-full rounded-lg border border-n-200" />
+            </Suspense>
+          </WidgetBoundary>
         </div>
       ) : (
         <div className="flex flex-col items-start gap-2">

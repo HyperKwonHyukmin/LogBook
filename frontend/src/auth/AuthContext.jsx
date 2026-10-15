@@ -1,10 +1,11 @@
 /**
  * 인증 상태 컨텍스트. WorkBench contexts/AuthContext.jsx 의 구조를 가져왔다.
  * 차이: 사용자 정보를 localStorage 에 두지 않고 매번 /auth/me 로 확인한다
- * (관리자가 비활성화하면 즉시 반영). 사번만 편의를 위해 기억한다.
+ * (WorkBench 에서 비활성화되면 다음 요청에서 끊긴다 — 15). 사번만 편의를 위해 기억한다.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, tokenStore, TOKEN_KEY } from '../api/client.js';
+import { canWriteLevel, canWriteShared, isAdminLevel, levelOf } from '../lib/levels.js';
 
 export const SAVED_EMPLOYEE_ID_KEY = 'logbook_saved_employee_id';
 export const AuthContext = createContext(null);
@@ -67,7 +68,15 @@ export function AuthProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, isAdmin: user?.is_admin === true, login, logout }),
+    // 15 — LogBook 등급. isAdmin = LV3(WorkBench 관리자 자동 포함), canWrite = 올리기·자기 자료(LV1 이상),
+    // canWriteShared = 공용 정보(태그 동의어·호선 메모)·해석 검증(LV2 이상)
+    () => ({
+      user, loading, login, logout,
+      level: user ? levelOf(user) : 0,
+      isAdmin: !!user && isAdminLevel(user),
+      canWrite: !!user && canWriteLevel(user),
+      canWriteShared: !!user && canWriteShared(user),
+    }),
     [user, loading, login, logout],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

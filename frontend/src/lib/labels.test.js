@@ -28,8 +28,8 @@ test('05 운영 동작·오류·작업 라벨', () => {
     expect(errorText({ detail: code }, 'FALLBACK')).not.toBe('FALLBACK');
   }
   expect(errorText({ detail: { code: 'backup_failed', message: 'x' } })).toMatch('백업');
-  expect(JOB_TYPE_LABELS).toEqual({ extract_file: '보고서 본문 추출', convert_model: 'BDF 변환',
-    process_batch: '배치 처리', write_meta: '메타 파일 쓰기', solve_check: '해석 검증' });
+  expect(JOB_TYPE_LABELS).toEqual({ extract_file: '문서 본문 추출', convert_model: 'BDF 변환',
+    process_batch: '배치 처리', write_meta: '메타 파일 쓰기', solve_check: '해석 검증', revision_diff: '판 비교' });
   expect(JOB_STATE_LABELS).toEqual({ queued: '대기', running: '실행 중', done: '완료', failed: '실패' });
 });
 

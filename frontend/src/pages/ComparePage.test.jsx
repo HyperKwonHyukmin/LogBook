@@ -288,3 +288,31 @@ test('끝내기 — 바로 열어 이전 화면이 없으면 검색으로', asyn
   await user.click(screen.getByRole('button', { name: '끝내기' }));
   expect(screen.getByTestId('where')).toHaveTextContent(/^\/$/);
 });
+
+test('2개 이상 모델로 열면 잠시 뒤 최근 비교에 한 번 남긴다(11)', async () => {
+  const rec = vi.fn(() => ({ id: 1, file_ids: [1, 2], open_count: 1 }));
+  API['POST /api/me/compares'] = (init) => rec(JSON.parse(init.body));
+  try {
+    const { engines } = setup('1,2');
+    await ready(engines, 2);
+    await waitFor(() => expect(rec).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    expect(rec).toHaveBeenCalledWith({ file_ids: [1, 2] });
+  } finally {
+    delete API['POST /api/me/compares'];
+  }
+});
+
+test('빈 비교 화면은 최근 비교를 보이고, 휴지통 모델은 빼고 연다(11)', async () => {
+  const fetch = mockApi({
+    'GET /api/me/compares?limit=5': { items: [{ id: 7, file_ids: [1, 2], open_count: 3, last_opened_at: '2026-10-01T09:00:00',
+      dropped: 0, files: [{ id: 1, name: 'rev1.bdf', hull: '9999', available: true, note: null },
+                          { id: 2, name: 'rev2.bdf', hull: '9999', available: false, note: 'trashed' }] }] },
+  });
+  render(<MemoryRouter initialEntries={['/compare']}><CompareBasketProvider><Routes>
+    <Route path="/compare" element={<ComparePage />} /></Routes></CompareBasketProvider></MemoryRouter>);
+  const list = await screen.findByRole('region', { name: '최근 비교' });
+  expect(within(list).getByRole('link', { name: /rev1\.bdf · rev2\.bdf/ })).toHaveAttribute('href', '/compare?ids=1');
+  expect(within(list).getByText(/확인할 모델 1/)).toBeInTheDocument();
+  expect(within(list).getByRole('link', { name: '모두 보기' })).toHaveAttribute('href', '/compares');
+  expect(fetch.mock.calls.some(([, i = {}]) => i.method === 'POST')).toBe(false);
+});

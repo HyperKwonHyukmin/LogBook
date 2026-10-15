@@ -46,14 +46,19 @@ def test_begin_rejects_unreachable_storage(db, storage, make_user, monkeypatch):
     assert e.value.status_code == 503 and e.value.detail == "storage_unreachable"
 
 
-def test_begin_target_must_be_confirmed_entry(db, storage, make_user):
+def test_begin_target_accepts_draft_and_confirmed_but_not_trashed(db, storage, make_user):
     user = make_user("A100001")
-    draft = models.Entry(title="t", status="draft", entry_id="E000900")
+    draft = models.Entry(title="t", status="trashed", entry_id="E000900", uploaded_by="A100001")   # 내 자료에만 추가
     db.add(draft)
     db.commit()
     with pytest.raises(HTTPException) as e:
         service.begin(db, storage, user, name="x", target_entry_id="E000900")
     assert e.value.status_code == 422 and e.value.detail == "target_not_confirmed"
+    draft.status = "draft"
+    db.commit()
+    pending = service.begin(db, storage, user, name="report", target_entry_id="E000900", target_status="draft")
+    assert pending.target_entry_id == draft.id
+    service.cancel(db, storage, user, pending.key)
     draft.status = "confirmed"
     db.commit()
     batch = service.begin(db, storage, user, name="x", target_entry_id="e000900")
@@ -133,11 +138,12 @@ def test_finish_moves_to_staging_and_queues_processing(db, storage, make_user, s
                           files=[{"rel_path": "9999_시험/a.bdf", "size": 4},
                                  {"rel_path": "9999_시험/r.pdf", "size": 8}],
                           rejected=[{"rel_path": "9999_시험/enc.pdf", "reason": "drm"}])
-    assert done.state == "staged"
+    assert done["state"] == "staged"
     assert not os.path.exists(to_long(storage.web_inbox / b.key))
     assert _read(storage.staging / b.key / "9999_시험" / "a.bdf") == b"GRID"
     assert db.query(models.Job).filter_by(type="process_batch", target_id=b.id).count() == 1
-    assert done.excluded == [{"name": "9999_시험/enc.pdf", "size": 0, "reason": "drm"}]
+    # 17 — finish 는 응답 사전({key, state, blocked, deferred})을 돌려준다. 제외 목록은 배치 행에
+    assert db.query(models.Batch).filter_by(key=b.key).one().excluded == [{"name": "9999_시험/enc.pdf", "size": 0, "reason": "drm"}]
     audit = db.query(models.AuditLog).filter_by(action="BATCH_RECEIVED", target_id=b.key).one()
     assert audit.employee_id == "A100001" and audit.after["source"] == "web"
 
@@ -251,7 +257,7 @@ def test_finish_audit_failure_keeps_upload(db, storage, make_user, monkeypatch):
 
     monkeypatch.setattr(service.audit, "record", boom)
     done = service.finish(db, storage, user, b.key, files=[{"rel_path": "a.bdf", "size": 4}], rejected=[])
-    assert done.state == "staged"
+    assert done["state"] == "staged"
     assert os.path.exists(to_long(storage.staging / b.key / "a.bdf"))
     assert not os.path.exists(to_long(storage.web_inbox / b.key))
     db.expire_all()
@@ -312,7 +318,7 @@ def test_finish_retries_rename_on_permission_error(db, storage, make_user, monke
     monkeypatch.setattr(service.os, "rename", locked_twice)
     monkeypatch.setattr(service.time, "sleep", lambda s: sleeps.append(s))
     done = service.finish(db, storage, user, b.key, files=[{"rel_path": "a.bdf", "size": 4}], rejected=[])
-    assert done.state == "staged" and len(attempts) == 3 and len(sleeps) == 2
+    assert done["state"] == "staged" and len(attempts) == 3 and len(sleeps) == 2
     assert os.path.exists(to_long(storage.staging / b.key / "a.bdf"))
 
 

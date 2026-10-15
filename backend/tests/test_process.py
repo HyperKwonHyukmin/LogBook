@@ -24,8 +24,9 @@ def test_process_creates_files_and_draft(db, storage):
     process_batch(db, storage, b)
     db.expire_all()
     [e] = db.query(models.Entry).all()
-    assert (e.status, e.title, e.uploaded_by, e.batch_id) == ("draft", "3496 Mooring 검토", "A476854", b.id)
+    assert (e.status, e.title, e.uploaded_by, e.batch_id) == ("draft", "3496 · Mooring 검토", "A476854", b.id)
     assert e.entry_id == f"E{e.id:06d}"
+    assert e.title_source == "3496_Mooring_검토"   # 20 — 제목 초안의 원래 이름
     assert db.query(models.EntryHull).filter_by(entry_id=e.id, hull_no="3496", is_primary=True).count() == 1
     files = db.query(models.File).order_by(models.File.rel_path).all()
     assert [(f.rel_path, f.kind) for f in files] == [

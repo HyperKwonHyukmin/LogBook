@@ -4,7 +4,8 @@ import re
 
 from sqlalchemy.orm import Session
 
-from .. import jobs, models
+from .. import isolated, jobs, models
+from ..config import settings
 from ..entries.locate import file_path
 from ..storage.paths import StoragePaths
 from . import can_extract, extract_bytes
@@ -64,6 +65,19 @@ def mark_failed(db: Session, file_id: int, error: str) -> None:
     _finish(db, row, "failed", error)
 
 
+def extract_path(path: str, ext: str) -> tuple[str, object]:
+    """파일을 읽어 본문을 뽑는다 — 자식 프로세스에서 돈다(리뷰 9, app.isolated).
+    돌려주는 것: ("drm", None) | ("ok", ExtractResult) | ("failed", 사유). 읽기 실패(OSError)는 그대로 던진다(재시도)."""
+    with open(path, "rb") as fh:
+        data = fh.read()
+    if data.startswith(DRM_MAGIC):
+        return "drm", None
+    try:
+        return "ok", extract_bytes(ext, data)
+    except Exception as exc:  # 문서가 깨졌다 — 다시 돌려도 같다
+        return "failed", f"{type(exc).__name__}: {exc}"
+
+
 def find_doc_hull(chunks: list[tuple[str, str]]) -> str | None:
     for _loc, text in chunks[:DOC_HULL_CHUNKS]:
         m = _HULL_BEFORE.search(text) or _HULL_AFTER.search(text)
@@ -111,16 +125,17 @@ def run_extract(db: Session, storage: StoragePaths, f: models.File) -> None:
 
     result = load_cached(storage, f.sha256)
     if result is None:
-        with open(file_path(db, storage, f), "rb") as fh:  # OSError·FileUnavailable → 작업 재시도
-            data = fh.read()
-        if data.startswith(DRM_MAGIC):
+        path = file_path(db, storage, f)   # FileUnavailable → 작업 재시도
+        # 읽기·추출은 자식 프로세스에서 제한 시간 안에(넘으면 isolated.HeavyTimeout — 워커가 최종 실패로 끝낸다).
+        # 파일 읽기 OSError 는 그대로 올라와 작업 큐가 재시도한다
+        status, value = isolated.run(extract_path, path, f.ext, timeout=settings.extract_timeout)
+        if status == "drm":
             f.drm_encrypted = True
             return _finish(db, row, "skipped", "drm")
-        try:
-            result = extract_bytes(f.ext, data)
-        except Exception as exc:  # 문서가 깨졌다 — 다시 돌려도 같으니 실패로 기록하고 끝낸다
-            log.warning("본문 추출 실패: file=%s %s — %s", f.id, f.name, exc)
-            return _finish(db, row, "failed", f"{type(exc).__name__}: {exc}")
+        if status == "failed":  # 문서가 깨졌다 — 다시 돌려도 같으니 실패로 기록하고 끝낸다
+            log.warning("본문 추출 실패: file=%s %s — %s", f.id, f.name, value)
+            return _finish(db, row, "failed", value)
+        result = value
         save_cached(storage, f.sha256, result)
 
     db.query(models.FileText).filter_by(file_id=f.id).delete(synchronize_session=False)

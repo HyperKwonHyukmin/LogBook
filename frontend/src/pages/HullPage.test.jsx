@@ -65,3 +65,15 @@ test('호선 번호는 주소에 넣을 때 인코딩한다', async () => {
   renderAt('/h/99%2099', { 'GET /api/hulls/99%2099': { __status: 404, detail: 'hull_not_found' } });
   expect(await screen.findByText('등록된 호선이 아닙니다')).toBeInTheDocument();
 });
+
+test('타임라인 행의 별은 서버 값을 보이고, 눌러도 상세로 가지 않는다(10)', async () => {
+  const hull = { ...HULL, timeline: HULL.timeline.map((m) => ({ ...m, entries: m.entries.map((e) => ({ ...e, favorite: e.entry_id === 'E000001' })) })) };
+  renderAt('/h/9999', { 'GET /api/hulls/9999': hull });
+  const tl = await screen.findByRole('list', { name: '월별 타임라인' });
+  const on = within(tl).getByRole('button', { name: '즐겨찾기 해제' });
+  expect(on).toHaveAttribute('aria-pressed', 'true');
+  const off = within(tl).getByRole('button', { name: '즐겨찾기 추가' });
+  await userEvent.click(off);   // 공급자 없이 단독 렌더 — 이 단추 안에서만 바뀐다
+  expect(within(tl).getAllByRole('button', { name: '즐겨찾기 해제' })).toHaveLength(2);
+  expect(screen.getByRole('heading', { name: /9999/ })).toBeInTheDocument();   // 상세로 가지 않았다
+});

@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+import { filterHref } from '../../lib/search.js';
+import { FACET_LABELS } from '../../lib/labels.js';
 
 const STATUS = {
   confirmed: ['확정', 'bg-ok', 'text-ok'],
@@ -44,7 +46,7 @@ export function TagChip({ children, className = '' }) {
 }
 
 /** 태그로 거른 검색 주소(08). */
-export const tagHref = (tag) => `/?tag=${encodeURIComponent(tag)}`;
+export const tagHref = (tag) => filterHref('tag', tag);
 
 /**
  * 자유 태그 링크(08) — 누르면 그 태그로 거른 검색. small: 결과 행 안의 작은 '#태그'.
@@ -59,5 +61,18 @@ export function TagLink({ tag, small = false, onClick }) {
   return (
     <Link to={tagHref(tag)} onClick={onClick} title={`태그 ‘${tag}’ 로 거르기`}
           className="inline-flex h-6 items-center rounded-sm bg-n-100 px-2 text-meta text-n-700 transition-colors duration-150 ease-out hover:bg-n-150 hover:text-n-900">{tag}</Link>
+  );
+}
+
+/**
+ * 속성 값 링크(09) — 누르면 그 값 하나로 거른 검색(`/?zone=선미부`). 글자 그대로 보이고 hover 때 밑줄.
+ * 결과 행 안에서는 onClick 으로 행 선택을 막는다(stopPropagation).
+ */
+export function FilterLink({ field, value, children, onClick, className = '' }) {
+  return (
+    <Link to={filterHref(field, value)} onClick={onClick} title={`${FACET_LABELS[field] || ''} ‘${value}’ 로 찾기`}
+          className={`min-w-0 truncate rounded-xs underline-offset-2 transition-colors duration-150 hover:text-brand hover:underline ${className}`}>
+      {children ?? value}
+    </Link>
   );
 }

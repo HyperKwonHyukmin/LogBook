@@ -9,6 +9,16 @@ from . import models
 RETRY_STEP = timedelta(minutes=1)
 MAX_ATTEMPTS = 3          # 작업 하나의 최대 시도 횟수(worker.MAX_ATTEMPTS 가 이 값을 쓴다)
 EXHAUSTED_ERROR = "attempts_exhausted"
+# 오래 늦춰 가며 다시 하는 작업(리뷰 8) — entry.json 쓰기는 SMB 가 잠깐 끊긴 것만으로도 실패하는데, 3번(약 3분)
+# 만에 포기하면 재구축 원천이 낡은 채로 남는다. 간격은 1분부터 두 배씩·최대 RETRY_CAP, 시도 상한은 MAX_ATTEMPTS
+# + LONG_RETRY_EXTRA(대략 하루 남짓). 그래도 안 되면 매일 재동기화(ops.daily.resync_entry_meta)가 다시 쓴다.
+LONG_RETRY_TYPES = ("write_meta",)
+LONG_RETRY_EXTRA = 30
+RETRY_CAP = timedelta(hours=1)
+
+
+def attempt_limit(job: models.Job, max_attempts: int = MAX_ATTEMPTS) -> int:
+    return max_attempts + LONG_RETRY_EXTRA if job.type in LONG_RETRY_TYPES else max_attempts
 
 
 def _now() -> datetime:
@@ -25,7 +35,8 @@ def enqueue(db: Session, job_type: str, target_id: int) -> models.Job:
 # 워커의 한 주기 시간 예산도 이 묶음에 건다(worker.HEAVY_BUDGET_SECONDS).
 # solve_check(06 해석 검증, 최대 LOGBOOK_SOLVE_TIMEOUT 초)는 무거운 작업 중에서도 맨 뒤 — 변환·추출이 먼저 돈다.
 # 한 건이 예산(120초)을 넘기면 그 주기에는 무거운 작업을 더 집지 않으므로 검증은 주기당 사실상 1건이다.
-HEAVY_JOB_TYPES = ("extract_file", "convert_model", "solve_check")
+# revision_diff(14 판 비교)도 두 덱을 다시 읽으므로 무거운 작업이다(변환 다음, 해석 검증 앞).
+HEAVY_JOB_TYPES = ("extract_file", "convert_model", "revision_diff", "solve_check")
 LAST_JOB_TYPES = ("solve_check",)
 LOW_PRIORITY_TYPES = HEAVY_JOB_TYPES  # 03 의 옛 이름(별칭)
 
@@ -52,7 +63,7 @@ def claim_next(db: Session, now: datetime | None = None, *,
         if job is None:
             db.rollback()
             return None
-        if job.attempts >= max_attempts:
+        if job.attempts >= attempt_limit(job, max_attempts):
             job.state, job.last_error = "failed", EXHAUSTED_ERROR
             db.commit()
             if on_exhausted is not None:
@@ -72,12 +83,24 @@ def complete(db: Session, job: models.Job) -> None:
 
 def fail(db: Session, job: models.Job, error: str, *, max_attempts: int = MAX_ATTEMPTS) -> None:
     job.last_error = error[:2000]
-    if job.attempts >= max_attempts:
+    if job.attempts >= attempt_limit(job, max_attempts):
+        job.state = "failed"
+    elif job.type in LONG_RETRY_TYPES:
+        job.state = "queued"
+        job.run_after = _now() + min(RETRY_STEP * (2 ** min(max(job.attempts - 1, 0), 10)), RETRY_CAP)
+    elif job.attempts >= max_attempts:
         job.state = "failed"
     else:
         job.state = "queued"
         job.run_after = _now() + RETRY_STEP * job.attempts
     db.commit()
+
+
+def has_queued(db: Session, job_type: str, target_id: int) -> bool:
+    """같은 대상의 같은 작업이 이미 대기 중인가(중복으로 쌓지 않게). 실행 중인 것은 세지 않는다 —
+    이미 옛 상태를 읽었을 수 있어서, 그 뒤의 변경은 새 작업이 다시 써야 한다."""
+    return db.query(models.Job.id).filter(models.Job.type == job_type, models.Job.target_id == target_id,
+                                         models.Job.state == "queued").first() is not None
 
 
 def recover_running(db: Session, *, older_than: timedelta | None = None) -> int:

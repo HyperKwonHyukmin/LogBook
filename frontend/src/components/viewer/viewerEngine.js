@@ -27,6 +27,10 @@
  *   06: setNodeSet(indices|null, { color }) — 절점 묶음 강조(해석 검증의 고정 노드). null 이면 지운다.
  *   07(비교 화면): getCameraState() · setCameraState(state) · onCameraChange(cb) → 해제 함수
  *        setPidHighlight(pids|null) → 찾은 PID 수. 카메라 상태 모양은 lib/cameraSync.js.
+ *   16(판 변경 보기): setDiff(spec|null) · setDiffLayers(layers) · setDiffFocus(focus|null) · frameDiff()
+ *        spec = { buffers(diffIndexBuffers), rigid(rigidIndexBuffers), nodes{added,moved,spc}, elemClass, ghost(ghostGeometry) }
+ *        — 변경 없는 부분은 기존 PID 묶음을 회색·반투명으로, 바뀐 것은 공유 위치 버퍼 + 범주 인덱스 버퍼로 덮어 그린다.
+ *        피킹 결과에 { kind: 'ghost', index }(삭제 요소·강체 = spec.ghost.items 순번) · { kind: 'ghost-node', index } 가 더해진다.
  *   extras = { blocks, groups(computeGroups), check(classifyNodes), rigids(listRigids), plan(planSections), orient, offsets }
  */
 import * as THREE from 'three';
@@ -37,7 +41,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { computeFrame, nodeBounds, perspectiveDistance, VIEW_PRESETS } from '../../lib/viewFrame.js';
 import { decodePick } from '../../lib/modelGeometry.js';
 import {
-  AXIS_COLORS, GROUP_COLORS, MARKER_COLORS, NO_GROUP_COLOR, NODE_CLASS_COLORS, SELECTION_COLORS,
+  AXIS_COLORS, DIFF_COLORS, GROUP_COLORS, MARKER_COLORS, NO_GROUP_COLOR, NODE_CLASS_COLORS, SELECTION_COLORS,
   cardColor, pidColor, sectionColor,
 } from '../../lib/pidPalette.js';
 import { fillBeamFrames } from '../../lib/beamFrame.js';
@@ -99,6 +103,23 @@ function disc() {
   }
   discTexture = new THREE.CanvasTexture(c);
   return discTexture;
+}
+/** 빈 고리(삭제 절점) — 색약 보조 모양. */
+let ringTexture = null;
+function ring() {
+  if (ringTexture) return ringTexture;
+  const c = document.createElement('canvas');
+  c.width = 32; c.height = 32;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(16, 16, 12, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ringTexture = new THREE.CanvasTexture(c);
+  return ringTexture;
 }
 const nextTick = () => new Promise((r) => { setTimeout(r, 0); });
 
@@ -378,6 +399,7 @@ export function createViewerEngine(container) {
   let isolate = null;                 // { obj, nodes }
   let clip = null;
   let pick = null;                    // { scene, groups: Map(pid → Object3D), rigid: { rbe2, rbe3 }, target }
+  let diff = null;                    // 16 판 변경 보기 — { spec, layers, root, layer: {key: Object3D[]}, pick, section, focus }
 
   function viewSize() {
     return { w: container.clientWidth || 1, h: container.clientHeight || 1 };
@@ -463,6 +485,7 @@ export function createViewerEngine(container) {
     clearIsolate();
     clearNodeSet();
     clearPidHighlight();
+    clearDiff();
     clearSection();
     disposePick();
     if (modelRoot) { scene.remove(modelRoot); disposeTree(modelRoot); modelRoot = null; }
@@ -576,6 +599,7 @@ export function createViewerEngine(container) {
 
   /** 범위(카드)별 재질 색 — 색 기준에 따라. 그룹 색은 셰이더가 칠한다. */
   function rangeColor(pid, card, sectionType) {
+    if (diff) return DIFF_COLORS.unchanged;          // 16 — 변경 보기에서 변경 없는 부분은 회색
     if (colorMode === 'type') return cardColor(card);
     if (colorMode === 'section') return sectionColor(sectionType);
     return pidColor(pid);
@@ -583,7 +607,7 @@ export function createViewerEngine(container) {
 
   function applyColors() {
     if (!uniforms) return;
-    uniforms.uColorByGroup.value = colorMode === 'group' ? 1 : 0;
+    uniforms.uColorByGroup.value = colorMode === 'group' && !diff ? 1 : 0;
     const plan = extras?.plan;
     for (const [pid, o] of groupObjs) {
       const ranges = plan?.ranges.get(pid) || [];
@@ -591,7 +615,7 @@ export function createViewerEngine(container) {
       o.shellMats.forEach((m, i) => m.color.set(rangeColor(pid, o.shellCards[i], 'SHELL')));
       if (o.edgeMat) {
         // 경계선은 은은하게 — 면 색을 어둡게 한 선(PID) 또는 바탕 쪽 어두운 선.
-        if (colorMode === 'pid') o.edgeMat.color.set(pidColor(pid)).multiplyScalar(0.4);
+        if (colorMode === 'pid' && !diff) o.edgeMat.color.set(pidColor(pid)).multiplyScalar(0.4);
         else o.edgeMat.color.setHex(EDGE_NEUTRAL);
       }
     }
@@ -642,6 +666,7 @@ export function createViewerEngine(container) {
       uniforms.uClassMask.value.set(...nodeState.classes.map((v) => (v ? 1 : 0)));
       uniforms.uDepthBias.value = sec ? 0.004 : 0.0015;
     }
+    if (diff) applyDiffVisibility(sec, iso);
     requestRender();
   }
 
@@ -792,7 +817,7 @@ export function createViewerEngine(container) {
   }
 
   /** (x, y) CSS 픽셀 둘레 PICK_SIZE 칸만 피킹 대상에 그리고 픽셀을 읽는다. */
-  function renderPick(x, y, w, h) {
+  function renderPick(x, y, w, h, scene0 = pick.scene, target = pick.target) {
     const half = (PICK_SIZE - 1) / 2;
     const prevColorSpace = renderer.outputColorSpace;
     const prevClear = renderer.getClearColor(new THREE.Color());
@@ -803,11 +828,11 @@ export function createViewerEngine(container) {
       camera.setViewOffset(w, h, x - half, y - half, PICK_SIZE, PICK_SIZE);
       renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
       renderer.setClearColor(0x000000, 0);
-      renderer.setRenderTarget(pick.target);
+      renderer.setRenderTarget(target);
       renderer.clippingPlanes = clipPlanes;
       renderer.clear();
-      renderer.render(pick.scene, camera);
-      renderer.readRenderTargetPixels(pick.target, 0, 0, PICK_SIZE, PICK_SIZE, buf);
+      renderer.render(scene0, camera);
+      renderer.readRenderTargetPixels(target, 0, 0, PICK_SIZE, PICK_SIZE, buf);
     } finally {
       renderer.setRenderTarget(null);
       renderer.outputColorSpace = prevColorSpace;
@@ -977,11 +1002,16 @@ export function createViewerEngine(container) {
   }
 
   function pointObject(nodes, color, size, depthTest, opacity = 1) {
+    return pointObjectXYZ(nodes.flatMap(at), color, size, depthTest, opacity);
+  }
+
+  /** 좌표([x,y,z, …])로 둥근 점(16 고스트 절점·이동 전 위치). map = 점 텍스처(기본 둥근 점). */
+  function pointObjectXYZ(xyz, color, size, depthTest, opacity = 1, map = disc()) {
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(nodes.flatMap(at), 3));
+    g.setAttribute('position', new THREE.Float32BufferAttribute(xyz, 3));
     // map 은 공유 텍스처라 disposeTree 가 지우지 않게 userData 로 표시한다.
     const mat = new THREE.PointsMaterial({
-      color, size, sizeAttenuation: false, depthTest, map: disc(), alphaTest: 0.5,
+      color, size, sizeAttenuation: false, depthTest, map, alphaTest: 0.5,
       transparent: opacity < 1, opacity,
     });
     mat.userData.sharedMap = true;
@@ -1001,6 +1031,22 @@ export function createViewerEngine(container) {
       return { nodes, segs, beam: nodes.length === 2 };
     }
     if (sel.kind === 'node') return { nodes: [sel.index], segs: [], beam: false };
+    // 16 — 삭제된 것(앞 판, 고스트 좌표)
+    const gh = diff?.spec?.ghost;
+    if (sel.kind === 'ghost' && gh && sel.index < gh.items.length) {
+      const it = gh.items[sel.index];
+      const gat = (v) => [gh.positions[v * 3], gh.positions[v * 3 + 1], gh.positions[v * 3 + 2]];
+      const v = it.nodes;
+      let segs;
+      if (it.type === 'rigid') segs = v.slice(1).flatMap((o) => [...gat(v[0]), ...gat(o)]);
+      else if (v.length === 2) segs = [...gat(v[0]), ...gat(v[1])];
+      else segs = v.flatMap((o, i) => [...gat(o), ...gat(v[(i + 1) % v.length])]);
+      return { nodes: [], segs, beam: v.length === 2, points: it.type === 'rigid' ? gat(v[0]) : null };
+    }
+    if (sel.kind === 'ghost-node' && gh && sel.index < gh.nodes.length) {
+      const v = gh.nodes[sel.index];
+      return { nodes: [], segs: [], beam: false, points: [gh.positions[v * 3], gh.positions[v * 3 + 1], gh.positions[v * 3 + 2]] };
+    }
     if (sel.kind === 'rbe' && extras.rigids && sel.index < extras.rigids.count) {
       const nodes = rigidNodes(extras, extras.rigids, sel.index);
       const segs = nodes.slice(1).flatMap((v) => [...at(nodes[0]), ...at(v)]);
@@ -1052,6 +1098,333 @@ export function createViewerEngine(container) {
       color: pidColor(elemPid(e)), side: THREE.DoubleSide, ...STANDARD,
       polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
     })));
+  }
+
+  /* ── 판 변경 보기(16) ───────────────────────────────────────────────────────────── */
+
+  /** 기존 PID 묶음(·3D 단면) 재질을 회색 반투명으로 흐리거나 되돌린다. 깊이를 쓰지 않아 뒤의 바뀐 것이 가려지지 않는다. */
+  function setDim(m, on, opacity) {
+    if (m.transparent !== on) { m.transparent = on; m.needsUpdate = true; }
+    m.opacity = on ? opacity : 1;
+    m.depthWrite = !on;
+  }
+  function dimBase(on) {
+    for (const o of groupObjs.values()) {
+      for (const m of o.shellMats) setDim(m, on, 0.16);
+      for (const m of o.beamMats) setDim(m, on, 0.34);
+      if (o.edgeMat) { o.edgeMat.opacity = on ? 0.14 : 0.55; o.edgeMat.depthWrite = !on; }
+    }
+    for (const s of section?.meshes || []) setDim(s.mat, on, 0.14);
+  }
+
+  /** 점선(1px) — 선분마다 0→8 거리를 줘 길이와 무관하게 선분마다 점 네 개. index = 쌍, pos = 좌표 배열. */
+  function dashedLines(pos, index, color, opacity, order) {
+    const n = index.length / 2;
+    const p = new Float32Array(n * 6);
+    const d = new Float32Array(n * 2);
+    for (let i = 0; i < n; i += 1) {
+      for (let k = 0; k < 2; k += 1) {
+        const v = index[i * 2 + k];
+        p[i * 6 + k * 3] = pos[v * 3]; p[i * 6 + k * 3 + 1] = pos[v * 3 + 1]; p[i * 6 + k * 3 + 2] = pos[v * 3 + 2];
+      }
+      d[i * 2 + 1] = 8;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    g.setAttribute('lineDistance', new THREE.BufferAttribute(d, 1));
+    const obj = new THREE.LineSegments(g, new THREE.LineDashedMaterial({
+      color, dashSize: 1, gapSize: 1, transparent: opacity < 1, opacity, depthWrite: false,
+    }));
+    obj.renderOrder = order;
+    return obj;
+  }
+
+  /** 인덱스 쌍 → 화면 고정 굵기 선(LineSegments2) 좌표. */
+  function segsOf(pos, index) {
+    const out = new Float32Array(index.length * 3);
+    for (let i = 0; i < index.length; i += 1) {
+      const v = index[i];
+      out[i * 3] = pos[v * 3]; out[i * 3 + 1] = pos[v * 3 + 1]; out[i * 3 + 2] = pos[v * 3 + 2];
+    }
+    return out;
+  }
+
+  /** 화면 고정 굵기 선 — 깊이 검사를 한다(바뀐 것끼리는 앞뒤가 맞게). dashed 면 선분마다 점선. */
+  function widthLines(segs, color, px, order, { opacity = 1, dashed = false } = {}) {
+    const g = new LineSegmentsGeometry();
+    g.setPositions(segs);
+    const mat = new LineMaterial({ color, linewidth: px, transparent: opacity < 1, opacity, worldUnits: false });
+    const { w, h } = viewSize();
+    mat.resolution.set(w, h);
+    fatMats.add(mat);
+    mat.addEventListener('dispose', () => fatMats.delete(mat));
+    const obj = new LineSegments2(g, mat);
+    if (dashed) {
+      obj.computeLineDistances();
+      // 선분 평균 길이의 1/8 씩 — 길이와 무관하게 선분마다 점 네 개쯤
+      let len = 0;
+      const n = segs.length / 6;
+      for (let i = 0; i < n; i += 1) {
+        len += Math.hypot(segs[i * 6 + 3] - segs[i * 6], segs[i * 6 + 4] - segs[i * 6 + 1], segs[i * 6 + 5] - segs[i * 6 + 2]);
+      }
+      const unit = Math.max(len / Math.max(n, 1) / 8, 1e-9);
+      mat.dashed = true;
+      mat.dashSize = unit;
+      mat.gapSize = unit;
+    }
+    obj.renderOrder = order;
+    return obj;
+  }
+
+  /** 피킹용 풀어 쓴 기하 — 꼭짓점마다 순번 색(base + itemOf[프리미티브] + 1). */
+  function pickFill(pos, index, itemOf, perItem, base) {
+    const n = index.length;
+    const p = new Float32Array(n * 3);
+    const c = new Uint8Array(n * 3);
+    for (let i = 0; i < n; i += 1) {
+      const v = index[i];
+      p[i * 3] = pos[v * 3]; p[i * 3 + 1] = pos[v * 3 + 1]; p[i * 3 + 2] = pos[v * 3 + 2];
+      const id = base + itemOf[(i / perItem) | 0] + 1;
+      c[i * 3] = id & 255; c[i * 3 + 1] = (id >> 8) & 255; c[i * 3 + 2] = (id >> 16) & 255;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(c, 3, true));
+    g.computeBoundingSphere();
+    return g;
+  }
+
+  function clearDiffFocus() {
+    if (!diff?.focus) return;
+    scene.remove(diff.focus);
+    disposeTree(diff.focus);
+    diff.focus = null;
+  }
+
+  function clearDiffSection() {
+    if (!diff?.section) return;
+    scene.remove(diff.section);
+    disposeTree(diff.section);
+    diff.section = null;
+  }
+
+  function clearDiff() {
+    if (!diff) return;
+    clearDiffFocus();
+    clearDiffSection();
+    scene.remove(diff.root);
+    disposeTree(diff.root);
+    disposeTree(diff.pick);
+    diff.target.dispose();
+    diff = null;
+  }
+
+  /** 3D 단면 — 바뀐 1D 는 단면 묶음마다 InstancedMesh 하나(단면 기하 공유·행렬 복사·instanceColor 로 범주 색). */
+  function buildDiffSection() {
+    clearDiffSection();
+    if (!diff || !section?.ready) return;
+    const cls = diff.spec.elemClass;
+    if (!cls) return;
+    const root = new THREE.Group();
+    const eg = extras?.groups?.elemGroup;
+    const mat = hook(new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide, ...STANDARD }), uniforms);
+    const color = new THREE.Color();
+    for (const s of section.meshes) {
+      const elems = s.bucket.elems;
+      for (const c of [1, 2]) {
+        const ks = [];
+        for (let k = 0; k < elems.length; k += 1) if (cls[elems[k]] === c) ks.push(k);
+        if (!ks.length) continue;
+        const src = s.mesh.geometry;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', src.getAttribute('position'));
+        g.setIndex(src.getIndex());
+        const grp = new Float32Array(ks.length);
+        ks.forEach((k, j) => { grp[j] = eg ? eg[elems[k]] : 0; });
+        g.setAttribute('lbGroup', new THREE.InstancedBufferAttribute(grp, 1));
+        const mesh = new THREE.InstancedMesh(g, mat, ks.length);
+        mesh.frustumCulled = false;
+        const from = s.mesh.instanceMatrix.array;
+        const to = mesh.instanceMatrix.array;
+        color.set(c === 1 ? DIFF_COLORS.added : DIFF_COLORS.changed);
+        ks.forEach((k, j) => {
+          for (let q = 0; q < 16; q += 1) to[j * 16 + q] = from[k * 16 + q];
+          mesh.setColorAt(j, color);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.userData.layer = c === 1 ? 'added' : 'changed';
+        root.add(mesh);
+      }
+    }
+    diff.section = root;
+    scene.add(root);
+  }
+
+  function applyDiffVisibility(sec, iso) {
+    const L = diff.layers;
+    const showBase = L.unchanged && !L.onlyChanged;
+    if (modelRoot) modelRoot.visible = !iso && showBase;
+    if (section) section.root.visible = sec && !iso && showBase;
+    // 변경 보기에서는 RBE·질량·SPC 마커를 끈다(마젠타·초록이 범주 색과 겹친다) — 강체 변경은 범주 선으로 그린다.
+    if (markerRoot) markerRoot.visible = false;
+    if (pick?.rigid) for (const k of ['rbe2', 'rbe3']) if (pick.rigid[k]) pick.rigid[k].visible = false;
+    for (const [key, objs] of Object.entries(diff.layer)) for (const o of objs) o.visible = !!L[key] && !iso;
+    for (const o of diff.pick.children) o.visible = !!L[o.userData.layer];
+    if (diff.section) {
+      diff.section.visible = sec && !iso;
+      for (const m of diff.section.children) m.visible = !!L[m.userData.layer];
+    }
+    if (diff.focus) diff.focus.visible = !iso;
+  }
+
+  function buildDiff(spec) {
+    const root = new THREE.Group();
+    const pscene = new THREE.Scene();
+    const layer = { added: [], changed: [], removed: [], moved: [], spc: [] };
+    const pos = geometry.positions;
+    const total = geometry.total;
+    const rc = extras?.rigids?.count || 0;
+    const meshPick = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, toneMapped: false });
+    const linePick = new THREE.LineBasicMaterial({ vertexColors: true, toneMapped: false });
+    const addPick = (obj, key) => { obj.userData.layer = key; obj.frustumCulled = false; pscene.add(obj); };
+    const put = (key, obj) => { layer[key].push(obj); root.add(obj); };
+
+    // 추가·변경(뒤 판) — 공유 위치 버퍼 + 범주 인덱스
+    for (const [c, key] of [[1, 'added'], [2, 'changed']]) {
+      const color = DIFF_COLORS[key];
+      const b = spec.buffers?.[c];
+      if (b?.shell.length) {
+        put(key, new THREE.Mesh(indexedGeometry(b.shell), hook(new THREE.MeshStandardMaterial({
+          color, side: THREE.DoubleSide, ...STANDARD, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+        }), uniforms)));
+        addPick(new THREE.Mesh(pickFill(pos, b.shell, b.shellElem, 3, 0), meshPick), key);
+      }
+      if (b?.edges.length) {
+        const e = new THREE.LineSegments(indexedGeometry(b.edges),
+          hook(new THREE.LineBasicMaterial({ color: new THREE.Color(color).multiplyScalar(0.45) }), uniforms));
+        e.renderOrder = 1;
+        put(key, e);
+      }
+      if (b?.beams.length) {
+        put(key, widthLines(segsOf(pos, b.beams), color, 3, 3));
+        addPick(new THREE.LineSegments(pickFill(pos, b.beams, b.beamElem, 2, 0), linePick), key);
+      }
+      const r = spec.rigid?.[c];
+      if (r?.segs.length) {
+        put(key, widthLines(segsOf(pos, r.segs), color, 2, 3));
+        addPick(new THREE.LineSegments(pickFill(pos, r.segs, r.item, 2, total), linePick), key);
+      }
+    }
+    // 절점 — 추가(초록 원) · 이동(주황 원) · 구속 변경(주황 네모). 화면 고정 크기, 맨 위.
+    const nodePts = (key, index, color, map) => {
+      if (!index?.length) return;
+      const m = hook(new THREE.PointsMaterial({
+        color, size: 9, sizeAttenuation: false, depthTest: false, map, alphaTest: map ? 0.5 : 0,
+      }), uniforms);
+      if (map) m.userData.sharedMap = true;
+      const obj = new THREE.Points(indexedGeometry(Uint32Array.from(index)), m);
+      obj.renderOrder = 7;
+      put(key, obj);
+    };
+    nodePts('added', spec.nodes?.added, DIFF_COLORS.added, disc());
+    nodePts('moved', spec.nodes?.moved, DIFF_COLORS.changed, disc());
+    nodePts('spc', spec.nodes?.spc, DIFF_COLORS.changed, null);
+
+    // 삭제(앞 판 고스트) — 반투명 면 + 점선 테두리·선, 빈 고리 절점
+    const gh = spec.ghost;
+    if (gh && gh.positions.length) {
+      const gpos = gh.positions;
+      const base = total + rc;
+      const red = DIFF_COLORS.removed;
+      if (gh.shell.length) {
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(gpos, 3));
+        g.setIndex(new THREE.BufferAttribute(gh.shell, 1));
+        const face = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
+          color: red, transparent: true, opacity: 0.26, depthWrite: false, side: THREE.DoubleSide,
+        }));
+        face.renderOrder = 4;
+        put('removed', face);
+        addPick(new THREE.Mesh(pickFill(gpos, gh.shell, gh.shellItem, 3, base), meshPick), 'removed');
+      }
+      if (gh.edges.length) put('removed', dashedLines(gpos, gh.edges, red, 0.95, 5));
+      if (gh.beams.length) {
+        put('removed', widthLines(segsOf(gpos, gh.beams), red, 2, 5, { dashed: true }));
+        addPick(new THREE.LineSegments(pickFill(gpos, gh.beams, gh.beamItem, 2, base), linePick), 'removed');
+      }
+      if (gh.rigid.length) {
+        put('removed', widthLines(segsOf(gpos, gh.rigid), red, 2, 5, { dashed: true }));
+        addPick(new THREE.LineSegments(pickFill(gpos, gh.rigid, gh.rigidItem, 2, base), linePick), 'removed');
+      }
+      if (gh.nodes.length) {
+        const xyz = new Float32Array(gh.nodes.length * 3);
+        gh.nodes.forEach((v, i) => { xyz[i * 3] = gpos[v * 3]; xyz[i * 3 + 1] = gpos[v * 3 + 1]; xyz[i * 3 + 2] = gpos[v * 3 + 2]; });
+        const pts = pointObjectXYZ(xyz, red, 11, false, 1, ring());
+        pts.material.userData.sharedMap = true;
+        pts.renderOrder = 7;
+        put('removed', pts);
+      }
+    }
+    scene.add(root);
+    const target = new THREE.WebGLRenderTarget(PICK_SIZE, PICK_SIZE, {
+      minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true,
+    });
+    return { spec, layers: { added: true, changed: true, removed: true, moved: true, spc: true, unchanged: true, onlyChanged: false },
+             root, layer, pick: pscene, target, section: null, focus: null };
+  }
+
+  /** 바뀐 절점(추가·이동·구속, 삭제 고스트) 화면 거리 피킹 — 켜진 범주만. */
+  function pickDiffNode(x, y, w, h) {
+    camera.updateMatrixWorld();
+    _pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    const e = _pv.elements;
+    const r2 = NODE_PICK_PX * NODE_PICK_PX;
+    let best = null; let bestD = Infinity;
+    const scan = (pos, list, make) => {
+      for (let j = 0; j < list.length; j += 1) {
+        const i = list[j];
+        const px = pos[i * 3]; const py = pos[i * 3 + 1]; const pz = pos[i * 3 + 2];
+        if (clipPlanes.length && clipPlane.normal.x * px + clipPlane.normal.y * py + clipPlane.normal.z * pz + clipPlane.constant < 0) continue;
+        const cw = e[3] * px + e[7] * py + e[11] * pz + e[15];
+        if (cw <= 0) continue;
+        const sx = ((e[0] * px + e[4] * py + e[8] * pz + e[12]) / cw * 0.5 + 0.5) * w;
+        const sy = (1 - ((e[1] * px + e[5] * py + e[9] * pz + e[13]) / cw * 0.5 + 0.5)) * h;
+        const d = (sx - x) ** 2 + (sy - y) ** 2;
+        if (d <= r2 && d < bestD) { bestD = d; best = make(i, j); }
+      }
+    };
+    const L = diff.layers;
+    const nd = diff.spec.nodes || {};
+    for (const k of ['added', 'moved', 'spc']) if (L[k] && nd[k]?.length) scan(geometry.positions, nd[k], (i) => ({ kind: 'node', index: i }));
+    const gh = diff.spec.ghost;
+    if (L.removed && gh?.nodes.length) scan(gh.positions, gh.nodes, (_i, j) => ({ kind: 'ghost-node', index: j }));
+    return best;
+  }
+
+  /** 바뀐 요소·강체·고스트를 먼저 고른다. @returns 선택 | null(고를 것 없음) | undefined(없음 — 일반 피킹으로) */
+  function pickDiff(clientX, clientY, rect, x, y, w, h) {
+    const node = pickDiffNode(clientX - rect.left, clientY - rect.top, w, h);
+    if (node) return node;
+    const buf = renderPick(x, y, w, h, diff.pick, diff.target);
+    const half = (PICK_SIZE - 1) / 2;
+    const total = geometry.total;
+    const rc = extras?.rigids?.count || 0;
+    const limit = total + rc + (diff.spec.ghost?.items.length || 0);
+    let best = null; let bestD = Infinity;
+    for (let py = 0; py < PICK_SIZE; py += 1) {
+      for (let px = 0; px < PICK_SIZE; px += 1) {
+        const o = (py * PICK_SIZE + px) * 4;
+        const idx = decodePick(buf[o], buf[o + 1], buf[o + 2]);
+        if (idx === null || idx >= limit) continue;
+        const d = (px - half) ** 2 + (py - half) ** 2;
+        if (d < bestD) { bestD = d; best = idx; }
+      }
+    }
+    // 변경 없는 부분이 숨어 있으면 일반 피킹으로 넘기지 않는다(보이지 않는 것이 골라지지 않게)
+    if (best == null) return diff.layers.onlyChanged || !diff.layers.unchanged ? null : undefined;
+    if (best < total) return { kind: 'element', index: best };
+    if (best < total + rc) return { kind: 'rbe', index: best - total };
+    return { kind: 'ghost', index: best - total - rc };
   }
 
   function resize() {
@@ -1228,6 +1601,7 @@ export function createViewerEngine(container) {
       if (renderMode === 'section' && !section) {
         const built = await buildSection(onProgress);
         if (!built) return { fallbacks: 0, cancelled: true };
+        if (diff) { dimBase(true); buildDiffSection(); }
         applyColors();
       }
       applyVisibility();
@@ -1285,6 +1659,10 @@ export function createViewerEngine(container) {
       if (x < 0 || y < 0 || x >= w || y >= h) return null;
       // 선택만 보기 중에는 그 대상 말고 고르지 않는다.
       if (isolate) return null;
+      if (diff) {
+        const hit = pickDiff(clientX, clientY, rect, x, y, w, h);
+        if (hit !== undefined) { requestRender(); return hit; }
+      }
       const node = pickNode(clientX - rect.left, clientY - rect.top, w, h);
       if (node != null) return { kind: 'node', index: node };
       if (!pick) { cancelIdlePick(); buildPick(); }
@@ -1321,12 +1699,12 @@ export function createViewerEngine(container) {
         group.add(fatLines(shape.segs, SEL.outline, SEL.elemOutlinePx, 0.5, 10));
         group.add(fatLines(shape.segs, SEL.core, SEL.elemPx, 0.8, 11));
       }
-      if (sel.kind !== 'element') {
-        // 절점은 그 점, RBE 는 기준 절점에 둥근 표시
-        const nodes = sel.kind === 'node' ? shape.nodes : shape.nodes.slice(0, 1);
-        const outline = pointObject(nodes, SEL.outline, SEL.nodeOutlinePx, false, 0.5);
+      if (sel.kind !== 'element' && (shape.points || shape.nodes.length)) {
+        // 절점은 그 점, RBE 는 기준 절점에 둥근 표시(16 고스트는 좌표로)
+        const xyz = shape.points || (sel.kind === 'node' ? shape.nodes : shape.nodes.slice(0, 1)).flatMap(at);
+        const outline = pointObjectXYZ(xyz, SEL.outline, SEL.nodeOutlinePx, false, 0.5);
         outline.renderOrder = 12;
-        const core = pointObject(nodes, SEL.core, SEL.nodePx, false, 0.8);
+        const core = pointObjectXYZ(xyz, SEL.core, SEL.nodePx, false, 0.8);
         core.renderOrder = 13;
         group.add(outline, core);
       }
@@ -1479,6 +1857,82 @@ export function createViewerEngine(container) {
       }
       applyVisibility();
       return found;
+    },
+
+    /**
+     * 판 변경 보기(16) 켜기·끄기 — spec(lib/revisionDiff3d.js 결과) | null. 켜면 변경 없는 부분을 회색 반투명으로 흐리고
+     * 바뀐 것만 범주 색으로 덮어 그린다. 끄면 원래 색·마커로 돌아간다. 모델을 바꾸면(setModel) 저절로 꺼진다.
+     */
+    setDiff(spec) {
+      const layers = diff?.layers;
+      clearDiff();
+      if (geometry && spec) {
+        diff = buildDiff(spec);
+        if (layers) diff.layers = layers;
+        if (sectionActive()) buildDiffSection();
+        dimBase(true);
+      } else {
+        dimBase(false);
+      }
+      applyColors();
+      applyVisibility();
+    },
+
+    /** 범주 켜기/끄기 — { added, changed, removed, moved, spc, unchanged, onlyChanged } 일부만 줘도 된다. */
+    setDiffLayers(layers) {
+      if (!diff) return;
+      diff.layers = { ...diff.layers, ...layers };
+      applyVisibility();
+    },
+
+    /**
+     * 고른 것의 '이동 전' 모양 — { points: [x,y,z,…](옅은 고리), segs: [x,y,z, x,y,z, …](옅은 점선), arrow: { from, to } }.
+     * 좌표는 뷰어 좌표(b 의 bbox 중심 기준). null 이면 지운다.
+     */
+    setDiffFocus(focus) {
+      if (!diff) return;
+      clearDiffFocus();
+      if (focus) {
+        const root = new THREE.Group();
+        if (focus.segs?.length) root.add(widthLines(Float32Array.from(focus.segs), NODE_CLASS_COLORS[0], 2, 8, { opacity: 0.75, dashed: true }));
+        if (focus.arrow) {
+          const { from, to } = focus.arrow;
+          root.add(widthLines(Float32Array.from([...from, ...to]), DIFF_COLORS.changed, 2, 8, { opacity: 0.9, dashed: true }));
+        }
+        if (focus.points?.length) {
+          const pts = pointObjectXYZ(focus.points, NODE_CLASS_COLORS[0], 12, false, 0.7, ring());
+          pts.renderOrder = 9;
+          root.add(pts);
+        }
+        diff.focus = root;
+        scene.add(root);
+      }
+      applyVisibility();
+    },
+
+    /** 바뀐 곳(추가·변경·이동·구속 절점 + 삭제 고스트)으로 화면을 맞춘다. 맞출 것이 없으면 false. */
+    frameDiff() {
+      if (!geometry || !diff) return false;
+      const sp = diff.spec;
+      const min = [Infinity, Infinity, Infinity];
+      const max = [-Infinity, -Infinity, -Infinity];
+      let n = 0;
+      const take = (p, i) => {
+        for (let k = 0; k < 3; k += 1) {
+          const v = p[i * 3 + k];
+          if (v < min[k]) min[k] = v;
+          if (v > max[k]) max[k] = v;
+        }
+        n += 1;
+      };
+      for (const i of sp.frameNodes || []) take(geometry.positions, i);
+      const gp = sp.ghost?.positions;
+      if (gp) for (let i = 0; i < gp.length / 3; i += 1) take(gp, i);
+      if (!n) return false;
+      const center = [0, 1, 2].map((k) => (min[k] + max[k]) / 2);
+      const r = Math.max(Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2, geometry.radius * 0.12);
+      reframe(center, r * 1.15);
+      return true;
     },
 
     dispose() {

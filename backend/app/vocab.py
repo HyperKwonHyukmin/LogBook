@@ -253,11 +253,14 @@ def safe_seed(db: Session, storage: StoragePaths) -> None:
 
 # ---- 데이터 속 값 ----
 
-def value_counts(db: Session, kind: str) -> Counter:
-    """미확정·확정 Entry 에 실제로 쓰인 값 → Entry 수(휴지통 제외)."""
+def value_counts(db: Session, kind: str, user=None) -> Counter:
+    """미확정·확정 Entry 에 실제로 쓰인 값 → Entry 수(휴지통 제외). user 를 주면 그가 볼 수 있는 Entry 만(13)."""
+    from . import access  # 순환 import 방지
+
     E = models.Entry
+    vis = access.visible_entries_filter(user) if user is not None else E.id.isnot(None)
     if kind == "atype":
-        rows = (db.query(E.analysis_type, E.id).filter(E.status.in_(LIVE), E.analysis_type.isnot(None)))
+        rows = (db.query(E.analysis_type, E.id).filter(E.status.in_(LIVE), E.analysis_type.isnot(None), vis))
         c = Counter()
         for value, _id in rows:
             if value and value.strip():
@@ -266,7 +269,7 @@ def value_counts(db: Session, kind: str) -> Counter:
     rows = (db.query(models.Tag.value, models.EntryTag.entry_id)
             .join(models.EntryTag, models.EntryTag.tag_id == models.Tag.id)
             .join(E, E.id == models.EntryTag.entry_id)
-            .filter(models.Tag.kind == "zone", E.status.in_(LIVE)))
+            .filter(models.Tag.kind == "zone", E.status.in_(LIVE), vis))
     return Counter(v for v, _e in rows)
 
 
@@ -278,10 +281,11 @@ def unlisted(db: Session, kind: str) -> list[dict]:
             if v.target(val) is None]
 
 
-def list_terms(db: Session, kind: str) -> list[dict]:
+def list_terms(db: Session, kind: str, user=None) -> list[dict]:
+    """목록 용어와 사용 건수. 건수는 user 가 볼 수 있는 Entry 만 센다(13)."""
     v = Vocab(db, kind)
     counts = Counter()
-    for val, n in value_counts(db, kind).items():
+    for val, n in value_counts(db, kind, user).items():
         t = v.target(val)
         if t is not None:
             counts[t.id] += n

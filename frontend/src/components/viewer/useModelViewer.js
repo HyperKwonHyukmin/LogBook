@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { apiArrayBuffer } from '../../api/client.js';
 import { errorText } from '../../lib/labels.js';
+import { isChunkLoadError, reloadOnce } from '../../lib/chunkReload.js';
 import { MARKER_COLORS } from '../../lib/pidPalette.js';
 import { beamExtras, lbmVersion, parseLbm } from '../../lib/lbm.js';
 import { buildGeometry } from '../../lib/modelGeometry.js';
@@ -28,6 +29,17 @@ function rigidCount(lbm, kind, card) {
   const eids = new Set();
   for (let i = 0; i < kinds.length; i += 1) if (kinds[i] === kind) eids.add(lines[i * 3]);
   return eids.size;
+}
+
+/**
+ * 엔진을 만들지 못했다 — 둘을 가른다.
+ *  · 3D 엔진 묶음(viewerEngine 동적 import)을 못 받음: 재배포로 파일이 바뀐 것. 한 번 새로 고침하고, 이미 해 봤으면 [새로 고침] 안내.
+ *  · 그 밖(WebGL 을 만들 수 없음 등): 이 브라우저에서 3D 를 쓸 수 없다.
+ */
+export function engineFailure(err, { reload = reloadOnce } = {}) {
+  if (!isChunkLoadError(err)) return { status: 'error', error: '이 브라우저에서 3D 를 표시할 수 없습니다.' };
+  if (reload()) return { status: 'loading', error: '' };
+  return { status: 'error', error: '새 버전이 배포되어 3D 화면을 불러오지 못했습니다. 새로 고침하면 다시 볼 수 있습니다.', reload: true };
 }
 
 /** 엔진 결과(옛 계약은 순번만 돌려준다)를 { kind, index } 로 맞춘다. */
@@ -104,8 +116,8 @@ export function useModelViewer({ fileId, formatVersion = null }) {
           return;
         }
         let engine;
-        try { engine = await enginePromise; } catch {
-          if (alive) setState({ status: 'error', error: '이 브라우저에서 3D 를 표시할 수 없습니다.' });
+        try { engine = await enginePromise; } catch (err) {
+          if (alive) setState(engineFailure(err));
           return;
         }
         // 늦게 온 옛 응답(파일이 바뀜·언마운트)은 버린다. 엔진은 정리 함수가 해제한다.
@@ -153,6 +165,7 @@ export function useModelViewer({ fileId, formatVersion = null }) {
   /** 선택 대상이 지금 보이는가(PID·그룹 숨김). */
   const visibleSel = useCallback((sel, pids, grps) => {
     if (!sel || !model) return true;
+    if (sel.kind === 'ghost' || sel.kind === 'ghost-node') return true;   // 16 삭제된 것(앞 판) — PID·그룹 숨김과 무관
     if (sel.kind === 'element') {
       return !pids.has(model.table.pid[sel.index]) && !grps.has(model.groups.elemGroup[sel.index]);
     }
@@ -165,7 +178,8 @@ export function useModelViewer({ fileId, formatVersion = null }) {
     if (!sel || !model) return [];
     if (sel.kind === 'element') return elementNodeIndices(model.lbm, model.geometry, sel.index);
     if (sel.kind === 'node') return [sel.index];
-    return rigidNodes(model.lbm, model.rigids, sel.index);
+    if (sel.kind === 'rbe') return rigidNodes(model.lbm, model.rigids, sel.index);
+    return [];
   }, [model]);
 
   const select = useCallback((raw, { frame = false } = {}) => {

@@ -61,6 +61,10 @@ function Viewport({ v, onKeyDown, children, label }) {
             <CircleAlert size={14} className="mt-[3px] shrink-0 text-n-300" aria-hidden="true" />
             {v.state.error}
           </p>
+          {/* 재배포로 3D 엔진 묶음이 바뀌었는데 새로 고침을 이미 한 번 해 봤다 — 직접 누르게 둔다 */}
+          {v.state.reload && (
+            <Button variant="secondary" size="sm" className="ml-3" onClick={() => window.location.reload()}>새로 고침</Button>
+          )}
         </div>
       )}
       <SectionProgress value={v.sectionProgress} />

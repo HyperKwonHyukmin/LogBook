@@ -67,3 +67,21 @@ test('apiArrayBuffer 는 Bearer 를 붙여 ArrayBuffer 를 돌려준다', async 
   expect(new Uint8Array(got)).toEqual(new Uint8Array([1, 2, 3]));
   expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok');
 });
+
+test('18 — WorkBench 경유 세션이 401 이면 로그인 화면에 이유를 남기고 선택 모드를 끝낸다', async () => {
+  tokenStore.set('tok-wb');
+  sessionStorage.setItem('logbook_wb', JSON.stringify({ target: 'gmu', slot: 1 }));
+  stubFetch(401, { detail: 'session_invalid' });
+  await expect(api('/auth/me')).rejects.toMatchObject({ status: 401 });
+  expect(tokenStore.get()).toBe('');
+  expect(sessionStorage.getItem('logbook_wb')).toBeNull();
+  expect(sessionStorage.getItem('logbook_logout_reason')).toBe('wb_logout');
+  sessionStorage.clear();
+});
+
+test('18 — 일반 세션의 401 은 이유를 남기지 않는다', async () => {
+  tokenStore.set('tok-plain');
+  stubFetch(401, { detail: 'session_invalid' });
+  await expect(api('/auth/me')).rejects.toMatchObject({ status: 401 });
+  expect(sessionStorage.getItem('logbook_logout_reason')).toBeNull();
+});

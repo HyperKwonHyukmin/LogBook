@@ -1,144 +1,208 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronRight, Lock, Search } from 'lucide-react';
 import { api } from '../../api/client.js';
-import Button from '../../components/ui/Button.jsx';
+import { AuthContext } from '../../auth/AuthContext.jsx';
+import { inputClass, selectClass } from '../../components/ui/Field.jsx';
+import { errorText, formatDateTime } from '../../lib/labels.js';
+import { LEVELS, LEVEL_HELP, assignableLevels, levelName } from '../../lib/levels.js';
 import { useConfirm } from '../../components/ui/ConfirmDialog.jsx';
 import { ErrorNote, Page, PageHeader } from '../../components/ui/Page.jsx';
 import { Tabs } from '../../components/ui/Tabs.jsx';
 
-const TABS = [
-  { id: 'pending', label: '승인 대기' },
-  { id: 'active', label: '활성' },
-  { id: 'disabled', label: '비활성' },
-];
+const ADMIN_FALLBACK = { employee_id: '', level: 3 };
+const DEBOUNCE_MS = 250;
 
-// 다른 관리자가 먼저 처리했거나, 화면을 열어 둔 사이 대상 사용자의 상태가 바뀌었거나
-// (경쟁 상태), 아예 삭제된 경우 — 모두 같은 방식(안내 + 목록 새로 고침)으로 다룬다.
-const STALE_TARGET_DETAILS = new Set(['not_pending', 'not_disabled', 'not_active', 'user_not_found']);
-const STALE_TARGET_MESSAGE = '이미 처리된 사용자입니다. 목록을 새로 고칩니다.';
+/** 등급 배지 — LV3 은 brand 옅은 바탕, 나머지는 회색. */
+export function LevelBadge({ level }) {
+  return (
+    <span className={`inline-flex h-5 items-center rounded-xs px-1.5 text-micro font-semibold ${level === 3 ? 'bg-brand-subtle text-brand' : 'bg-n-100 text-n-700'}`}>
+      {levelName(level)}
+    </span>
+  );
+}
 
-/** 되돌리기 어려운 동작은 확인 대화상자를 거친다. */
-const CONFIRMS = {
-  reject: (u) => ({ title: `${u.name} 님의 가입 신청을 거절할까요?`, body: '거절한 사번은 다시 가입 신청을 해야 합니다.', confirmLabel: '거절' }),
-  disable: (u) => ({ title: `${u.name} 님을 비활성화할까요?`, body: '즉시 로그인이 차단됩니다. 비활성 탭에서 다시 활성화할 수 있습니다.', confirmLabel: '비활성화' }),
-};
+/** 등급 안내(접힘) — 무엇을 할 수 있는지 한 줄씩. */
+function LevelHelp() {
+  return (
+    <details className="group mb-4 rounded-md border border-n-200 text-meta text-n-700">
+      <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 px-3 hover:bg-n-50 [&::-webkit-details-marker]:hidden">
+        <ChevronRight size={14} className="text-n-400 transition-transform duration-150 group-open:rotate-90" aria-hidden="true" />
+        등급 안내
+      </summary>
+      <dl className="grid grid-cols-[88px_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-t border-n-200 px-3 py-2.5">
+        {[...LEVELS].reverse().map((lv) => (
+          <div key={lv} className="contents">
+            <dt><LevelBadge level={lv} /></dt>
+            <dd className="text-n-700">{LEVEL_HELP[lv]}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="border-t border-n-200 px-3 py-2 text-n-600">
+        HiTESS WorkBench 에 가입·승인된 사람은 누구나 들어오고, 처음에는 LV1 입니다. WorkBench 관리자는 자동으로 LV3 이며 여기서 바꿀 수 없습니다.
+        계정 활성·비활성은 WorkBench 에서 관리합니다. 자료별 열람 허락은 그 자료의 상세 화면 ‘공개 범위’에서 줍니다.
+      </p>
+    </details>
+  );
+}
 
 const th = 'h-9 border-b border-n-200 bg-n-50 px-3 text-left text-meta font-medium text-n-600';
 const td = 'h-12 border-b border-n-200 px-3 text-ui';
+const FILTERS = [{ id: 'all', label: '전체' }, { id: '3', label: 'LV3' }, { id: '2', label: 'LV2' }, { id: '1', label: 'LV1' }];
 
+/**
+ * 사용자 관리(15, LV3) — WorkBench 활성 사용자 목록과 LogBook 등급.
+ * WorkBench 표를 읽을 수 없으면(연결·권한) 원인을 알리고 목록을 비운다.
+ */
 export default function UsersPage() {
-  const [tab, setTab] = useState('pending');
+  // 관리자 전용 화면이라 로그인 정보가 없으면(시험) LV3 로 본다 — 서버가 다시 검사한다
+  const me = useContext(AuthContext)?.user || ADMIN_FALLBACK;
+  const [q, setQ] = useState('');
+  const [term, setTerm] = useState('');
+  const [filter, setFilter] = useState('all');
   const [rows, setRows] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [confirm, dialog] = useConfirm();
-  // 탭을 빠르게 넘나들 때 먼저 나간 요청이 나중에 응답해 화면을 덮어쓰지 않도록,
-  // 매 요청에 순번을 매겨 "가장 최근에 보낸 요청"의 응답만 반영한다.
+  // 검색어를 빠르게 바꿀 때 먼저 나간 요청이 나중에 응답해 화면을 덮어쓰지 않도록 순번을 매긴다
   const requestSeq = useRef(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setTerm(q.trim()), DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [q]);
 
   const load = useCallback(async () => {
     const seq = ++requestSeq.current;
     setLoading(true);
-    setError('');
     try {
-      const data = await api(`/admin/users?status=${tab}`);
-      if (seq === requestSeq.current) setRows(data);
-    } catch {
+      const data = await api(`/admin/users${term ? `?q=${encodeURIComponent(term)}` : ''}`);
+      if (seq === requestSeq.current) { setRows(data); setError(''); }
+    } catch (err) {
       if (seq === requestSeq.current) {
-        setError('사용자 목록을 불러오지 못했습니다.');
+        setError(err?.detail === 'wb_unavailable'
+          ? 'WorkBench 사용자 표를 읽을 수 없습니다. 운영 화면의 ‘WorkBench 사용자 표’ 상태와 DB 권한(GRANT SELECT)을 확인하세요.'
+          : '사용자 목록을 불러오지 못했습니다.');
         setRows([]);
       }
     } finally {
       if (seq === requestSeq.current) setLoading(false);
     }
-  }, [tab]);
+  }, [term]);
 
   useEffect(() => { load(); }, [load]);
 
-  async function act(user, path, method = 'POST', body) {
-    const employeeId = user.employee_id;
-    if (CONFIRMS[path] && !(await confirm(CONFIRMS[path](user)))) return;
-    setBusyId(employeeId);
+  const counts = useMemo(() => {
+    const c = { all: rows.length, 1: 0, 2: 0, 3: 0 };
+    for (const u of rows) c[u.level] += 1;
+    return c;
+  }, [rows]);
+  const shown = filter === 'all' ? rows : rows.filter((u) => String(u.level) === filter);
+
+  async function change(u, level) {
+    // LV3 지정·해제는 모든 자료·사용자 관리 권한이 오가므로 묻는다(다른 등급은 바로 바꾸고 되돌릴 수 있다)
+    if (level === 3 || u.level === 3) {
+      const ok = await confirm({
+        title: level === 3 ? `${u.name} 님을 LV3 관리자로 지정할까요?` : `${u.name} 님을 ${levelName(level)} 로 내릴까요?`,
+        body: level === 3 ? '모든 자료를 보고 고치며, 자료 블록과 사용자 등급을 바꿀 수 있게 됩니다.'
+          : '관리자 권한(모든 자료·블록·등급 지정)이 바로 없어집니다.',
+        confirmLabel: '바꾸기', tone: 'primary',
+      });
+      if (!ok) return;
+    }
+    setBusyId(u.employee_id);
     try {
-      await api(`/admin/users/${employeeId}/${path}`, { method, body });
+      await api(`/admin/users/${u.employee_id}/level`, { method: 'PUT', body: { level } });
       await load();
     } catch (err) {
-      if (err.detail === 'cannot_change_self') {
-        setError('자기 자신은 변경할 수 없습니다.');
-      } else if (STALE_TARGET_DETAILS.has(err.detail)) {
-        // load() 는 시작할 때 setError('') 를 하므로, 안내 메시지는 load() 가 끝난 뒤에 설정한다.
-        await load();
-        setError(STALE_TARGET_MESSAGE);
-      } else {
-        setError('처리하지 못했습니다.');
-      }
+      setError(errorText(err, '등급을 바꾸지 못했습니다.'));
     } finally {
       setBusyId(null);
     }
   }
 
-  const dateHeader = tab === 'pending' ? '신청일' : '가입일';
-
   return (
     <Page>
       {dialog}
-      <PageHeader title="사용자 관리" description="사번으로 가입을 신청한 사람을 승인하고, 권한과 활성 상태를 관리합니다." />
-      <Tabs label="사용자 상태" items={TABS} value={tab} onChange={setTab} className="mb-4" />
+      <PageHeader title="사용자 관리"
+                  description="HiTESS WorkBench 가입자에게 LogBook 등급(LV1 게스트 · LV2 일반 · LV3 관리자)을 정합니다." />
+      <LevelHelp />
+      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Tabs label="등급으로 거르기" className="min-w-0"
+              items={FILTERS.map((f) => ({ ...f, count: counts[f.id] }))}
+              value={filter} onChange={setFilter} />
+        <label className="ml-auto flex items-center gap-1.5">
+          <Search size={14} className="text-n-400" aria-hidden="true" />
+          <input aria-label="사용자 찾기" value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름 또는 사번"
+                 className={inputClass('h-8 w-[220px]')} />
+        </label>
+      </div>
       {error && <ErrorNote className="mb-4">{error}</ErrorNote>}
       <div className="overflow-hidden rounded-lg border border-n-200">
         <table className="w-full border-collapse">
           <thead>
             <tr>
               <th className={th}>이름</th><th className={th}>부서</th>
-              <th className={th}>{dateHeader}</th><th className={th}>권한</th><th className={th}><span className="sr-only">동작</span></th>
+              <th className={th}>마지막 로그인</th><th className={th}>등급</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((u) => {
-              const busy = busyId === u.employee_id;
-              return (
-                <tr key={u.employee_id} className="group transition-colors duration-150 last:[&>td]:border-0 hover:bg-n-50">
-                  <td className={td}>
-                    <div className="font-medium text-n-900">{u.name}</div>
-                    <div className="font-mono text-meta text-n-500">{u.employee_id}</div>
-                  </td>
-                  <td className={`${td} ${u.department ? 'text-n-700' : 'text-n-500'}`}>{u.department || '—'}</td>
-                  <td className={`${td} font-mono text-meta text-n-600`}>{u.created_at?.slice(0, 10)}</td>
-                  <td className={td}>
-                    {u.is_admin
-                      ? <span className="inline-flex h-5 items-center rounded-xs bg-brand-subtle px-1.5 text-micro font-semibold text-brand">관리자</span>
-                      : <span className="text-n-600">일반</span>}
-                  </td>
-                  <td className={td}>
-                    <div className="flex justify-end gap-1.5">
-                      {u.status === 'pending' && (<>
-                        <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(u, 'reject')}>거절</Button>
-                        <Button size="sm" disabled={busy} onClick={() => act(u, 'approve')}>승인</Button>
-                      </>)}
-                      {u.status === 'active' && (<>
-                        <Button size="sm" variant="ghost" disabled={busy}
-                                onClick={() => act(u, 'admin', 'PUT', { is_admin: !u.is_admin })}>
-                          {u.is_admin ? '관리자 해제' : '관리자 지정'}
-                        </Button>
-                        <Button size="sm" variant="danger" disabled={busy} onClick={() => act(u, 'disable')}>비활성화</Button>
-                      </>)}
-                      {u.status === 'disabled' && (
-                        <Button size="sm" variant="secondary" disabled={busy} onClick={() => act(u, 'enable')}>재활성화</Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {!loading && rows.length === 0 && (
-              <tr><td colSpan={5} className="py-10 text-center text-ui text-n-500">해당하는 사용자가 없습니다.</td></tr>
+            {shown.map((u) => (
+              <tr key={u.employee_id} className="transition-colors duration-150 last:[&>td]:border-0 hover:bg-n-50">
+                <td className={td}>
+                  <div className="font-medium text-n-900">{u.name || <span className="font-mono">{u.employee_id}</span>}</div>
+                  <div className="font-mono text-meta text-n-500">{u.employee_id}</div>
+                </td>
+                <td className={`${td} ${u.department ? 'text-n-700' : 'text-n-500'}`}>
+                  {u.department || '—'}{u.position && <span className="ml-1.5 text-meta text-n-500">{u.position}</span>}
+                </td>
+                <td className={`${td} text-meta ${u.last_login ? 'font-mono text-n-600' : 'text-n-500'}`}>
+                  {u.last_login ? formatDateTime(u.last_login).slice(0, 16) : '들어온 적 없음'}
+                </td>
+                <td className={td}>
+                  <LevelCell u={u} me={me} busy={busyId === u.employee_id} onChange={(lv) => change(u, lv)} />
+                </td>
+              </tr>
+            ))}
+            {!loading && shown.length === 0 && !error && (
+              <tr><td colSpan={4} className="py-10 text-center text-ui text-n-500">해당하는 사용자가 없습니다.</td></tr>
             )}
             {loading && rows.length === 0 && (
-              <tr><td colSpan={5} className="py-10 text-center text-ui text-n-500"><span className="appear-late">불러오는 중…</span></td></tr>
+              <tr><td colSpan={4} className="py-10 text-center text-ui text-n-500"><span className="appear-late">불러오는 중…</span></td></tr>
             )}
           </tbody>
         </table>
       </div>
     </Page>
+  );
+}
+
+/**
+ * 등급 칸 — 바꿀 수 있는 사람은 고르기, 아니면 배지 + 이유(WorkBench 관리자 자동 LV3 · 나 · WorkBench 비활성).
+ */
+function LevelCell({ u, me, busy, onChange }) {
+  const options = assignableLevels(me, u);
+  let note = null;
+  if (u.wb_admin) note = 'WorkBench 관리자 · 자동';
+  else if (me && u.employee_id === me.employee_id) note = '나';
+  else if (u.wb_active === false) note = 'WorkBench 비활성';
+  if (options.length === 0) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <LevelBadge level={u.level} />
+        {note && (
+          <span className="inline-flex items-center gap-1 text-meta text-n-500" title={u.wb_admin ? 'WorkBench 관리자는 LogBook 에서 바꿀 수 없습니다' : undefined}>
+            {u.wb_admin && <Lock size={11} aria-hidden="true" />}{note}
+          </span>
+        )}
+      </span>
+    );
+  }
+  return (
+    <select aria-label={`${u.name || u.employee_id} 등급`} value={u.level} disabled={busy} title={LEVEL_HELP[u.level]}
+            onChange={(e) => Number(e.target.value) !== u.level && onChange(Number(e.target.value))}
+            className={selectClass('h-7 text-meta')}>
+      {options.map((lv) => <option key={lv} value={lv}>{levelName(lv)}</option>)}
+    </select>
   );
 }

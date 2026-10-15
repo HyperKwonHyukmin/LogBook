@@ -174,7 +174,7 @@ export function ViewportLegend({ v }) {
     <div role="group" aria-label="범례"
          className="absolute bottom-3 right-3 z-10 w-[208px] rounded-lg border border-viewer-line bg-viewer-raised px-2.5 py-2 text-meta text-on-viewer-muted shadow-md">
       <button type="button" onClick={toggle} aria-expanded={!collapsed}
-              className="flex w-full items-center gap-1 rounded-sm text-left font-medium text-on-viewer">
+              className="-mx-1 flex w-[calc(100%+8px)] items-center gap-1 rounded-sm px-1 text-left font-medium text-on-viewer transition-colors duration-150 ease-out hover:bg-viewer-hover">
         {collapsed ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
         {legend.title}
       </button>

@@ -6,6 +6,7 @@ import {
   sameIds, writeBasket,
 } from '../../lib/compareBasket.js';
 import Button, { buttonClass } from '../ui/Button.jsx';
+import { RecentComparesMenu } from './RecentCompares.jsx';
 import { useToast } from '../ui/Toast.jsx';
 
 const BasketContext = createContext(null);
@@ -128,6 +129,9 @@ export function CompareBar() {
         </ul>
         <Link to={compareHref(items.map((x) => x.id))} className={buttonClass('primary', 'sm', 'ml-1')}>비교 열기</Link>
         <Button variant="ghost" size="sm" onClick={basket.clear}>비우기</Button>
+        {/* 11 — 최근에 연 비교 바로 열기 */}
+        <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-n-200" />
+        <RecentComparesMenu />
       </section>
     </div>
   );

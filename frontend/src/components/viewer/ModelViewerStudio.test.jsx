@@ -214,7 +214,7 @@ describe('전체 화면 뷰어', () => {
     expect(engine.fit).not.toHaveBeenCalled();
     await userEvent.type(input, '{Escape}');
     expect(screen.queryByRole('search', { name: 'ID 로 찾기' })).toBeNull();
-  });
+  }, 15000); // 찾기 입력·결과 순회가 길어 전체 스위트 부하에서 기본 5초를 넘기곤 한다
 
   test('절점·RBE 선택 정보와 선택만 보기', async () => {
     const engine = fakeEngine({ kind: 'node', index: 11 });

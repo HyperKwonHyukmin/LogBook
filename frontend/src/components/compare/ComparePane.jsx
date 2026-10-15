@@ -20,7 +20,7 @@ const POLL_MAX = 30;
  * 파일 메타 → (모델이면) 변환 요약 → (호선을 모르면) 소속 자료의 대표 호선.
  * 변환 대기 중이면 잠시 뒤 다시 묻는다(상한 있음). @returns { file, summary, hull, error }
  */
-function usePaneInfo(id, knownHull) {
+export function usePaneInfo(id, knownHull) {
   const [st, setSt] = useState({ file: null, summary: null, hull: '', error: '', polls: 0 });
   const [tick, setTick] = useState(0);
   useEffect(() => {

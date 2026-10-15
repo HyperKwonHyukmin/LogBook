@@ -10,6 +10,10 @@
 raw_sink(06 해석 검증): 주면 Bulk 구간의 줄 원문(주석 `$…` 만 뗀 것)을 읽는 순서대로 넘긴다. INCLUDE 줄은
 넘기지 않고 그 자리에서 포함 파일의 줄이 이어지므로, 받은 줄을 이으면 INCLUDE 가 풀린 Bulk 한 덩어리가 된다.
 BEGIN BULK·ENDDATA·빈 줄은 넘기지 않는다.
+
+control(12 내용 서명): Bulk 앞 실행·케이스 제어 줄(주석 `$…` 만 뗀 것)을 읽는 순서대로 모은다(SOL·CEND·
+SUBCASE·LOAD= …). INCLUDE·BEGIN BULK 줄은 넣지 않는다. 줄 수 상한(MAX_CONTROL_LINES)을 넘으면 더 모으지 않고
+경고 control_truncated 를 남긴다.
 """
 import hashlib
 import posixpath
@@ -39,6 +43,7 @@ MAX_INCLUDE_DEPTH = 10
 MAX_INCLUDE_JOIN_LINES = 5     # 따옴표가 안 닫힌 INCLUDE 를 이어 붙이는 최대 줄 수
 MAX_INCLUDE_JOIN_CHARS = 256   # … 와 최대 글자 수
 MAX_NAME_CHARS = 200           # missing·경고에 남기는 INCLUDE 이름 길이
+MAX_CONTROL_LINES = 20000      # 실행·케이스 제어 줄을 모으는 상한(내용 서명용, 12)
 
 
 class DeckTooLarge(Exception):
@@ -115,6 +120,7 @@ class DeckReader:
         self.warnings: list[str] = []
         self.includes: list[str] = []
         self.missing: list[str] = []
+        self.control: list[str] = []   # Bulk 앞 실행·케이스 제어 줄(12 내용 서명)
         self._seen: set[str] = set()
         self._hash = hashlib.sha256()
 
@@ -165,6 +171,7 @@ class DeckReader:
                         break
                     continue
                 else:
+                    self._keep_control(line)
                     continue
             if not line.strip():
                 continue
@@ -192,6 +199,15 @@ class DeckReader:
             current = Card(name, fields, rel)
             self.cards.append(current)
         return True
+
+    def _keep_control(self, line: str) -> None:
+        if not line.strip():
+            return
+        if len(self.control) >= MAX_CONTROL_LINES:
+            if "control_truncated" not in self.warnings:
+                self.warnings.append("control_truncated")
+            return
+        self.control.append(line.strip())
 
     def _include_line(self, rel: str, line: str, lines, depth: int) -> None:
         """INCLUDE 한 줄(따옴표가 안 닫혔으면 다음 줄을 정해진 만큼 잇는다)을 처리한다."""

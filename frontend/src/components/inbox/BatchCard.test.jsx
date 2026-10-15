@@ -9,18 +9,31 @@ const draw = (batch) => render(<BatchCard batch={batch} me="A100001" isAdmin={fa
 
 test('분석 중 — 지금 단계 n/N 한 줄, 펼치면 처리 단계와 이유', async () => {
   draw({ ...base, state: 'staged', queue, progress: { step: 'files', done: 3, total: 12 } });
-  expect(screen.getByText('파일 확인 중 3/12')).toBeInTheDocument();
+  // 눈에 띄는 진행 패널 — 제목·지금 하는 일·단계·n/N 만큼 찬 진행 막대
+  const panel = screen.getByRole('status', { name: '정리 진행' });
+  expect(panel).toHaveTextContent('정리하는 중입니다');
+  expect(panel).toHaveTextContent('파일 확인 중 3/12');
+  expect(within(panel).getByRole('list', { name: '처리 단계' }).querySelector('[aria-current="step"]')).toHaveTextContent('파일마다 확인');
+  expect(within(panel).getByRole('progressbar')).toHaveAttribute('aria-valuenow', String(Math.round(((1 + 3 / 12) / 4) * 100)));
   await userEvent.click(screen.getByText('무엇을 하나요?'));
-  const steps = screen.getByRole('list');
+  const steps = within(screen.getByText('무엇을 하나요?').closest('details')).getByRole('list');
   expect(within(steps).getAllByRole('listitem')).toHaveLength(4);
   expect(within(steps).getByText('파일마다 확인').closest('li')).toHaveAttribute('aria-current', 'step');
   expect(within(steps).getByText(/지문\(SHA-256\)/)).toBeInTheDocument();
   expect(screen.getByText(/초안\(미확정 자료\)/)).toBeInTheDocument();
 });
 
+test('분석 중 — 아직 시작 전이면 기다리는 중으로, 흐르는 막대', () => {
+  draw({ ...base, state: 'staged', queue: { ...queue, job_state: 'queued', ahead: 2 }, progress: null });
+  const panel = screen.getByRole('status', { name: '정리 진행' });
+  expect(panel).toHaveTextContent('정리를 기다리는 중입니다');
+  expect(panel).toHaveTextContent('앞의 배치 2개를 먼저 처리하고 있습니다');
+  expect(within(panel).getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
+});
+
 test('분석 중 — 워커가 꺼져 있으면 눈에 띄게 알린다', () => {
   draw({ ...base, state: 'staged', queue: { ...queue, job_state: 'queued', worker_alive: false }, progress: null });
-  expect(screen.getByRole('status')).toHaveTextContent('처리 프로그램(워커)이 꺼져 있어 기다리는 중입니다 — 관리자에게 알려 주세요.');
+  expect(screen.getByRole('status')).toHaveTextContent('처리 프로그램(워커)이 꺼져 있어 기다리는 중입니다. 관리자에게 알려 주세요.');
 });
 
 test('정리 대기 — 왜 기다리는지, BDF 변환 상태, 초안마다 확인할 것', async () => {
@@ -40,7 +53,7 @@ test('정리 대기 — 왜 기다리는지, BDF 변환 상태, 초안마다 확
   expect(screen.getByText(/BDF 3D 변환은 확정과 따로/)).toBeInTheDocument();
   const card = screen.getByRole('article', { name: /E000010/ });
   const checks = within(card).getByLabelText('확인할 것');
-  expect(checks).toHaveTextContent('제목 없음 — 확정하려면 필요합니다');
+  expect(checks).toHaveTextContent('제목 없음: 확정하려면 필요합니다');
   expect(checks).toHaveTextContent('호선 없음');
   expect(within(card).getByText('3D 변환 중')).toBeInTheDocument();
   expect(within(card).getByText('3D 준비됨')).toBeInTheDocument();

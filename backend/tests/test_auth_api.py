@@ -1,72 +1,17 @@
+"""로그인·로그아웃·내 정보(15 — 사용자는 WorkBench 가입자, 자체 가입 없음).
+
+WorkBench 사용자 표는 가짜 표(conftest wb fixture)다. 표 읽기 전용·세션 끊김·LV 규칙은 test_wb_users_15.py."""
 from app import models
 
 
-def test_register_creates_pending_user_and_audit(client, db):
+def test_register_is_gone(client, db):
+    """15 — LogBook 자체 가입은 없앴다(WorkBench 에서 가입·승인)."""
     res = client.post("/api/auth/register",
                       json={"employee_id": "a476854", "name": "권혁민", "department": "구조시스템연구실"})
-    assert res.status_code == 201
-    assert res.json() == {"employee_id": "A476854", "status": "pending"}
+    assert res.status_code == 410
+    assert res.json()["detail"] == "register_moved"
     db.expire_all()
-    assert db.query(models.User).filter_by(employee_id="A476854").one().status == "pending"
-    assert db.query(models.AuditLog).filter_by(action="USER_REGISTER").count() == 1
-
-
-def test_register_audit_after_includes_position(client, db):
-    res = client.post(
-        "/api/auth/register",
-        json={"employee_id": "A300009", "name": "홍길동", "department": "구조", "position": "책임연구원"},
-    )
-    assert res.status_code == 201
-    db.expire_all()
-    log = db.query(models.AuditLog).filter_by(action="USER_REGISTER", target_id="A300009").one()
-    assert log.after["position"] == "책임연구원"
-    assert log.after["status"] == "pending"
-
-
-def test_register_rejects_blank_name_after_strip(client):
-    res = client.post("/api/auth/register", json={"employee_id": "A300010", "name": "   "})
-    assert res.status_code == 422
-
-
-def test_register_rejects_bad_format(client):
-    res = client.post("/api/auth/register", json={"employee_id": "12345", "name": "x"})
-    assert res.status_code == 422
-    assert res.json()["detail"] == "invalid_employee_id"
-
-
-def test_register_rejects_duplicate(client, make_user):
-    make_user("A476854")
-    res = client.post("/api/auth/register", json={"employee_id": "A476854", "name": "x"})
-    assert res.status_code == 409
-    assert res.json()["detail"] == "already_registered"
-
-
-def test_register_rejects_arabic_indic_digits(client):
-    # \d 가 유니코드 숫자 전체를 매치하던 시절엔 이 값이 통과했다 — ASCII 숫자만 허용해야 한다.
-    res = client.post("/api/auth/register", json={"employee_id": "B١٢٣٤٥", "name": "x"})
-    assert res.status_code == 422
-    assert res.json()["detail"] == "invalid_employee_id"
-
-
-def test_register_rejects_fullwidth_digits(client):
-    res = client.post("/api/auth/register", json={"employee_id": "B１２３４５", "name": "x"})
-    assert res.status_code == 422
-    assert res.json()["detail"] == "invalid_employee_id"
-
-
-def test_register_rejects_duplicate_on_concurrent_commit(client, monkeypatch, make_user):
-    """동시에 같은 사번이 들어오면 사전 조회는 통과해도 커밋 시점에 unique 제약이 막는다."""
-    from sqlalchemy.exc import IntegrityError
-
-    from app import audit as audit_module
-
-    def _boom(*a, **kw):
-        raise IntegrityError("stmt", {}, Exception("duplicate"))
-
-    monkeypatch.setattr(audit_module, "record", _boom)
-    res = client.post("/api/auth/register", json={"employee_id": "A300001", "name": "x"})
-    assert res.status_code == 409
-    assert res.json()["detail"] == "already_registered"
+    assert db.query(models.User).count() == 0
 
 
 def test_login_rejects_bad_format(client):
@@ -82,24 +27,26 @@ def test_login_rejects_arabic_indic_digits(client, make_user):
     assert res.json()["detail"] == "invalid_employee_id"
 
 
+def test_login_rejects_fullwidth_digits(client):
+    # \d 가 유니코드 숫자 전체를 매치하던 시절엔 이 값이 통과했다 — ASCII 숫자만 허용해야 한다.
+    res = client.post("/api/auth/login", json={"employee_id": "B１２３４５"})
+    assert res.status_code == 422
+    assert res.json()["detail"] == "invalid_employee_id"
+
+
 def test_login_not_registered(client):
+    """WorkBench 표에 없는 사번."""
     res = client.post("/api/auth/login", json={"employee_id": "Z999999"})
     assert res.status_code == 404
     assert res.json()["detail"] == "not_registered"
 
 
-def test_login_pending(client, make_user):
-    make_user("A200001", status="pending")
+def test_login_inactive_in_workbench(client, wb):
+    """WorkBench 승인 대기·비활성(is_active=0)은 들어올 수 없다."""
+    wb("A200001", name="대기중", active=False)
     res = client.post("/api/auth/login", json={"employee_id": "A200001"})
     assert res.status_code == 403
-    assert res.json()["detail"] == "pending_approval"
-
-
-def test_login_disabled(client, make_user):
-    make_user("A200002", status="disabled")
-    res = client.post("/api/auth/login", json={"employee_id": "A200002"})
-    assert res.status_code == 403
-    assert res.json()["detail"] == "account_disabled"
+    assert res.json()["detail"] == "wb_inactive"
 
 
 def test_login_success_returns_token_and_user(client, make_user, db):
@@ -112,10 +59,35 @@ def test_login_success_returns_token_and_user(client, make_user, db):
     assert body["user"]["login_count"] == 1
 
 
+def test_first_login_creates_level1_user(client, wb, db):
+    """처음 들어온 WorkBench 가입자 — LogBook 행을 LV1 로 만들고 감사 USER_JOIN."""
+    wb("A200007", name="새사람", department="구조", position="연구원")
+    res = client.post("/api/auth/login", json={"employee_id": "A200007"})
+    assert res.status_code == 200
+    u = res.json()["user"]
+    assert (u["level"], u["stored_level"], u["wb_admin"], u["is_admin"]) == (1, 1, False, False)
+    assert (u["name"], u["department"], u["position"]) == ("새사람", "구조", "연구원")
+    db.expire_all()
+    row = db.query(models.User).filter_by(employee_id="A200007").one()
+    assert row.level == 1 and row.status == "active"
+    assert db.query(models.AuditLog).filter_by(action="USER_JOIN", target_id="A200007").count() == 1
+    # 두 번째 로그인은 새로 만들지 않는다
+    assert client.post("/api/auth/login", json={"employee_id": "A200007"}).status_code == 200
+    db.expire_all()
+    assert db.query(models.AuditLog).filter_by(action="USER_JOIN").count() == 1
+
+
+def test_login_refreshes_name_from_workbench(client, make_user, wb, db):
+    make_user("A200008", name="옛이름")
+    wb("A200008", name="새이름", department="새부서", position="책임")
+    u = client.post("/api/auth/login", json={"employee_id": "A200008"}).json()["user"]
+    assert (u["name"], u["department"], u["position"]) == ("새이름", "새부서", "책임")
+    db.expire_all()
+    assert db.query(models.User).filter_by(employee_id="A200008").one().name == "새이름"
+
+
 def test_login_cleans_up_this_users_expired_sessions(client, make_user, db):
     from datetime import datetime, timedelta
-
-    from app import models
 
     make_user("A200005", name="정만수")
     res1 = client.post("/api/auth/login", json={"employee_id": "A200005"})

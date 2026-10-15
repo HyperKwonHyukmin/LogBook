@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import access, models
 from ..convert.job import SERVABLE_STATES, model_paths
 from ..database import get_db
 from ..dependencies import get_storage, require_auth
@@ -31,9 +31,10 @@ def _now() -> datetime:
     return datetime.now().replace(microsecond=0)
 
 
-def _file(db: Session, file_id: int) -> models.File:
+def _file(db: Session, file_id: int, user: models.User | None) -> models.File:
+    """파일 하나 — 없거나 휴지통이거나, 사용자가 그 파일이 든 Entry 를 볼 수 없으면 404(13 — 존재를 숨긴다)."""
     f = db.get(models.File, file_id)
-    if f is None or f.location == "trash":
+    if f is None or f.location == "trash" or not access.file_visible(db, user, f):
         raise HTTPException(status_code=404, detail="file_not_found")
     return f
 
@@ -53,7 +54,7 @@ def _disposition(name: str, inline: bool) -> str:
 @router.get("/{file_id}")
 def file_meta(file_id: int, db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
     """파일 메타(04b 전체 화면 뷰어 머리줄) — 이름·경로·종류와 소속 Entry. 휴지통 파일은 _file() 이 404."""
-    f = _file(db, file_id)
+    f = _file(db, file_id, user)
     e = db.get(models.Entry, f.entry_id) if f.entry_id else None
     s = db.get(models.ModelSummary, f.id) if f.kind == "model" else None
     return {"id": f.id, "name": f.name, "rel_path": f.rel_path, "kind": f.kind, "size": f.size,
@@ -65,7 +66,7 @@ def file_meta(file_id: int, db: Session = Depends(get_db), user: models.User = D
 @router.post("/{file_id}/link")
 def create_link(file_id: int, inline: bool = False, db: Session = Depends(get_db),
                 user: models.User = Depends(require_auth)):
-    f = _file(db, file_id)
+    f = _file(db, file_id, user)
     now = _now()
     db.query(models.DownloadToken).filter(models.DownloadToken.expires_at <= now).delete(synchronize_session=False)
     tok = models.DownloadToken(token=str(uuid.uuid4()), file_id=f.id, employee_id=user.employee_id,
@@ -84,7 +85,9 @@ def content(file_id: int, t: str = Query(default=""), inline: bool = False, db: 
     # '<' 로 비교하면 초 경계에서 막 만료된 토큰이 1초 동안 통과할 수 있다.
     if tok is None or tok.file_id != file_id or tok.expires_at <= _now():
         raise HTTPException(status_code=403, detail="link_invalid")
-    f = _file(db, file_id)
+    # 13 — 링크를 만든 뒤 공개 범위·등급이 바뀌었을 수 있다: 링크 주인이 지금도 볼 수 있어야 한다
+    owner = db.query(models.User).filter_by(employee_id=tok.employee_id, status="active").first()
+    f = _file(db, file_id, owner)
     path = _path(db, storage, f)
     name, ext, drm = f.name, f.ext, f.drm_encrypted
     # 큰 파일을 흘려보내는 동안 DB 연결을 붙잡지 않는다 — yield 의존성(get_db)은 응답이 끝난 뒤에야
@@ -113,7 +116,7 @@ def content(file_id: int, t: str = Query(default=""), inline: bool = False, db: 
 
 @router.get("/{file_id}/text")
 def text(file_id: int, db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
-    f = _file(db, file_id)
+    f = _file(db, file_id, user)
     x = db.get(models.FileExtract, f.id)
     chunks = (db.query(models.FileText).filter_by(file_id=f.id).order_by(models.FileText.seq).all()) if x else []
     return {"state": x.state if x else None, "error": x.error if x else None, "summary": x.summary if x else None,
@@ -123,7 +126,7 @@ def text(file_id: int, db: Session = Depends(get_db), user: models.User = Depend
 @router.get("/{file_id}/sheet")
 def sheet(file_id: int, name: str | None = None, db: Session = Depends(get_db),
           storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
-    f = _file(db, file_id)
+    f = _file(db, file_id, user)
     if f.ext not in (".xlsx", ".xlsm"):
         raise HTTPException(status_code=422, detail="not_sheet")
     if f.drm_encrypted:
@@ -204,7 +207,7 @@ def _derived(path) -> bytes:
 @router.get("/{file_id}/model")
 def model_summary(file_id: int, db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage),
                   user: models.User = Depends(require_auth)):
-    f = _file(db, file_id)
+    f = _file(db, file_id, user)
     s = db.get(models.ModelSummary, f.id)
     # 06 해석 검증 요약 — 상태·오류 유형·'다시 검증 필요'(검증한 원본과 지금 변환 결과가 다름)
     solve = solve_brief(db.get(models.SolveCheck, f.id), s)
@@ -220,7 +223,7 @@ def model_summary(file_id: int, db: Session = Depends(get_db), storage: StorageP
 def model_lbm(file_id: int, if_none_match: str | None = Header(default=None),
               db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage),
               user: models.User = Depends(require_auth)):
-    s = _ready_model(db, storage, _file(db, file_id), 0)
+    s = _ready_model(db, storage, _file(db, file_id, user), 0)
     return _derived_response(storage, s, 0, "application/octet-stream", if_none_match,
                              {"Content-Encoding": "gzip"})
 
@@ -229,5 +232,5 @@ def model_lbm(file_id: int, if_none_match: str | None = Header(default=None),
 def model_thumb(file_id: int, if_none_match: str | None = Header(default=None),
                 db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage),
                 user: models.User = Depends(require_auth)):
-    s = _ready_model(db, storage, _file(db, file_id), 1)
+    s = _ready_model(db, storage, _file(db, file_id, user), 1)
     return _derived_response(storage, s, 1, "image/png", if_none_match)

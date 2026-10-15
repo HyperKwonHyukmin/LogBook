@@ -1,4 +1,6 @@
 /** 화면 라벨 모음 — 같은 코드 값을 여러 화면이 같은 말로 보이게 한 곳에 둔다. */
+import { LEVEL_ERRORS } from './levels.js';
+
 export const ACTION_LABELS = {
   USER_REGISTER: '가입 신청', USER_APPROVE: '가입 승인', USER_REJECT: '가입 거절',
   USER_DISABLE: '계정 비활성화', USER_ENABLE: '계정 재활성화',
@@ -13,16 +15,38 @@ export const ACTION_LABELS = {
   VOCAB_SEED: '분류 목록 기본값', VOCAB_TERM_ADD: '분류 용어 추가', VOCAB_TERM_UPDATE: '분류 용어 수정',
   VOCAB_REORDER: '분류 순서 변경', VOCAB_MERGE: '분류 값 합치기', VOCAB_SYNONYM_REMOVE: '분류 동의어 빼기',
   VOCAB_NORMALIZE: '분류 값 일괄 정리',
+  // 13 — 등급·공개 범위
+  USER_ROLE: '등급 변경', MASTER_TRANSFER: 'Master 이양',
+  // 15 — WorkBench 사용자 첫 로그인·LogBook 등급
+  USER_JOIN: '처음 들어옴(LV1)', USER_LEVEL: '등급 변경',
+  ENTRY_ACCESS: '공개 범위 변경', ENTRY_GRANT: '열람 허락', ENTRY_REVOKE: '열람 허락 회수',
+  // 14 — 판 정리
+  ENTRY_REVISIONS: '판 정리',
+  // 17 — 완전 동일 BDF
+  UPLOAD_DUPLICATE_BLOCKED: '동일 BDF 올리지 않음', UPLOAD_DUPLICATE_FORCED: '동일 BDF 그래도 올림',
+  // 18 — WorkBench 연동(GMU 권상이 BDF 를 가져감)
+  WB_EXPORT: 'WorkBench 로 보냄',
+  WB_RULE_SET: 'WorkBench 연결 규칙 변경', WB_RULE_SEED: 'WorkBench 연결 규칙 기본값',
+  // 20 — 자료 정비(제목 형식)
+  ENTRY_RETITLE: '제목 형식 정비', ENTRY_RETITLE_REVERT: '제목 정비 되돌림',
+  // 21 — 프로젝트·문서(보고서 종류 파일) 정보. 23 — 메뉴 이름 '보고서' → '문서'
+  ENTRY_PROJECT: '프로젝트 변경', REPORT_META: '문서 분류 변경', REPORT_LINKS: '문서 모델 연결 변경',
 };
+
+/** 20 — 확정에 필요한 분류 칸(BDF 자료). 서버 required_missing·409 required_fields 의 missing 과 같은 이름. */
+// 21 — 'hull' = 호선·'호선 없음(공용)'·프로젝트가 모두 없음(프로젝트가 있으면 호선 대신 인정)
+export const REQUIRED_LABELS = { hull: '호선(또는 프로젝트)', zone: '구역', analysis_type: '해석 종류' };
+export const requiredText = (missing) => (missing || []).map((k) => REQUIRED_LABELS[k] || k).join(', ');
 
 /** 워커 작업 종류·상태(관리자 운영 화면). */
 export const JOB_TYPE_LABELS = {
-  extract_file: '보고서 본문 추출', convert_model: 'BDF 변환', process_batch: '배치 처리', write_meta: '메타 파일 쓰기',
-  solve_check: '해석 검증',
+  extract_file: '문서 본문 추출', convert_model: 'BDF 변환', process_batch: '배치 처리', write_meta: '메타 파일 쓰기',
+  solve_check: '해석 검증', revision_diff: '판 비교',
 };
 export const JOB_STATE_LABELS = { queued: '대기', running: '실행 중', done: '완료', failed: '실패' };
 
-export const KIND_LABELS = { model: 'BDF', result: '결과', report: '보고서', drawing: '도면', other: '기타' };
+// 23 — 파일 종류 report 의 화면 이름은 '문서'(PDF·PPT·DOC·XLS — 보고서·발표자료·계산서 등). 값 'report' 는 그대로
+export const KIND_LABELS = { model: 'BDF', result: '결과', report: '문서', drawing: '도면', other: '기타' };
 
 export const BATCH_STATE_LABELS = {
   staged: '분석 중', processed: '정리 대기', failed: '처리 실패', done: '완료', uploading: '올리는 중',
@@ -31,6 +55,9 @@ export const BATCH_STATE_LABELS = {
 export const EXCLUDE_REASON_LABELS = {
   drm: 'DRM 암호화. 탐색기로 00_Inbox 에 복사해 주세요',
   path_too_long: '경로가 너무 김',
+  // 17 — 완전 동일 BDF(같은 자료가 이미 있음)와 그 BDF 만 쓰던 INCLUDE 조각
+  duplicate_model: '동일 BDF 가 이미 있음',
+  duplicate_include: '올리지 않은 BDF 의 INCLUDE 파일',
 };
 
 export const ERROR_LABELS = {
@@ -39,8 +66,12 @@ export const ERROR_LABELS = {
   storage_unreachable: '999_LogBook 공유 폴더에 연결할 수 없습니다.',
   storage_error_partial: '파일 이동 중 문제가 생겼습니다. 관리자에게 알려 주세요.',
   title_required: '제목을 입력해 주세요.',
-  invalid_period: '해석 시기는 YYYY-MM 형식입니다.',
+  duplicate_model: '같은 BDF 가 이미 있어 확정하지 않았습니다.',
   target_not_confirmed: '합칠 대상 Entry 가 확정 상태가 아닙니다.',
+  draft_attachments_pending: '추가 파일을 첨부 중입니다. 첨부가 끝난 뒤 다시 진행해 주세요.',
+  attachment_target_changed: '자료 상태가 변경되었습니다. 정리 대기 목록을 다시 확인해 주세요.',
+  attachment_target_not_draft: '이 자료는 이미 확정되었거나 정리 대기에서 제외되었습니다.',
+  attachment_still_processing: '파일을 처리 중입니다. 잠시 뒤 상태를 다시 확인해 주세요.',
   already_claimed: '이미 다른 사람이 가져갔습니다.',
   entry_trashed: '휴지통에 있는 자료입니다.',
   incomplete: '일부 파일이 끝까지 올라가지 않았습니다. 다시 올려 주세요.',
@@ -54,6 +85,9 @@ export const ERROR_LABELS = {
   drm_encrypted: 'DRM 암호화 파일이라 올릴 수 없습니다. 탐색기로 00_Inbox 에 복사해 주세요.',
   link_invalid: '내려받기 링크가 만료됐습니다. 다시 눌러 주세요.',
   file_not_found: '파일을 찾을 수 없습니다.',
+  revisions_conflict: '다른 사람이 그 사이 판을 정리했습니다. 다시 열어 주세요.',
+  revision_file_not_in_entry: '이 자료의 모델이 아닌 파일이 들어 있습니다.',
+  revision_file_duplicated: '한 파일을 두 계열에 넣을 수 없습니다.',
   file_missing: '공유 폴더에서 파일을 찾을 수 없습니다.',
   not_sheet: '엑셀 파일이 아닙니다.',
   too_large: '파일이 너무 커서 미리 볼 수 없습니다. 내려받아 열어 주세요.',
@@ -78,10 +112,42 @@ export const ERROR_LABELS = {
   value_not_found: '데이터에서 그 값을 찾을 수 없습니다. 새로 고쳐 보세요.',
   term_not_found: '용어를 찾을 수 없습니다. 새로 고쳐 보세요.',
   invalid_order: '목록이 바뀌었습니다. 새로 고친 뒤 다시 해 주세요.',
+  // 13 — 등급·공개 범위
+  read_only_role: '로그인한 사용자만 할 수 있습니다.',
+  master_required: 'Master 만 할 수 있습니다.',
+  master_transfer_only: 'Master 는 이양으로만 바꿀 수 있습니다.',
+  master_protected: 'Master 계정은 비활성화하거나 거절할 수 없습니다.',
+  cannot_change_self: '자기 자신의 등급은 바꿀 수 없습니다.',
+  invalid_role: '고를 수 없는 등급입니다.',
+  grant_not_found: '이미 회수된 허락입니다.',
+  user_not_found: '사용자를 찾을 수 없습니다.',
+  merge_target_not_found: '그 번호의 자료를 찾을 수 없습니다.',
+  use_access_endpoint: '공개 범위는 공개 범위 패널에서 바꿉니다.',
+  // 18-b — WorkBench 연결 규칙
+  zone_not_listed: '구역 목록에 없는 값입니다. 분류 목록의 구역에서 골라 주세요.',
+  unknown_target: '알 수 없는 WorkBench 앱입니다.',
+  too_many_values: '구역·태그는 각각 20개까지 정할 수 있습니다.',
+  too_many_entries: '한 번에 확인할 수 있는 자료 수를 넘었습니다.',
+  // 20 — 필수 분류·자료 정비
+  required_fields: 'BDF 자료는 호선(또는 프로젝트)·구역·해석 종류가 있어야 확정할 수 있습니다.',
+  no_hull_with_hulls: "'호선 없음(공용)' 과 호선을 함께 넣을 수 없습니다.",
+  nothing_to_revert: '되돌릴 제목 정비 기록이 없습니다.',
+  title_changed_since: '정비 뒤에 제목이 다시 바뀌어 되돌리지 않았습니다.',
+  // 21 — 문서 정보·모델 연결
+  report_not_found: '문서를 찾을 수 없습니다.',
+  report_catalog_conflict: '다른 곳에서 문서 정보가 바뀌었습니다. 다시 불러온 뒤 저장해 주세요.',
+  model_not_found: '고른 모델을 볼 수 없거나 더 이상 쓸 수 없습니다.',
+  invalid_document_type: '고를 수 없는 문서 분류입니다.',
+  too_many_links: '모델은 50개까지 연결할 수 있습니다.',
+  // 15 — LogBook 등급·WorkBench 사용자
+  ...LEVEL_ERRORS,
 };
 
 export function errorText(err, fallback = '요청을 처리하지 못했습니다.') {
   const code = typeof err?.detail === 'string' ? err.detail : err?.detail?.code;
+  if (code === 'required_fields' && err.detail?.missing?.length) {
+    return `BDF 자료는 호선(또는 프로젝트)·구역·해석 종류가 있어야 확정할 수 있습니다 — 빠진 칸: ${requiredText(err.detail.missing)}`;
+  }
   return ERROR_LABELS[code] || fallback;
 }
 
@@ -94,8 +160,9 @@ export function formatBytes(n) {
   return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`;
 }
 
-export const FACET_LABELS = { hull: '호선', ship_type: '선종', analysis_type: '해석 종류', zone: '구역',
-  year: '해석 연도', tag: '태그', uploaded_by: '올린 사람', kind: '파일 종류' };
+// 15 — '해석 연도'(year)는 해석 시기와 함께 없앴다
+export const FACET_LABELS = { hull: '호선', project: '프로젝트', ship_type: '선종', analysis_type: '해석 종류', zone: '구역',
+  tag: '태그', uploaded_by: '올린 사람', kind: '파일 종류' };
 
 export const EXTRACT_LABELS = {
   queued: '본문 추출 대기 중', failed: '본문을 읽지 못했습니다',
@@ -118,7 +185,13 @@ export const MODEL_STATE_LABELS = {
 };
 
 export const MATCH_LABELS = { entry_id: 'Entry 번호', hull: '호선', title: '제목', tag: '태그',
-  analysis_type: '해석 종류', description: '설명', file: '파일명', body: '본문' };
+  analysis_type: '해석 종류', description: '설명', file: '파일명', body: '본문',
+  project: '프로젝트', document_type: '문서 분류' };   // 21
+
+// 23 — 문서 분류 목록과 빠른 구분(보고서/발표자료/기타) 묶음은 프런트에 사본을 두지 않는다 — 서버(models.REPORT_DOCUMENT_TYPES·
+// report_catalog.DOCUMENT_TYPE_GROUPS)가 GET /api/reports 의 document_type_options·document_type_groups 로 내려준다.
+/** 21 — 자료 소속(호선·프로젝트·공용에서 파생 — 서버 report_catalog.scope_of). */
+export const SCOPE_LABELS = { hull: '호선 관련', project: '독립 프로젝트', reference: '공통 참고자료', unclassified: '미분류' };
 
 /** ISO 시각 → 'YYYY-MM-DD HH:MM'. 없으면 '—'. */
 export function formatDateTime(iso) {

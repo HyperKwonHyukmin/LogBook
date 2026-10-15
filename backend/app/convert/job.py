@@ -5,12 +5,14 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from .. import jobs, models
+from .. import isolated, jobs, models
 from ..bdf.deck import DeckReader, DeckTooLarge
 from ..bdf.fingerprint import fingerprint
 from ..bdf.lbm import VERSION as LBM_VERSION, write_lbm
 from ..bdf.model import ModelError, build_model
+from ..bdf.signature import Signature, compute_signature
 from ..bdf.thumbnail import render_thumbnail
+from ..config import settings
 from ..entries.files import entry_dir
 from ..entries.locate import FileUnavailable
 from ..storage.paths import StoragePaths, long_join, to_long
@@ -66,12 +68,23 @@ def _row(db: Session, f: models.File) -> models.ModelSummary:
     return row
 
 
+def set_signature(row: models.ModelSummary, sig: Signature | None) -> None:
+    """내용 서명(12)을 행에 적는다. None 이면 지운다(모델이 아니게 된 파일 — include·건너뜀)."""
+    row.sig_version = sig.version if sig else None
+    row.sig_geometry = sig.geometry if sig else None
+    row.sig_property = sig.property if sig else None
+    row.sig_material = sig.material if sig else None
+    row.sig_load = sig.load if sig else None
+    row.sig_other = sig.other if sig else None
+
+
 def _finish(db: Session, row: models.ModelSummary, state: str, error: str | None = None) -> None:
     row.state, row.error = state, (error or None) and error[:500]
     # 실패해도 이전 결과(key)가 있으면 지문은 남긴다 — 뷰어가 이전 결과를 계속 보여 주는 것과 맞춘다
     keep_text = state == "done" or (state == "failed" and row.key)
     if not keep_text:
         db.query(models.FileText).filter_by(file_id=row.file_id, locator="model").delete(synchronize_session=False)
+        set_signature(row, None)   # 내용 서명도 지문과 같은 규칙으로 남기거나 지운다
     db.commit()
 
 
@@ -113,6 +126,7 @@ def _mark_included(db: Session, siblings: list[models.File], includes: list[str]
             row = _row(db, s)
             row.state, row.error = "include", None
             row.warnings = []  # 단독 변환 때 남은 경고(missing_node 등)는 include 파일에 의미가 없다
+            set_signature(row, None)   # include 조각은 홀로 '같은 모델' 비교 대상이 아니다
             db.query(models.FileText).filter_by(file_id=s.id, locator="model").delete(synchronize_session=False)
 
 
@@ -129,11 +143,12 @@ def _requeue_dropped(db: Session, siblings: list[models.File], before: list[str]
                 enqueue_convert(db, s)
 
 
-def _opener(root: Path):
+def _opener(root: Path, max_bytes: int | None = None):
     def read(rel: str) -> bytes:
         with open(long_join(root, rel), "rb") as fh:
-            # 파일 하나가 상한을 넘으면 읽기 전에 멈춘다(누적 상한은 DeckReader 가 본다)
-            if os.fstat(fh.fileno()).st_size > MAX_MODEL_BYTES:
+            # 파일 하나가 상한을 넘으면 읽기 전에 멈춘다(누적 상한은 DeckReader 가 본다).
+            # 상한은 부를 때 읽는다 — 자식 프로세스(convert_deck)는 부모가 넘긴 값을 쓴다
+            if os.fstat(fh.fileno()).st_size > (MAX_MODEL_BYTES if max_bytes is None else max_bytes):
                 raise DeckTooLarge(rel)
             data = fh.read()
         if data.startswith(DRM_MAGIC):
@@ -179,66 +194,94 @@ def run_convert(db: Session, storage: StoragePaths, f: models.File) -> None:
         return _finish(db, row, "include")
 
     where = (f.location, f.rel_path, f.entry_id)
-    reader = DeckReader(_opener(root), max_bytes=MAX_MODEL_BYTES)
-    try:
-        cards = reader.read(f.rel_path)
-    except EncryptedFile:
+    # 읽기·파싱·lbm/썸네일 쓰기는 자식 프로세스에서 제한 시간 안에(리뷰 9 — 넘으면 isolated.HeavyTimeout,
+    # 워커가 최종 실패로 끝낸다). 파일 없음·잠김(OSError)은 그대로 올라와 작업 큐가 재시도한다
+    out = isolated.run(convert_deck, str(root), f.rel_path, str(storage.root), MAX_MODEL_BYTES,
+                       timeout=settings.convert_timeout)
+    status = out["status"]
+    if status == "drm":
         f.drm_encrypted = True
         return _finish(db, row, "skipped", "drm")
-    except DeckTooLarge:
-        reader = None
+    if status == "too_large":
         return _finish(db, row, "skipped", "too_large")
-    except MemoryError:
-        reader = None           # 붙잡은 카드를 먼저 놓아 준다
+    if status == "read_memory_error":
         log.warning("BDF 변환 메모리 부족: file=%s %s", f.id, f.name)
         return _finish(db, row, "failed", "memory_error")
-    # 그 밖의 OSError(파일 없음·잠김)는 위로 — 작업 큐가 재시도한다
 
     # 읽는 동안 확정 등으로 파일이 옮겨졌으면 결과를 옛 위치 기준으로 남기지 않고 다시 돈다.
     # 커밋으로 트랜잭션을 끝내야(MySQL REPEATABLE READ) 다른 세션이 커밋한 이동이 보인다.
+    # (파생물은 이미 내용 해시 이름으로 써졌을 수 있지만 같은 내용이면 같은 파일이라 해가 없다)
     db.commit()
     db.refresh(f)
     if (f.location, f.rel_path, f.entry_id) != where:
         raise FileMoved(f"변환 중 파일이 옮겨짐: {where[1]} → {f.rel_path}")
 
-    row.includes, row.missing = reader.includes, reader.missing
-    _requeue_dropped(db, siblings, previous_includes, reader.includes)
+    row.includes, row.missing = out["includes"], out["missing"]
+    _requeue_dropped(db, siblings, previous_includes, out["includes"])
+    if status == "no_elements":
+        row.warnings = out["warnings"][:MAX_WARNINGS]
+        _mark_included(db, siblings, out["includes"])
+        return _finish(db, row, "skipped", "no_elements")
+    if status == "model_error":   # 모델이 표시 규칙을 벗어났다(예: int32 를 넘는 ID)
+        log.warning("BDF 변환 실패: file=%s %s — %s", f.id, f.name, out["error"])
+        return _finish(db, row, "failed", out["error"])
+    if status == "memory_error":
+        log.warning("BDF 변환 메모리 부족: file=%s %s", f.id, f.name)
+        return _finish(db, row, "failed", "memory_error")
+    if status == "failed":   # 모델이 깨졌다 — 다시 돌려도 같으니 실패로 기록하고 끝낸다
+        log.warning("BDF 변환 실패: file=%s %s — %s", f.id, f.name, out["error"])
+        return _finish(db, row, "failed", out["error"])
+
+    row.state, row.error, row.key = "done", None, out["key"]
+    row.format_version = LBM_VERSION
+    row.counts, row.bbox = out["counts"], out["bbox"]
+    row.sol = out["sol"][:MAX_SOL_CHARS] if out["sol"] else None
+    row.fingerprint, row.warnings = out["fingerprint"], out["warnings"][:MAX_WARNINGS]
+    set_signature(row, out["signature"])
+    db.query(models.FileText).filter_by(file_id=f.id, locator="model").delete(synchronize_session=False)
+    db.add(models.FileText(file_id=f.id, seq=0, locator="model", text=out["fingerprint"]))
+    _mark_included(db, siblings, out["includes"])
+    db.commit()
+
+
+def convert_deck(root: str, rel_path: str, storage_root: str, max_bytes: int) -> dict:
+    """BDF 를 읽어 모델을 만들고 lbm·썸네일을 공유 폴더(20_Derived)에 쓴다 — 자식 프로세스에서 돈다(app.isolated).
+    DB 는 만지지 않는다. 결과는 status 와 DB 에 적을 값의 dict. 읽기 OSError·파생물 쓰기 OSError 는 그대로 던진다."""
+    reader = DeckReader(_opener(Path(root), max_bytes), max_bytes=max_bytes)
+    try:
+        cards = reader.read(rel_path)
+    except EncryptedFile:
+        return {"status": "drm"}
+    except DeckTooLarge:
+        return {"status": "too_large"}
+    except MemoryError:
+        reader = None           # 붙잡은 카드를 먼저 놓아 준다
+        return {"status": "read_memory_error"}
+    out = {"includes": list(reader.includes), "missing": list(reader.missing), "warnings": []}
     try:
         model = build_model(cards, sol=reader.sol, warnings=reader.warnings,
                             includes=reader.includes, missing=reader.missing)
         if model.element_total() == 0:
-            row.warnings = model.warnings[:MAX_WARNINGS]
-            _mark_included(db, siblings, reader.includes)
-            return _finish(db, row, "skipped", "no_elements")
+            return {**out, "status": "no_elements", "warnings": list(model.warnings)}
         lbm = write_lbm(model)
         png = render_thumbnail(model)
         fp = fingerprint(model)
-    except ModelError as exc:   # 모델이 표시 규칙을 벗어났다(예: int32 를 넘는 ID)
-        log.warning("BDF 변환 실패: file=%s %s — %s", f.id, f.name, exc.code)
-        return _finish(db, row, "failed", exc.code)
+        sig = compute_signature(cards, reader.control, reader.sol)
+    except ModelError as exc:
+        return {**out, "status": "model_error", "error": exc.code}
     except MemoryError:
         cards = model = reader.cards = None
-        log.warning("BDF 변환 메모리 부족: file=%s %s", f.id, f.name)
-        return _finish(db, row, "failed", "memory_error")
-    except Exception as exc:  # 모델이 깨졌다 — 다시 돌려도 같으니 실패로 기록하고 끝낸다
-        log.warning("BDF 변환 실패: file=%s %s — %s", f.id, f.name, exc)
-        return _finish(db, row, "failed", f"{type(exc).__name__}: {exc}")
+        return {**out, "status": "memory_error"}
+    except Exception as exc:
+        return {**out, "status": "failed", "error": f"{type(exc).__name__}: {exc}"}
     del cards
 
     key = reader.digest
-    lbm_path, png_path = model_paths(storage, key)
+    lbm_path, png_path = model_paths(StoragePaths(Path(storage_root)), key)
     _write(lbm_path, lbm)       # 실패(OSError)는 위로 — 재시도
     _write(png_path, png)
-
-    row.state, row.error, row.key = "done", None, key
-    row.format_version = LBM_VERSION
-    row.counts, row.bbox = model.counts(), model.bbox()
-    row.sol = model.sol[:MAX_SOL_CHARS] if model.sol else None
-    row.fingerprint, row.warnings = fp, model.warnings[:MAX_WARNINGS]
-    db.query(models.FileText).filter_by(file_id=f.id, locator="model").delete(synchronize_session=False)
-    db.add(models.FileText(file_id=f.id, seq=0, locator="model", text=fp))
-    _mark_included(db, siblings, reader.includes)
-    db.commit()
+    return {**out, "status": "done", "key": key, "counts": model.counts(), "bbox": model.bbox(),
+            "sol": model.sol, "fingerprint": fp, "warnings": list(model.warnings), "signature": sig}
 
 
 def requeue_entry_models(db: Session, entry_id: int) -> int:

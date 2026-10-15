@@ -12,6 +12,7 @@ backend/.venv/
 backend/.env*
 !backend/.env.example
 backend/.pytest_cache/
+backend/.report-search/
 
 # frontend (dist 는 145 배포를 위해 커밋한다)
 frontend/node_modules/

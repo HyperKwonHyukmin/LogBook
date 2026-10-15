@@ -1,13 +1,16 @@
-"""Entry API — 조회·수정·확정·쪼개기·합치기·파일 이동·휴지통·복원."""
+"""Entry API — 조회·수정·확정·쪼개기·합치기·파일 이동·휴지통·복원·공개 단계(13, 15 규칙).
+
+13 — 볼 수 없는 Entry 는 모든 경로에서 404(존재를 숨긴다). _entry(db, id, user) 가 그 한 곳이다."""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import access, models
 from ..database import get_db
 from ..dependencies import client_ip, get_storage, require_auth
 from ..entries import service
 from ..entries.files import entry_dir
+from ..favorites import favorite_pks
 from ..storage.paths import StoragePaths
 
 router = APIRouter(prefix="/api", tags=["entries"])
@@ -18,11 +21,24 @@ class EntryPatch(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     analysis_type: str | None = Field(default=None, max_length=50)
     description: str | None = None
-    analysis_period: str | None = None
     hulls: list[str] | None = None
     zones: list[str] | None = None
     tags: list[str] | None = None
     merge_into_id: str | None = None
+    access: str | None = Field(default=None, pattern="^(shared|normal|blocked)$")   # 15 — 초안에서만
+    no_hull: bool | None = None       # 20 — '호선 없음(공용)'
+    title_auto: bool | None = None    # 20 — 제목을 형식대로 다시 만들기(호선·구역·해석 종류 + 구별자)
+    project: str | None = Field(default=None, max_length=100)   # 21 — 프로젝트(빈 값·null 이면 지운다)
+
+
+class AccessBody(BaseModel):
+    """15 — 공개 단계: 공유(LV1 이상) · 일반(LV2 이상) · 블록(LV3 만)."""
+    access: str = Field(pattern="^(shared|normal|blocked)$")
+    version: int | None = None
+
+
+class GrantBody(BaseModel):
+    employee_id: str = Field(min_length=1, max_length=20)
 
 
 class SplitBody(BaseModel):
@@ -37,93 +53,166 @@ class MoveBody(BaseModel):
     to_entry_id: str
 
 
-def _entry(db: Session, entry_id: str) -> models.Entry:
+def _entry(db: Session, entry_id: str, user: models.User) -> models.Entry:
+    """번호로 Entry 를 찾는다 — 없거나 이 사용자가 볼 수 없으면 404 entry_not_found(13)."""
     e = db.query(models.Entry).filter_by(entry_id=entry_id.upper()).first()
-    if e is None:
-        raise HTTPException(status_code=404, detail="entry_not_found")
-    return e
+    return access.ensure_visible(db, user, e)
 
 
-def _detail(db: Session, storage: StoragePaths, e: models.Entry) -> dict:
-    """상세 응답 — Entry 사전 + 공유 폴더 경로(확정 Entry 만, 화면의 '경로 복사'용)."""
-    d = service.entry_to_dict(db, e)
+def _detail(db: Session, storage: StoragePaths, e: models.Entry, user: models.User) -> dict:
+    """상세 응답 — Entry 사전 + 공유 폴더 경로(확정 Entry 만, 화면의 '경로 복사'용) + 내 즐겨찾기 여부(10)."""
+    d = service.entry_to_dict(db, e, viewer=user)
     d["vault_unc"] = str(entry_dir(storage, e)) if e.status == "confirmed" and e.vault_rel else None
+    d["favorite"] = bool(e.id in favorite_pks(db, user.employee_id, [e.id]))
     return d
 
 
 @router.get("/entries/{entry_id}")
 def get_entry(entry_id: str, db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage),
               user: models.User = Depends(require_auth)):
-    return _detail(db, storage, _entry(db, entry_id))
+    return _detail(db, storage, _entry(db, entry_id, user), user)
 
 
 @router.get("/entries/{entry_id}/history")
 def entry_history(entry_id: str, db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
     """이 Entry 의 변경 이력(감사 로그) — 최근 것부터 200건."""
-    e = _entry(db, entry_id)
-    rows = (db.query(models.AuditLog).filter_by(target_type="entry", target_id=e.entry_id)
-            .order_by(models.AuditLog.at.desc(), models.AuditLog.id.desc()).limit(200).all())
+    e = _entry(db, entry_id, user)
+    q = db.query(models.AuditLog).filter_by(target_type="entry", target_id=e.entry_id)
+    if not access.can_edit_entry(user, e):
+        # 13 — 열람 허락 명단은 공개 범위를 바꿀 수 있는 사람(올린 사람·관리자 이상)에게만
+        q = q.filter(models.AuditLog.action.notin_(("ENTRY_GRANT", "ENTRY_REVOKE")))
+    rows = q.order_by(models.AuditLog.at.desc(), models.AuditLog.id.desc()).limit(200).all()
+
+    def subject(r):   # 열람 허락·회수의 대상 사번(13)
+        if r.action in ("ENTRY_GRANT", "ENTRY_REVOKE"):
+            return ((r.after or r.before) or {}).get("employee_id")
+        return None
+
+    ids = {r.employee_id for r in rows if r.employee_id} | {s for r in rows if (s := subject(r))}
     names = dict(db.query(models.User.employee_id, models.User.name)
-                 .filter(models.User.employee_id.in_({r.employee_id for r in rows if r.employee_id} or {""})))
-    return [{"at": r.at.isoformat(), "employee_id": r.employee_id, "name": names.get(r.employee_id),
-             "action": r.action, "before": r.before, "after": r.after} for r in rows]
+                 .filter(models.User.employee_id.in_(ids or {""})))
+    # 15 — 허락 대상은 LogBook 에 들어온 적 없는 WorkBench 사용자일 수 있다 — 이름을 WorkBench 에서 보탠다
+    missing = {s for r in rows if (s := subject(r)) and s not in names}
+    if missing:
+        from .. import wb_users
+
+        try:
+            names |= {k: v.name for k, v in wb_users.fetch_many(db, missing).items()}
+        except wb_users.WbUnavailable:
+            pass
+    out = []
+    for r in rows:
+        d = {"at": r.at.isoformat(), "employee_id": r.employee_id, "name": names.get(r.employee_id),
+             "action": r.action, "before": r.before, "after": r.after}
+        if (s := subject(r)) is not None:
+            d["subject_name"] = names.get(s)     # 화면이 사번 대신 이름을 보이게
+        out.append(d)
+    return out
 
 
 @router.patch("/entries/{entry_id}")
 def patch_entry(entry_id: str, body: EntryPatch, request: Request, db: Session = Depends(get_db),
                 storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
-    e = service.update_entry(db, storage, _entry(db, entry_id), user, body.model_dump(exclude_unset=True),
+    e = service.update_entry(db, storage, _entry(db, entry_id, user), user, body.model_dump(exclude_unset=True),
                              client_ip(request))
-    return _detail(db, storage, e)
+    return _detail(db, storage, e, user)
 
 
 @router.post("/entries/{entry_id}/confirm")
-def confirm_entry(entry_id: str, request: Request, db: Session = Depends(get_db),
+def confirm_entry(entry_id: str, request: Request, force: bool = False, db: Session = Depends(get_db),
                   storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
-    e = service.confirm(db, storage, _entry(db, entry_id), user, client_ip(request))
-    return _detail(db, storage, e)
+    # 17 — 완전 동일 BDF 가 그 사이 생겼으면 409 duplicate_model. force=true 는 LV3 만(감사 after.duplicates_forced)
+    e = service.confirm(db, storage, _entry(db, entry_id, user), user, client_ip(request), force=force)
+    return _detail(db, storage, e, user)
 
 
 @router.post("/entries/{entry_id}/split")
 def split_entry(entry_id: str, body: SplitBody, db: Session = Depends(get_db),
                 user: models.User = Depends(require_auth)):
-    return service.entry_to_dict(db, service.split(db, _entry(db, entry_id), user, body.file_ids))
+    return service.entry_to_dict(db, service.split(db, _entry(db, entry_id, user), user, body.file_ids), viewer=user)
 
 
 @router.post("/entries/{entry_id}/merge")
 def merge_entry(entry_id: str, body: MergeBody, db: Session = Depends(get_db),
                 user: models.User = Depends(require_auth)):
-    e = service.merge(db, _entry(db, entry_id), _entry(db, body.from_entry_id), user)
-    return service.entry_to_dict(db, e)
+    e = service.merge(db, _entry(db, entry_id, user), _entry(db, body.from_entry_id, user), user)
+    return service.entry_to_dict(db, e, viewer=user)
 
 
 @router.post("/files/{file_id}/move")
 def move_file(file_id: int, body: MoveBody, db: Session = Depends(get_db),
               user: models.User = Depends(require_auth)):
     f = db.get(models.File, file_id)
-    if f is None or f.entry_id is None:
+    if f is None or f.entry_id is None or not access.file_visible(db, user, f):
         raise HTTPException(status_code=404, detail="file_not_found")
-    service.move_file(db, f, _entry(db, body.to_entry_id), user)
+    service.move_file(db, f, _entry(db, body.to_entry_id, user), user)
     return {"ok": True}
 
 
 @router.delete("/entries/{entry_id}")
 def trash_entry(entry_id: str, request: Request, db: Session = Depends(get_db),
                 storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
-    e = service.trash(db, storage, _entry(db, entry_id), user, client_ip(request))
-    return service.entry_to_dict(db, e)
+    e = service.trash(db, storage, _entry(db, entry_id, user), user, client_ip(request))
+    return service.entry_to_dict(db, e, viewer=user)
 
 
 @router.post("/entries/{entry_id}/restore")
 def restore_entry(entry_id: str, request: Request, db: Session = Depends(get_db),
                   storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
-    e = service.restore(db, storage, _entry(db, entry_id), user, client_ip(request))
-    return _detail(db, storage, e)
+    e = service.restore(db, storage, _entry(db, entry_id, user), user, client_ip(request))
+    return _detail(db, storage, e, user)
 
 
 @router.get("/trash")
 def list_trash(db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
-    rows = (db.query(models.Entry).filter_by(status="trashed")
+    rows = (db.query(models.Entry).filter(models.Entry.status == "trashed", access.visible_entries_filter(user))
             .order_by(models.Entry.updated_at.desc(), models.Entry.id.desc()).limit(200))
     return [{"entry_id": e.entry_id, "title": e.title, "trash_rel": e.trash_rel,
-             "restorable": bool(e.vault_rel), "updated_at": e.updated_at.isoformat()} for e in rows]
+             "restorable": bool(e.vault_rel), "updated_at": e.updated_at.isoformat(),
+             "can_restore": access.can_edit_entry(user, e), **access.access_brief(e)} for e in rows]
+
+
+# ---- 13: 공개 범위·열람 허락 ----
+
+@router.put("/entries/{entry_id}/access")
+def put_access(entry_id: str, body: AccessBody, request: Request, db: Session = Depends(get_db),
+               storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    """공개 단계 바꾸기 — 공유↔일반은 올린 사람 + LV3, 블록 지정·해제는 LV3 만(아니면 403). 감사 ENTRY_ACCESS."""
+    e = service.set_access(db, storage, _entry(db, entry_id, user), user, body.access, body.version,
+                           client_ip(request))
+    return _detail(db, storage, e, user)
+
+
+@router.put("/entries/{entry_id}/grants")
+def add_grant(entry_id: str, body: GrantBody, request: Request, db: Session = Depends(get_db),
+              storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    """개별 열람 허락 주기 — 대상은 WorkBench 활성 사용자(LV1 포함). 블록 자료는 LV3 만."""
+    e = _entry(db, entry_id, user)
+    service.grant(db, storage, e, user, body.employee_id, client_ip(request))
+    return {"grants": service.grants_of(db, e)}
+
+
+@router.delete("/entries/{entry_id}/grants/{employee_id}")
+def delete_grant(entry_id: str, employee_id: str, request: Request, db: Session = Depends(get_db),
+                 storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    e = _entry(db, entry_id, user)
+    service.revoke(db, storage, e, user, employee_id, client_ip(request))
+    return {"grants": service.grants_of(db, e)}
+
+
+@router.get("/users/lookup")
+def lookup_users(q: str = "", db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
+    """열람 허락 대상 찾기(15) — WorkBench 활성 사용자(이름·사번 앞부분, 20명). 로그인한 누구나(자기 자료에 허락을 준다)."""
+    from .. import wb_users
+
+    q = q.strip()
+    if not q:
+        return []
+    try:
+        rows = wb_users.list_active(db, q, limit=20)
+    except wb_users.WbUnavailable:
+        raise HTTPException(status_code=503, detail="wb_unavailable")
+    levels = dict(db.query(models.User.employee_id, models.User.level)
+                  .filter(models.User.employee_id.in_([u.employee_id for u in rows] or [""])))
+    return [{"employee_id": u.employee_id, "name": u.name, "department": u.department,
+             "level": 3 if u.is_admin else (levels.get(u.employee_id) or 1)} for u in rows]

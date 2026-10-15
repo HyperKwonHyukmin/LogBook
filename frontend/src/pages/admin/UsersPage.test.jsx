@@ -2,17 +2,22 @@ import { afterEach, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UsersPage from './UsersPage.jsx';
+import { AuthContext } from '../../auth/AuthContext.jsx';
 
-const PENDING = [{ employee_id: 'A100002', name: '대기자', department: '구조팀', status: 'pending', is_admin: false, created_at: '2026-09-29T09:00:00' }];
-const ACTIVE = [{ employee_id: 'A100004', name: '활성자', department: '구조팀', status: 'active', is_admin: false, created_at: '2026-09-29T09:00:00' }];
-const DISABLED = [{ employee_id: 'A100003', name: '비활성자', department: null, status: 'disabled', is_admin: false, created_at: '2026-09-29T09:00:00' }];
+const ME = { employee_id: 'A900001', name: '나관리', level: 3, wb_admin: false };
+const ROWS = [
+  { employee_id: 'A900001', name: '나관리', department: '구조', level: 3, stored_level: 3, wb_active: true, wb_admin: false, known: true, last_login: '2026-10-08T09:00:00' },
+  { employee_id: 'A100001', name: '김일반', department: '구조팀', position: '책임', level: 2, stored_level: 2, wb_active: true, wb_admin: false, known: true, last_login: '2026-10-07T10:00:00' },
+  { employee_id: 'A100002', name: '이처음', department: null, level: 1, stored_level: 1, wb_active: true, wb_admin: false, known: false, last_login: null },
+  { employee_id: 'W100001', name: '박WB', department: '전산', level: 3, stored_level: 1, wb_active: true, wb_admin: true, known: true, last_login: null },
+  { employee_id: 'D100001', name: '최떠남', department: null, level: 2, stored_level: 2, wb_active: false, wb_admin: false, known: true, last_login: null },
+];
 
 function routeFetch(handlers) {
   vi.stubGlobal('fetch', vi.fn((url, init = {}) => {
     const key = `${init.method || 'GET'} ${url}`;
     const body = handlers[key];
     if (body === undefined) throw new Error(`unexpected ${key}`);
-    if (body instanceof Error) return Promise.reject(body);
     if (body.__status) {
       return Promise.resolve({ ok: false, status: body.__status, json: () => Promise.resolve({ detail: body.detail }) });
     }
@@ -20,210 +25,84 @@ function routeFetch(handlers) {
   }));
 }
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
+function renderPage() {
+  return render(<AuthContext.Provider value={{ user: ME }}><UsersPage /></AuthContext.Provider>);
+}
 
-/** 확인 대화상자에서 고른다(ok=true 면 확인 단추, 아니면 취소). */
+afterEach(() => { vi.restoreAllMocks(); });
+
 async function answer(ok) {
   const dialog = await screen.findByRole('alertdialog');
   const buttons = within(dialog).getAllByRole('button');
   await userEvent.click(ok ? buttons[buttons.length - 1] : within(dialog).getByRole('button', { name: '취소' }));
 }
 
-test('승인 대기 목록을 보여 주고 승인하면 목록을 다시 불러온다', async () => {
-  routeFetch({
-    'GET /api/admin/users?status=pending': PENDING,
-    'POST /api/admin/users/A100002/approve': { ...PENDING[0], status: 'active' },
-  });
-  render(<UsersPage />);
-  const row = (await screen.findByText('대기자')).closest('tr');
-  await userEvent.click(within(row).getByRole('button', { name: '승인' }));
-  const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
-  expect(calls).toContain('POST /api/admin/users/A100002/approve');
-  expect(calls.filter((c) => c === 'GET /api/admin/users?status=pending')).toHaveLength(2);
+const rowOf = async (name) => (await screen.findByText(name)).closest('tr');
+
+test('WorkBench 사용자 목록 — 등급 고르기·잠금 표시(나·WorkBench 관리자·비활성)', async () => {
+  routeFetch({ 'GET /api/admin/users': ROWS });
+  renderPage();
+  const general = await rowOf('김일반');
+  expect(within(general).getByRole('combobox', { name: '김일반 등급' })).toHaveValue('2');
+  expect(within(await rowOf('이처음')).getByText('들어온 적 없음')).toBeInTheDocument();
+  const wb = await rowOf('박WB');
+  expect(within(wb).queryByRole('combobox')).toBeNull();
+  expect(within(wb).getByText('LV3 관리자')).toBeInTheDocument();
+  expect(within(wb).getByText('WorkBench 관리자 · 자동')).toBeInTheDocument();
+  const mine = await rowOf('나관리');
+  expect(within(mine).queryByRole('combobox')).toBeNull();
+  expect(within(mine).getByText('나')).toBeInTheDocument();
+  expect(within(await rowOf('최떠남')).getByText('WorkBench 비활성')).toBeInTheDocument();
+  // 등급별 거르기 — 개수
+  const tabs = screen.getByRole('tablist', { name: '등급으로 거르기' });
+  expect(within(tabs).getByRole('tab', { name: /LV3/ })).toHaveTextContent('2');
+  await userEvent.click(within(tabs).getByRole('tab', { name: /LV1/ }));
+  expect(screen.queryByText('김일반')).toBeNull();
+  expect(screen.getByText('이처음')).toBeInTheDocument();
 });
 
-test('탭을 바꾸면 해당 상태로 조회한다', async () => {
-  routeFetch({ 'GET /api/admin/users?status=pending': [], 'GET /api/admin/users?status=active': [] });
-  render(<UsersPage />);
-  await userEvent.click(screen.getByRole('tab', { name: '활성' }));
-  const calls = fetch.mock.calls.map(([u]) => u);
-  expect(calls).toContain('/api/admin/users?status=active');
-});
-
-test('이미 처리된 사용자(409 not_pending)면 안내하고 목록을 새로 고친다', async () => {
-  routeFetch({
-    'GET /api/admin/users?status=pending': PENDING,
-    'POST /api/admin/users/A100002/approve': { __status: 409, detail: 'not_pending' },
-  });
-  render(<UsersPage />);
-  const row = (await screen.findByText('대기자')).closest('tr');
-  await userEvent.click(within(row).getByRole('button', { name: '승인' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('이미 처리된 사용자입니다. 목록을 새로 고칩니다.');
-  const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
-  expect(calls.filter((c) => c === 'GET /api/admin/users?status=pending')).toHaveLength(2);
-});
-
-test('이미 처리된 사용자(409 not_disabled)면 안내하고 목록을 새로 고친다', async () => {
-  routeFetch({
-    'GET /api/admin/users?status=disabled': DISABLED,
-    'GET /api/admin/users?status=pending': [],
-    'POST /api/admin/users/A100003/enable': { __status: 409, detail: 'not_disabled' },
-  });
-  render(<UsersPage />);
-  await userEvent.click(screen.getByRole('tab', { name: '비활성' }));
-  const row = (await screen.findByText('비활성자')).closest('tr');
-  await userEvent.click(within(row).getByRole('button', { name: '재활성화' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('이미 처리된 사용자입니다. 목록을 새로 고칩니다.');
-  const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
-  expect(calls.filter((c) => c === 'GET /api/admin/users?status=disabled')).toHaveLength(2);
-});
-
-test('이미 처리된 사용자(409 not_active)면 안내하고 목록을 새로 고친다', async () => {
-  routeFetch({
-    'GET /api/admin/users?status=active': ACTIVE,
-    'POST /api/admin/users/A100004/disable': { __status: 409, detail: 'not_active' },
-  });
-  render(<UsersPage />);
-  await userEvent.click(screen.getByRole('tab', { name: '활성' }));
-  const row = (await screen.findByText('활성자')).closest('tr');
-  await userEvent.click(within(row).getByRole('button', { name: '비활성화' }));
-  await answer(true);
-  expect(await screen.findByRole('alert')).toHaveTextContent('이미 처리된 사용자입니다. 목록을 새로 고칩니다.');
-  const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
-  expect(calls.filter((c) => c === 'GET /api/admin/users?status=active')).toHaveLength(2);
-});
-
-test('이미 삭제된 사용자(404 user_not_found)면 안내하고 목록을 새로 고친다', async () => {
-  routeFetch({
-    'GET /api/admin/users?status=pending': PENDING,
-    'POST /api/admin/users/A100002/approve': { __status: 404, detail: 'user_not_found' },
-  });
-  render(<UsersPage />);
-  const row = (await screen.findByText('대기자')).closest('tr');
-  await userEvent.click(within(row).getByRole('button', { name: '승인' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('이미 처리된 사용자입니다. 목록을 새로 고칩니다.');
-  const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
-  expect(calls.filter((c) => c === 'GET /api/admin/users?status=pending')).toHaveLength(2);
-});
-
-test('처리 중에는 해당 행의 버튼이 비활성화된다', async () => {
-  let resolveApprove;
-  vi.stubGlobal('fetch', vi.fn((url, init = {}) => {
-    const key = `${init.method || 'GET'} ${url}`;
-    if (key === 'GET /api/admin/users?status=pending') {
-      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(PENDING) });
-    }
-    if (key === 'POST /api/admin/users/A100002/approve') {
-      return new Promise((resolve) => { resolveApprove = resolve; });
-    }
-    throw new Error(`unexpected ${key}`);
-  }));
-  render(<UsersPage />);
-  const row = (await screen.findByText('대기자')).closest('tr');
-  const approveBtn = within(row).getByRole('button', { name: '승인' });
-  const rejectBtn = within(row).getByRole('button', { name: '거절' });
-  await userEvent.click(approveBtn);
-  expect(approveBtn).toBeDisabled();
-  expect(rejectBtn).toBeDisabled();
-  resolveApprove({ ok: true, status: 200, json: () => Promise.resolve({ ...PENDING[0], status: 'active' }) });
-  await waitFor(() => expect(approveBtn).not.toBeDisabled());
-});
-
-test('거절 확인 대화상자에서 취소하면 요청을 보내지 않는다', async () => {
-  routeFetch({ 'GET /api/admin/users?status=pending': PENDING });
-  render(<UsersPage />);
-  const row = (await screen.findByText('대기자')).closest('tr');
-  await userEvent.click(within(row).getByRole('button', { name: '거절' }));
-  await answer(false);
+test('등급을 바꾸면 PUT /level 후 다시 불러온다(LV1↔LV2 는 바로)', async () => {
+  routeFetch({ 'GET /api/admin/users': ROWS, 'PUT /api/admin/users/A100001/level': { ...ROWS[1], level: 1 } });
+  renderPage();
+  const row = await rowOf('김일반');
+  await userEvent.selectOptions(within(row).getByRole('combobox'), '1');
+  await waitFor(() => expect(fetch.mock.calls.some(([u, i]) => u === '/api/admin/users/A100001/level' && i?.method === 'PUT')).toBe(true));
+  const [, init] = fetch.mock.calls.find(([u, i]) => u === '/api/admin/users/A100001/level' && i?.method === 'PUT');
+  expect(JSON.parse(init.body)).toEqual({ level: 1 });
   expect(screen.queryByRole('alertdialog')).toBeNull();
-  const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
-  expect(calls).not.toContain('POST /api/admin/users/A100002/reject');
 });
 
-test('거절 확인 대화상자에서 확인하면 요청을 보낸다', async () => {
-  routeFetch({
-    'GET /api/admin/users?status=pending': PENDING,
-    'POST /api/admin/users/A100002/reject': { ...PENDING[0], status: 'disabled' },
-  });
-  render(<UsersPage />);
-  const row = (await screen.findByText('대기자')).closest('tr');
-  await userEvent.click(within(row).getByRole('button', { name: '거절' }));
-  await answer(true);
-  const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
-  expect(calls).toContain('POST /api/admin/users/A100002/reject');
-});
-
-test('비활성화 확인 대화상자에서 취소하면 요청을 보내지 않는다', async () => {
-  routeFetch({ 'GET /api/admin/users?status=active': ACTIVE });
-  render(<UsersPage />);
-  await userEvent.click(screen.getByRole('tab', { name: '활성' }));
-  const row = (await screen.findByText('활성자')).closest('tr');
-  await userEvent.click(within(row).getByRole('button', { name: '비활성화' }));
+test('LV3 지정은 확인을 묻는다(취소하면 보내지 않는다)', async () => {
+  routeFetch({ 'GET /api/admin/users': ROWS, 'PUT /api/admin/users/A100002/level': { ...ROWS[2], level: 3 } });
+  renderPage();
+  const row = await rowOf('이처음');
+  await userEvent.selectOptions(within(row).getByRole('combobox'), '3');
   await answer(false);
-  const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
-  expect(calls).not.toContain('POST /api/admin/users/A100004/disable');
+  expect(fetch.mock.calls.some(([u, i]) => i?.method === 'PUT')).toBe(false);
+  await userEvent.selectOptions(within(row).getByRole('combobox'), '3');
+  await answer(true);
+  await waitFor(() => expect(fetch.mock.calls.some(([u, i]) => u === '/api/admin/users/A100002/level' && i?.method === 'PUT')).toBe(true));
 });
 
-test('로딩 중에는 없음 안내가 나타나지 않는다', async () => {
-  let resolveGet;
-  vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => { resolveGet = resolve; })));
-  render(<UsersPage />);
-  expect(screen.queryByText('해당하는 사용자가 없습니다.')).not.toBeInTheDocument();
-  resolveGet({ ok: true, status: 200, json: () => Promise.resolve([]) });
-  expect(await screen.findByText('해당하는 사용자가 없습니다.')).toBeInTheDocument();
+test('찾기 — 이름·사번으로 서버에 묻는다', async () => {
+  routeFetch({ 'GET /api/admin/users': ROWS, 'GET /api/admin/users?q=%EC%9D%B4': [ROWS[2]] });
+  renderPage();
+  await screen.findByText('김일반');
+  await userEvent.type(screen.getByRole('textbox', { name: '사용자 찾기' }), '이');
+  await waitFor(() => expect(screen.queryByText('김일반')).toBeNull());
+  expect(screen.getByText('이처음')).toBeInTheDocument();
 });
 
-test('목록 조회 실패 시 이전 목록을 지운다', async () => {
-  vi.stubGlobal('fetch', vi.fn((url, init = {}) => {
-    const key = `${init.method || 'GET'} ${url}`;
-    if (key === 'GET /api/admin/users?status=pending') {
-      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(PENDING) });
-    }
-    if (key === 'GET /api/admin/users?status=active') return Promise.reject(new Error('network'));
-    throw new Error(`unexpected ${key}`);
-  }));
-  render(<UsersPage />);
-  await screen.findByText('대기자');
-  await userEvent.click(screen.getByRole('tab', { name: '활성' }));
-  await screen.findByRole('alert');
-  expect(screen.queryByText('대기자')).not.toBeInTheDocument();
+test('WorkBench 표를 읽을 수 없으면 원인을 알린다', async () => {
+  routeFetch({ 'GET /api/admin/users': { __status: 503, detail: 'wb_unavailable' } });
+  renderPage();
+  expect(await screen.findByText(/WorkBench 사용자 표를 읽을 수 없습니다/)).toBeInTheDocument();
 });
 
-test('빠르게 탭을 바꾸면 오래된 응답을 무시한다', async () => {
-  let resolvePending;
-  let resolveActive;
-  vi.stubGlobal('fetch', vi.fn((url, init = {}) => {
-    const key = `${init.method || 'GET'} ${url}`;
-    if (key === 'GET /api/admin/users?status=pending') {
-      return new Promise((resolve) => {
-        resolvePending = () => resolve({ ok: true, status: 200, json: () => Promise.resolve(PENDING) });
-      });
-    }
-    if (key === 'GET /api/admin/users?status=active') {
-      return new Promise((resolve) => {
-        resolveActive = () => resolve({ ok: true, status: 200, json: () => Promise.resolve([]) });
-      });
-    }
-    throw new Error(`unexpected ${key}`);
-  }));
-  render(<UsersPage />);
-  await userEvent.click(screen.getByRole('tab', { name: '활성' }));
-  // 활성 탭 요청이 먼저 응답으로 오고, 그보다 먼저 나간 대기 탭 요청이 뒤늦게 도착해도
-  // 화면은 마지막으로 선택한 탭(활성)의 빈 목록을 유지해야 한다.
-  resolveActive();
-  await screen.findByText('해당하는 사용자가 없습니다.');
-  resolvePending();
-  await new Promise((r) => setTimeout(r, 0));
-  expect(screen.queryByText('대기자')).not.toBeInTheDocument();
-});
-
-test('승인 대기 탭은 신청일, 그 외 탭은 가입일 헤더를 쓴다', async () => {
-  routeFetch({ 'GET /api/admin/users?status=pending': [], 'GET /api/admin/users?status=active': [] });
-  render(<UsersPage />);
-  expect(await screen.findByText('신청일')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('tab', { name: '활성' }));
-  expect(await screen.findByText('가입일')).toBeInTheDocument();
-  expect(screen.queryByText('신청일')).not.toBeInTheDocument();
+test('서버 거부 문구(WorkBench 관리자 잠금)', async () => {
+  routeFetch({ 'GET /api/admin/users': ROWS,
+    'PUT /api/admin/users/A100001/level': { __status: 409, detail: 'wb_admin_locked' } });
+  renderPage();
+  await userEvent.selectOptions(within(await rowOf('김일반')).getByRole('combobox'), '1');
+  expect(await screen.findByText(/WorkBench 관리자는 LogBook 에서 자동으로 LV3/)).toBeInTheDocument();
 });

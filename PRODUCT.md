@@ -12,13 +12,15 @@ Their jobs are:
 - Preview it without leaving the page.
 - File their own new results into the shared archive (upload, then confirm).
 
+Users are HiTESS WorkBench members (same employee ID, no separate sign-up). LogBook adds its own levels: LV1 guest (shared items only), LV2 general (everything not blocked), LV3 admin. Items are shared / normal / blocked, with per-person grants.
+
 Sessions are short and frequent (search, glance, copy path), with occasional long reading of a report or a table.
 
 ## Product Purpose
-Logbook ("구조해석 항해일지") is the team's single archive for structural-analysis files and reports. The share folder is the source of truth and the app is the way in. Success means an engineer finds the right past analysis in seconds, trusts where it came from, and never has to dig through personal PCs or network folders again.
+Hi-TESS LogBook ("구조해석 항해일지", part of the Hi-TESS structural-analysis tool family alongside HiTESS WorkBench) is the team's single archive for structural-analysis files and reports. The share folder is the source of truth and the app is the way in. Success means an engineer finds the right past analysis in seconds, trusts where it came from, and never has to dig through personal PCs or network folders again.
 
 ## Brand Personality
-Precise, trustworthy, confident. The UI carries the HD Hyundai signature colours with real presence: the app chrome (top bar and side nav) is one continuous Trust Blue navy surface, and the white working surface sits inset inside it. Inside that surface the content (hull numbers, titles, report text, file paths) stays the hero, and navy appears only where it means something: primary actions, selection, and hull identity (navy hull chips, the large navy hull number). Heritage Green is reserved for "confirmed / connected". The tone is calm expert confidence: short Korean labels, no marketing voice, and numbers and IDs set in monospace with tabular figures. The login screen is the one signature moment: a navy brand panel beside a white form.
+Precise, trustworthy, confident. The UI carries the HD Hyundai signature colours with real presence: the app chrome (top bar and side nav) is one continuous Trust Blue navy surface, and the white working surface sits inset inside it. Inside that surface the content (hull numbers, titles, report text, file paths) stays the hero, and navy appears only where it means something: primary actions, selection, and hull identity (navy hull chips, the large navy hull number). Heritage Green is reserved for "confirmed / connected". The tone is calm expert confidence: short Korean labels, no marketing voice, and numbers and IDs set in monospace with tabular figures. The login screen is the one signature moment: a navy brand panel carrying the Hi-TESS mark and the "Hi-TESS LogBook" wordmark (white + Hi-TESS mint) beside a white form.
 
 ## Anti-references
 - Legacy in-house enterprise systems: gray gradients, rows of tiny icons, nested modals, full-page reloads, dense unstyled tables.

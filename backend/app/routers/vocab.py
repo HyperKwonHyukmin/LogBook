@@ -44,7 +44,7 @@ def _term_dict(t: models.Tag) -> dict:
 
 @router.get("")
 def list_vocab(kind: str = KIND, db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
-    return {"kind": kind, "other": vocab.OTHER, "terms": vocab.list_terms(db, kind)}
+    return {"kind": kind, "other": vocab.OTHER, "terms": vocab.list_terms(db, kind, user)}
 
 
 @router.get("/unlisted")

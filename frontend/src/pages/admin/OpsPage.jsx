@@ -30,8 +30,8 @@ const tdNum = `${td} text-right font-mono`;
 const BULK = [
   { id: 'reextract', label: '본문 다시 추출', title: '본문을 다시 추출할까요?',
     body: (force) => (force
-      ? '이미 추출한 보고서까지 모두 작업 큐에 넣습니다. 파일이 많으면 오래 걸립니다.'
-      : '아직 추출하지 않은 보고서만 작업 큐에 넣습니다.') },
+      ? '이미 추출한 문서까지 모두 작업 큐에 넣습니다. 파일이 많으면 오래 걸립니다.'
+      : '아직 추출하지 않은 문서만 작업 큐에 넣습니다.') },
   { id: 'reconvert', label: 'BDF 다시 변환', title: 'BDF 를 다시 변환할까요?',
     body: (force) => (force
       ? '이미 변환한 BDF 까지 모두 작업 큐에 넣습니다. 큰 모델이 많으면 오래 걸립니다.'
@@ -65,9 +65,9 @@ function StatusCell({ label, children }) {
 }
 
 function StatusRow({ status }) {
-  const { worker, storage, backup } = status;
+  const { worker, storage, backup, wb_users: wb } = status;
   return (
-    <dl className="grid grid-cols-1 divide-y divide-n-200 rounded-lg border border-n-200 md:grid-cols-3 md:divide-x md:divide-y-0">
+    <dl className="grid grid-cols-1 divide-y divide-n-200 rounded-lg border border-n-200 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4">
       <StatusCell label="워커">
         <Dot ok={worker?.alive}>{worker?.alive ? '동작 중' : '멈춤'}</Dot>
         <span className="text-meta text-n-500">
@@ -80,6 +80,17 @@ function StatusRow({ status }) {
       <StatusCell label="공유 폴더">
         <Dot ok={storage?.reachable}>{storage?.reachable ? '연결됨' : '끊김'}</Dot>
         <span className="font-mono text-meta text-n-500">999_LogBook</span>
+      </StatusCell>
+      {/* 15 — WorkBench 사용자 표(읽기 전용). 끊기면 로그인·모든 요청이 503 이다 */}
+      <StatusCell label="WorkBench 사용자 표">
+        {!wb && <span className="text-ui text-n-500">정보 없음</span>}
+        {wb && (<>
+          <Dot ok={wb.ok}>{wb.ok ? '연결됨' : '읽을 수 없음'}</Dot>
+          {wb.ok
+            ? <span className="text-meta text-n-500">활성 <span className="font-mono">{wb.active}</span>명 · WorkBench 관리자 <span className="font-mono">{wb.admins}</span>명(자동 LV3)</span>
+            : <span className="text-meta text-n-500">{wb.error}{/권한/.test(wb.error || '') ? '' : ' · DB 계정의 SELECT 권한과 표 이름을 확인하세요'}</span>}
+          <span className="truncate font-mono text-meta text-n-500" title={wb.table}>{wb.table}</span>
+        </>)}
       </StatusCell>
       <StatusCell label="마지막 백업">
         {!backup && <span className="text-ui text-n-500">기록 없음</span>}
@@ -313,6 +324,13 @@ export default function OpsPage() {
       {!status && !loadError && <BlockSkeleton className="h-20" label="운영 상태를 불러오는 중" />}
       {status && (<>
         <StatusRow status={status} />
+        {/* 17 — 서명 없는 옛 모델: 완전 동일 BDF 차단이 바이트가 같은 파일만 잡는다 */}
+        {status.signatures?.missing > 0 && (
+          <p role="status" className="mt-3 rounded-md border border-wait-line bg-wait-bg px-3 py-2 text-ui text-wait">
+            서명 없는 모델 <span className="font-mono">{status.signatures.missing}</span>개: 이 모델들과 같은 BDF 는 파일 바이트가 같을 때만 업로드를 막습니다.
+            서버에서 <span className="font-mono">python -m app.cli enqueue-convert --missing-signature</span> 를 한 번 실행하세요(워커가 다시 변환해 서명을 채웁니다).
+          </p>
+        )}
         {status.daily?.at && (
           <p className="mt-2 text-meta text-n-500">
             매일 작업 마지막 실행 <span className="font-mono">{formatDateTime(status.daily.at)}</span>

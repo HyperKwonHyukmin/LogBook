@@ -9,7 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .. import audit, cli, models
+from .. import audit, cli, models, wb_users
+from ..ingest import duplicates
 from ..config import settings
 from ..database import get_db
 from ..dependencies import client_ip, get_storage, require_admin
@@ -76,6 +77,10 @@ def status(db: Session = Depends(get_db), storage: StoragePaths = Depends(get_st
         "backup": get_state(db, "last_backup"),
         "daily": get_state(db, "last_daily"),
         "trash": {"count": trashed.count(), "expiring": expiring, "days": settings.trash_days},
+        # 15 — WorkBench 사용자 표(읽기 전용) 연결 상태: {table, ok, active, admins, error}
+        "wb_users": wb_users.status(db),
+        # 17 — 서명 없는(12 이전·옛 규칙) 변환 완료 모델: 완전 동일 BDF 차단이 바이트가 같은 것만 잡는다
+        "signatures": {"missing": duplicates.missing_signature_count(db)},
     }
 
 

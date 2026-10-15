@@ -1,6 +1,9 @@
 """레지스트리 — DB 에만 있던 운영 정보를 공유 폴더(90_System\\registry.json)에도 남긴다.
 
 entry.json 이 Entry 를 되살린다면, 이 파일은 사용자·호선 메모·선종·태그 동의어·분류 목록(08)을 되살린다(재구축 원천).
+15 — 사용자 등급(level·wb_admin), 일반이 아닌 Entry 의 공개 단계(entry_access), 열람 허락(grants)도 여기 남긴다.
+열람 허락 명단은 Entry 폴더의 entry.json 에는 넣지 않는다(공유 폴더 탐색기로 보이는 자리라서).
+18-b — WorkBench 앱별 보내기 제한 규칙(wb_target_rules)도 남긴다(비워 둔 규칙도 빈 목록으로 — 다시 넣지 않게).
 쓰기 실패는 요청을 실패시키지 않는다(DB 가 먼저다) — 다음 변경이나 매일 작업에서 다시 쓴다."""
 import json
 import logging
@@ -17,13 +20,16 @@ from ..storage.paths import StoragePaths, to_long
 
 log = logging.getLogger(__name__)
 REGISTRY_FILE = "registry.json"
-EMPTY = {"version": 1, "users": [], "hulls": [], "tags": [], "vocab": []}
+EMPTY = {"version": 1, "users": [], "hulls": [], "tags": [], "vocab": [], "entry_access": [], "grants": [],
+         "wb_target_rules": []}
+LIST_KEYS = ("users", "hulls", "tags", "vocab", "entry_access", "grants", "wb_target_rules")
 _write_lock = threading.Lock()
 
 
 def build_registry(db: Session) -> dict:
+    # 15 — level 은 LogBook 저장값(WorkBench 관리자 자동 LV3 는 wb_admin 으로 따로). 13 의 role·is_admin 은 쓰지 않는다
     users = [{"employee_id": u.employee_id, "name": u.name, "department": u.department, "position": u.position,
-              "status": u.status, "is_admin": bool(u.is_admin),
+              "status": u.status, "level": u.level or 1, "wb_admin": bool(u.wb_admin),
               "created_at": u.created_at.isoformat() if u.created_at else None}
              for u in db.query(models.User).order_by(models.User.employee_id)]
     hulls = [{"hull_no": h.hull_no, "ship_type": h.ship_type, "memo": h.memo}
@@ -36,8 +42,23 @@ def build_registry(db: Session) -> dict:
     vocab = [{"kind": t.kind, "value": t.value, "sort_order": t.sort_order, "active": bool(t.active)}
              for t in db.query(models.Tag).filter(models.Tag.listed.is_(True), models.Tag.alias_of_id.is_(None))
              .order_by(models.Tag.kind, models.Tag.sort_order, models.Tag.value)]
+    # 15 — 일반이 아닌 Entry(공유·블록 — 일반은 기본값이라 적지 않는다)와 열람 허락
+    entry_access = [{"entry_id": eid, "access": acc}
+                    for eid, acc in db.query(models.Entry.entry_id, models.Entry.access)
+                    .filter(models.Entry.access.in_(("shared", "blocked")), models.Entry.entry_id.isnot(None))
+                    .order_by(models.Entry.entry_id)]
+    grants = [{"entry_id": eid, "employee_id": g.employee_id, "granted_by": g.granted_by,
+               "granted_at": g.granted_at.isoformat() if g.granted_at else None}
+              for g, eid in db.query(models.EntryGrant, models.Entry.entry_id)
+              .join(models.Entry, models.Entry.id == models.EntryGrant.entry_id)
+              .order_by(models.Entry.entry_id, models.EntryGrant.employee_id)]
+    # 18-b — WorkBench 앱별 보내기 제한(행이 있는 대상만 — 비워 둔 규칙도 남긴다)
+    wb_rules = [{"target": r.target, "zones": list(r.zones or []), "tags": list(r.tags or []),
+                 "updated_by": r.updated_by, "updated_at": r.updated_at.isoformat() if r.updated_at else None}
+                for r in db.query(models.WbTargetRule).order_by(models.WbTargetRule.target)]
     return {"version": 1, "written_at": datetime.now().replace(microsecond=0).isoformat(),
-            "users": users, "hulls": hulls, "tags": tags, "vocab": vocab}
+            "users": users, "hulls": hulls, "tags": tags, "vocab": vocab,
+            "entry_access": entry_access, "grants": grants, "wb_target_rules": wb_rules}
 
 
 def write_registry(db: Session, storage: StoragePaths) -> bool:
@@ -81,4 +102,4 @@ def read_registry(storage: StoragePaths) -> dict:
         return {k: (list(v) if isinstance(v, list) else v) for k, v in EMPTY.items()}
     if not isinstance(data, dict):
         return {k: (list(v) if isinstance(v, list) else v) for k, v in EMPTY.items()}
-    return {**EMPTY, **{k: data.get(k) or [] for k in ("users", "hulls", "tags", "vocab")}, "version": data.get("version", 1)}
+    return {**EMPTY, **{k: data.get(k) or [] for k in LIST_KEYS}, "version": data.get("version", 1)}
