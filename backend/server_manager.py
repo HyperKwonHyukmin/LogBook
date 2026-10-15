@@ -47,6 +47,10 @@ WORKER_CMD = [PYTHON, "-m", "app.worker"]
 HEALTH_URL = "http://127.0.0.1:9095/api/system/health"
 API_PORT = 9095
 
+# 자식 python 이 로그를 UTF-8 로 쓰고 버퍼에 묶이지 않게 — Windows 기본 CP949 로
+# 출력하면 한글이 깨지고(`��Ŀ`), 버퍼링이 켜져 있으면 급사 시 마지막 줄이 사라진다.
+_CHILD_ENV = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"}
+
 # UI 색
 BG = "#1e2130"
 PANEL = "#252a3a"
@@ -278,6 +282,7 @@ class LogbookManager:
                 API_CMD, cwd=str(BASE_DIR),
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding="utf-8", errors="replace",
+                env=_CHILD_ENV,
                 creationflags=subprocess.CREATE_NO_WINDOW
             )
             self.health_tracker.reset()
@@ -334,6 +339,7 @@ class LogbookManager:
                 WORKER_CMD, cwd=str(BASE_DIR),
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding="utf-8", errors="replace",
+                env=_CHILD_ENV,
                 creationflags=subprocess.CREATE_NO_WINDOW
             )
             self._set_worker_state(True)
