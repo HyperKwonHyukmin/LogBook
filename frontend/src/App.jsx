@@ -24,6 +24,8 @@ import ViewerPage from './pages/ViewerPage.jsx';
 
 // 비교 화면(07)은 뷰어 상태·표 묶음이 커서 따로 묶는다.
 const ComparePage = lazy(() => import('./pages/ComparePage.jsx'));
+// 25 — 관계 지도는 d3(힘 배치·확대)를 쓰므로 따로 묶는다.
+const GraphPage = lazy(() => import('./pages/GraphPage.jsx'));
 
 export default function App() {
   return (
@@ -43,6 +45,7 @@ export default function App() {
             <Route path="compare" element={<Suspense fallback={null}><ComparePage /></Suspense>} />
             {/* 11 — 최근 비교(사용자별) */}
             <Route path="compares" element={<RecentComparesPage />} />
+            <Route path="graph" element={<Suspense fallback={null}><GraphPage /></Suspense>} />
             <Route path="inbox" element={<InboxPage />} />
             <Route path="browse" element={<BrowsePage />} />
             {/* 09 — '태그' 메뉴는 '분류'(속성별 값)로 바뀌었다. 옛 주소는 분류의 태그 탭으로, 자유 태그 동의어는 하위 화면 */}

@@ -14,6 +14,7 @@ from .database import SessionLocal, init_schema
 from .dependencies import get_storage
 from .routers import admin_cleanup, admin_ops, auth, batches, compares, entries, favorites, files, hulls, integration, revisions, search, solve, suggest, system, uploads, users
 from .routers import tags as tags_router
+from .routers import graph as graph_router
 from .routers import draft_attachments as draft_attachments_router
 from .routers import vocab as vocab_router
 from .routers import wb_targets as wb_targets_router
@@ -62,6 +63,7 @@ def create_app(frontend_dist: Path | None | object = _USE_DEFAULT) -> FastAPI:
     app.include_router(favorites.router)
     app.include_router(compares.router)
     app.include_router(hulls.router)
+    app.include_router(graph_router.router)   # 25 — 관계 지도
     app.include_router(revisions.router)   # 14 — /files/{a}/diff/{b} 가 files 의 /{file_id} 보다 먼저
     app.include_router(files.router)
     app.include_router(solve.router)

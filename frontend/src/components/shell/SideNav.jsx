@@ -1,5 +1,5 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Activity, Anchor, ClipboardCheck, Columns2, FileText, History, Inbox, ListTree, Search, Send, Star, Tags, Trash2, Users } from 'lucide-react';
+import { Activity, Anchor, ClipboardCheck, Columns2, FileText, History, Inbox, ListTree, Search, Send, Star, Tags, Trash2, Users, Waypoints } from 'lucide-react';
 
 // 10 — 검색과 즐겨찾기는 같은 화면('/')이고 주소의 fav=1 로 갈린다
 const isFav = (search) => new URLSearchParams(search).get('fav') === '1';
@@ -11,6 +11,7 @@ const GROUPS = [
     { to: '/reports', label: '문서', icon: FileText },
     { to: '/hulls', label: '호선', icon: Anchor, also: ['/h/'] }, // 호선 화면(/h/9999)도 '호선' 메뉴 아래
     { to: '/browse', label: '분류', icon: Tags, also: ['/tags'] }, // 09 — 속성별 값 둘러보기(태그 동의어 화면 포함)
+    { to: '/graph', label: '관계 지도', icon: Waypoints }, // 25 — 호선·구역·프로젝트와 모델 관계를 잇는 지도
     { to: '/compares', label: '최근 비교', icon: Columns2, also: ['/compare'] }, // 11 — 비교 화면(/compare)도 이 메뉴 아래
   ] },
   { label: '작업', items: [
