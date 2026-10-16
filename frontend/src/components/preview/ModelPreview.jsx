@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { RefreshCw, Rotate3d } from 'lucide-react';
+import { RefreshCw, Rotate3d, ScanSearch } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { MODEL_STATE_LABELS, errorText } from '../../lib/labels.js';
 import { isModelPending, modelStaleNote, modelStateMessage } from '../../lib/modelState.js';
@@ -143,6 +143,12 @@ function ModelPreviewBody({ file, inline, compare }) {
           </ul>
         </details>
       )}
+      {inline && (
+        // 27 — 이 BDF 를 기준으로 비슷한 확정 모델 찾기(전체 화면 뷰어 위 줄)
+        <Link to={`/similar?file=${file.id}`} className={buttonClass('ghost', 'sm', 'self-start')}>
+          <ScanSearch size={14} aria-hidden="true" />이 BDF 와 비슷한 선례
+        </Link>
+      )}
       {inline ? (
         <div className={VIEWER_HEIGHT}>
           {/* 뷰어가 터져도(엔진 오류·사라진 묶음) 미리보기 나머지는 살린다 */}
@@ -159,9 +165,15 @@ function ModelPreviewBody({ file, inline, compare }) {
         <div className="flex flex-col items-start gap-2">
           <ModelThumb fileId={file.id} modelKey={data.key} alt={`${file.name} 3D 미리보기`}
                       className="aspect-[16/10] w-full rounded-md" />
-          <Link to={`/v/${file.id}`} className={buttonClass('secondary', 'sm')}>
-            <Rotate3d size={14} aria-hidden="true" />3D 로 보기
-          </Link>
+          <div className="flex flex-wrap gap-1.5">
+            <Link to={`/v/${file.id}`} className={buttonClass('secondary', 'sm')}>
+              <Rotate3d size={14} aria-hidden="true" />3D 로 보기
+            </Link>
+            {/* 27 — 이 BDF 를 기준으로 비슷한 확정 모델 찾기 */}
+            <Link to={`/similar?file=${file.id}`} className={buttonClass('ghost', 'sm')}>
+              <ScanSearch size={14} aria-hidden="true" />비슷한 선례
+            </Link>
+          </div>
         </div>
       )}
     </div>

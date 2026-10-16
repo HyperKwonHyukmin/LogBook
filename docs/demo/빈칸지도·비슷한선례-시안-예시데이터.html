@@ -1,0 +1,1121 @@
+<title>LogBook 빈칸·점검·선례</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 네이비 크롬(상단 바 + 사이드 내비) 안에 흰 작업면 하나. 화면마다 본문 | 오른쪽 상세 열.
+   LogBook 은 밝은 단일 테마(DESIGN.md — 다크 테마 없음)라 다크 블록 없이 모든 색을 명시한다. */
+:root {
+  color-scheme: light;
+  --n-0:#FFFFFF; --n-25:#FAFCFF; --n-50:#F5F8FD; --n-100:#EEF2F8; --n-150:#E6EBF2;
+  --n-200:#E0E5EC; --n-250:#D3D9E0; --n-300:#BDC3CA; --n-400:#90959C; --n-500:#686D74;
+  --n-600:#4E5359; --n-700:#383C42; --n-800:#24282E; --n-900:#13171C;
+  --navy-900:#002554; --navy-800:#0D315F; --navy-700:#1B3E6E; --navy-600:#2E507F; --on-navy:#FFFFFF;
+  --on-navy-muted:#B9C9DE; --on-navy-subtle:#97A9C2; --on-navy-icon:#8A9DB8; --brand-mint:#6BE8C1;
+  --brand:#002554; --brand-hover:#0B2F5E; --brand-subtle:#EDF3FB; --brand-muted:#D9E4F4; --brand-ring:#7F97B8;
+  --ok:#007A30; --ok-bg:#EAF5EE; --wait:#A34A07; --wait-bg:#FDF3E7; --err:#B42318; --err-bg:#FDEEEC; --err-line:#F4C7C1;
+  --hl:#E8590C; --viewer:#0E1A2B;
+  --p-shape:#002554; --p-size:#3D6AA8; --p-scale:#6F93C6; --p-mix:#2E8A7A; --p-sec:#7CC2B2; --p-tag:#B9A26A;
+  --font-sans:"Pretendard Variable", Pretendard, "Noto Sans KR", -apple-system, "Segoe UI", sans-serif;
+  --font-mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { background: var(--navy-900); color: var(--n-900); font-family: var(--font-sans); font-size: 13px; line-height: 1.5; word-break: keep-all; overflow-wrap: break-word; }
+button, input, select { font: inherit; color: inherit; }
+::selection { background: var(--brand-muted); color: var(--brand); }
+:focus-visible { outline: 2px solid var(--brand-ring); outline-offset: 1px; }
+* { scrollbar-width: thin; scrollbar-color: var(--n-300) transparent; box-sizing: border-box; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums slashed-zero; }
+
+.app { height: 100%; display: grid; grid-template-rows: 48px minmax(0, 1fr); }
+.topbar { background: var(--navy-900); color: var(--on-navy); display: flex; align-items: center; gap: 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wordmark { font-weight: 600; font-size: 15px; white-space: nowrap; }
+.wordmark b { color: var(--brand-mint); font-weight: 600; }
+.top-search { flex: 1; max-width: 460px; height: 32px; border-radius: 6px; background: var(--n-0); color: var(--n-500);
+  display: flex; align-items: center; padding-inline: 12px; font-size: 12.5px; justify-content: space-between; }
+.top-search kbd { font-family: var(--font-mono); font-size: 11px; background: var(--n-50); color: var(--n-600); border-radius: 4px; padding: 1px 6px; }
+.top-user { margin-left: auto; color: var(--on-navy-muted); font-size: 12.5px; white-space: nowrap; }
+.mock-flag { font-size: 12px; color: var(--navy-900); background: var(--brand-mint); border-radius: 4px; padding: 2px 8px; font-weight: 600; white-space: nowrap; }
+
+.body { display: grid; grid-template-columns: 200px minmax(0, 1fr); min-height: 0; }
+.sidenav { background: var(--navy-900); padding-block: 12px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: 12px;
+  display: flex; flex-direction: column; gap: 2px; overflow: auto; }
+.nav-sec { color: var(--on-navy-subtle); font-size: 12px; font-weight: 500; padding: 12px 10px 4px; }
+.nav-item { display: flex; align-items: center; gap: 9px; height: 32px; padding-inline: 10px; border-radius: 6px; color: var(--on-navy-muted);
+  font-size: 13px; font-weight: 500; text-decoration: none; border: 0; background: none; cursor: pointer; text-align: left; width: 100%; }
+.nav-item svg { width: 16px; height: 16px; flex: none; stroke: var(--on-navy-icon); fill: none; stroke-width: 1.7; }
+.nav-item.old { cursor: default; opacity: .62; }
+.nav-item.new:hover { background: var(--navy-800); color: var(--on-navy); }
+.nav-item.new[aria-current="page"] { background: var(--navy-700); color: var(--on-navy); }
+.nav-item.new[aria-current="page"] svg { stroke: var(--on-navy); }
+.nav-item .tag { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--on-navy-subtle); }
+.nav-foot { margin-top: auto; border-top: 1px solid var(--navy-700); padding: 12px 10px 4px; color: var(--on-navy-subtle); font-size: 11.5px; line-height: 1.6; }
+
+.main { background: var(--n-0); border-top-left-radius: 12px; min-height: 0; overflow: auto; }
+.page { max-width: 1440px; margin: 0 auto; padding-block: 22px 40px; padding-inline: 28px; }
+.ph { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 14px; border-bottom: 1px solid var(--n-200); margin-bottom: 16px; }
+.ph h1 { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -.018em; margin: 0; text-wrap: balance; }
+.ph p { margin: 4px 0 0; color: var(--n-600); font-size: 13.5px; max-width: 72ch; }
+.sample { font-size: 12px; color: var(--wait); background: var(--wait-bg); border-radius: 5px; padding: 4px 10px; white-space: nowrap; }
+
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 22px; align-items: start; }
+.panel { border: 1px solid var(--n-200); border-radius: 8px; background: var(--n-0); }
+.side { position: sticky; top: 16px; max-height: calc(100vh - 100px); overflow: auto; }
+.sec-t { font-size: 13px; font-weight: 600; color: var(--n-800); margin: 0 0 8px; }
+.muted { color: var(--n-500); }
+.small { font-size: 12px; }
+
+.btn { height: 28px; padding-inline: 10px; border-radius: 6px; border: 1px solid var(--n-250); background: var(--n-0); cursor: pointer; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+.btn:hover { background: var(--n-50); border-color: var(--n-300); }
+.btn.primary { background: var(--brand); color: var(--on-navy); border-color: var(--brand); }
+.btn.primary:hover { background: var(--brand-hover); }
+.btn.ghost { border-color: transparent; background: none; color: var(--brand); }
+.btn.ghost:hover { background: var(--brand-subtle); }
+.seg { display: inline-flex; background: var(--n-100); border-radius: 7px; padding: 2px; gap: 2px; flex-wrap: wrap; }
+.seg button { border: 0; background: none; height: 26px; padding-inline: 10px; border-radius: 5px; cursor: pointer; font-size: 12.5px; color: var(--n-600); white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--n-0); color: var(--n-900); box-shadow: 0 1px 2px rgb(19 23 30 / .12); font-weight: 500; }
+.chip { display: inline-flex; align-items: center; height: 20px; padding-inline: 6px; border-radius: 4px; background: var(--brand); color: var(--on-navy);
+  font-family: var(--font-mono); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.chip.proj { background: var(--n-100); color: var(--n-800); font-family: var(--font-sans); }
+.tagc { display: inline-flex; align-items: center; height: 20px; padding-inline: 7px; border-radius: 4px; background: var(--n-100); color: var(--n-700); font-size: 12px; white-space: nowrap; }
+.pill { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding-inline: 7px; border-radius: 10px; font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.ok { color: var(--ok); background: var(--ok-bg); }
+.pill.fail { color: var(--err); background: var(--err-bg); }
+.pill.none { color: var(--n-600); background: var(--n-100); }
+.pill.warn { color: var(--wait); background: var(--wait-bg); }
+.pill.info { color: var(--navy-700); background: var(--brand-subtle); }
+.kb { display: inline-flex; align-items: center; height: 18px; padding-inline: 5px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+.kb.bdf { background: #E8EEF9; color: #1F3F7A; } .kb.pdf { background: #FBEAEA; color: #9B1C1C; } .kb.ppt { background: #FCEFE3; color: #92400E; }
+.idl { font-family: var(--font-mono); font-size: 12px; color: var(--n-600); }
+
+/* ---------- 빈칸 지도 ---------- */
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: flex-end; margin-bottom: 12px; }
+.tb-g { display: flex; flex-direction: column; gap: 4px; }
+.tb-g > span { font-size: 12px; color: var(--n-600); font-weight: 500; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+.legend .lt-h { font-size: 12px; color: var(--n-600); margin-right: 4px; }
+.lg { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px 0 6px; border-radius: 6px; border: 1px solid var(--n-200); background: var(--n-0); cursor: pointer; font-size: 12.5px; }
+.lg:hover { background: var(--n-50); }
+.lg[aria-pressed="true"] { border-color: var(--n-900); background: var(--n-50); }
+.lg b { font-family: var(--font-mono); font-weight: 500; }
+.lg em { font-style: normal; color: var(--n-500); font-size: 12px; }
+.sw { width: 22px; height: 16px; border-radius: 3px; position: relative; flex: none; }
+.gridwrap { overflow: auto; border: 1px solid var(--n-200); border-radius: 8px; max-height: min(640px, calc(100vh - 290px)); min-height: 320px; }
+table.cov { border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+table.cov th, table.cov td { padding: 0; }
+table.cov thead th { position: sticky; top: 0; background: var(--n-50); z-index: 2; border-bottom: 1px solid var(--n-200); vertical-align: bottom; }
+table.cov thead th.zh { width: 45px; min-width: 45px; max-width: 45px; padding: 8px 1px 6px; font-weight: 500; color: var(--n-700); font-size: 12px; line-height: 1.3; text-align: center; }
+.zbar { height: 3px; background: var(--n-150); border-radius: 2px; margin: 6px 7px 0; overflow: hidden; }
+.zbar i { display: block; height: 100%; background: var(--n-400); }
+.zn { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--n-600); margin-top: 2px; }
+table.cov th.rh { position: sticky; left: 0; background: var(--n-0); z-index: 1; text-align: left; min-width: 138px; padding: 0 8px 0 10px; border-right: 1px solid var(--n-200); font-weight: 400; }
+table.cov thead th.rh { z-index: 3; background: var(--n-50); color: var(--n-600); font-size: 12px; font-weight: 500; padding-bottom: 8px; }
+.rhin { display: flex; align-items: center; gap: 7px; height: 34px; }
+.rhin .st { color: var(--n-600); font-size: 12px; }
+.rcov { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--n-600); }
+table.cov tbody tr:hover th.rh, table.cov tbody tr.rsel th.rh { background: var(--n-50); }
+table.cov td { text-align: center; border-bottom: 1px solid var(--n-100); }
+table.cov thead th.zsel { background: var(--n-100); color: var(--n-900); }
+.cell { width: 37px; height: 26px; margin: 4px; border-radius: 4px; border: 1px solid transparent; display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 12px; cursor: pointer; position: relative; background: none; padding: 0; transition: box-shadow .15s cubic-bezier(.2,0,0,1), opacity .15s; }
+.cell:hover { box-shadow: 0 0 0 2px var(--brand-ring); }
+.cell:focus-visible { outline: 2px solid var(--n-900); outline-offset: 2px; }
+.c-full { background: var(--brand); color: var(--on-navy); }
+.c-noreport { background: var(--brand-muted); color: var(--brand); border-color: #9FB4D3; }
+.c-noreport::after { content: ""; position: absolute; right: -1px; top: -1px; border-style: solid; border-width: 0 10px 10px 0; border-color: transparent var(--n-0) transparent transparent; }
+.c-nomodel { background: var(--n-0); color: var(--brand); border: 1.5px dashed var(--navy-600); }
+.c-fail { background: var(--err-bg); color: var(--err); border-color: var(--err-line); }
+.c-fail::before { content: ""; position: absolute; left: 4px; top: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--err); }
+.c-empty { background: var(--n-0); border: 1px dashed var(--n-300); color: var(--n-500); }
+.c-empty.expect { border: 1.5px solid var(--err); background: var(--err-bg); color: var(--err); font-weight: 600; }
+.c-na { background: repeating-linear-gradient(135deg, var(--n-100) 0 4px, var(--n-50) 4px 8px); border-color: var(--n-150); cursor: default; }
+.c-na:hover { box-shadow: none; }
+.c-sel { outline: 2px solid var(--n-900); outline-offset: 2px; }
+.dim .cell:not(.on) { opacity: .14; }
+.dim .cell.c-empty.on { border: 1.5px solid var(--n-700); background: var(--n-50); }
+.gridnote { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--n-600); margin-top: 6px; }
+.tip { position: fixed; z-index: 50; pointer-events: none; background: var(--n-900); color: var(--n-0); font-size: 12.5px; line-height: 1.55; padding: 8px 11px; border-radius: 6px; max-width: 300px; box-shadow: 0 6px 20px rgb(19 23 30 / .25); }
+.tip b { color: var(--n-0); font-weight: 600; }
+.lists { margin-top: 22px; }
+.lists-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.scope { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 4px 0 10px; border-radius: 13px; background: var(--brand-subtle); color: var(--brand); font-size: 12.5px; }
+.scope button { border: 0; background: none; cursor: pointer; color: var(--brand); width: 22px; height: 22px; border-radius: 11px; font-size: 14px; line-height: 1; }
+.scope button:hover { background: var(--brand-muted); }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--n-200); margin-bottom: 0; flex-wrap: wrap; }
+.tabs button { border: 0; background: none; height: 36px; padding-inline: 12px; cursor: pointer; font-size: 13px; color: var(--n-600); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--n-900); border-bottom-color: var(--n-900); font-weight: 500; }
+.tabs .cnt { font-family: var(--font-mono); font-size: 12px; color: var(--n-600); margin-left: 4px; }
+.tabnote { font-size: 12.5px; color: var(--n-600); padding: 10px 2px; }
+table.lt { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.lt th { text-align: left; font-size: 12px; font-weight: 500; color: var(--n-600); background: var(--n-50); height: 34px; padding: 0 10px; border-bottom: 1px solid var(--n-200); white-space: nowrap; position: sticky; top: 0; }
+table.lt td { height: 42px; padding: 4px 10px; border-bottom: 1px solid var(--n-100); }
+table.lt td.nw { white-space: nowrap; }
+table.lt tr:hover td { background: var(--n-50); }
+.ltwrap { border: 1px solid var(--n-200); border-radius: 8px; overflow: auto; }
+.more { padding: 10px; text-align: center; font-size: 12.5px; color: var(--n-600); border-top: 1px solid var(--n-100); }
+
+.dp { padding: 16px; }
+.dp h2 { font-size: 16px; font-weight: 600; margin: 0 0 2px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dp .lead { font-size: 13px; color: var(--n-700); margin: 8px 0 14px; padding: 10px 12px; background: var(--n-50); border-radius: 6px; }
+.erow { padding: 10px 0; border-top: 1px solid var(--n-100); }
+.erow:first-of-type { border-top: 0; }
+.erow .t { font-size: 13.5px; font-weight: 600; color: var(--n-900); }
+.erow .m { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 5px; }
+.todo { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; text-align: left; border: 0; background: none; padding: 9px 4px; border-top: 1px solid var(--n-100); cursor: pointer; border-radius: 4px; }
+.todo:hover { background: var(--n-50); }
+.todo .w { font-size: 13px; color: var(--n-900); }
+.todo .s { font-size: 12px; color: var(--n-600); }
+.empty-note { padding: 28px 16px; color: var(--n-600); font-size: 13px; }
+/* ---------- 모델 점검 ---------- */
+.rules { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rules th { text-align: left; font-size: 12px; font-weight: 500; color: var(--n-600); background: var(--n-50); height: 34px; padding: 0 10px; border-bottom: 1px solid var(--n-200); white-space: nowrap; }
+.rules td { height: 40px; padding: 4px 10px; border-bottom: 1px solid var(--n-100); }
+.rules tr.rr { cursor: pointer; }
+.rules tr.rr:hover td { background: var(--n-50); }
+.rules tr.rr[aria-selected="true"] td { background: var(--brand-subtle); }
+.rbar { display: inline-block; width: 90px; height: 6px; background: var(--n-150); border-radius: 3px; vertical-align: middle; margin-right: 8px; overflow: hidden; }
+.rbar i { display: block; height: 100%; background: var(--navy-600); }
+.ck-grid { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 18px; margin-top: 18px; align-items: start; }
+.mlist { max-height: 760px; overflow: auto; }
+.mrow { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 10px 12px; border-bottom: 1px solid var(--n-100); cursor: pointer; }
+.mrow:hover { background: var(--n-50); }
+.mrow[aria-selected="true"] { background: var(--brand-subtle); }
+.mrow[aria-selected="true"] .t { color: var(--brand); }
+.mrow .t { font-size: 13px; font-weight: 600; }
+.mrow .m { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 4px; align-items: center; }
+.ckitem { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 10px 0; border-top: 1px solid var(--n-100); }
+.ckitem:first-child { border-top: 0; }
+.ckitem .s { font-size: 13.5px; color: var(--n-900); }
+.ckitem .d { font-size: 12px; color: var(--n-500); margin-top: 2px; }
+.ckitem[aria-current="true"] .s { color: var(--hl); }
+.viewer { position: relative; background: var(--viewer); border-radius: 8px; overflow: hidden; }
+.viewer canvas { display: block; width: 100%; height: 300px; }
+.viewer .vcap { position: absolute; left: 12px; bottom: 10px; color: #C9D6EA; font-size: 12px; }
+.viewer .vlg { position: absolute; right: 12px; top: 10px; color: #C9D6EA; font-size: 12px; display: flex; gap: 6px; align-items: center; }
+.viewer .vlg i { width: 9px; height: 9px; border-radius: 50%; background: var(--hl); display: inline-block; }
+.peer { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 4px 14px; align-items: center; padding: 8px 0; border-top: 1px solid var(--n-100); }
+.peer:first-of-type { border-top: 0; }
+.peer .nm { font-size: 12.5px; color: var(--n-700); }
+.peer svg { width: 100%; height: 34px; display: block; }
+.peer .sent { grid-column: 2; font-size: 12.5px; color: var(--n-700); }
+.peer .sent.flag { color: var(--wait); font-weight: 500; }
+.mockcard { border: 1px solid var(--n-200); border-radius: 8px; padding: 12px; background: var(--n-0); }
+.mockcard .hd { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ckbadge { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 4px; background: var(--wait-bg); color: var(--wait); font-size: 11.5px; font-weight: 600; cursor: pointer; border: 0; }
+.ckbadge.info { background: var(--brand-subtle); color: var(--navy-700); }
+.ckbadge.zero { background: var(--ok-bg); color: var(--ok); }
+
+/* ---------- 비슷한 선례 ---------- */
+.basebar { display: grid; grid-template-columns: 168px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 12px 14px; border: 1px solid var(--n-200); border-radius: 8px; background: var(--n-0); }
+.basebar.over { border-color: var(--brand); background: var(--brand-subtle); outline: 2px dashed var(--brand-ring); outline-offset: -6px; }
+.basebar canvas { width: 168px; height: 104px; display: block; border-radius: 6px; background: var(--viewer); }
+.bname { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bname b { font-size: 15px; font-weight: 600; }
+.bfacts { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: 13px; color: var(--n-700); }
+.bfacts .k { color: var(--n-600); margin-right: 5px; }
+.bctl { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.bctl .lb { font-size: 12px; color: var(--n-600); }
+.bact { display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 176px; }
+.bact .hint { font-size: 12px; color: var(--n-600); text-align: center; }
+.exrow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 10px 0 0; }
+.exrow .lb { font-size: 12px; color: var(--n-600); margin-right: 2px; }
+.btn[aria-pressed="true"] { border-color: var(--n-900); background: var(--n-50); }
+.reshead { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--n-200); align-items: center; }
+.res { display: grid; grid-template-columns: 24px 150px minmax(0, 1fr) 104px; gap: 14px; padding: 14px; border-bottom: 1px solid var(--n-100); cursor: pointer; align-items: start; outline: none; }
+.res:hover { background: var(--n-25); }
+.res:focus-visible { box-shadow: inset 0 0 0 2px var(--brand-ring); }
+.res[aria-selected="true"] { background: var(--brand-subtle); }
+.res .rk { font-family: var(--font-mono); font-size: 13px; color: var(--n-600); padding-top: 2px; }
+.res canvas { width: 150px; height: 96px; border-radius: 5px; background: var(--viewer); display: block; }
+.res .t { font-size: 14px; font-weight: 600; color: var(--n-900); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.res[aria-selected="true"] .t .tt { color: var(--brand); }
+.res .m { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 6px; font-size: 12.5px; color: var(--n-700); }
+.cmp { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 4px 8px; margin-top: 8px; align-items: baseline; }
+.cmp .h { font-size: 12px; color: var(--n-600); }
+.cmp .v { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.cmp .v span { font-size: 12.5px; color: var(--n-800); background: var(--n-50); border: 1px solid var(--n-150); border-radius: 4px; padding: 0 7px; line-height: 20px; }
+.cmp .v.diff span { color: var(--wait); background: var(--wait-bg); border-color: #EFD3B4; }
+.warnline { display: flex; gap: 6px; align-items: center; margin-top: 8px; font-size: 12.5px; color: var(--err); }
+.warnline::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--err); flex: none; }
+.likeness { text-align: right; }
+.likeness .w { font-size: 14px; font-weight: 600; color: var(--brand); line-height: 1.3; }
+.likeness .w.weak { color: var(--n-700); }
+.likeness .n { font-family: var(--font-mono); font-size: 12px; color: var(--n-600); }
+.lbar { height: 4px; border-radius: 2px; background: var(--n-150); margin-top: 6px; overflow: hidden; }
+.lbar i { display: block; height: 100%; background: var(--brand); }
+.grp { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 4px; background: var(--n-900); color: var(--n-0); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.members { grid-column: 3 / 5; border-top: 1px solid var(--n-150); margin-top: 4px; }
+.mem { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--n-100); font-size: 12.5px; }
+.mem:last-child { border-bottom: 0; }
+.expand { border: 0; background: none; color: var(--brand); font-size: 12.5px; cursor: pointer; padding: 2px 0; font-weight: 500; }
+.expand:hover { text-decoration: underline; text-underline-offset: 3px; }
+.parts { display: grid; gap: 6px; margin-top: 4px; }
+.prow { display: grid; grid-template-columns: 76px minmax(0, 1fr) 38px; gap: 8px; align-items: center; font-size: 12.5px; }
+.prow .tr { height: 6px; border-radius: 3px; background: var(--n-150); overflow: hidden; }
+.prow .tr i { display: block; height: 100%; background: var(--navy-600); }
+.prow .num { font-family: var(--font-mono); font-size: 12px; color: var(--n-700); text-align: right; }
+details.adm { margin-top: 18px; border-top: 1px solid var(--n-200); padding-top: 10px; }
+details.adm summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--n-800); }
+.wrow { display: grid; grid-template-columns: 92px minmax(0, 1fr) 36px; gap: 8px; align-items: center; padding: 2px 0; font-size: 12.5px; }
+.wrow input { width: 100%; height: 24px; accent-color: var(--brand); }
+.cmpt { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.cmpt th, .cmpt td { padding: 6px 4px; border-bottom: 1px solid var(--n-100); text-align: left; vertical-align: top; }
+.cmpt th { color: var(--n-600); font-weight: 500; width: 76px; }
+.cmpt td.dif { color: var(--wait); font-weight: 500; }
+.nomatch { padding: 14px 16px; background: var(--n-50); border-radius: 8px; color: var(--n-800); font-size: 13.5px; margin: 14px; }
+.nomatch .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.twin { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.twin canvas { width: 100%; height: 110px; border-radius: 5px; background: var(--viewer); display: block; }
+.twin .cap { font-size: 12px; color: var(--n-600); margin-top: 3px; }
+.zsel { height: 28px; border: 1px solid var(--n-250); border-radius: 6px; padding: 0 6px; background: var(--n-0); font-size: 12.5px; }
+.secs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.secs span { font-family: var(--font-mono); font-size: 12px; background: var(--n-100); color: var(--n-700); border-radius: 3px; padding: 1px 6px; }
+.secs span.hit { background: var(--brand-muted); color: var(--brand); }
+.secs span i { font-family: var(--font-sans); font-style: normal; color: var(--n-600); }
+@media (max-width: 1180px) {
+  .split, .ck-grid { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; max-height: none; }
+}
+@media (max-width: 860px) {
+  .basebar { grid-template-columns: minmax(0, 1fr); }
+  .basebar canvas { width: 100%; }
+  .bact { min-width: 0; }
+  .members { grid-column: 1 / -1; }
+  .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .sidenav { flex-direction: row; overflow-x: auto; padding-block: 6px; }
+  .nav-sec, .nav-foot, .nav-item.old { display: none; }
+  .nav-item { width: auto; white-space: nowrap; }
+  .main { border-top-left-radius: 0; }
+  .page { padding-inline: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .top-search, .top-user { display: none; }
+  .res { grid-template-columns: 24px minmax(0, 1fr); }
+  .res canvas { display: none; }
+  .res .score { grid-column: 2; text-align: left; }
+  .base { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .cell { transition: none; } }
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <div class="wordmark">Hi-TESS <b>LogBook</b></div>
+    <div class="top-search"><span>호선 · 제목 · 문서 본문 검색</span><kbd>Ctrl K</kbd></div>
+    <span class="mock-flag">시안 · 예시 데이터</span>
+    <div class="top-user">관리자 · LV3</div>
+  </header>
+  <div class="body">
+    <nav class="sidenav" aria-label="메뉴">
+      <div class="nav-sec">작업</div>
+      <span class="nav-item old"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>검색</span>
+      <span class="nav-item old"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg>문서</span>
+      <span class="nav-item old"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="10" cy="18" r="2.5"/><path d="M8 7l7.5 1M7.5 8.2 9.4 15.6M16.5 10l-4.7 6.3"/></svg>관계 지도</span>
+      <button class="nav-item new" data-route="coverage"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7" stroke-dasharray="2 2"/></svg>빈칸 지도<span class="tag" title="계획서 번호">#26</span></button>
+      <button class="nav-item new" data-route="similar"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="8" height="14" rx="1.5"/><rect x="13" y="5" width="8" height="14" rx="1.5"/><path d="M6 9h2M16 9h2M6 13h2M16 13h2"/></svg>비슷한 선례<span class="tag" title="계획서 번호">#27</span></button>
+      <div class="nav-sec">기록</div>
+      <span class="nav-item old"><svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4"/><path d="M4 13 6.5 5h11L20 13v6H4z"/></svg>정리 대기</span>
+      <span class="nav-item old"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>활동 로그</span>
+      <div class="nav-sec">관리</div>
+      <button class="nav-item new" data-route="checks"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>모델 점검<span class="tag" title="계획서 번호(미구현)">#28</span></button>
+      <span class="nav-item old"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>운영</span>
+      <div class="nav-foot"># 번호는 계획서 번호입니다(26·27 구현, 28 미구현). 흐린 메뉴는 기존 화면이라 시안에서 열리지 않습니다.</div>
+    </nav>
+    <main class="main" id="main"></main>
+  </div>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+'use strict';
+/* ================= 예시 데이터 (결정적 난수 — 열 때마다 같다) ================= */
+function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const R = rng(20261016);
+const pick = a => a[Math.floor(R() * a.length)];
+const between = (a, b) => a + (b - a) * R();
+const logN = (lo, hi) => Math.round(Math.exp(between(Math.log(lo), Math.log(hi))));
+const shuffle = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+const fmt = n => n.toLocaleString('ko-KR');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+const ROWS = [
+  ['2981', 'VLCC'], ['3115', '컨테이너'], ['3204', 'LNGC'], ['3266', 'LNGC'], ['3321', 'FPSO'], ['3370', 'LNGC'], ['3412', '컨테이너'],
+  ['3455', 'VLCC'], ['3496', 'LNGC'], ['3512', 'PCTC'], ['3542', 'LNGC'], ['3577', '컨테이너'], ['3611', 'LNGC'], ['3640', 'FSRU'],
+  ['3688', 'VLCC'], ['3702', 'LNGC'], ['3745', '컨테이너'], ['3781', 'LPGC'], ['3820', 'LNGC'], ['3856', 'FPSO'],
+].map(([no, st], i) => ({ key: 'h:' + no, label: no, kind: 'hull', st, maturity: 0.62 - i * 0.017 + between(-0.08, 0.08) }))
+  .concat([
+    { key: 'p:해상풍력 TP', label: '해상풍력 TP', kind: 'project', st: '프로젝트', maturity: 0.3 },
+    { key: 'p:표준 정반', label: '표준 정반', kind: 'project', st: '프로젝트', maturity: 0.22 },
+    { key: 'c:공용', label: '공용', kind: 'common', st: '호선 없음', maturity: 0.28 },
+  ]);
+
+const ZONES = {
+  '정반': { kind: 'frame', at: ['Truss', '국부 강도'] },
+  '블록': { kind: 'plate', at: ['권상', '국부 강도'] },
+  '모듈': { kind: 'module', at: ['권상', '해상 운송'] },
+  '데크하우스': { kind: 'module', at: ['권상', '국부 강도'] },
+  '마스트': { kind: 'mast', at: ['국부 강도', '좌굴'] },
+  '크레인 받침': { kind: 'frame', at: ['국부 강도', '좌굴'] },
+  '계류': { kind: 'plate', at: ['계류 강도'] },
+  '헬리데크': { kind: 'plate', at: ['국부 강도'] },
+  '라싱 브리지': { kind: 'frame', at: ['국부 강도', '좌굴'] },
+  '화물창': { kind: 'plate', at: ['국부 강도', '좌굴'] },
+  '기관실': { kind: 'plate', at: ['국부 강도'] },
+  '갑판 의장': { kind: 'frame', at: ['국부 강도'] },
+};
+const ZONE_NAMES = Object.keys(ZONES);
+const ZONE_POP = { '정반': .9, '블록': .75, '모듈': .55, '데크하우스': .35, '마스트': .45, '크레인 받침': .3, '계류': .55, '헬리데크': .15, '라싱 브리지': .3, '화물창': .4, '기관실': .25, '갑판 의장': .3 };
+const ATYPES = ['Truss', '권상', '해상 운송', '계류 강도', '국부 강도', '좌굴'];
+const EXPECT = {   // 선종별 필수 해석(2단계 미리보기) — 구역마다 필요한 해석 종류
+  'LNGC': { '정반': ['Truss'], '블록': ['권상'], '모듈': ['권상', '해상 운송'], '마스트': ['국부 강도'], '계류': ['계류 강도'], '화물창': ['국부 강도'] },
+  'VLCC': { '정반': ['Truss'], '블록': ['권상'], '계류': ['계류 강도'], '기관실': ['국부 강도'], '화물창': ['국부 강도'] },
+  '컨테이너': { '정반': ['Truss'], '블록': ['권상'], '라싱 브리지': ['국부 강도'], '데크하우스': ['권상'] },
+  'FPSO': { '정반': ['Truss'], '모듈': ['권상', '해상 운송'], '크레인 받침': ['국부 강도'], '헬리데크': ['국부 강도'], '계류': ['계류 강도'] },
+  'FSRU': { '정반': ['Truss'], '모듈': ['권상'], '계류': ['계류 강도'] },
+  'LPGC': { '정반': ['Truss'], '블록': ['권상'], '계류': ['계류 강도'] },
+  'PCTC': { '정반': ['Truss'], '블록': ['권상'], '데크하우스': ['권상'] },
+};
+const PEOPLE = ['김도윤', '이서준', '박지호', '최민재', '정하은', '강예린', '윤시우', '장태현', '임수빈', '한지민', '오세훈', '서유나'];
+const SECTIONS = {
+  frame: ['L100x100x10', 'L130x130x12', 'L150x90x12', 'H200x200x8x12', 'H300x300x10x15', 'H250x250x9x14', 'BOX200x200x10', 'PIPE114.3x6', 'T250x90x10x15'],
+  plate: ['t8', 't10', 't12', 't14', 't16', 't20', 'FB150x12', 'FB200x15', 'L150x90x12', 'T300x100x11x16', 'L125x75x10'],
+  module: ['H200x200x8x12', 'H300x300x10x15', 'H400x200x8x13', 'L100x100x10', 'PIPE165.2x7', 'BOX250x250x12', 't8', 't10', 't12', 'FB150x12'],
+  mast: ['PIPE165.2x7', 'PIPE216.3x8', 'PIPE114.3x6', 'L100x100x10', 'L75x75x9', 'BOX200x200x10', 't10', 't12'],
+};
+const DIMS = { frame: [[16, 32], [7, 14], [1.4, 3.2]], plate: [[7, 20], [5, 14], [1.8, 5]], module: [[14, 34], [10, 24], [7, 18]], mast: [[2, 4], [2, 4], [9, 24]] };
+const ELEMS = { frame: [700, 6000], plate: [4000, 48000], module: [3500, 36000], mast: [500, 3800] };
+const MIX = { frame: [.9, .0, .07, .03], plate: [.22, .74, .03, .01], module: [.58, .36, .04, .02], mast: [.93, .03, .03, .01] };
+
+// 선종·구역별 '표준 설계' — 다른 호선에서 형상 그대로 다시 쓰는 모델(같은 형상 서명)
+const STANDARD = {};
+function standardFor(st, zone) {
+  const k = st + '|' + zone;
+  if (!STANDARD[k]) STANDARD[k] = makeGeom(ZONES[zone].kind, 'g-' + Object.keys(STANDARD).length);
+  return STANDARD[k];
+}
+let geomSeq = 0;
+function makeGeom(kind, sig) {
+  const d = DIMS[kind].map(([a, b]) => +between(a, b).toFixed(1));
+  const elems = logN(...ELEMS[kind]);
+  const m = MIX[kind].map(v => Math.max(0, v + between(-.05, .05)));
+  const s = m.reduce((a, b) => a + b, 0);
+  return { kind, sig: sig || 'g' + (++geomSeq), L: d[0], W: d[1], H: d[2], elems, mix: m.map(v => v / s), nx: 3 + Math.floor(R() * 5), ny: 2 + Math.floor(R() * 4), decks: 2 + Math.floor(R() * 3), seed: Math.floor(R() * 1e6), variant: Math.floor(R() * 3) };
+}
+
+const ENTRIES = [];
+let eSeq = 1180;
+function dateFor(row) {
+  const y = 2023 + Math.min(3, Math.floor((1 - row.maturity) * 3.2 + R()));
+  const mo = 1 + Math.floor(R() * (y === 2026 ? 9 : 12));
+  return `${y}-${String(mo).padStart(2, '0')}`;
+}
+for (const row of ROWS) {
+  for (const zone of ZONE_NAMES) {
+    const p = Math.min(.95, ZONE_POP[zone] * (0.55 + row.maturity));
+    if (R() > p) continue;
+    if (row.kind !== 'hull' && R() < .45) continue;
+    const n = R() < .25 ? 2 : (R() < .08 ? 3 : 1);
+    for (let k = 0; k < n; k++) {
+      const atype = pick(ZONES[zone].at);
+      const hasModel = R() < .84;
+      const hasReport = !hasModel || R() < .66;
+      const kind = ZONES[zone].kind;
+      let geom = null;
+      if (hasModel) {
+        const reuse = row.kind === 'hull' && (zone === '정반' || zone === '모듈' || zone === '마스트') && R() < .4;
+        geom = reuse ? standardFor(row.st, zone) : makeGeom(kind);
+      }
+      const solve = !hasModel ? null : (R() < .7 ? 'pass' : R() < .45 ? 'fail' : 'none');
+      const secPool = SECTIONS[kind];
+      const secs = hasModel ? shuffle(secPool).slice(0, 4 + Math.floor(R() * 5)).sort() : [];
+      const id = 'E000' + (eSeq += 1 + Math.floor(R() * 3));
+      const suffix = n > 1 ? ['1차', '2차', '개정'][k] : pick(['1차', '', '', 'R1']);
+      const label = row.kind === 'common' ? '공용' : row.label;
+      const reports = hasReport ? (R() < .6 ? [{ n: `${label} ${zone} ${atype} 검토 보고서.pdf`, k: 'pdf' }] : [{ n: `${label}_${zone}_${atype}_결과.pptx`, k: 'ppt' }]) : [];
+      if (hasReport && R() < .3) reports.push({ n: `${zone} 검토 회의자료.pptx`, k: 'ppt' });
+      ENTRIES.push({
+        id, row, zone, atype, title: [label, zone, atype, suffix].filter(Boolean).join(' · '),
+        hasModel, hasReport, reports, linked: !hasModel && R() < .35,
+        solve, needsFix: R() < .05, unsigned: hasModel && R() < .05,
+        by: pick(PEOPLE), date: dateFor(row), geom,
+        secs, sol: hasModel ? (R() < .94 ? '101' : '103') : null,
+        rev: hasModel && R() < .25 ? 2 + Math.floor(R() * 2) : 1,
+      });
+    }
+  }
+}
+// 모델 특징(27): 형상 + 판마다 조금 다른 단면/요소 수
+const MODELS = ENTRIES.filter(e => e.hasModel);
+for (const e of MODELS) {
+  const g = e.geom;
+  const elems = Math.round(g.elems * between(.97, 1.03));
+  e.f = { L: g.L, W: g.W, H: g.H, elems, mix: g.mix, nodes: Math.round(elems * between(.8, 1.15)), meanElem: 0, thick: null };
+  const shells = e.secs.filter(s => /^t\d/.test(s)).map(s => +s.slice(1)).sort((a, b) => a - b);
+  e.f.thick = shells.length ? shells[Math.floor(shells.length / 2)] : null;
+}
+// 일부러 넣는 튀는 모델(규칙 B 시연)
+shuffle(MODELS.filter(e => e.geom.kind !== 'mast')).slice(0, 5).forEach((e, i) => { e.f.elems = Math.round(e.f.elems * (i < 3 ? between(7, 10) : between(.08, .12))); e.outlier = true; });
+for (const e of MODELS) {
+  const diag = Math.hypot(e.f.L, e.f.W, e.f.H) * 1000;
+  e.f.meanElem = Math.round(diag / Math.sqrt(e.f.elems) * 2.2);
+}
+
+/* ---------- 규칙 A — 모델 하나만 보고 판정 ---------- */
+const RULES = [
+  { code: 'unit_mismatch_E', lv: '주의', name: 'E 단위 불일치', p: .035, make: e => ({ s: `모델 크기는 mm 단위인데 E = 2.06e11입니다. Pa 값으로 보입니다.`, d: 'MAT1 1번 · mm·MPa 모델이면 E ≈ 206000', ids: 0 }) },
+  { code: 'density_missing', lv: '주의', name: '자중 있는데 밀도 없음', p: .045, make: e => ({ s: `자중(GRAV)을 거는데 MAT1 ${1 + Math.floor(R() * 3)}번에 밀도가 없습니다. 자중이 0이 됩니다.`, d: 'GRAV 1 · 9810 · 0 0 −1', ids: 0 }) },
+  { code: 'density_unit', lv: '주의', name: '밀도 단위', p: .03, make: e => ({ s: `밀도가 7850입니다. mm 단위 모델이면 7.85e-9가 맞습니다.`, d: 'kg/m³ 값으로 보임', ids: 0 }) },
+  { code: 'no_spc', lv: '주의', name: '고정 조건 없음', p: .028, make: e => ({ s: '고정 조건(SPC)이 없습니다. 해석하면 mechanism으로 실패합니다.', d: 'SOL 101 · SPC 절점 0', ids: 0 }) },
+  { code: 'zero_length', lv: '주의', name: '길이 0 요소', p: .03, make: e => { const n = 1 + Math.floor(R() * 3); return { s: `길이가 0인 보 요소가 ${n}개 있습니다.`, d: '양 끝 절점 좌표가 같음', ids: n }; } },
+  { code: 'grav_direction', lv: '참고', name: '중력 방향', p: .03, make: e => ({ s: '중력이 +Z 방향(위쪽)입니다.', d: 'GRAV 1 · 9810 · 0 0 1', ids: 0 }) },
+  { code: 'split_groups', lv: '참고', name: '떨어진 덩어리', p: .12, make: e => { const g = 2 + Math.floor(R() * 3), n = 6 + Math.floor(R() * 60); return { s: `떨어진 덩어리 ${g}개(주 구조 밖 요소 ${n}개)`, d: '부재·쉘·RBE로 이어지지 않은 그룹', ids: Math.min(n, 18) }; } },
+  { code: 'coincident_nodes', lv: '참고', name: '같은 자리 절점', p: .08, make: e => { const n = 2 + Math.floor(R() * 20); return { s: `같은 자리에 절점 ${n}쌍이 있습니다. 서로 이어지지 않았을 수 있습니다.`, d: '허용 거리 = 평균 요소 크기 × 0.01', ids: Math.min(n, 18) }; } },
+  { code: 'free_nodes', lv: '참고', name: '안 쓰인 절점', p: .15, make: e => { const n = 4 + Math.floor(R() * 300); return { s: `어디에도 안 쓰인 절점이 ${n}개 있습니다.`, d: '요소·RBE가 참조하지 않는 GRID', ids: Math.min(n, 18) }; } },
+];
+for (const e of MODELS) {
+  e.checks = [];
+  for (const r of RULES) if (R() < r.p) { const c = r.make(e); e.checks.push({ code: r.code, lv: r.lv, name: r.name, ...c, hl: Array.from({ length: c.ids }, () => Math.floor(R() * 1e6)) }); }
+}
+
+/* ---------- 규칙 B — 비슷한 모델과 견주기(실제로 계산) ---------- */
+const median = a => { const b = a.slice().sort((x, y) => x - y); const m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+const METRICS = [
+  { key: 'elems', name: '요소 수', val: e => Math.log10(e.f.elems), show: e => fmt(e.f.elems) + '개', fromLog: v => fmt(Math.round(10 ** v)) + '개' },
+  { key: 'meanElem', name: '평균 요소 크기', val: e => e.f.meanElem, show: e => fmt(e.f.meanElem) + ' mm', fromLog: v => fmt(Math.round(v)) + ' mm' },
+  { key: 'thick', name: '쉘 두께 중앙값', val: e => e.f.thick, show: e => e.f.thick + ' mm', fromLog: v => (+v.toFixed(1)) + ' mm' },
+  { key: 'nsec', name: '단면 수', val: e => e.secs.length, show: e => e.secs.length + '개', fromLog: v => Math.round(v) + '개' },
+];
+function peersOf(e) { return MODELS.filter(o => o !== e && o.zone === e.zone && o.atype === e.atype); }
+function ruleB(e) {
+  const peers = peersOf(e);
+  if (peers.length < 5) return { peers, rows: null };
+  const rows = METRICS.map(m => {
+    const x = m.val(e); if (x == null) return null;
+    const vals = peers.map(m.val).filter(v => v != null); if (vals.length < 5) return null;
+    const med = median(vals); const mad = median(vals.map(v => Math.abs(v - med))) || 1e-9;
+    const z = 0.6745 * (x - med) / mad;
+    return { m, x, vals, med, z, flag: Math.abs(z) > 3 };
+  }).filter(Boolean);
+  return { peers, rows };
+}
+for (const e of MODELS) {
+  const b = ruleB(e);
+  e.ruleB = b;
+  if (b.rows) for (const r of b.rows) if (r.flag) {
+    let s;
+    if (r.m.key === 'elems') { const ratio = 10 ** (r.x - r.med); s = ratio > 1 ? `${e.zone} · ${e.atype} 모델 ${b.peers.length}개보다 요소가 약 ${ratio.toFixed(0)}배 많습니다.` : `${e.zone} · ${e.atype} 모델 ${b.peers.length}개보다 요소가 약 ${(1 / ratio).toFixed(0)}분의 1입니다.`; }
+    else s = `${e.zone} · ${e.atype} 모델 ${b.peers.length}개와 비교해 ${r.m.name}이 ${r.z > 0 ? '크게' : '작게'} 벗어납니다.`;
+    e.checks.push({ code: 'peer_' + r.m.key, lv: '참고', name: '비슷한 모델과 차이', s, d: `중앙값 ${r.m.fromLog(r.med)}, 이 모델 ${r.m.show(e)}`, ids: 0, hl: [], peer: true });
+  }
+}
+
+/* ================= 공통 ================= */
+const main = document.getElementById('main');
+const tip = document.getElementById('tip');
+function showTip(ev, html) { tip.innerHTML = html; tip.hidden = false; moveTip(ev); }
+function moveTip(ev) { const w = tip.offsetWidth, h = tip.offsetHeight; let x = ev.clientX + 14, y = ev.clientY + 14; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + h > innerHeight - 8) y = ev.clientY - h - 14; tip.style.left = x + 'px'; tip.style.top = y + 'px'; }
+function hideTip() { tip.hidden = true; }
+const rowChip = row => row.kind === 'hull' ? `<span class="chip">${row.label}</span>` : `<span class="chip proj">${esc(row.label)}</span>`;
+const solvePill = s => s === 'pass' ? '<span class="pill ok">검증 통과</span>' : s === 'fail' ? '<span class="pill fail">검증 실패</span>' : s === 'none' ? '<span class="pill none">검증 전</span>' : '';
+const kindBadges = e => (e.hasModel ? '<span class="kb bdf">BDF</span>' : '') + e.reports.map(r => `<span class="kb ${r.k}">${r.k === 'pdf' ? 'PDF' : 'PPTX'}</span>`).join('');
+
+/* ---------- 3D 와이어프레임(예시 모델을 형상 값으로 그린다) ----------
+   종류(kind)마다 실제 현장 모델처럼 모양이 다른 변형(variant) 3가지를 둔다.
+   frame  0 정반 격자+받침 다리 · 1 2단 트러스(사재) · 2 사다리꼴 받침대
+   plate  0 보강 판넬 · 1 개구부 있는 판+거더 · 2 이중 바닥(상·하판+늑판)
+   module 0 다층 골조 · 1 층마다 줄어드는 계단형 · 2 한쪽이 튀어나온 캔틸레버
+   mast   0 격자 탑 · 1 원통 기둥+상부 플랫폼 · 2 A형 프레임 */
+function buildShape(g) {
+  const r = rng(g.seed || 1); const P = [], E = [], F = [];
+  const add = (x, y, z) => (P.push([x, y, z]), P.length - 1);
+  const line = (a, b) => E.push([a, b]);
+  const L = g.L, W = g.W, H = g.H, v = g.variant || 0;
+  const grid = (nx, ny, z, xs = 0, xe = L, ys = 0, ye = W) => { const id = []; for (let i = 0; i <= nx; i++) { id[i] = []; for (let j = 0; j <= ny; j++) id[i][j] = add(xs + i / nx * (xe - xs), ys + j / ny * (ye - ys), z); } return id; };
+  const gridLines = (id, nx, ny, skip) => { for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) { if (i < nx && !(skip && skip(i, j, 'x'))) line(id[i][j], id[i + 1][j]); if (j < ny && !(skip && skip(i, j, 'y'))) line(id[i][j], id[i][j + 1]); } };
+  const faces = (id, nx, ny, skip) => { for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (!(skip && skip(i, j))) F.push([id[i][j], id[i + 1][j], id[i + 1][j + 1], id[i][j + 1]]); };
+  if (g.kind === 'frame') {
+    const nx = g.nx + 3, ny = g.ny + 1;
+    if (v === 1) {
+      const top = grid(nx, 1, H), bot = grid(nx, 1, 0); gridLines(top, nx, 1); gridLines(bot, nx, 1);
+      for (let i = 0; i <= nx; i++) for (let j = 0; j <= 1; j++) { line(top[i][j], bot[i][j]); if (i < nx) line(i % 2 ? top[i][j] : bot[i][j], i % 2 ? bot[i + 1][j] : top[i + 1][j]); }
+    } else if (v === 2) {
+      const top = grid(nx, ny, H), id = []; gridLines(top, nx, ny);
+      for (let i = 0; i <= nx; i += 2) { const a = add(i / nx * L, W * .2, 0), b = add(i / nx * L, W * .8, 0); line(a, b); line(a, top[i][0]); line(b, top[i][ny]); line(a, top[i][Math.floor(ny / 2)]); id.push([a, b]); }
+      for (let k = 0; k + 1 < id.length; k++) { line(id[k][0], id[k + 1][0]); line(id[k][1], id[k + 1][1]); }
+    } else {
+      const id = grid(nx, ny, 0); gridLines(id, nx, ny);
+      for (let i = 0; i <= nx; i += 2) for (let j = 0; j <= ny; j += ny) line(id[i][j], add(i / nx * L, j / ny * W, -H));
+    }
+  } else if (g.kind === 'plate') {
+    const nx = g.nx + 4, ny = g.ny + 2;
+    if (v === 1) {
+      const id = grid(nx, ny, 0); const hole = (i, j) => i >= Math.floor(nx * .35) && i < Math.ceil(nx * .65) && j >= 1 && j < ny - 1;
+      const hl = (i, j) => i >= 0 && j >= 0 && i < nx && j < ny && hole(i, j);
+      faces(id, nx, ny, hole); gridLines(id, nx, ny, (i, j, d) => d === 'x' ? hl(i, j) && hl(i, j - 1) : hl(i, j) && hl(i - 1, j));
+      for (const j of [0, ny]) { const a = add(0, j / ny * W, -H * .5), b = add(L, j / ny * W, -H * .5); line(a, b); line(id[0][j], a); line(id[nx][j], b); for (let i = 2; i < nx; i += 2) line(id[i][j], add(i / nx * L, j / ny * W, -H * .5)); }
+    } else if (v === 2) {
+      const t = grid(nx, ny, H), b = grid(nx, ny, 0); faces(t, nx, ny); faces(b, nx, ny); gridLines(t, nx, ny); gridLines(b, nx, ny);
+      for (let i = 0; i <= nx; i += 2) for (let j = 0; j <= ny; j++) line(t[i][j], b[i][j]);
+    } else {
+      const id = grid(nx, ny, 0); faces(id, nx, ny); gridLines(id, nx, ny);
+      for (let j = 0; j <= ny; j++) { const a = add(0, j / ny * W, -H * .35), b = add(L, j / ny * W, -H * .35); line(a, b); line(id[0][j], a); line(id[nx][j], b); }
+    }
+  } else if (g.kind === 'module') {
+    const nx = g.nx + 1, ny = g.ny, D = g.decks, id = [];
+    for (let d = 0; d <= D; d++) {
+      const shrink = v === 1 ? d / D * .45 : 0, over = v === 2 && d === D ? .28 : 0;
+      id[d] = grid(nx, ny, d / D * H, 0, L * (1 - shrink) + L * over, 0, W);
+      gridLines(id[d], nx, ny);
+    }
+    for (let d = 0; d < D; d++) for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) if (i === 0 || i === nx || j === 0 || j === ny || r() < .25) line(id[d][i][j], id[d + 1][i][j]);
+    if (v === 2) for (let j = 0; j <= ny; j += ny) line(id[D - 1][nx][j], id[D][nx][j]);
+    faces(id[0], nx, ny);
+  } else {
+    if (v === 1) {
+      const lv = 6, seg = 10, cx = L / 2, cy = W / 2, rad = Math.min(L, W) * .14, id = [];
+      for (let k = 0; k <= lv; k++) { id[k] = []; for (let q = 0; q < seg; q++) { const a = q / seg * Math.PI * 2; id[k][q] = add(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad, k / lv * H * .86); } }
+      for (let k = 0; k <= lv; k++) for (let q = 0; q < seg; q++) { line(id[k][q], id[k][(q + 1) % seg]); if (k < lv) { line(id[k][q], id[k + 1][q]); F.push([id[k][q], id[k][(q + 1) % seg], id[k + 1][(q + 1) % seg], id[k + 1][q]]); } }
+      const pf = grid(4, 4, H * .86, 0, L, 0, W); faces(pf, 4, 4); gridLines(pf, 4, 4);
+      const rail = grid(4, 4, H, 0, L, 0, W); for (const [i, j] of [[0, 0], [4, 0], [4, 4], [0, 4]]) line(pf[i][j], rail[i][j]);
+    } else if (v === 2) {
+      const a1 = add(0, 0, 0), a2 = add(L, 0, 0), b1 = add(0, W, 0), b2 = add(L, W, 0), t1 = add(L * .5, 0, H), t2 = add(L * .5, W, H);
+      line(a1, t1); line(a2, t1); line(b1, t2); line(b2, t2); line(t1, t2); line(a1, b1); line(a2, b2);
+      for (let k = 1; k < 5; k++) { const z = k / 5 * H, o = (1 - k / 5) * L * .5; const p = add(o, 0, z), q = add(L - o, 0, z), p2 = add(o, W, z), q2 = add(L - o, W, z); line(p, q); line(p2, q2); line(p, p2); line(q, q2); }
+    } else {
+      const lv = 5 + g.decks, id = [];
+      for (let k = 0; k <= lv; k++) { const t = 1 - k / lv * .55, z = k / lv * H, cx = L / 2, cy = W / 2; id[k] = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => add(cx + a * L / 2 * t, cy + b * W / 2 * t, z)); }
+      for (let k = 0; k <= lv; k++) for (let q = 0; q < 4; q++) { line(id[k][q], id[k][(q + 1) % 4]); if (k < lv) { line(id[k][q], id[k + 1][q]); line(id[k][q], id[k + 1][(q + 1) % 4]); } }
+    }
+  }
+  return { P, E, F };
+}
+function drawModel(cv, g, opt = {}) {
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  const w = cv.clientWidth || 128, h = cv.clientHeight || 84;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.fillStyle = '#0E1A2B'; c.fillRect(0, 0, w, h);
+  const { P, E, F } = buildShape(g);
+  const a = Math.PI / 6;
+  const pr = ([x, y, z]) => [(x - y) * Math.cos(a), (x + y) * Math.sin(a) - z];
+  const Q = P.map(pr);
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const [x, y] of Q) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  const pad = opt.pad ?? 10, bottom = opt.label ? 16 : 0;
+  const s = Math.min((w - pad * 2) / (x1 - x0 || 1), (h - pad * 2 - bottom) / (y1 - y0 || 1));
+  const ox = (w - (x1 - x0) * s) / 2 - x0 * s, oy = (h - bottom - (y1 - y0) * s) / 2 - y0 * s;
+  const T = ([x, y]) => [x * s + ox, y * s + oy];
+  c.fillStyle = 'rgba(111,147,198,.16)';
+  for (const f of F) { c.beginPath(); f.forEach((i, k) => { const [x, y] = T(Q[i]); k ? c.lineTo(x, y) : c.moveTo(x, y); }); c.closePath(); c.fill(); }
+  c.strokeStyle = opt.dimLines ? 'rgba(170,190,220,.35)' : 'rgba(176,198,230,.88)'; c.lineWidth = opt.lw || 1;
+  c.beginPath(); for (const [i, j] of E) { const [ax, ay] = T(Q[i]), [bx, by] = T(Q[j]); c.moveTo(ax, ay); c.lineTo(bx, by); } c.stroke();
+  if (opt.label) {
+    c.font = '500 12px "JetBrains Mono", Consolas, monospace'; c.textAlign = 'right'; c.textBaseline = 'alphabetic';
+    c.fillStyle = '#C9D6EA'; c.fillText(opt.label, w - 7, h - 6);
+  }
+  if (opt.hl && opt.hl.length) {
+    const t = opt.t || 0;
+    for (const k of opt.hl) {
+      const [x, y] = T(Q[k % Q.length]);
+      c.fillStyle = 'rgba(232,89,12,.22)'; c.beginPath(); c.arc(x, y, 9 + 3 * Math.sin(t / 260), 0, 7); c.fill();
+      c.fillStyle = '#E8590C'; c.beginPath(); c.arc(x, y, 3.6, 0, 7); c.fill();
+    }
+  }
+}
+const sizeLabel = g => `${Math.max(g.L, g.W, g.H).toFixed(Math.max(g.L, g.W, g.H) < 10 ? 1 : 0)} m`;
+
+/* ================= 26 빈칸 지도 ================= */
+const COV = { atype: '전체', focus: null, sel: null, expect: false, sort: 'hull', tab: 'no_report', scoped: false, all: false };
+const STATE_INFO = {
+  full: { name: '갖춤', cls: 'c-full', desc: '모델과 문서가 있고, 해석 검증에 실패하지 않았습니다' },
+  noreport: { name: '문서 없음', cls: 'c-noreport', desc: '모델만 있고 보고서·발표자료가 없습니다' },
+  nomodel: { name: '모델 없음', cls: 'c-nomodel', desc: '문서만 있고 모델이 없습니다' },
+  fail: { name: '검증 실패만', cls: 'c-fail', desc: '모델이 모두 해석 검증에 실패했습니다' },
+  empty: { name: '비어 있음', cls: 'c-empty', desc: '자료가 없습니다' },
+  na: { name: '해당 없음', cls: 'c-na', desc: '이 구역에서는 고른 해석 종류를 하지 않습니다' },
+};
+const STATE_ORDER = ['full', 'noreport', 'nomodel', 'fail', 'empty'];
+const inAtype = e => COV.atype === '전체' || e.atype === COV.atype;
+function expected(row, zone) {
+  if (row.kind !== 'hull') return false;
+  const z = (EXPECT[row.st] || {})[zone]; if (!z) return false;
+  return COV.atype === '전체' ? true : z.includes(COV.atype);
+}
+function cellOf(row, zone) {
+  if (COV.atype !== '전체' && !ZONES[zone].at.includes(COV.atype)) return { row, zone, es: [], models: [], docs: [], state: 'na', expect: false };
+  const es = ENTRIES.filter(e => e.row === row && e.zone === zone && inAtype(e));
+  const models = es.filter(e => e.hasModel), docs = es.filter(e => e.hasReport);
+  const linkedOnly = !models.length && es.length && es.every(e => e.linked);
+  let state = 'empty';
+  if (es.length) {
+    if (models.length && models.every(e => e.solve === 'fail')) state = 'fail';
+    else if (models.length && docs.length) state = 'full';
+    else if (models.length) state = 'noreport';
+    else state = linkedOnly ? 'full' : 'nomodel';
+  }
+  return { row, zone, es, models, docs, state, linkedOnly, expect: state === 'empty' && expected(row, zone) };
+}
+const maxDate = row => ENTRIES.filter(e => e.row === row).map(e => e.date).sort().pop() || '';
+const filled = row => ZONE_NAMES.filter(z => { const s = cellOf(row, z).state; return s !== 'empty' && s !== 'na'; }).length;
+function covRows() {
+  const r = ROWS.slice();
+  if (COV.sort === 'recent') r.sort((a, b) => maxDate(b).localeCompare(maxDate(a)));
+  if (COV.sort === 'fill') r.sort((a, b) => filled(a) - filled(b));
+  return r;
+}
+const ZLABEL = { '데크하우스': '데크<br>하우스', '크레인 받침': '크레인<br>받침', '라싱 브리지': '라싱<br>브리지', '헬리데크': '헬리<br>데크', '갑판 의장': '갑판<br>의장' };
+const applicable = () => ZONE_NAMES.filter(z => COV.atype === '전체' || ZONES[z].at.includes(COV.atype)).length;
+
+function renderCoverage() {
+  const rows = covRows(); const cells = [];
+  for (const row of rows) for (const z of ZONE_NAMES) cells.push(cellOf(row, z));
+  const cnt = s => cells.filter(c => c.state === s).length;
+  const expectN = cells.filter(c => c.expect).length;
+  const zoneHas = z => rows.filter(r => { const s = cellOf(r, z).state; return s !== 'empty' && s !== 'na'; }).length;
+  main.innerHTML = `<div class="page">
+    <div class="ph"><div><h1>빈칸 지도</h1><p>호선과 구역마다 확정 자료가 무엇을 갖췄는지 봅니다. 칸에 올리거나 포커스하면 이유가 나오고, 누르면 오른쪽에 그 칸의 자료가 열립니다.</p></div>
+      <span class="sample">예시 데이터 · 자료 ${ENTRIES.length}건 · 호선 20척, 프로젝트 2, 공용</span></div>
+    <div class="toolbar">
+      <div class="tb-g"><span>해석 종류</span><div class="seg" id="atSeg">${['전체', ...ATYPES].map(a => `<button aria-pressed="${COV.atype === a}" data-at="${a}">${a}</button>`).join('')}</div></div>
+      <div class="tb-g"><span>행 순서</span><div class="seg">${[['hull', '호선 번호'], ['recent', '최근 확정'], ['fill', '빈 구역 많은 순']].map(([k, l]) => `<button aria-pressed="${COV.sort === k}" data-sort="${k}">${l}</button>`).join('')}</div></div>
+      <div class="tb-g"><span>선종별 필수 해석</span><button class="btn" id="expBtn" aria-pressed="${COV.expect}">${COV.expect ? `빠진 칸 ${expectN}개 표시 중 · 끄기` : '빠진 칸 표시'}</button></div>
+    </div>
+    <div class="legend" id="legend"><span class="lt-h">칸 수 · 누르면 그 상태만</span>
+      ${STATE_ORDER.map(s => `<button class="lg" data-st="${s}" aria-pressed="${COV.focus === s}"><span class="sw cell ${STATE_INFO[s].cls}" style="margin:0;width:22px;height:16px"></span>${STATE_INFO[s].name} <b>${cnt(s)}</b><em>칸</em></button>`).join('')}
+      ${COV.atype !== '전체' ? `<span class="lg" style="cursor:default"><span class="sw cell c-na" style="margin:0;width:22px;height:16px"></span>해당 없음 <b>${cnt('na')}</b><em>칸</em></span>` : ''}
+      ${COV.expect ? `<span class="lg" style="cursor:default"><span class="sw cell c-empty expect" style="margin:0;width:22px;height:16px"></span>있어야 하는데 빔 <b>${expectN}</b><em>칸</em></span>` : ''}
+    </div>
+    <div class="split">
+      <div style="min-width:0">
+        <div class="gridwrap ${COV.focus ? 'dim' : ''}" id="gridwrap">
+          <table class="cov" role="grid" aria-label="호선별 구역 자료 현황"><thead><tr><th class="rh" scope="col">호선 · 프로젝트<br><span class="small" style="font-weight:400">채운 구역</span></th>
+            ${ZONE_NAMES.map(z => { const n = zoneHas(z); return `<th class="zh ${COV.sel && COV.sel.zone === z ? 'zsel' : ''}" scope="col">${ZLABEL[z] || z}<div class="zbar"><i style="width:${n / rows.length * 100}%"></i></div><span class="zn" title="이 구역에 자료가 있는 호선 수">${n}</span></th>`; }).join('')}
+          </tr></thead><tbody>
+            ${rows.map(row => `<tr class="${COV.sel && COV.sel.row === row ? 'rsel' : ''}"><th class="rh" scope="row"><div class="rhin">${rowChip(row)}<span class="st">${row.st}</span><span class="rcov" title="자료가 있는 구역 수">${filled(row)}/${applicable()}</span></div></th>
+              ${ZONE_NAMES.map(z => { const c = cellOf(row, z); const on = COV.focus ? COV.focus === c.state : true; const sel = COV.sel && COV.sel.row === row && COV.sel.zone === z;
+                const showExp = COV.expect && c.expect;
+                const txt = c.es.length || (showExp ? '!' : '');
+                return `<td><button class="cell ${STATE_INFO[c.state].cls}${showExp ? ' expect' : ''}${on ? ' on' : ''}${sel ? ' c-sel' : ''}" tabindex="-1" data-r="${row.key}" data-z="${z}" aria-label="${row.label} ${z}: ${STATE_INFO[c.state].name}${c.es.length ? ', 자료 ' + c.es.length + '건' : ''}${showExp ? ', 필수 해석인데 비어 있음' : ''}">${txt}</button></td>`; }).join('')}</tr>`).join('')}
+          </tbody></table>
+        </div>
+        <div class="gridnote"><span>칸 안 숫자 = 자료 수 · 열 머리 숫자 = 자료가 있는 호선 수</span><span>방향키로 칸을 옮기고 Enter로 엽니다</span></div>
+        ${renderCovLists()}
+      </div>
+      <aside class="panel side" id="covSide" aria-live="polite">${renderCovSide()}</aside>
+    </div></div>`;
+  bindCoverage();
+}
+function covLists() {
+  let base = ENTRIES.filter(inAtype);
+  if (COV.scoped && COV.sel) base = base.filter(e => e.row === COV.sel.row && e.zone === COV.sel.zone);
+  return {
+    no_report: { name: '문서 없는 모델', note: '모델은 있는데 보고서·발표자료가 없고, 다른 문서에서 이 모델을 연결한 적도 없습니다.', rows: base.filter(e => e.hasModel && !e.hasReport) },
+    no_model: { name: '모델 없는 문서', note: '문서만 있고, 문서에 사용한 모델 연결도 없습니다.', rows: base.filter(e => !e.hasModel && !e.linked) },
+    solve_fail: { name: '해석 검증 실패', note: '원본을 바꾸지 않은 사본으로 Nastran을 돌렸을 때 실패한 모델입니다.', rows: base.filter(e => e.solve === 'fail') },
+    checks: { name: '점검 주의', note: '모델 점검에서 「주의」가 하나라도 나온 모델입니다.', rows: base.filter(e => e.hasModel && e.checks.some(c => c.lv === '주의')) },
+    needs_fix: { name: '분류 보완 필요', note: '호선·구역·해석 종류 중 빠진 칸이 있는 확정 자료입니다.', rows: base.filter(e => e.needsFix) },
+    unsigned: { name: '서명 없는 모델', note: '옛 방식으로 변환되어 내용 서명이 없습니다. 관리자가 다시 변환하면 채워집니다.', rows: base.filter(e => e.unsigned) },
+  };
+}
+function renderCovLists() {
+  const L = covLists(); const cur = L[COV.tab]; const lim = COV.all ? cur.rows.length : 12;
+  return `<div class="lists">
+    <div class="lists-h"><p class="sec-t" style="margin:0">손볼 자료 목록${COV.atype !== '전체' ? ` · ${COV.atype}` : ''}</p>
+      ${COV.sel ? (COV.scoped ? `<span class="scope">${COV.sel.row.label} · ${COV.sel.zone}만<button id="unscope" aria-label="칸 거르기 풀기">×</button></span>` : `<button class="btn" id="scopeBtn">${COV.sel.row.label} · ${COV.sel.zone}만 보기</button>`) : ''}</div>
+    <div class="tabs" role="tablist">${Object.entries(L).map(([k, v]) => `<button role="tab" aria-selected="${COV.tab === k}" data-tab="${k}">${v.name}<span class="cnt">${v.rows.length}건</span></button>`).join('')}</div>
+    <div class="tabnote">${cur.note}</div>
+    ${cur.rows.length ? `<div class="ltwrap"><table class="lt"><thead><tr><th>자료</th><th>호선</th><th>구역 · 해석 종류</th><th>파일 · 검증</th><th>올린 사람</th><th>확정</th></tr></thead><tbody>
+      ${cur.rows.slice(0, lim).map(e => `<tr><td><div style="font-weight:500">${esc(shortTitle(e))}</div><span class="idl">${e.id}</span></td><td>${rowChip(e.row)}</td><td class="nw">${e.zone} · ${e.atype}</td><td class="nw">${kindBadges(e)} ${solvePill(e.solve)}</td><td class="nw">${e.by}</td><td class="mono small nw">${e.date}</td></tr>`).join('')}
+    </tbody></table>${cur.rows.length > lim ? `<div class="more"><button class="btn ghost" id="moreBtn">나머지 ${cur.rows.length - lim}건 더 보기</button></div>` : ''}</div>`
+      : '<div class="empty-note">이 조건에 해당하는 자료가 없습니다.</div>'}
+  </div>`;
+}
+const shortTitle = e => e.title.split(' · ').slice(1).join(' · ') || e.title;
+function todoCells() {
+  const out = [];
+  for (const row of ROWS) for (const z of ZONE_NAMES) {
+    const c = cellOf(row, z);
+    if (c.state === 'fail') out.push({ c, rank: 0, why: `모델 ${c.models.length}개가 모두 검증 실패` });
+    else if (c.state === 'noreport') out.push({ c, rank: 1, why: `모델 ${c.models.length}개 · 문서 없음` });
+    else if (COV.expect && c.expect) out.push({ c, rank: 2, why: `${row.st} 필수 해석인데 비어 있음` });
+  }
+  return out.sort((a, b) => a.rank - b.rank || maxDate(b.c.row).localeCompare(maxDate(a.c.row)));
+}
+function renderCovSide() {
+  if (!COV.sel) {
+    const t = todoCells();
+    return `<div class="dp"><h2>먼저 볼 칸</h2><div class="small" style="color:var(--n-600)">검증 실패 → 문서 없음${COV.expect ? ' → 필수인데 빔' : ''} 순서, 최근 확정한 호선부터입니다.</div>
+      <div style="margin-top:10px">${t.slice(0, 9).map((x, i) => `<button class="todo" data-todo="${i}"><span class="cell ${STATE_INFO[x.c.state].cls}${x.c.expect && COV.expect ? ' expect' : ''}" style="margin:0;width:34px;height:22px;cursor:inherit">${x.c.es.length || '!'}</span><span><span class="w">${rowChip(x.c.row)} ${x.c.zone}</span><br><span class="s">${x.why}</span></span><span class="small" style="color:var(--n-600)">열기</span></button>`).join('') || '<p class="empty-note">손볼 칸이 없습니다.</p>'}</div>
+      ${t.length > 9 ? `<p class="small" style="color:var(--n-600);margin-top:8px">그 밖에 ${t.length - 9}칸은 아래 목록 탭에서 자료 단위로 볼 수 있습니다.</p>` : ''}</div>`;
+  }
+  const c = cellOf(COV.sel.row, COV.sel.zone);
+  let html = `<div class="dp"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><h2>${rowChip(c.row)} ${c.zone}</h2><button class="btn ghost" id="closeSel" aria-label="선택 해제">닫기</button></div>
+    <div class="small" style="color:var(--n-600)">${c.row.st}${COV.atype !== '전체' ? ' · ' + COV.atype + '만' : ''}</div>
+    <div class="lead"><b style="font-weight:600">${STATE_INFO[c.state].name}</b>. ${STATE_INFO[c.state].desc}.${c.linkedOnly ? ' 문서가 다른 자료의 모델과 연결되어 있어 갖춤으로 셉니다.' : ''}${COV.expect && c.expect ? ` <span style="color:var(--err)">${c.row.st} 필수 해석 목록에 있는 구역입니다.</span>` : ''}</div>`;
+  if (c.es.length) html += `<p class="sec-t">이 칸의 자료 ${c.es.length}건</p>` + c.es.map(entryRow).join('');
+  else if (c.state !== 'na') {
+    const sameZone = ENTRIES.filter(e => e.zone === c.zone && e.row !== c.row && e.row.st === c.row.st && inAtype(e)).slice(0, 4);
+    const sameRow = ENTRIES.filter(e => e.row === c.row && inAtype(e)).slice(0, 4);
+    html += `<p class="sec-t">참고할 자료 · 같은 선종 다른 호선의 ${c.zone}</p>${sameZone.length ? sameZone.map(entryRow).join('') : '<p class="small" style="color:var(--n-600)">없습니다.</p>'}
+      <p class="sec-t" style="margin-top:14px">참고할 자료 · ${c.row.label}의 다른 구역</p>${sameRow.length ? sameRow.map(entryRow).join('') : '<p class="small" style="color:var(--n-600)">이 호선에는 아직 자료가 없습니다.</p>'}`;
+  }
+  return html + '</div>';
+}
+const entryRow = e => `<div class="erow"><div class="t">${esc(shortTitle(e))}</div><div class="m">${rowChip(e.row)}<span class="idl">${e.id}</span>${kindBadges(e)}${solvePill(e.solve)}</div><div class="small" style="margin-top:3px;color:var(--n-600)">${e.by} · ${e.date}${e.linked ? ' · 다른 자료의 모델과 연결됨' : ''}</div></div>`;
+function cellTip(row, z) {
+  const c = cellOf(row, z); const parts = [];
+  if (c.models.length) parts.push(`모델 ${c.models.length}`); if (c.docs.length) parts.push(`문서 ${c.docs.length}`);
+  const fails = c.models.filter(e => e.solve === 'fail').length; if (fails) parts.push(`검증 실패 ${fails}`);
+  return `<b>${row.label} · ${z}</b><br>${STATE_INFO[c.state].name}. ${STATE_INFO[c.state].desc}.${parts.length ? '<br>' + parts.join(' · ') : ''}${COV.expect && c.expect ? '<br>' + row.st + ' 필수 해석인데 비어 있습니다.' : ''}`;
+}
+function selectCell(row, z, focus) {
+  COV.sel = { row, zone: z }; COV.all = false; hideTip();
+  const gw = document.getElementById('gridwrap'); const y = gw.scrollTop, x = gw.scrollLeft;
+  renderCoverage();
+  const g2 = document.getElementById('gridwrap'); g2.scrollTop = y; g2.scrollLeft = x;
+  const btn = g2.querySelector(`.cell[data-r="${row.key}"][data-z="${z}"]`);
+  if (btn) { btn.tabIndex = 0; if (focus) btn.focus({ preventScroll: true }); }
+}
+function bindCoverage() {
+  main.querySelectorAll('[data-at]').forEach(b => b.onclick = () => { COV.atype = b.dataset.at; COV.all = false; keepScroll(renderCoverage); });
+  main.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => { COV.sort = b.dataset.sort; keepScroll(renderCoverage); });
+  main.querySelectorAll('[data-st]').forEach(b => b.onclick = () => { COV.focus = COV.focus === b.dataset.st ? null : b.dataset.st; keepScroll(renderCoverage); });
+  main.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { COV.tab = b.dataset.tab; COV.all = false; keepScroll(renderCoverage); });
+  document.getElementById('expBtn').onclick = () => { COV.expect = !COV.expect; keepScroll(renderCoverage); };
+  const sb = document.getElementById('scopeBtn'); if (sb) sb.onclick = () => { COV.scoped = true; keepScroll(renderCoverage); };
+  const us = document.getElementById('unscope'); if (us) us.onclick = () => { COV.scoped = false; keepScroll(renderCoverage); };
+  const mb = document.getElementById('moreBtn'); if (mb) mb.onclick = () => { COV.all = true; keepScroll(renderCoverage); };
+  const cs = document.getElementById('closeSel'); if (cs) cs.onclick = () => { COV.sel = null; COV.scoped = false; keepScroll(renderCoverage); };
+  const todos = todoCells(); main.querySelectorAll('[data-todo]').forEach(b => b.onclick = () => { const x = todos[+b.dataset.todo].c; selectCell(x.row, x.zone, true); const btn = document.querySelector(`.cell[data-r="${x.row.key}"][data-z="${x.zone}"]`); if (btn) btn.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
+  const gw = document.getElementById('gridwrap');
+  const cellsEl = [...gw.querySelectorAll('.cell[data-r]')];
+  if (!cellsEl.some(b => b.tabIndex === 0) && cellsEl[0]) cellsEl[0].tabIndex = 0;
+  const nCol = ZONE_NAMES.length;
+  cellsEl.forEach((b, idx) => {
+    const row = ROWS.find(r => r.key === b.dataset.r), z = b.dataset.z;
+    b.onclick = () => { if (b.classList.contains('c-na')) return; selectCell(row, z, true); };
+    b.onmouseenter = ev => showTip(ev, cellTip(row, z)); b.onmousemove = moveTip; b.onmouseleave = hideTip;
+    b.onfocus = () => { const r = b.getBoundingClientRect(); showTip({ clientX: r.right, clientY: r.bottom }, cellTip(row, z)); };
+    b.onblur = hideTip;
+    b.onkeydown = ev => {
+      const mv = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: nCol, ArrowUp: -nCol }[ev.key];
+      if (mv) { ev.preventDefault(); const t = cellsEl[idx + mv]; if (t) { b.tabIndex = -1; t.tabIndex = 0; t.focus(); t.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }
+      if (ev.key === 'Escape') { hideTip(); }
+    };
+  });
+}
+
+/* ================= 27 모델 점검 ================= */
+const CK = { rule: null, sel: null, active: null, raf: 0 };
+function renderChecks() {
+  const all = MODELS;
+  const hits = RULES.map(r => ({ r, n: all.filter(e => e.checks.some(c => c.code === r.code)).length }));
+  const peerN = all.filter(e => e.checks.some(c => c.peer)).length;
+  const maxN = Math.max(peerN, ...hits.map(h => h.n), 1);
+  const list = all.filter(e => CK.rule ? (CK.rule === 'peer' ? e.checks.some(c => c.peer) : e.checks.some(c => c.code === CK.rule)) : e.checks.length)
+    .sort((a, b) => warnN(b) - warnN(a) || b.checks.length - a.checks.length);
+  if (!CK.sel || !list.includes(CK.sel)) CK.sel = list[0] || null;
+  const clean = all.filter(e => !e.checks.length).length;
+  main.innerHTML = `<div class="page">
+    <div class="ph"><div><h1>모델 점검</h1><p>변환할 때 BDF를 함께 점검합니다. 확정을 막지 않고, 정리 대기 카드와 자료 상세에 문장으로 알립니다. 이 화면은 관리자용 모아 보기입니다.</p></div>
+      <span class="sample">예시 데이터 · 모델 ${all.length}개 · 점검 없음 ${clean}개</span></div>
+    <div class="panel" style="overflow:auto"><table class="rules"><thead><tr><th>규칙</th><th>수준</th><th>판정 방식</th><th>걸린 모델</th><th></th></tr></thead><tbody>
+      ${hits.map(({ r, n }) => `<tr class="rr" data-rule="${r.code}" aria-selected="${CK.rule === r.code}"><td><b style="font-weight:500">${r.name}</b> <span class="idl">${r.code}</span></td><td>${lvPill(r.lv)}</td><td class="small muted">모델 하나만 보고 (A)</td><td class="mono"><span class="rbar"><i style="width:${n / maxN * 100}%"></i></span>${n} <span class="muted">/ ${all.length}</span></td><td class="small muted">${n / all.length > .1 ? '많이 걸림 — 문턱 확인' : ''}</td></tr>`).join('')}
+      <tr class="rr" data-rule="peer" aria-selected="${CK.rule === 'peer'}"><td><b style="font-weight:500">비슷한 모델과 차이</b> <span class="idl">peer_*</span></td><td>${lvPill('참고')}</td><td class="small muted">같은 구역 · 해석 종류 5개 이상과 비교 (B)</td><td class="mono"><span class="rbar"><i style="width:${peerN / maxN * 100}%"></i></span>${peerN} <span class="muted">/ ${all.length}</span></td><td class="small muted">쌓일수록 정확해짐</td></tr>
+    </tbody></table></div>
+    <p class="small muted" style="margin:8px 2px 0">규칙을 누르면 그 규칙에 걸린 모델만 남습니다. 운영 모델 전체에 돌려 걸린 비율이 높으면 문턱을 다시 맞춥니다(오탐 0 목표).</p>
+    <div class="ck-grid">
+      <div class="panel mlist">${list.map(e => `<button class="mrow" data-id="${e.id}" aria-selected="${CK.sel === e}"><div class="t">${esc(e.title)}</div><div class="m">${rowChip(e.row)}<span class="idl">${e.id}</span>${badgeFor(e)}</div></button>`).join('') || '<div class="empty-note">이 규칙에 걸린 모델이 없습니다.</div>'}</div>
+      <div id="ckDetail" style="min-width:0">${CK.sel ? renderCkDetail(CK.sel) : ''}</div>
+    </div></div>`;
+  main.querySelectorAll('[data-rule]').forEach(tr => tr.onclick = () => { CK.rule = CK.rule === tr.dataset.rule ? null : tr.dataset.rule; CK.active = null; renderChecks(); });
+  main.querySelectorAll('.mrow').forEach(b => b.onclick = () => { CK.sel = MODELS.find(e => e.id === b.dataset.id); CK.active = null; main.querySelectorAll('.mrow').forEach(x => x.setAttribute('aria-selected', x === b)); document.getElementById('ckDetail').innerHTML = renderCkDetail(CK.sel); bindCkDetail(); });
+  bindCkDetail();
+}
+const warnN = e => e.checks.filter(c => c.lv === '주의').length;
+const lvPill = lv => lv === '주의' ? '<span class="pill warn">주의</span>' : '<span class="pill info">참고</span>';
+function badgeFor(e) { const w = warnN(e), i = e.checks.length - w; return (w ? `<span class="ckbadge">주의 ${w}</span>` : '') + (i ? `<span class="ckbadge info">참고 ${i}</span>` : '') + (!e.checks.length ? '<span class="ckbadge zero">점검 이상 없음</span>' : ''); }
+function renderCkDetail(e) {
+  const b = e.ruleB;
+  return `<div class="panel" style="padding:16px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h2 style="font-size:17px;font-weight:600;margin:0">${esc(e.title)}</h2></div>
+    <div class="m" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center">${rowChip(e.row)}<span class="idl">${e.id}</span><span class="tagc">${e.zone}</span><span class="tagc">${e.atype}</span>${solvePill(e.solve)}<span class="small muted">요소 ${fmt(e.f.elems)} · 크기 ${e.f.L}×${e.f.W}×${e.f.H} m</span></div>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:14px" class="ckin">
+      <div style="min-width:0"><p class="sec-t">점검 결과 ${e.checks.length}건</p>
+        ${e.checks.map((c, i) => `<div class="ckitem" data-ci="${i}" aria-current="${CK.active === i}"><div>${lvPill(c.lv)}</div><div><div class="s">${esc(c.s)}</div><div class="d">${esc(c.d)} · <span class="idl">${c.code}</span></div></div><div>${c.hl.length ? `<button class="btn ghost" data-show="${i}">3D에서 보기</button>` : ''}</div></div>`).join('') || '<p class="small muted">걸린 규칙이 없습니다.</p>'}
+      </div>
+      <div style="min-width:0"><div class="viewer"><canvas id="ckCanvas"></canvas><div class="vcap">모델 미리보기 · 예시 형상</div><div class="vlg" id="vlg" hidden><i></i><span id="vlgT"></span></div></div></div>
+    </div>
+    <p class="sec-t" style="margin-top:18px">비슷한 모델과 견주기 (규칙 B)</p>
+    ${b.rows ? `<div class="small muted" style="margin-bottom:6px">같은 구역(${e.zone}) · 같은 해석 종류(${e.atype})의 확정 모델 ${b.peers.length}개와 비교합니다. 회색 점 = 다른 모델, 세로선 = 중앙값, 남색 = 이 모델. 중앙값에서 robust z 3을 넘으면 알립니다.</div>${b.rows.map(peerRow).join('')}`
+      : `<div class="lead" style="margin:0;padding:10px 12px;background:var(--n-50);border-radius:6px;font-size:13px">같은 구역 · 해석 종류의 모델이 ${b.peers.length}개뿐이라 판정하지 않습니다. 5개가 넘으면 비교를 시작합니다.</div>`}
+    <p class="sec-t" style="margin-top:18px">정리 대기 카드에서는 이렇게 보입니다</p>
+    <div class="mockcard"><div class="hd"><span class="kb bdf">BDF</span><b style="font-weight:600">${esc(e.title.replace(/ · /g, '_'))}.bdf</b><span class="small muted mono">${(e.f.elems * 0.21 / 1024).toFixed(1)} MB</span>${badgeFor(e)}<span style="margin-left:auto"></span><button class="btn primary" tabindex="-1">확정</button></div>
+      <div class="small muted" style="margin-top:6px">배지를 누르면 위 점검 문장이 펼쳐집니다. 확정 단추는 잠그지 않습니다.</div></div>
+  </div>`;
+}
+function peerRow(r) {
+  const W = 400, H = 34, all = r.vals.concat([r.x]); let lo = Math.min(...all), hi = Math.max(...all); if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+  const X = v => 8 + (v - lo) / (hi - lo) * (W - 16);
+  const dots = r.vals.map((v, i) => `<circle cx="${X(v).toFixed(1)}" cy="${(17 + ((i * 7) % 11) - 5).toFixed(1)}" r="3.2" fill="#90959C" fill-opacity=".55"/>`).join('');
+  const sent = r.flag ? `중앙값 ${r.m.fromLog(r.med)}에서 크게 벗어납니다 (이 모델 ${r.m.key === 'elems' ? fmt(Math.round(10 ** r.x)) + '개' : r.m.key === 'meanElem' ? fmt(r.x) + ' mm' : r.m.key === 'thick' ? r.x + ' mm' : r.x + '개'}).` : `중앙값 ${r.m.fromLog(r.med)} — 범위 안입니다.`;
+  return `<div class="peer"><div class="nm">${r.m.name}${r.m.key === 'elems' ? ' <span class="muted small">(log)</span>' : ''}</div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${r.m.name} 분포"><line x1="8" x2="${W - 8}" y1="17" y2="17" stroke="#E0E5EC"/>${dots}
+      <line x1="${X(r.med)}" x2="${X(r.med)}" y1="4" y2="30" stroke="#4E5359" stroke-dasharray="2 2"/>
+      <circle cx="${X(r.x)}" cy="17" r="6" fill="${r.flag ? '#A34A07' : '#002554'}" stroke="#fff" stroke-width="2"/></svg>
+    <div class="sent ${r.flag ? 'flag' : ''}">${sent}</div></div>`;
+}
+function bindCkDetail() {
+  const e = CK.sel; if (!e) return;
+  const cv = document.getElementById('ckCanvas');
+  cancelAnimationFrame(CK.raf);
+  const draw = t => { const c = CK.active != null ? e.checks[CK.active] : null; drawModel(cv, e.geom, { hl: c ? c.hl : [], t, dimLines: !!c, pad: 22, lw: 1.1 }); if (c && !matchMedia('(prefers-reduced-motion: reduce)').matches) CK.raf = requestAnimationFrame(draw); };
+  draw(0);
+  main.querySelectorAll('[data-show]').forEach(b => b.onclick = () => {
+    const i = +b.dataset.show; CK.active = CK.active === i ? null : i;
+    main.querySelectorAll('.ckitem').forEach(x => x.setAttribute('aria-current', +x.dataset.ci === CK.active));
+    const lg = document.getElementById('vlg'); lg.hidden = CK.active == null; if (CK.active != null) document.getElementById('vlgT').textContent = `${e.checks[i].name} ${e.checks[i].hl.length}곳`;
+    cancelAnimationFrame(CK.raf); draw(0);
+  });
+}
+
+/* ================= 28 비슷한 선례 ================= */
+const W0 = { size: .30, scale: .20, mix: .20, sec: .20, tag: .10 };
+const SIM = { base: null, sel: null, w: { ...W0 }, zone: '', atype: '', order: 'like', open: new Set(), err: '' };
+const PART_NAMES = { size: '크기', scale: '규모·촘촘함', mix: '구성', sec: '단면', tag: '분류' };
+function keepScroll(fn) { const y = main.scrollTop; fn(); main.scrollTop = y; }
+function feat(e) { return { L: e.f.L, W: e.f.W, H: e.f.H, elems: e.f.elems, meanElem: e.f.meanElem, mix: e.f.mix, secs: e.secs, sig: e.geom.sig, zone: e.zone, atype: e.atype, sol: e.sol }; }
+function score(b, o) {
+  const db = [b.L, b.W, b.H].sort((x, y) => y - x), dob = [o.L, o.W, o.H].sort((x, y) => y - x);
+  const dsz = Math.sqrt(db.reduce((s, v, i) => s + Math.log(Math.max(v, .05) / Math.max(dob[i], .05)) ** 2, 0));
+  const size = Math.exp(-dsz * 1.3);
+  const scale = Math.exp(-(Math.abs(Math.log10(b.elems / o.elems)) * 1.4 + Math.abs(Math.log(b.meanElem / o.meanElem)) * .8));
+  const dot = b.mix.reduce((s, v, i) => s + v * o.mix[i], 0), nb = Math.hypot(...b.mix), no = Math.hypot(...o.mix);
+  const mix = Math.max(0, dot / (nb * no || 1)) ** 3;
+  const A = new Set(b.secs), B = new Set(o.secs), inter = [...A].filter(x => B.has(x));
+  const sec = (A.size + B.size) ? inter.length / new Set([...A, ...B]).size : 0;
+  const tag = (b.zone && b.zone === o.zone ? .6 : 0) + (b.atype && b.atype === o.atype ? .4 : 0);
+  const shape = b.sig && b.sig === o.sig ? 1 : 0;
+  const w = SIM.w, ws = w.size + w.scale + w.mix + w.sec + w.tag || 1;
+  const raw = { size, scale, mix, sec, tag };
+  const weighted = Object.keys(raw).reduce((a, k) => a + raw[k] * w[k] / ws, 0);
+  const total = shape ? .9 + .1 * weighted : weighted;
+  return { total, shape, raw, inter };
+}
+/* 같은 점 · 다른 점 — 반복되는 '비슷함'보다 판단에 쓰이는 차이를 앞에 둔다 */
+function compare(b, o, s) {
+  const same = [], diff = [];
+  const dim = x => `${x.L}×${x.W}×${x.H} m`;
+  if (s.shape) same.push('형상 같음(같은 설계)');
+  if (s.raw.size > .6) same.push('크기 비슷'); else diff.push(`크기 ${dim(o)}`);
+  const er = o.elems / b.elems;
+  if (er > 1.6 || er < .62) diff.push(`요소 ${er > 1 ? er.toFixed(1) + '배' : '1/' + (1 / er).toFixed(1)} (${fmt(o.elems)}개)`); else same.push('요소 수 비슷');
+  if (s.raw.mix > .85) same.push(o.mix[0] > .7 ? '보 위주' : o.mix[1] > .5 ? '쉘 위주' : '보·쉘 섞임');
+  else diff.push(o.mix[0] > .7 ? `보 위주(${Math.round(o.mix[0] * 100)}%)` : `쉘 ${Math.round(o.mix[1] * 100)}%`);
+  const onlyB = b.secs.filter(x => !o.secs.includes(x)), onlyO = o.secs.filter(x => !b.secs.includes(x));
+  if (s.inter.length) same.push(`단면 ${s.inter.length}개 같음`);
+  if (onlyO.length) diff.push(`단면 ${onlyO.length}개 다름` + (onlyO.length <= 2 ? ` (${onlyO.join(', ')})` : ''));
+  if (b.zone && b.zone !== o.zone) diff.push(`구역 ${o.zone}`);
+  if (b.atype && b.atype !== o.atype) diff.push(`해석 ${o.atype}`);
+  return { same: same.slice(0, 3), diff: diff.slice(0, 3) };
+}
+const likeWord = v => v >= .9 ? '거의 같음' : v >= .7 ? '많이 비슷' : v >= .5 ? '일부 비슷' : '참고만';
+function sizeTxt(f) { return `${f.L}×${f.W}×${f.H} m`; }
+function geomVariant(kind, v, base) { return { ...base, kind, variant: v }; }
+const EXAMPLES = (() => {
+  // ① 표준 설계를 다시 쓰는 새 LNGC 정반 ② 해상풍력 마스트 좌굴 ③ 닮은 선례가 없는 대형 모듈
+  const std = MODELS.find(e => e.geom.sig.startsWith('g-') && e.zone === '정반') || MODELS[0];
+  const mast = MODELS.find(e => e.zone === '마스트') || MODELS[1];
+  return [
+    { name: '3902_정반_Truss_R0.bdf', note: 'LNGC 새 호선 정반', f: { L: std.f.L, W: std.f.W, H: std.f.H, elems: Math.round(std.f.elems * 1.01), meanElem: std.f.meanElem, mix: std.f.mix, secs: [...new Set(std.secs.slice(0, -1).concat(['L130x130x12']))].sort(), sig: std.geom.sig, zone: '정반', atype: 'Truss', sol: '101' }, geom: std.geom },
+    { name: 'TP_마스트_좌굴_검토.bdf', note: '해상풍력 마스트', f: { L: +(mast.f.L * 1.1).toFixed(1), W: +(mast.f.W * .95).toFixed(1), H: +(mast.f.H * 1.15).toFixed(1), elems: Math.round(mast.f.elems * 1.3), meanElem: Math.round(mast.f.meanElem * .95), mix: [.9, .05, .04, .01], secs: ['L100x100x10', 'PIPE165.2x7', 'PIPE216.3x8', 't12'], sig: 'new-1', zone: '마스트', atype: '좌굴', sol: '101' }, geom: { ...mast.geom, sig: 'new-1', H: mast.geom.H * 1.15, seed: 99 } },
+    { name: '신규_대형모듈_해상운송.bdf', note: '닮은 선례가 없는 경우', f: { L: 128, W: 64, H: 41, elems: 920000, meanElem: 190, mix: [.12, .86, .01, .01], secs: ['BOX500x500x20', 'H600x300x12x20', 't22', 't25'], sig: 'new-2', zone: '', atype: '', sol: '101' }, geom: { kind: 'module', variant: 2, L: 128, W: 64, H: 41, nx: 7, ny: 5, decks: 4, seed: 7 } },
+  ];
+})();
+function setBase(x) { SIM.base = { name: x.name, f: x.f, geom: x.geom, entry: x.entry || null, parsed: !!x.parsed }; SIM.sel = null; SIM.zone = ''; SIM.atype = ''; SIM.open = new Set(); SIM.err = ''; }
+/* 같은 형상 서명은 한 줄로 묶는다 — 표준 설계를 여러 척이 다시 쓴 경우 '같은 그림 N장' 대신 '같은 설계 N개 자료' */
+function groupedResults(bf) {
+  const scored = MODELS.filter(e => e !== SIM.base.entry).map(e => ({ e, s: score(bf, feat(e)) }));
+  const groups = new Map();
+  for (const r of scored) { const k = r.e.geom.sig; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+  let rows = [...groups.values()].map(list => {
+    list.sort((a, b) => b.s.total - a.s.total || (a.e.solve === 'pass' ? -1 : 1));
+    const pass = list.filter(x => x.e.solve === 'pass');
+    const lead = pass.length && pass[0].s.total > list[0].s.total - .03 ? pass[0] : list[0];
+    return { lead, list, best: list[0].s.total };
+  });
+  rows.sort((a, b) => b.best - a.best);
+  if (SIM.order === 'pass') rows.sort((a, b) => (a.lead.e.solve === 'pass' ? 0 : 1) - (b.lead.e.solve === 'pass' ? 0 : 1) || (b.lead.e.reports.length ? 1 : 0) - (a.lead.e.reports.length ? 1 : 0) || b.best - a.best);
+  return rows.slice(0, 10);
+}
+function renderSimilar() {
+  if (!SIM.base) setBase(EXAMPLES[0]);
+  const b = SIM.base;
+  const bf = { ...b.f, zone: SIM.zone || b.f.zone, atype: SIM.atype || b.f.atype };
+  const rows = groupedResults(bf);
+  const best = rows[0] ? rows[0].best : 0, weak = best < .5;
+  const shown = weak ? rows.slice(0, 3) : rows;
+  if (!SIM.sel || !shown.some(r => r.list.some(x => x.e === SIM.sel))) SIM.sel = shown[0] && shown[0].lead.e;
+  main.innerHTML = `<div class="page">
+    <div class="ph"><div><h1>비슷한 선례</h1><p>새 해석을 시작하기 전에, 비슷한 모델을 누가 해석했고 결과가 어땠는지 찾습니다. 기준 BDF와 같은 점, 다른 점을 함께 보여 줍니다.</p></div>
+      <span class="sample">예시 데이터 · 비교 대상 모델 ${MODELS.length}개</span></div>
+    <section class="basebar" id="drop" aria-label="기준 BDF">
+      <canvas id="baseCv" aria-hidden="true"></canvas>
+      <div style="min-width:0">
+        <div class="bname"><span class="kb bdf">BDF</span><b>${esc(b.name)}</b><span class="small" style="color:var(--n-600)">기준 · ${b.entry ? b.entry.id + ' 자료' : b.parsed ? '내 PC에서 읽음(저장 안 함)' : '예시'}</span></div>
+        <div class="bfacts"><span><span class="k">크기</span><span class="mono">${sizeTxt(b.f)}</span></span><span><span class="k">요소</span><span class="mono">${fmt(b.f.elems)}</span></span><span><span class="k">평균 요소</span><span class="mono">${fmt(b.f.meanElem)} mm</span></span><span><span class="k">구성</span>보 ${Math.round(b.f.mix[0] * 100)}% · 쉘 ${Math.round(b.f.mix[1] * 100)}%</span><span><span class="k">단면</span>${b.f.secs.length}개</span></div>
+        <div class="bctl"><span class="lb">구역·해석 종류를 고르면 더 정확해집니다</span>
+          <select class="zsel" id="zSel" aria-label="구역"><option value="">구역 모름</option>${ZONE_NAMES.map(z => `<option ${bf.zone === z ? 'selected' : ''}>${z}</option>`).join('')}</select>
+          <select class="zsel" id="aSel" aria-label="해석 종류"><option value="">해석 종류 모름</option>${ATYPES.map(a => `<option ${bf.atype === a ? 'selected' : ''}>${a}</option>`).join('')}</select></div>
+        ${SIM.err ? `<div class="warnline">${esc(SIM.err)}</div>` : ''}
+      </div>
+      <div class="bact"><input type="file" id="fileIn" accept=".bdf,.dat,.nas,.txt" hidden><button class="btn primary" id="pickFile">다른 BDF 고르기</button><span class="hint">또는 이 칸에 끌어다 놓기</span>
+        <select class="zsel" id="fromEntry" aria-label="LogBook 자료에서 기준 고르기"><option value="">LogBook 자료에서 고르기</option>${MODELS.slice(0, 80).map(e => `<option value="${e.id}" ${b.entry === e ? 'selected' : ''}>${e.id} · ${esc(e.title)}</option>`).join('')}</select></div>
+    </section>
+    <div class="exrow"><span class="lb">예시로 보기</span>${EXAMPLES.map((x, i) => `<button class="btn" data-ex="${i}" aria-pressed="${b.name === x.name}">${x.note}</button>`).join('')}</div>
+    <div class="split" style="margin-top:14px">
+      <div class="panel" style="min-width:0">
+        <div class="reshead"><b style="font-weight:600">${weak ? '가까운 모델 3개' : `선례 ${rows.length}건`}</b><div class="seg" role="group" aria-label="정렬">${[['like', '닮은 순'], ['pass', '검증 통과·문서 있는 것 먼저']].map(([k, l]) => `<button aria-pressed="${SIM.order === k}" data-ord="${k}">${l}</button>`).join('')}</div></div>
+        ${weak ? `<div class="nomatch"><b style="font-weight:600">충분히 비슷한 선례가 없습니다.</b> 가장 가까운 모델도 일부만 닮았습니다. 아래 3개는 참고로만 보세요.
+          <div class="acts">${bf.zone ? '' : '<span class="small" style="color:var(--n-700)">구역·해석 종류를 고르면 같은 구역 자료가 위로 옵니다.</span>'}<button class="btn" id="goCov">빈칸 지도에서 같은 구역 보기</button></div></div>` : ''}
+        <div id="resList" role="listbox" aria-label="비슷한 선례">${shown.map((r, i) => resRow(r, i, bf)).join('')}</div>
+      </div>
+      <aside class="panel side" id="simSide" aria-live="polite">${renderSimSide(bf)}</aside>
+    </div></div>`;
+  bindSimilar(bf, shown);
+}
+function resRow(r, i, bf) {
+  const { e, s } = r.lead; const o = feat(e); const c = compare(bf, o, s);
+  const grp = r.list.length > 1; const open = SIM.open.has(e.geom.sig);
+  const hulls = [...new Map(r.list.map(x => [x.e.row.key, x.e.row])).values()];
+  return `<div class="res" role="option" data-id="${e.id}" aria-selected="${SIM.sel === e}" tabindex="${SIM.sel === e ? 0 : -1}">
+    <div class="rk">${i + 1}</div><canvas data-cv="${e.id}" aria-hidden="true"></canvas>
+    <div style="min-width:0">
+      <div class="t">${grp ? `<span class="grp">같은 설계 ${r.list.length}개 자료</span>` : rowChip(e.row)}<span class="tt">${esc(grp ? `${e.zone} · ${e.atype}` : shortTitle(e))}</span><span class="idl">${grp ? '대표 ' : ''}${e.id}</span></div>
+      ${grp ? `<div class="m">${hulls.slice(0, 6).map(rowChip).join('')}${hulls.length > 6 ? `<span>외 ${hulls.length - 6}척</span>` : ''}</div>` : ''}
+      <div class="m">${solvePill(e.solve)}<span>${e.reports.length ? `문서 ${e.reports.length}개` : '문서 없음'}</span><span>${e.by} · <span class="mono">${e.date}</span></span>${e.rev > 1 ? `<span>판 ${e.rev}개 중 최신</span>` : ''}</div>
+      <div class="cmp"><span class="h">같은 점</span><div class="v">${c.same.map(x => `<span>${esc(x)}</span>`).join('') || '<span>없음</span>'}</div>${c.diff.length ? `<span class="h">다른 점</span><div class="v diff">${c.diff.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}</div>
+      ${e.solve === 'fail' ? '<div class="warnline">이 선례는 해석 검증에 실패했습니다. 그대로 가져다 쓰기 전에 원인을 확인하세요.</div>' : ''}
+      ${grp ? `<button class="expand" data-grp="${e.geom.sig}" aria-expanded="${open}">${open ? '자료 목록 접기' : `같은 설계 자료 ${r.list.length}개 모두 보기`}</button>` : ''}
+    </div>
+    <div class="likeness"><div class="w ${s.total < .5 ? 'weak' : ''}">${likeWord(s.total)}</div><div class="n" title="유사도 점수(0~1)">${s.total.toFixed(2)}</div><div class="lbar"><i style="width:${Math.round(s.total * 100)}%"></i></div></div>
+    ${grp && open ? `<div class="members">${r.list.map(x => `<div class="mem">${rowChip(x.e.row)}<span>${esc(shortTitle(x.e))} <span class="idl">${x.e.id}</span></span>${solvePill(x.e.solve)}<span class="mono small">${x.e.date}</span></div>`).join('')}</div>` : ''}
+  </div>`;
+}
+function renderSimSide(bf) {
+  let found = null;
+  for (const e of MODELS) if (e === SIM.sel) found = e;
+  let html = '<div class="dp">';
+  if (found) {
+    const e = found, o = feat(e), b = bf, s = score(b, o);
+    const row = (k, a, c, dif) => `<tr><th>${k}</th><td>${a}</td><td class="${dif ? 'dif' : ''}">${c}</td></tr>`;
+    html += `<h2 style="font-size:15px">${rowChip(e.row)} ${esc(shortTitle(e))}</h2><div class="small" style="color:var(--n-600);margin-bottom:10px">${e.id} · ${e.by} · ${e.date}</div>
+      <div class="twin"><div><canvas id="twA" aria-hidden="true"></canvas><div class="cap">기준</div></div><div><canvas id="twB" aria-hidden="true"></canvas><div class="cap">선례 ${e.id}</div></div></div>
+      <table class="cmpt" style="margin-top:10px"><tr><th></th><td class="small" style="color:var(--n-600)">기준</td><td class="small" style="color:var(--n-600)">선례 (다른 값은 주황)</td></tr>
+      ${row('크기', sizeTxt(b), sizeTxt(o), s.raw.size < .6)}
+      ${row('요소', fmt(b.elems), fmt(o.elems), s.raw.scale < .5)}
+      ${row('평균 요소', fmt(b.meanElem) + ' mm', fmt(o.meanElem) + ' mm', Math.abs(Math.log(b.meanElem / o.meanElem)) > .4)}
+      ${row('구역', b.zone || '모름', o.zone, b.zone && b.zone !== o.zone)}
+      ${row('해석 종류', b.atype || '모름', o.atype, b.atype && b.atype !== o.atype)}
+      ${row('검증', '—', e.solve === 'pass' ? '통과' : e.solve === 'fail' ? '실패' : '검증 전', e.solve === 'fail')}</table>
+      <p class="sec-t" style="margin-top:12px">단면 · 같은 것 ${s.inter.length}개</p><div class="secs">${[...new Set([...b.secs, ...o.secs])].sort().map(x => `<span class="${s.inter.includes(x) ? 'hit' : ''}">${esc(x)}${s.inter.includes(x) ? '' : (b.secs.includes(x) ? ' <i>기준만</i>' : ' <i>선례만</i>')}</span>`).join('')}</div>
+      <p class="sec-t" style="margin-top:14px">문서</p>${e.reports.length ? e.reports.map(r => `<div style="display:flex;gap:6px;align-items:center;padding:3px 0"><span class="kb ${r.k}">${r.k === 'pdf' ? 'PDF' : 'PPTX'}</span><span class="small">${esc(r.n)}</span></div>`).join('') : '<p class="small" style="color:var(--n-600)">이 선례에는 문서가 없습니다. 올린 사람에게 결과를 물어보세요.</p>'}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px"><button class="btn primary">나란히 비교</button>${s.shape ? '<button class="btn">바뀐 곳 3D로 보기</button>' : ''}${e.reports.length ? '<button class="btn">문서 근거로 요약</button>' : ''}<button class="btn ghost">자료 열기</button></div>
+      <p class="sec-t" style="margin-top:16px">닮은 정도 ${s.total.toFixed(2)}${s.shape ? ' · 형상이 같아 맨 위' : ''}</p>
+      <div class="parts">${Object.keys(PART_NAMES).map(k => `<div class="prow"><span>${PART_NAMES[k]}</span><span class="tr"><i style="width:${Math.round(s.raw[k] * 100)}%"></i></span><span class="num">${s.raw[k].toFixed(2)}</span></div>`).join('')}</div>`;
+  }
+  html += `<details class="adm"><summary>점수 무게 조정 (관리자 · 시안 확인용)</summary>
+    ${Object.keys(PART_NAMES).map(k => `<div class="wrow"><label for="w_${k}">${PART_NAMES[k]}</label><input type="range" id="w_${k}" min="0" max="0.6" step="0.05" value="${SIM.w[k]}" data-w="${k}"><span class="mono small">${SIM.w[k].toFixed(2)}</span></div>`).join('')}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px"><span class="small" style="color:var(--n-600)">형상이 같으면 무게와 상관없이 맨 위입니다.</span><button class="btn ghost" id="wReset">처음 값</button></div></details></div>`;
+  return html;
+}
+function bindSimilar(bf, shown) {
+  drawModel(document.getElementById('baseCv'), SIM.base.geom, { pad: 12, label: sizeLabel(SIM.base.geom) });
+  main.querySelectorAll('[data-cv]').forEach(cv => { const g = MODELS.find(e => e.id === cv.dataset.cv).geom; drawModel(cv, g, { pad: 8, label: sizeLabel(g) }); });
+  const side = () => { const e = SIM.sel; if (!e || !document.getElementById('twA')) return; drawModel(document.getElementById('twA'), SIM.base.geom, { pad: 10, label: sizeLabel(SIM.base.geom) }); drawModel(document.getElementById('twB'), e.geom, { pad: 10, label: sizeLabel(e.geom) }); };
+  const bindSide = () => {
+    main.querySelectorAll('[data-w]').forEach(inp => inp.oninput = () => { SIM.w[inp.dataset.w] = +inp.value; keepOpen(); });
+    const rs = document.getElementById('wReset'); if (rs) rs.onclick = () => { SIM.w = { ...W0 }; keepOpen(); };
+  };
+  const keepOpen = () => { keepScroll(renderSimilar); const d = main.querySelector('details.adm'); if (d) d.open = true; };
+  side(); bindSide();
+  const items = [...main.querySelectorAll('.res')];
+  const pickIt = (el, focus) => { SIM.sel = MODELS.find(e => e.id === el.dataset.id); items.forEach(x => { x.setAttribute('aria-selected', x === el); x.tabIndex = x === el ? 0 : -1; }); document.getElementById('simSide').innerHTML = renderSimSide(bf); side(); bindSide(); if (focus) el.focus(); };
+  items.forEach((el, i) => {
+    el.onclick = ev => { if (ev.target.closest('[data-grp]')) return; pickIt(el); };
+    el.onkeydown = ev => { if (ev.key === 'ArrowDown' && items[i + 1]) { ev.preventDefault(); pickIt(items[i + 1], true); } if (ev.key === 'ArrowUp' && items[i - 1]) { ev.preventDefault(); pickIt(items[i - 1], true); } if (ev.key === 'Enter') pickIt(el); };
+  });
+  main.querySelectorAll('[data-grp]').forEach(btn => btn.onclick = () => { const k = btn.dataset.grp; SIM.open.has(k) ? SIM.open.delete(k) : SIM.open.add(k); keepScroll(renderSimilar); });
+  main.querySelectorAll('[data-ord]').forEach(btn => btn.onclick = () => { SIM.order = btn.dataset.ord; keepScroll(renderSimilar); });
+  main.querySelectorAll('[data-ex]').forEach(btn => btn.onclick = () => { setBase(EXAMPLES[+btn.dataset.ex]); renderSimilar(); });
+  const gc = document.getElementById('goCov'); if (gc) gc.onclick = () => { history.replaceState(null, '', '#coverage'); go('coverage'); };
+  document.getElementById('fromEntry').onchange = ev => { const e = MODELS.find(x => x.id === ev.target.value); if (!e) return; setBase({ name: e.title.replace(/ · /g, '_') + '.bdf', f: feat(e), geom: e.geom, entry: e }); renderSimilar(); };
+  document.getElementById('zSel').onchange = ev => { SIM.zone = ev.target.value; keepScroll(renderSimilar); };
+  document.getElementById('aSel').onchange = ev => { SIM.atype = ev.target.value; keepScroll(renderSimilar); };
+  const fi = document.getElementById('fileIn'); document.getElementById('pickFile').onclick = () => fi.click(); fi.onchange = () => fi.files[0] && readBdf(fi.files[0]);
+  const dz = document.getElementById('drop');
+  dz.ondragover = ev => { ev.preventDefault(); dz.classList.add('over'); }; dz.ondragleave = () => dz.classList.remove('over');
+  dz.ondrop = ev => { ev.preventDefault(); dz.classList.remove('over'); const f = ev.dataTransfer.files[0]; if (f) readBdf(f); };
+}
+
+/* 브라우저에서 BDF 간단히 읽기(시안용 — 실제는 서버 bdf/features.py). 소형·대형·자유 필드 GRID/요소/PSHELL/PBEAML 만 */
+function readBdf(file) {
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const txt = String(rd.result); const lines = txt.split(/\r?\n/);
+      const cnt = { beam: 0, shell: 0, rigid: 0, mass: 0 }; const xs = [], ys = [], zs = []; const secs = new Set(); let sol = null;
+      const fields = (ln) => {
+        if (ln.includes(',')) return ln.split(',').map(s => s.trim());
+        const big = /^\S+\*/.test(ln); const w = big ? 16 : 8; const out = [ln.slice(0, 8).trim()];
+        for (let p = 8; p < Math.min(ln.length, big ? 72 : 72); p += w) out.push(ln.slice(p, p + w).trim());
+        return out;
+      };
+      const num = s => { if (!s) return NaN; s = s.replace(/^([+-]?[\d.]+)([+-]\d+)$/, '$1e$2'); return parseFloat(s); };
+      for (let i = 0; i < lines.length; i++) {
+        const ln = lines[i]; if (!ln || ln[0] === '$') continue;
+        const head = ln.slice(0, 8).split(/[,\s*]/)[0].toUpperCase();
+        if (/^SOL\s/i.test(ln)) sol = ln.split(/\s+/)[1];
+        if (head === 'GRID') { const f = fields(ln); let x = num(f[3]), y = num(f[4]), z = num(f[5]); if (/^GRID\*/i.test(ln) && lines[i + 1]) { z = num(fields(lines[i + 1])[1]); } if (isFinite(x) && isFinite(y)) { xs.push(x); ys.push(y); zs.push(isFinite(z) ? z : 0); } }
+        else if (/^(CBAR|CBEAM|CROD|CONROD|CBUSH)$/.test(head)) cnt.beam++;
+        else if (/^(CQUAD4|CQUAD8|CTRIA3|CTRIA6|CQUADR|CTRIAR)$/.test(head)) cnt.shell++;
+        else if (/^(RBE2|RBE3|RBAR)$/.test(head)) cnt.rigid++;
+        else if (/^CONM/.test(head)) cnt.mass++;
+        else if (head === 'PSHELL') { const t = num(fields(ln)[3]); if (isFinite(t)) secs.add('t' + (+t.toFixed(1))); }
+        else if (head === 'PBEAML' || head === 'PBARL') { const f = fields(ln); const ty = (f[4] || '').toUpperCase(); const nx = lines[i + 1] ? fields(lines[i + 1]).slice(1).map(num).filter(isFinite) : []; const pre = { L: 'L', H: 'H', I: 'H', T: 'T', TUBE: 'PIPE', BOX: 'BOX', BAR: 'FB', ROD: 'ROD' }[ty] || ty; if (pre && nx.length) secs.add(pre + nx.slice(0, 4).map(v => +v.toFixed(1)).join('x')); }
+      }
+      const elems = cnt.beam + cnt.shell;
+      if (!xs.length || !elems) throw new Error('GRID나 요소를 찾지 못했습니다');
+      const span = a => { let lo = Infinity, hi = -Infinity; for (const v of a) { if (v < lo) lo = v; if (v > hi) hi = v; } return hi - lo; };
+      let d = [span(xs), span(ys), span(zs)]; const big = Math.max(...d); const toM = big > 500 ? 1 / 1000 : 1; d = d.map(v => +(v * toM).toFixed(1));
+      const tot = cnt.beam + cnt.shell + cnt.rigid + cnt.mass;
+      const mix = [cnt.beam, cnt.shell, cnt.rigid, cnt.mass].map(v => v / tot);
+      const meanElem = Math.round(Math.hypot(...d) * 1000 / Math.sqrt(elems) * 2.2);
+      const kind = mix[1] > .5 ? (d[2] > 5 ? 'module' : 'plate') : (d[2] > Math.max(d[0], d[1]) * 2 ? 'mast' : d[2] > 5 ? 'module' : 'frame');
+      setBase({ name: file.name, parsed: true, f: { L: d[0], W: d[1], H: d[2], elems, meanElem, mix, secs: [...secs].sort().slice(0, 30), sig: 'file', zone: '', atype: '', sol }, geom: { kind, L: Math.max(d[0], .5), W: Math.max(d[1], .5), H: Math.max(d[2], .3), nx: 5, ny: 3, decks: 3, seed: 3 } });
+      renderSimilar();
+    } catch (err) {
+      SIM.err = `${file.name}을(를) 읽지 못했습니다. ${err.message}. GRID와 요소 카드가 있는 BDF인지 확인하세요.`; keepScroll(renderSimilar);
+    }
+  };
+  rd.readAsText(file);
+}
+
+/* ================= 화면 전환 ================= */
+const ROUTES = { coverage: renderCoverage, checks: renderChecks, similar: renderSimilar };
+function go(r) {
+  if (!ROUTES[r]) r = 'coverage';
+  cancelAnimationFrame(CK.raf); hideTip();
+  document.querySelectorAll('[data-route]').forEach(b => b.toggleAttribute('aria-current', b.dataset.route === r) || b.dataset.route === r && b.setAttribute('aria-current', 'page'));
+  document.querySelectorAll('[data-route]').forEach(b => b.dataset.route === r ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
+  main.scrollTop = 0; ROUTES[r]();
+  try { localStorage.setItem('lb-insight-route', r); } catch (e) { }
+}
+document.querySelectorAll('[data-route]').forEach(b => b.onclick = () => { history.replaceState(null, '', '#' + b.dataset.route); go(b.dataset.route); });
+let start = location.hash.slice(1);
+if (!ROUTES[start]) { try { start = localStorage.getItem('lb-insight-route') || 'coverage'; } catch (e) { start = 'coverage'; } }
+go(start);
+addEventListener('hashchange', () => { const h = location.hash.slice(1); if (ROUTES[h]) go(h); });
+addEventListener('resize', () => { const r = (document.querySelector('[data-route][aria-current]') || {}).dataset; if (r && r.route !== 'coverage') keepScroll(ROUTES[r.route]); });
+</script>

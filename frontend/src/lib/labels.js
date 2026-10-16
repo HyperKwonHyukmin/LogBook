@@ -61,6 +61,12 @@ export const EXCLUDE_REASON_LABELS = {
 };
 
 export const ERROR_LABELS = {
+  // 27 — 비슷한 선례
+  similar_base_not_found: '기준 BDF 를 찾지 못했습니다. 볼 수 없는 자료이거나 아직 변환되지 않았습니다.',
+  bdf_too_large: 'BDF 가 32MB 를 넘어 이 화면에서 읽을 수 없습니다. 먼저 올려 확정한 뒤 자료 화면에서 찾아 주세요.',
+  bdf_drm: '회사 DRM 으로 암호화된 파일이라 읽을 수 없습니다. 암호를 푼 파일을 넣어 주세요.',
+  bdf_no_elements: '요소가 없는 BDF 입니다. INCLUDE 로 나뉜 모델이면 본 파일이 아니라 요소가 든 파일을 넣어 주세요.',
+  bdf_model_error: 'BDF 를 모델로 읽지 못했습니다. 카드 형식을 확인해 주세요.',
   version_conflict: '다른 사람이 먼저 고쳤습니다. 최신 내용으로 다시 불러왔습니다.',
   not_uploader: '올린 사람만 할 수 있습니다.',
   storage_unreachable: '999_LogBook 공유 폴더에 연결할 수 없습니다.',

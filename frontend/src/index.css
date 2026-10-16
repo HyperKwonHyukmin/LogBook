@@ -221,3 +221,22 @@ html { scrollbar-color: var(--color-n-300) transparent; }
 /* 미리보기 폭 끌기(09) — 끄는 동안 iframe(PDF)·3D 캔버스가 포인터를 삼키지 않게, 글자 선택·커서도 고정 */
 body[data-resizing] { cursor: col-resize; user-select: none; }
 body[data-resizing] iframe, body[data-resizing] canvas, body[data-resizing] embed, body[data-resizing] object { pointer-events: none; }
+
+/* 빈칸 지도(26) — 칸 상태는 색 + 모양으로 말한다(채움 · 모서리 잘림 · 점선 · 점 · 빗금). */
+.cov-cell { position: relative; display: inline-flex; width: 37px; height: 26px; align-items: center; justify-content: center;
+  border-radius: 4px; border: 1px solid transparent; font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums;
+  transition: box-shadow 150ms var(--ease-out), opacity 150ms var(--ease-out); }
+button.cov-cell:hover { box-shadow: 0 0 0 2px var(--color-brand-ring); }
+.cov-cell:focus-visible { outline: 2px solid var(--color-n-900); outline-offset: 2px; }
+.cov-full { background: var(--color-brand); color: var(--color-on-navy); }
+.cov-noreport { background: var(--color-brand-muted); color: var(--color-brand); border-color: #9FB4D3; }
+.cov-noreport::after { content: ""; position: absolute; right: -1px; top: -1px; border-style: solid; border-width: 0 10px 10px 0;
+  border-color: transparent var(--color-n-0) transparent transparent; }
+.cov-nomodel { background: var(--color-n-0); color: var(--color-brand); border: 1.5px dashed var(--color-navy-600); }
+.cov-fail { background: var(--color-err-bg); color: var(--color-err); border-color: var(--color-err-line); }
+.cov-fail::before { content: ""; position: absolute; left: 4px; top: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--color-err); }
+.cov-empty { background: var(--color-n-0); border: 1px dashed var(--color-n-300); }
+.cov-na { background: repeating-linear-gradient(135deg, var(--color-n-100) 0 4px, var(--color-n-50) 4px 8px); border-color: var(--color-n-150); }
+.cov-sel { outline: 2px solid var(--color-n-900); outline-offset: 2px; }
+.cov-dim .cov-cell:not(.cov-on) { opacity: 0.14; }
+.cov-dim .cov-empty.cov-on { border: 1.5px solid var(--color-n-700); background: var(--color-n-50); }
