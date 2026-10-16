@@ -1,4 +1,4 @@
-<title>LogBook 빈칸·점검·선례</title>
+<title>LogBook 현황·점검·선례</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -91,7 +91,7 @@ button, input, select { font: inherit; color: inherit; }
 .kb.bdf { background: #E8EEF9; color: #1F3F7A; } .kb.pdf { background: #FBEAEA; color: #9B1C1C; } .kb.ppt { background: #FCEFE3; color: #92400E; }
 .idl { font-family: var(--font-mono); font-size: 12px; color: var(--n-600); }
 
-/* ---------- 빈칸 지도 ---------- */
+/* ---------- 갖춤 현황 ---------- */
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: flex-end; margin-bottom: 12px; }
 .tb-g { display: flex; flex-direction: column; gap: 4px; }
 .tb-g > span { font-size: 12px; color: var(--n-600); font-weight: 500; }
@@ -208,7 +208,7 @@ table.lt tr:hover td { background: var(--n-50); }
 .ckbadge.info { background: var(--brand-subtle); color: var(--navy-700); }
 .ckbadge.zero { background: var(--ok-bg); color: var(--ok); }
 
-/* ---------- 비슷한 선례 ---------- */
+/* ---------- 선례 찾기 ---------- */
 .basebar { display: grid; grid-template-columns: 168px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 12px 14px; border: 1px solid var(--n-200); border-radius: 8px; background: var(--n-0); }
 .basebar.over { border-color: var(--brand); background: var(--brand-subtle); outline: 2px dashed var(--brand-ring); outline-offset: -6px; }
 .basebar canvas { width: 168px; height: 104px; display: block; border-radius: 6px; background: var(--viewer); }
@@ -312,8 +312,8 @@ details.adm summary { cursor: pointer; font-size: 13px; font-weight: 600; color:
       <span class="nav-item old"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>검색</span>
       <span class="nav-item old"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg>문서</span>
       <span class="nav-item old"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="10" cy="18" r="2.5"/><path d="M8 7l7.5 1M7.5 8.2 9.4 15.6M16.5 10l-4.7 6.3"/></svg>관계 지도</span>
-      <button class="nav-item new" data-route="coverage"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7" stroke-dasharray="2 2"/></svg>빈칸 지도<span class="tag" title="계획서 번호">#26</span></button>
-      <button class="nav-item new" data-route="similar"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="8" height="14" rx="1.5"/><rect x="13" y="5" width="8" height="14" rx="1.5"/><path d="M6 9h2M16 9h2M6 13h2M16 13h2"/></svg>비슷한 선례<span class="tag" title="계획서 번호">#27</span></button>
+      <button class="nav-item new" data-route="coverage"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7" stroke-dasharray="2 2"/></svg>갖춤 현황<span class="tag" title="계획서 번호">#26</span></button>
+      <button class="nav-item new" data-route="similar"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="8" height="14" rx="1.5"/><rect x="13" y="5" width="8" height="14" rx="1.5"/><path d="M6 9h2M16 9h2M6 13h2M16 13h2"/></svg>선례 찾기<span class="tag" title="계획서 번호">#27</span></button>
       <div class="nav-sec">기록</div>
       <span class="nav-item old"><svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4"/><path d="M4 13 6.5 5h11L20 13v6H4z"/></svg>정리 대기</span>
       <span class="nav-item old"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>활동 로그</span>
@@ -625,7 +625,7 @@ function drawModel(cv, g, opt = {}) {
 }
 const sizeLabel = g => `${Math.max(g.L, g.W, g.H).toFixed(Math.max(g.L, g.W, g.H) < 10 ? 1 : 0)} m`;
 
-/* ================= 26 빈칸 지도 ================= */
+/* ================= 26 갖춤 현황 ================= */
 const COV = { atype: '전체', focus: null, sel: null, expect: false, sort: 'hull', tab: 'no_report', scoped: false, all: false };
 const STATE_INFO = {
   full: { name: '갖춤', cls: 'c-full', desc: '모델과 문서가 있고, 해석 검증에 실패하지 않았습니다' },
@@ -674,7 +674,7 @@ function renderCoverage() {
   const expectN = cells.filter(c => c.expect).length;
   const zoneHas = z => rows.filter(r => { const s = cellOf(r, z).state; return s !== 'empty' && s !== 'na'; }).length;
   main.innerHTML = `<div class="page">
-    <div class="ph"><div><h1>빈칸 지도</h1><p>호선과 구역마다 확정 자료가 무엇을 갖췄는지 봅니다. 칸에 올리거나 포커스하면 이유가 나오고, 누르면 오른쪽에 그 칸의 자료가 열립니다.</p></div>
+    <div class="ph"><div><h1>갖춤 현황</h1><p>호선과 구역마다 확정 자료가 무엇을 갖췄는지 봅니다. 칸에 올리거나 포커스하면 이유가 나오고, 누르면 오른쪽에 그 칸의 자료가 열립니다.</p></div>
       <span class="sample">예시 데이터 · 자료 ${ENTRIES.length}건 · 호선 20척, 프로젝트 2, 공용</span></div>
     <div class="toolbar">
       <div class="tb-g"><span>해석 종류</span><div class="seg" id="atSeg">${['전체', ...ATYPES].map(a => `<button aria-pressed="${COV.atype === a}" data-at="${a}">${a}</button>`).join('')}</div></div>
@@ -880,7 +880,7 @@ function bindCkDetail() {
   });
 }
 
-/* ================= 28 비슷한 선례 ================= */
+/* ================= 28 선례 찾기 ================= */
 const W0 = { size: .30, scale: .20, mix: .20, sec: .20, tag: .10 };
 const SIM = { base: null, sel: null, w: { ...W0 }, zone: '', atype: '', order: 'like', open: new Set(), err: '' };
 const PART_NAMES = { size: '크기', scale: '규모·촘촘함', mix: '구성', sec: '단면', tag: '분류' };
@@ -958,7 +958,7 @@ function renderSimilar() {
   const shown = weak ? rows.slice(0, 3) : rows;
   if (!SIM.sel || !shown.some(r => r.list.some(x => x.e === SIM.sel))) SIM.sel = shown[0] && shown[0].lead.e;
   main.innerHTML = `<div class="page">
-    <div class="ph"><div><h1>비슷한 선례</h1><p>새 해석을 시작하기 전에, 비슷한 모델을 누가 해석했고 결과가 어땠는지 찾습니다. 기준 BDF와 같은 점, 다른 점을 함께 보여 줍니다.</p></div>
+    <div class="ph"><div><h1>선례 찾기</h1><p>새 해석을 시작하기 전에, 비슷한 모델을 누가 해석했고 결과가 어땠는지 찾습니다. 기준 BDF와 같은 점, 다른 점을 함께 보여 줍니다.</p></div>
       <span class="sample">예시 데이터 · 비교 대상 모델 ${MODELS.length}개</span></div>
     <section class="basebar" id="drop" aria-label="기준 BDF">
       <canvas id="baseCv" aria-hidden="true"></canvas>
@@ -978,8 +978,8 @@ function renderSimilar() {
       <div class="panel" style="min-width:0">
         <div class="reshead"><b style="font-weight:600">${weak ? '가까운 모델 3개' : `선례 ${rows.length}건`}</b><div class="seg" role="group" aria-label="정렬">${[['like', '닮은 순'], ['pass', '검증 통과·문서 있는 것 먼저']].map(([k, l]) => `<button aria-pressed="${SIM.order === k}" data-ord="${k}">${l}</button>`).join('')}</div></div>
         ${weak ? `<div class="nomatch"><b style="font-weight:600">충분히 비슷한 선례가 없습니다.</b> 가장 가까운 모델도 일부만 닮았습니다. 아래 3개는 참고로만 보세요.
-          <div class="acts">${bf.zone ? '' : '<span class="small" style="color:var(--n-700)">구역·해석 종류를 고르면 같은 구역 자료가 위로 옵니다.</span>'}<button class="btn" id="goCov">빈칸 지도에서 같은 구역 보기</button></div></div>` : ''}
-        <div id="resList" role="listbox" aria-label="비슷한 선례">${shown.map((r, i) => resRow(r, i, bf)).join('')}</div>
+          <div class="acts">${bf.zone ? '' : '<span class="small" style="color:var(--n-700)">구역·해석 종류를 고르면 같은 구역 자료가 위로 옵니다.</span>'}<button class="btn" id="goCov">갖춤 현황에서 같은 구역 보기</button></div></div>` : ''}
+        <div id="resList" role="listbox" aria-label="찾은 선례">${shown.map((r, i) => resRow(r, i, bf)).join('')}</div>
       </div>
       <aside class="panel side" id="simSide" aria-live="polite">${renderSimSide(bf)}</aside>
     </div></div>`;

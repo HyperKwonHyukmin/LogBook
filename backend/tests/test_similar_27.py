@@ -1,4 +1,4 @@
-"""27 — 비슷한 선례. 특징(model_summaries 에서)·점수(형상 같으면 맨 위)·같은 설계 묶기·권한·올린 BDF.
+"""27 — 선례 찾기. 특징(model_summaries 에서)·점수(형상 같으면 맨 위)·같은 설계 묶기·권한·올린 BDF.
 
 합성 데이터만(가상 호선 9001~9004)."""
 from datetime import datetime

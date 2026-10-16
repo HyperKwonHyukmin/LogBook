@@ -12,8 +12,8 @@ const GROUPS = [
     { to: '/hulls', label: '호선', icon: Anchor, also: ['/h/'] }, // 호선 화면(/h/9999)도 '호선' 메뉴 아래
     { to: '/browse', label: '분류', icon: Tags, also: ['/tags'] }, // 09 — 속성별 값 둘러보기(태그 동의어 화면 포함)
     { to: '/graph', label: '관계 지도', icon: Waypoints }, // 25 — 호선·구역·프로젝트와 모델 관계를 잇는 지도
-    { to: '/coverage', label: '빈칸 지도', icon: Grid2x2Check }, // 26 — 호선 × 구역 칸마다 갖춘 자료·빈 곳
-    { to: '/similar', label: '비슷한 선례', icon: ScanSearch }, // 27 — 기준 BDF 와 비슷한 확정 모델
+    { to: '/coverage', label: '갖춤 현황', icon: Grid2x2Check }, // 26 — 호선 × 구역 칸마다 갖춘 자료·빈 곳
+    { to: '/similar', label: '선례 찾기', icon: ScanSearch }, // 27 — 기준 BDF 와 비슷한 확정 모델
     { to: '/compares', label: '최근 비교', icon: Columns2, also: ['/compare'] }, // 11 — 비교 화면(/compare)도 이 메뉴 아래
   ] },
   { label: '작업', items: [

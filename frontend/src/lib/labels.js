@@ -61,7 +61,7 @@ export const EXCLUDE_REASON_LABELS = {
 };
 
 export const ERROR_LABELS = {
-  // 27 — 비슷한 선례
+  // 27 — 선례 찾기
   similar_base_not_found: '기준 BDF 를 찾지 못했습니다. 볼 수 없는 자료이거나 아직 변환되지 않았습니다.',
   bdf_too_large: 'BDF 가 32MB 를 넘어 이 화면에서 읽을 수 없습니다. 먼저 올려 확정한 뒤 자료 화면에서 찾아 주세요.',
   bdf_drm: '회사 DRM 으로 암호화된 파일이라 읽을 수 없습니다. 암호를 푼 파일을 넣어 주세요.',

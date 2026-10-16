@@ -55,7 +55,7 @@ function EntryLine({ e }) {
 }
 
 /**
- * 빈칸 지도(26, `/coverage`) — 확정 자료를 호선(·프로젝트·공용) × 구역 칸에 놓고, 칸마다 무엇을 갖췄는지 보인다.
+ * 갖춤 현황(26, `/coverage`) — 확정 자료를 호선(·프로젝트·공용) × 구역 칸에 놓고, 칸마다 무엇을 갖췄는지 보인다.
  * 칸 상태·목록은 lib/coverage.js(순수 함수). 해석 종류 거르기는 다시 부르지 않고 그 자리에서 다시 센다.
  */
 export default function CoveragePage() {
@@ -75,7 +75,7 @@ export default function CoveragePage() {
   useEffect(() => {
     let alive = true;
     api('/coverage').then((d) => { if (alive) setData(d); })
-      .catch((err) => { if (alive) setError(errorText(err, '빈칸 지도를 불러오지 못했습니다.')); });
+      .catch((err) => { if (alive) setError(errorText(err, '갖춤 현황을 불러오지 못했습니다.')); });
     return () => { alive = false; };
   }, []);
 
@@ -118,7 +118,7 @@ export default function CoveragePage() {
     <div className="px-6 pb-10 pt-5 min-[1441px]:px-8">
       <header className="mb-4 flex flex-wrap items-end gap-x-4 gap-y-2 border-b border-n-200 pb-4">
         <div className="min-w-0 flex-1">
-          <h1 className="text-title font-semibold tracking-[-0.018em] text-n-900">빈칸 지도</h1>
+          <h1 className="text-title font-semibold tracking-[-0.018em] text-n-900">갖춤 현황</h1>
           <p className="mt-1 text-ui text-n-600">호선과 구역마다 확정 자료가 무엇을 갖췄는지 봅니다. 칸에 올리거나 포커스하면 이유가 나오고, 누르면 오른쪽에 그 칸의 자료가 열립니다.</p>
         </div>
         <span className="text-ui text-n-600 tabular-nums">

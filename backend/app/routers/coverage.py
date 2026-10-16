@@ -1,4 +1,4 @@
-"""빈칸 지도 API(26) — 보는 사람이 볼 수 있는 확정 자료를 호선 × 구역 칸에 놓을 재료(app/coverage.py)."""
+"""갖춤 현황 API(26) — 보는 사람이 볼 수 있는 확정 자료를 호선 × 구역 칸에 놓을 재료(app/coverage.py)."""
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 

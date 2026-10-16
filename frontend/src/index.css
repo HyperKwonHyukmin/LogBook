@@ -222,7 +222,7 @@ html { scrollbar-color: var(--color-n-300) transparent; }
 body[data-resizing] { cursor: col-resize; user-select: none; }
 body[data-resizing] iframe, body[data-resizing] canvas, body[data-resizing] embed, body[data-resizing] object { pointer-events: none; }
 
-/* 빈칸 지도(26) — 칸 상태는 색 + 모양으로 말한다(채움 · 모서리 잘림 · 점선 · 점 · 빗금). */
+/* 갖춤 현황(26) — 칸 상태는 색 + 모양으로 말한다(채움 · 모서리 잘림 · 점선 · 점 · 빗금). */
 .cov-cell { position: relative; display: inline-flex; width: 37px; height: 26px; align-items: center; justify-content: center;
   border-radius: 4px; border: 1px solid transparent; font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums;
   transition: box-shadow 150ms var(--ease-out), opacity 150ms var(--ease-out); }

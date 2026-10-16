@@ -1,4 +1,4 @@
-"""비슷한 선례 API(27) — 기준 BDF 와 비슷한 확정 모델(app/similar.py).
+"""선례 찾기 API(27) — 기준 BDF 와 비슷한 확정 모델(app/similar.py).
 
     GET  /api/similar?file_id=N[&zone=&analysis_type=]   LogBook 의 BDF 가 기준
     POST /api/similar/bdf?name=…[&zone=&analysis_type=]  본문 = BDF 바이트(저장하지 않는다, 32MB 까지)

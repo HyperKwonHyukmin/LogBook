@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { FileUp, ScanSearch } from 'lucide-react';
+import { Database, FileUp, ScanSearch } from 'lucide-react';
 import { api, apiBinary } from '../api/client.js';
 import Button, { buttonClass } from '../components/ui/Button.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
@@ -8,6 +8,7 @@ import { ErrorNote } from '../components/ui/Page.jsx';
 import { RowsSkeleton } from '../components/ui/Skeleton.jsx';
 import { HullChip } from '../components/ui/Status.jsx';
 import { Segmented } from '../components/ui/Tabs.jsx';
+import ModelPicker from '../components/similar/ModelPicker.jsx';
 import ModelThumb from '../components/viewer/ModelThumb.jsx';
 import { errorText } from '../lib/labels.js';
 import {
@@ -38,7 +39,7 @@ function SolveText({ solve }) {
 const Hulls = ({ hulls }) => <span className="flex flex-wrap gap-1">{hulls.slice(0, 6).map((h) => <HullChip key={h} hull={h} />)}{hulls.length > 6 && <span className="text-meta text-n-600">외 {hulls.length - 6}척</span>}</span>;
 
 /**
- * 비슷한 선례(27, `/similar?file=<id>`) — 기준 BDF 와 비슷한 확정 모델을 순위로. 같은 설계(형상 서명)는 한 줄로 묶고,
+ * 선례 찾기(27, `/similar?file=<id>`) — 기준 BDF 와 비슷한 확정 모델을 순위로. 같은 설계(형상 서명)는 한 줄로 묶고,
  * 점수 대신 같은 점·다른 점·검증·문서를 앞에 둔다. 기준은 LogBook 의 BDF(주소의 file) 또는 내 PC 의 BDF(저장하지 않음).
  */
 export default function SimilarPage() {
@@ -53,6 +54,7 @@ export default function SimilarPage() {
   const [selId, setSelId] = useState(null);
   const [open, setOpen] = useState(() => new Set());
   const [over, setOver] = useState(false);
+  const [picking, setPicking] = useState(!fileId);   // LogBook 에서 고르기 칸(기준이 없으면 처음부터 연다)
   const [vocab, setVocab] = useState({ zone: [], atype: [] });
   const upload = useRef(null);                  // 마지막에 올린 파일(구역·해석 종류를 바꾸면 다시 보낸다)
   const fileInput = useRef(null);
@@ -97,8 +99,17 @@ export default function SimilarPage() {
     if (!f) return;
     if (f.size > MAX_UPLOAD_BYTES) { setError(errorText({ detail: 'bdf_too_large' })); return; }
     upload.current = f; setZone(null); setAtype(null);
+    setPicking(false);
     if (fileId) setParams({}, { replace: true });
     run(null, null);
+  }
+
+  function pickFromLogbook(id) {
+    setPicking(false);
+    if (String(id) === String(fileId) && !upload.current) return;
+    upload.current = null;
+    if (String(id) === String(fileId)) { run(null, null); return; }
+    setParams({ file: String(id) });
   }
 
   const results = useMemo(() => (data ? orderResults(data.results, order) : []), [data, order]);
@@ -119,7 +130,7 @@ export default function SimilarPage() {
   return (
     <div className="px-6 pb-10 pt-5 min-[1441px]:px-8">
       <header className="mb-4 border-b border-n-200 pb-4">
-        <h1 className="text-title font-semibold tracking-[-0.018em] text-n-900">비슷한 선례</h1>
+        <h1 className="text-title font-semibold tracking-[-0.018em] text-n-900">선례 찾기</h1>
         <p className="mt-1 text-ui text-n-600">새 해석을 시작하기 전에, 비슷한 모델을 누가 해석했고 결과가 어땠는지 찾습니다. 기준 BDF 와 같은 점·다른 점을 함께 보여 줍니다.</p>
       </header>
 
@@ -163,20 +174,32 @@ export default function SimilarPage() {
           ) : (
             <>
               <b className="text-body font-semibold text-n-900">기준 BDF 를 정하세요</b>
-              <p className="mt-1 text-ui text-n-600">BDF 를 이 칸에 끌어다 놓거나 고르세요(32MB 까지, 저장하지 않습니다). 자료 화면의 BDF 미리보기에서 [비슷한 선례]를 눌러도 여기로 옵니다.</p>
+              <p className="mt-1 text-ui text-n-600">LogBook 에 있는 BDF 를 아래에서 고르거나, 내 PC 의 BDF 를 이 칸에 끌어다 놓으세요(32MB 까지, 저장하지 않습니다).
+                자료 화면의 BDF 미리보기에서 [선례 찾기]를 눌러도 여기로 옵니다.</p>
             </>
           )}
         </div>
         <div className="flex flex-col items-stretch gap-1.5 min-[900px]:min-w-[160px]">
           <input ref={fileInput} type="file" accept=".bdf,.dat,.nas,.blk,.txt" hidden onChange={(e) => takeFile(e.target.files?.[0])} />
-          <Button onClick={() => fileInput.current?.click()} loading={busy}>{base ? '다른 BDF 고르기' : 'BDF 고르기'}</Button>
+          <Button onClick={() => setPicking((v) => !v)} aria-expanded={picking} loading={busy && !upload.current}>
+            <Database size={14} aria-hidden="true" />LogBook 에서 고르기
+          </Button>
+          <Button variant="secondary" onClick={() => fileInput.current?.click()} loading={busy && !!upload.current}>
+            <FileUp size={14} aria-hidden="true" />내 PC 에서 고르기
+          </Button>
           <span className="text-center text-meta text-n-600">또는 이 칸에 끌어다 놓기</span>
         </div>
       </section>
 
+      {picking && (
+        <div className="mt-2">
+          <ModelPicker currentId={upload.current ? null : base?.file_id} onPick={pickFromLogbook}
+                       onClose={base ? () => setPicking(false) : undefined} />
+        </div>
+      )}
       {error && <ErrorNote className="mt-3">{error}</ErrorNote>}
       {busy && !data && <div className="mt-4"><RowsSkeleton rows={4} /></div>}
-      {!busy && !data && !error && (
+      {!busy && !data && !error && !picking && (
         <div className="mt-6"><EmptyState icon={ScanSearch} title="아직 기준 BDF 가 없습니다">해석하려는 BDF 를 넣으면 과거 확정 자료에서 비슷한 모델을 찾습니다.</EmptyState></div>
       )}
 
@@ -192,11 +215,11 @@ export default function SimilarPage() {
               <div className="m-3.5 rounded-lg bg-n-50 px-4 py-3 text-ui text-n-800">
                 <b className="font-semibold">충분히 비슷한 선례가 없습니다.</b> 가장 가까운 모델도 일부만 닮았습니다. 아래는 참고로만 보세요.
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
-                  <Link to="/coverage" className={buttonClass('secondary', 'sm')}>빈칸 지도에서 같은 구역 보기</Link>
+                  <Link to="/coverage" className={buttonClass('secondary', 'sm')}>갖춤 현황에서 같은 구역 보기</Link>
                 </div>
               </div>
             )}
-            <div ref={listRef} role="listbox" aria-label="비슷한 선례">
+            <div ref={listRef} role="listbox" aria-label="찾은 선례">
               {shown.map((r, i) => {
                 const L = r.lead;
                 const c = compareLines({ ...base, zone: zone ?? base.zone, atype: atype ?? base.atype }, L, r.score);

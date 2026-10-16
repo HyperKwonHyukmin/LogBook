@@ -66,8 +66,8 @@ def create_app(frontend_dist: Path | None | object = _USE_DEFAULT) -> FastAPI:
     app.include_router(compares.router)
     app.include_router(hulls.router)
     app.include_router(graph_router.router)   # 25 — 관계 지도
-    app.include_router(coverage_router.router)   # 26 — 빈칸 지도
-    app.include_router(similar_router.router)    # 27 — 비슷한 선례
+    app.include_router(coverage_router.router)   # 26 — 갖춤 현황
+    app.include_router(similar_router.router)    # 27 — 선례 찾기
     app.include_router(revisions.router)   # 14 — /files/{a}/diff/{b} 가 files 의 /{file_id} 보다 먼저
     app.include_router(files.router)
     app.include_router(solve.router)

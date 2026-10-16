@@ -26,7 +26,7 @@ import ViewerPage from './pages/ViewerPage.jsx';
 const ComparePage = lazy(() => import('./pages/ComparePage.jsx'));
 // 25 — 관계 지도는 d3(힘 배치·확대)를 쓰므로 따로 묶는다.
 const GraphPage = lazy(() => import('./pages/GraphPage.jsx'));
-// 26 빈칸 지도 · 27 비슷한 선례 — 메뉴로만 들어오는 화면이라 따로 묶는다.
+// 26 갖춤 현황 · 27 선례 찾기 — 메뉴로만 들어오는 화면이라 따로 묶는다.
 const CoveragePage = lazy(() => import('./pages/CoveragePage.jsx'));
 const SimilarPage = lazy(() => import('./pages/SimilarPage.jsx'));
 

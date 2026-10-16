@@ -146,7 +146,7 @@ function ModelPreviewBody({ file, inline, compare }) {
       {inline && (
         // 27 — 이 BDF 를 기준으로 비슷한 확정 모델 찾기(전체 화면 뷰어 위 줄)
         <Link to={`/similar?file=${file.id}`} className={buttonClass('ghost', 'sm', 'self-start')}>
-          <ScanSearch size={14} aria-hidden="true" />이 BDF 와 비슷한 선례
+          <ScanSearch size={14} aria-hidden="true" />이 BDF 로 선례 찾기
         </Link>
       )}
       {inline ? (
@@ -171,7 +171,7 @@ function ModelPreviewBody({ file, inline, compare }) {
             </Link>
             {/* 27 — 이 BDF 를 기준으로 비슷한 확정 모델 찾기 */}
             <Link to={`/similar?file=${file.id}`} className={buttonClass('ghost', 'sm')}>
-              <ScanSearch size={14} aria-hidden="true" />비슷한 선례
+              <ScanSearch size={14} aria-hidden="true" />선례 찾기
             </Link>
           </div>
         </div>
