@@ -4,6 +4,9 @@ import { api } from '../../api/client.js';
 import Button from '../ui/Button.jsx';
 import { errorText } from '../../lib/labels.js';
 
+/** 35 — 크기급 '174K급 LNG'(용량 + 선종). 규칙 밖(FPSO·함정)이면 PLM 선형 원문. */
+export const sizeClassOf = (plm) => (plm?.capacity && plm?.ship_kind ? `${plm.capacity}급 ${plm.ship_kind}` : plm?.ship_type_raw || null);
+
 /**
  * 30 — 자료 수정·정리 대기 화면의 [선박 정보 검색]. 입력한 호선을 사내 PLM 에서 읽어 보여 주기만 한다.
  * 호선 선종은 자료를 저장(확정)하면 자동 조회가 빈 선종만 채운다. 바꾸려면 호선 화면의 같은 단추를 쓴다.
@@ -26,7 +29,7 @@ export default function HullPlmLookup({ hulls, disabled = false }) {
   return (
     <div className="mt-1 flex min-w-0 flex-col gap-1">
       <Button variant="ghost" size="sm" className="w-fit -ml-2.5" loading={busy} disabled={disabled || busy || !hulls.length}
-              onClick={lookup} title="입력한 호선을 사내 PLM 에서 찾아 선형·주기관·선급·인도일을 보여 줍니다">
+              onClick={lookup} title="입력한 호선을 사내 PLM 에서 찾아 크기급·주기관·선급·인도일을 보여 줍니다">
         <Ship size={13} aria-hidden="true" />선박 정보 검색
       </Button>
       {shown.length > 0 && (
@@ -57,7 +60,7 @@ function PlmRow({ hullNo, r }) {
   }
   const p = r.plm;
   const items = [
-    r.ship_type && ['선종', r.ship_type],
+    sizeClassOf(p) && ['크기급', sizeClassOf(p)],
     p.main_engine && ['주기관', p.main_engine],
     p.ship_class && ['선급', p.ship_class],
     ['인도', `${p.delivery_date || '—'}${p.delivered ? '' : ' (미인도)'}`],

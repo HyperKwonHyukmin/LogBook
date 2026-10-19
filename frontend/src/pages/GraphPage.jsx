@@ -16,7 +16,7 @@ import {
 } from '../lib/graphModel.js';
 
 const PIVOT_ITEMS = [{ id: 'hull', label: '호선' }, { id: 'zone', label: '구역' }, { id: 'kind', label: '선종' },
-  { id: 'type', label: '선형' }];
+  { id: 'size', label: '크기급' }];
 const COLOR_ITEMS = [{ id: 'none', label: '없음' }, { id: 'atype', label: '해석 종류' }, { id: 'ship', label: '선종' }];
 // 32 — 자료 사이 선의 층: 모델(형상만 같음·똑같은 BDF) · 문서(사용한 모델·보고서 다른 판·본문 비슷함)
 const LAYER_ITEMS = [{ id: 'all', label: '모두' }, { id: 'model', label: '모델' }, { id: 'doc', label: '문서' }];

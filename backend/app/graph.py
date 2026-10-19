@@ -1,9 +1,10 @@
-"""관계 지도(25) — 확정 자료를 호선·구역·태그(30 — 선종·선형)와 모델 관계로 잇는 그래프 한 벌.
+"""관계 지도(25) — 확정 자료를 호선·구역·태그(30 — 선종·크기급)와 모델 관계로 잇는 그래프 한 벌.
 
 관계를 따로 저장하지 않는다. 화면을 열 때 이미 있는 값으로 묶는다.
     호선      entry_hulls (주 호선 먼저)
-    선형·선종  hulls.ship_type('174K LNG') · hulls.ship_kind('LNG', 30 PLM). 용량만으로는 묶지 않는다 —
-              단위가 선종마다 다르다(LNG m³ · VLCC/B·C DWT · CNTR TEU). 자료 쪽 값은 화면이 호선에서 모은다
+    선종·크기급  hulls.ship_kind('LNG') · 크기급 = 용량 + 선종('174K급 LNG', 30 PLM). 용량만으로는 묶지 않는다 —
+              단위가 선종마다 다르다(LNG m³ · VLCC/B·C DWT · CNTR TEU). 같은 174K 라도 선종이 다르면 다른 크기급.
+              자료 쪽 값은 화면이 호선에서 모은다
     구역·태그·프로젝트  entry_tags → tags. 분류 목록의 대표 값으로 센다(Vocab.root — 동의어가 갈라지지 않게)
     모델 관계  model_summaries 의 내용 서명(12). geometry 서명이 같은 두 자료의 BDF 를 한 쌍으로 묶는다.
               네 서명이 모두 같으면 'dup'(똑같은 BDF — 17 이 업로드에서 막으므로 예외로만 생긴다),
@@ -70,13 +71,19 @@ def build_graph(db: Session, user, store=None) -> dict:
                                   .filter(models.EntryHull.entry_id.in_(pks))
                                   .order_by(models.EntryHull.is_primary.desc(), models.EntryHull.hull_no)):
         hulls[eid].append(hull_no)
-    # 30 — 선형(선종 칸 그대로, 예 '174K LNG')과 선종(PLM 분해 값, 없으면 선형 글자를 같은 규칙으로 풀어서)
+    # 30 — 선종·크기급: PLM 분해 값(ship_kind·ship_capacity), 없으면 선종 칸 글자('300K-VLCC')를 같은 규칙으로 풀어서
     ships: dict[str, str | None] = {}
     kinds: dict[str, str | None] = {}
-    for no, ship_type, ship_kind in (db.query(models.Hull.hull_no, models.Hull.ship_type, models.Hull.ship_kind)
-                                     .filter(models.Hull.hull_no.in_({h for hs in hulls.values() for h in hs} or {""}))):
+    sizes: dict[str, str | None] = {}
+    for no, ship_type, ship_kind, capacity in (
+            db.query(models.Hull.hull_no, models.Hull.ship_type, models.Hull.ship_kind, models.Hull.ship_capacity)
+            .filter(models.Hull.hull_no.in_({h for hs in hulls.values() for h in hs} or {""}))):
         ships[no] = ship_type
-        kinds[no] = ship_kind or (parse_ship_type(ship_type)["shipKind"] if ship_type else None)
+        parsed = parse_ship_type(ship_type) if ship_type and not (ship_kind and capacity) else {}
+        kind = ship_kind or parsed.get("shipKind")
+        cap = capacity or parsed.get("capacity")
+        kinds[no] = kind
+        sizes[no] = f"{cap}급 {kind}" if cap and kind else None
 
     # 태그는 대표 값으로(동의어를 하나로). 해석 종류도 분류 목록의 대표 값으로
     vocabs = {k: Vocab(db, k) for k in TAG_KINDS}
@@ -175,6 +182,7 @@ def build_graph(db: Session, user, store=None) -> dict:
                for (a, b), p in sorted(doc_pairs.items())]
     return {"entries": out_entries, "hulls": {h: ships.get(h) for h in sorted(used)},
             "hull_kinds": {h: kinds.get(h) for h in sorted(used)},
+            "hull_sizes": {h: sizes.get(h) for h in sorted(used)},
             "pairs": out_pairs, "doc_pairs": out_doc, "unsigned_models": unsigned, "truncated": truncated,
             "doc_index": doc_index}
 

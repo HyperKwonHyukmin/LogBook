@@ -114,11 +114,15 @@ def test_requires_login(client):
 
 
 def test_hull_kinds_from_plm_or_ship_type(world, client, auth_headers, db):
-    """30 — 선종: PLM 분해 값이 있으면 그것, 없으면 선종(선형) 글자를 같은 규칙으로 풀어서. 둘 다 없으면 None."""
+    """30 — 선종·크기급: PLM 분해 값이 있으면 그것, 없으면 선종 칸 글자를 같은 규칙으로 풀어서. 용량이 없으면 크기급 None."""
     h2 = db.get(models.Hull, "9002")
-    h2.ship_type, h2.ship_kind = "174K LNG", "LNG"
+    h2.ship_type, h2.ship_kind, h2.ship_capacity = "174K LNG", "LNG", "174K"
     db.get(models.Hull, "9001").ship_type = "300K-VLCC"   # 사람이 적은 선종(PLM 조회 전)
+    h3 = db.get(models.Hull, "9003") or models.Hull(hull_no="9003")
+    h3.ship_type = "FPSO"                                  # 용량 없는 값 — 크기급 없음
+    db.add(h3)
     db.commit()
     g = _graph(client, auth_headers, "M100001")
     assert g["hull_kinds"] == {"9001": "VLCC", "9002": "LNG", "9003": None}
+    assert g["hull_sizes"] == {"9001": "300K급 VLCC", "9002": "174K급 LNG", "9003": None}
     assert g["hulls"]["9002"] == "174K LNG"

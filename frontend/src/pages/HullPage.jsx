@@ -14,6 +14,7 @@ import { ErrorNote, Page, SectionTitle } from '../components/ui/Page.jsx';
 import { Bar } from '../components/ui/Skeleton.jsx';
 import { errorText } from '../lib/labels.js';
 import { useToast } from '../components/ui/Toast.jsx';
+import { sizeClassOf } from '../components/hull/HullPlmLookup.jsx';
 
 /** '2026-09' → '2026년 9월' */
 const monthLabel = (m) => {
@@ -31,7 +32,7 @@ function PlmLine({ plm }) {
   // 인도 = 실적 인도일. 인도 전이면 날짜 뒤에 '(미인도)'
   const delivery = `${plm.delivery_date || '—'}${plm.delivered ? '' : ' (미인도)'}`;
   const items = [
-    plm.ship_type_raw && ['선형', plm.ship_type_raw],
+    sizeClassOf(plm) && ['크기급', sizeClassOf(plm)],
     plm.main_engine && ['주기관', plm.main_engine],
     plm.ship_class && ['선급', plm.ship_class],
     ['인도', delivery],
@@ -105,7 +106,7 @@ export default function HullPage() {
     } catch (err) { setError(errorText(err, '저장하지 못했습니다.')); return false; }
   }
 
-  // 30 — [선박 정보 검색]: PLM 에서 선형·주기관·선급·인도일을 읽어 채운다(선종은 선형으로 바뀐다)
+  // 30 — [선박 정보 검색]: PLM 에서 크기급·주기관·선급·인도일을 읽어 채운다(선종 칸은 PLM 값으로 바뀐다)
   async function lookupPlm() {
     setPlmBusy(true);
     try {
@@ -171,7 +172,7 @@ export default function HullPage() {
         <div className="flex flex-wrap gap-2">
           {!readOnly && (
             <Button variant="secondary" size="sm" loading={plmBusy} disabled={plmBusy} onClick={lookupPlm}
-                    title="사내 PLM 에서 선형·주기관·선급·인도일을 찾아 채웁니다(선종은 선형으로 바뀝니다)">
+                    title="사내 PLM 에서 크기급·주기관·선급·인도일을 찾아 채웁니다(선종 칸은 PLM 값으로 바뀝니다)">
               <Ship size={14} aria-hidden="true" />선박 정보 검색
             </Button>
           )}

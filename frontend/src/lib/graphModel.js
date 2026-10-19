@@ -1,7 +1,7 @@
 /**
  * 관계 지도(25) — /api/graph 응답을 지도용 모델로 바꾸는 순수 함수.
  *
- * 점은 두 종류다. 기준 점(호선·구역·선종·선형·자유 태그 값 하나)과 자료 점(확정 Entry 하나).
+ * 점은 두 종류다. 기준 점(호선·구역·선종·크기급·자유 태그 값 하나)과 자료 점(확정 Entry 하나).
  * 고른 기준(pivot)의 값마다 기준 점이 생기고 자료가 그 둘레에 앉는다. 기준 값이 없는 자료는 '○○ 없음' 점 하나로 모은다.
  * 기준 점끼리의 굵은 곡선(aggregate) = 두 기준에 함께 등록된 자료 + 형상만 같은 BDF 쌍 + 똑같은 BDF 쌍
  * (+ 32 문서 관계: 사용한 모델 · 같은 보고서의 다른 판 · 본문 비슷함).
@@ -9,17 +9,17 @@
  * 32 — 자료 사이 선은 두 층이다. 모델 층(pairs: geom·dup)과 문서 층(docPairs: uses·rrev·text).
  * 보기 층(layer: model | doc | all)에 따라 pairsOf 가 고른다 — 보고서만 있는 자료도 문서 층으로 이어진다.
  */
-// 29 — 프로젝트 기준은 없앴다. 30 — 선종(LNG·VLCC)·선형(174K LNG = 용량 + 선종)은 자료의 호선들에서 모은다.
-// 용량만으로는 묶지 않는다 — 단위가 선종마다 다르다(LNG m³ · VLCC/B·C DWT · CNTR TEU).
-export const GROUP = { hull: '호선', zone: '구역', kind: '선종', type: '선형', free: '자유 태그' };
-export const JOSA = { hull: '이', zone: '이', kind: '이', type: '이', free: '가' };
-export const PIVOTS = ['hull', 'zone', 'kind', 'type'];
-export const GROUP_KEYS = ['hull', 'zone', 'kind', 'type', 'free'];
+// 29 — 프로젝트 기준은 없앴다. 35 — 선종(LNG·VLCC)·크기급(174K급 LNG = 용량 + 선종)은 자료의 호선들에서 모은다.
+// 용량만으로는 묶지 않는다 — 단위가 선종마다 다르다(LNG m³ · VLCC/B·C DWT · CNTR TEU). 같은 174K 라도 선종이 다르면 다른 크기급.
+export const GROUP = { hull: '호선', zone: '구역', kind: '선종', size: '크기급', free: '자유 태그' };
+export const JOSA = { hull: '이', zone: '이', kind: '이', size: '이', free: '가' };
+export const PIVOTS = ['hull', 'zone', 'kind', 'size'];
+export const GROUP_KEYS = ['hull', 'zone', 'kind', 'size', 'free'];
 const FIELD = { hull: 'hulls', zone: 'zones', free: 'free' };
-/** 자료의 기준 값 — 선종·선형은 호선마다의 값을 겹치지 않게 모은다(호선 순서 = 주 호선 먼저). */
-function valuesOf(e, g, ships, kinds) {
-  if (g === 'kind' || g === 'type') {
-    const of = g === 'kind' ? kinds : ships;
+/** 자료의 기준 값 — 선종·크기급은 호선마다의 값을 겹치지 않게 모은다(호선 순서 = 주 호선 먼저). */
+function valuesOf(e, g, kinds, sizes) {
+  if (g === 'kind' || g === 'size') {
+    const of = g === 'kind' ? kinds : sizes;
     return [...new Set((e.hulls || []).map((h) => of[h]).filter(Boolean))];
   }
   return e[FIELD[g]] || [];
@@ -56,6 +56,7 @@ function palette(entries, key) {
 export function buildModel(data) {
   const ships = data?.hulls || {};
   const kinds = data?.hull_kinds || {};
+  const sizes = data?.hull_sizes || {};
   const hubs = new Map();
   const hub = (g, v) => {
     const id = `${g}:${v}`;
@@ -71,7 +72,7 @@ export function buildModel(data) {
     const n = { id: `e:${e.id}`, eid: e.id, label: e.title || e.id, raw: e, atype: e.analysis_type || null,
       ship: e.hulls?.[0] ? ships[e.hulls[0]] || null : null, of: {} };
     for (const g of GROUP_KEYS) {
-      n.of[g] = valuesOf(e, g, ships, kinds).map((v) => hub(g, v));
+      n.of[g] = valuesOf(e, g, kinds, sizes).map((v) => hub(g, v));
       n.of[g].forEach((h) => { h.cnt += 1; });
     }
     return n;
