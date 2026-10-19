@@ -97,13 +97,14 @@ def fetch_many(db: Session, employee_ids) -> dict[str, WbUser]:
 
 
 def list_active(db: Session, q: str = "", limit: int = LIST_LIMIT) -> list[WbUser]:
-    """활성 사용자(이름·사번 앞부분으로 거르기). 이름 순."""
+    """활성 사용자(이름·사번·부서에 검색어가 들어간 사람). 이름 순."""
     t = _table()
     stmt = select(*_cols(t)).where(t.c.is_active.is_(True))
     q = (q or "").strip()
     if q:
-        like = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-        stmt = stmt.where(or_(t.c.name.like(like, escape="\\"), t.c.employee_id.like(like.upper(), escape="\\")))
+        like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        stmt = stmt.where(or_(t.c.name.like(like, escape="\\"), t.c.employee_id.like(like.upper(), escape="\\"),
+                              t.c.department.like(like, escape="\\")))
     return [_row(r) for r in _run(db, stmt.order_by(t.c.name, t.c.employee_id).limit(limit))]
 
 

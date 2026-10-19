@@ -24,7 +24,7 @@ export default function GroupedResults({ by, groups, collapsed, onToggle, onMore
                                          terms, filters, multiValued }) {
   const meta = GROUPS.find((g) => g.id === by) || { none: '없음' };
   const multiNote = {
-    hull: '호선이 둘 이상인 자료', zone: '구역이 둘 이상인 자료', tag: '태그가 둘 이상인 자료',   // 19 — 태그별(프로젝트는 자료당 하나)
+    hull: '호선이 둘 이상인 자료', zone: '구역이 둘 이상인 자료', tag: '태그가 둘 이상인 자료',   // 19 — 태그별
   }[by];
   const sections = groups.map((g, gi) => {
     const isOpen = !collapsed.has(gi);

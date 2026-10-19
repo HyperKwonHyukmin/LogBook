@@ -389,7 +389,6 @@ def world(db, client, make_user, make_entry_file, auth_headers, store):
     make_user("Z900009", name="관리자", level=3)
     make_user("C300003", name="게스트", level=1)
     crane, crane_r = make_entry_file(title="크레인 검토", hulls=(), name="크레인.pdf")
-    service.set_project(db, crane, "크레인 연구")
     moor, moor_r = make_entry_file(title="계류 검토", hulls=("3496",), name="계류.pdf")
     plain, plain_r = make_entry_file(title="일반 검토", hulls=("3497",), name="일반.pdf")
     hidden, hidden_r = make_entry_file(title="비공개", name="비밀.pdf", uploaded_by="B200002")
@@ -416,7 +415,7 @@ def test_search_and_or_phrase_digits_parts_short_terms(client, store, world):
     _add(chunks, "page:3", long_text)
     put_doc(store, *w.plain, [(c["locator"], c["text"]) for c in chunks])
     crane_id, moor_id, plain_id = w.crane[0].id, w.moor[0].id, w.plain[0].id
-    # AND — 서로 다른 조각과 메타데이터(프로젝트 '크레인 연구') 조합
+    # AND — 서로 다른 조각과 메타데이터(자료 제목 '크레인 검토') 조합
     r = _ids(client, h, "q=크레인 응력 피로")
     assert [i["file_id"] for i in r["items"]] == [crane_id] and r["keyword_total"] == 1
     item = r["items"][0]
@@ -497,16 +496,16 @@ def test_filters_facets_paging_exhaustive(client, db, store, make_entry_file, wo
     for n in range(81):
         e, f = make_entry_file(title=f"보고서 {n}", hulls=(), name=f"r{n:02d}.pdf")
         if n % 2:
-            service.set_project(db, e, "풍하중 연구")
+            e.no_hull = True   # 공통 참고자료
         made.append((f, e))
     db.commit()
     for f, e in made:
         put_doc(store, f, e, [("page:1", "stress"), ("page:100", "fatigue")])
     r = _ids(client, w.h, "q=stress fatigue&limit=10&offset=70")
     assert r["total"] == r["keyword_total"] == 81 and len(r["items"]) == 10 and len(r["items"][0]["snippets"]) == 2
-    r = _ids(client, w.h, "q=stress fatigue&project=풍하중 연구")
-    assert r["total"] == 40 and {p["name"]: p["count"] for p in r["projects"]} == {"풍하중 연구": 40}
-    assert r["no_project"] == 41 and r["applied"] == {"project": ["풍하중 연구"]}
+    r = _ids(client, w.h, "q=stress fatigue&scope=reference")
+    assert r["total"] == 40 and r["scopes"] == {"reference": 40, "unclassified": 41}
+    assert r["applied"] == {"scope": ["reference"]}
     assert _ids(client, w.h, "q=stress&scope=hull")["total"] == 0
 
 

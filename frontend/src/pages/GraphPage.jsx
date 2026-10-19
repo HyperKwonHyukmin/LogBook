@@ -14,12 +14,12 @@ import {
   aggregate, aggText, buildModel, diffShort, GROUP, GROUP_KEYS, JOSA, membersOf, pivotHubs, primaryOf, searchNodes,
 } from '../lib/graphModel.js';
 
-const PIVOT_ITEMS = [{ id: 'hull', label: '호선' }, { id: 'zone', label: '구역' }, { id: 'project', label: '프로젝트' }];
+const PIVOT_ITEMS = [{ id: 'hull', label: '호선' }, { id: 'zone', label: '구역' }];
 const COLOR_ITEMS = [{ id: 'none', label: '없음' }, { id: 'atype', label: '해석 종류' }, { id: 'ship', label: '선종' }];
 const reduced = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 /**
- * 관계 지도(25, `/graph`) — 확정 자료를 고른 기준(호선·구역·프로젝트) 둘레에 모으고, 기준 사이 관계를 굵은 곡선으로,
+ * 관계 지도(25, `/graph`) — 확정 자료를 고른 기준(호선·구역) 둘레에 모으고, 기준 사이 관계를 굵은 곡선으로,
  * 자료 사이 모델 관계(형상만 같음·똑같은 BDF)를 선으로 보인다. 모든 선은 올리면 왜 이어졌는지 문장으로 설명한다.
  * 그리기·배치·움직임은 components/graph/graphView.js, 묶기·설명 문장은 lib/graphModel.js.
  */
@@ -81,7 +81,7 @@ export default function GraphPage() {
       {error && <ErrorNote className="m-6">{error}</ErrorNote>}
       {!model && !error && <div className="p-6"><RowsSkeleton rows={5} label="관계 지도를 불러오는 중" /></div>}
       {model && model.entries.length === 0 && (
-        <div className="p-6"><EmptyState icon={Waypoints} title="볼 수 있는 확정 자료가 없습니다">자료를 확정하면 호선·구역·프로젝트별로 이어져 여기에 나타납니다.</EmptyState></div>
+        <div className="p-6"><EmptyState icon={Waypoints} title="볼 수 있는 확정 자료가 없습니다">자료를 확정하면 호선·구역별로 이어져 여기에 나타납니다.</EmptyState></div>
       )}
       {model && model.entries.length > 0 && (
         <div className="grid min-h-0 flex-1 grid-cols-[224px_minmax(0,1fr)_288px] max-[1100px]:grid-cols-1 max-[1100px]:overflow-y-auto">

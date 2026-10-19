@@ -37,31 +37,6 @@ def zones_of(db: Session, entry: models.Entry) -> list[str]:
     return tags_of(db, entry, "zone")
 
 
-# 21 — 프로젝트(자료의 소속 — 호선 대신 독립 프로젝트로 묶는 자료). 자유 값 + 자동완성, 자료당 하나.
-# 태그 kind='project' 로 둔다(구역처럼 entry_tags 로 잇고, 동의어 묶기·재구축 registry 를 그대로 쓴다)
-PROJECT_MAX = 100
-
-
-def clean_project(value) -> str:
-    """앞뒤·연속 공백 정리 + 길이 제한."""
-    return " ".join(str(value or "").split())[:PROJECT_MAX]
-
-
-def project_of(db: Session, entry: models.Entry) -> str | None:
-    values = tags_of(db, entry, "project")
-    return values[0] if values else None
-
-
-def set_project(db: Session, entry: models.Entry, value) -> None:
-    """프로젝트 바꾸기(빈 값이면 지운다). 이미 있는 이름(대소문자 무시)·동의어는 그 대표 이름으로 맞춘다."""
-    from ..tags import root_value
-
-    v = clean_project(value)
-    if v:
-        v = root_value(db, "project", v)
-    set_tags(db, entry, "project", [v] if v else [])
-
-
 def file_rank(f: models.File, model_rows: dict[int, models.ModelSummary] | None = None) -> int:
     """파일 목록 순서 — 해석 모델을 맨 위에 둬 목록에서 바로 열어 보게 한다.
     0 = 변환된 모델(본 BDF, 3D 로 열림) · 1 = 그 밖의 모델 파일(변환 전·INCLUDE) · 2 = 나머지."""
@@ -120,6 +95,7 @@ def grants_of(db: Session, entry: models.Entry) -> list[dict]:
         level = 3 if (w is not None and w.is_admin) else ((u.level or 1) if u is not None else 1)
         out.append({"employee_id": g.employee_id,
                     "name": (w.name if w is not None else None) or (u.name if u is not None else None),
+                    "department": (w.department if w is not None else None) or (u.department if u is not None else None),
                     "level": level,
                     "effective": None if wb is None else bool(w is not None and w.is_active),
                     "granted_by": g.granted_by, "granted_at": g.granted_at.isoformat() if g.granted_at else None})
@@ -151,18 +127,15 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
     merge_into = _entry_ref(db, entry.merge_into_id, viewer)
     # 20 — 필수 분류(BDF 자료는 호선·구역·해석 종류)
     zones = zones_of(db, entry)
-    project = project_of(db, entry)
     missing = quality.missing_fields(has_bdf=any(f.kind == "model" and f.location != "trash" for f in files),
                                      hulls=[h.hull_no for h in hulls], no_hull=bool(entry.no_hull), zones=zones,
-                                     analysis_type=entry.analysis_type, project=project)
+                                     analysis_type=entry.analysis_type)
     d = {
         "id": entry.id, "entry_id": entry.entry_id, "status": entry.status, "title": entry.title,
         "analysis_type": entry.analysis_type, "description": entry.description, "version": entry.version,
         "hulls": [{"hull_no": h.hull_no, "ship_type": ship.get(h.hull_no), "is_primary": bool(h.is_primary)}
                   for h in hulls],
         "no_hull": bool(entry.no_hull),
-        # 21 — 프로젝트(자료의 소속). 보고서 화면의 '자료 소속'은 호선·프로젝트·공용에서 파생한다(report_catalog.scope_of)
-        "project": project,
         "zones": zones,
         "tags": tags_of(db, entry, "free"),
         "hull_evidence": entry.hull_evidence or [],
@@ -211,8 +184,7 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
 def snapshot(db: Session, entry: models.Entry) -> dict:
     d = entry_to_dict(db, entry)
     return {k: d[k] for k in ("title", "analysis_type", "description", "zones", "tags")} | {
-        "hulls": [h["hull_no"] for h in d["hulls"]]} | ({"no_hull": True} if d["no_hull"] else {}) | (
-        {"project": d["project"]} if d["project"] else {})   # 21 — 프로젝트(있을 때만)
+        "hulls": [h["hull_no"] for h in d["hulls"]]} | ({"no_hull": True} if d["no_hull"] else {})
 
 
 def can_edit_draft(user: models.User, entry: models.Entry) -> bool:
@@ -299,9 +271,7 @@ def _set_merge_into(db: Session, entry: models.Entry, value: str | None, user: m
 
 
 # 20 — 이 칸이 바뀌면 (사람이 고치지 않은) 초안 제목을 형식대로 다시 만든다
-TITLE_VALUE_FIELDS = ("hulls", "no_hull", "zones", "analysis_type", "project")   # 21 — 프로젝트(호선 대신 제목 머리)
-# 21 — 확정 자료에서 프로젝트만 바뀐 수정은 감사 동작 이름을 따로 남긴다(활동 로그에서 '프로젝트 변경'으로 보인다)
-PROJECT_ACTION = "ENTRY_PROJECT"
+TITLE_VALUE_FIELDS = ("hulls", "no_hull", "zones", "analysis_type")
 
 
 def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User | None,
@@ -354,8 +324,6 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
         set_zones(db, entry, patch["zones"] or [])
     if "tags" in patch:
         set_tags(db, entry, "free", patch["tags"] or [])
-    if "project" in patch:
-        set_project(db, entry, patch["project"])
     if "merge_into_id" in patch:
         _set_merge_into(db, entry, patch["merge_into_id"], user)
     if patch.get("access"):
@@ -376,9 +344,6 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
     db.flush()
     if entry.status == "confirmed":
         after = snapshot(db, entry)
-        changed = {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
-        if action == "ENTRY_UPDATE" and changed == {"project"}:
-            action = PROJECT_ACTION
         audit.record(db, storage, actor=actor, action=action, target_type="entry",
                      target_id=entry.entry_id, before=before, after=after, ip=ip)
         db.commit()
@@ -581,6 +546,10 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
         entry.status, entry.confirmed_by, entry.confirmed_at = "confirmed", user.employee_id, now
         _ensure_hulls(db, entry)
         db.flush()
+        from .. import plm_ship   # 30 — 아직 PLM 을 조회하지 않은 호선이 있으면 일괄 조회 작업(설정돼 있을 때만)
+
+        plm_ship.enqueue_fill(db)
+        db.flush()
         audit.record(db, storage, actor=user.employee_id, action="ENTRY_CONFIRM", target_type="entry",
                      target_id=entry.entry_id,
                      after=snapshot(db, entry) | {"files": len(files)} | access_snapshot(entry) | extra, ip=ip)
@@ -766,9 +735,6 @@ def split(db: Session, entry: models.Entry, user: models.User, file_ids: list[in
     new.entry_id = f"E{new.id:06d}"
     for h in hulls_of(db, entry):
         db.add(models.EntryHull(entry_id=new.id, hull_no=h.hull_no, is_primary=h.is_primary))
-    project = project_of(db, entry)
-    if project:   # 21 — 프로젝트도 호선처럼 소속이라 쪼갠 초안이 물려받는다
-        set_project(db, new, project)
     for f in files:
         f.entry_id = new.id
     entry.version += 1
@@ -867,30 +833,50 @@ def grant(db: Session, storage: StoragePaths, entry: models.Entry, user: models.
           ip: str | None = None) -> models.EntryGrant:
     """개별 열람 허락(15) — 올린 사람 또는 LV3 가(블록 자료는 LV3 만) WorkBench 활성 사용자에게. 감사 ENTRY_GRANT.
     이미 있으면 그대로(여러 번 불러도 같다). LogBook 에 들어온 적 없는 사람에게도 줄 수 있다(사번으로 남는다)."""
+    eid = (employee_id or "").strip().upper()
+    grant_many(db, storage, entry, user, [eid], ip)
+    return db.query(models.EntryGrant).filter_by(entry_id=entry.id, employee_id=eid).one()
+
+
+GRANT_MANY_LIMIT = 200
+
+
+def grant_many(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User, employee_ids,
+               ip: str | None = None) -> list[str]:
+    """여러 사람에게 한 번에 열람 허락(31) — 규칙은 grant 와 같다. 대상을 모두 먼저 확인하고(한 명이라도
+    없거나 비활성이면 아무것도 주지 않는다) 새로 준 사람마다 감사 ENTRY_GRANT. registry 는 한 번만 쓴다.
+    새로 허락한 사번 목록을 돌려준다(이미 있던 사람은 빠진다)."""
     from .. import wb_users
 
     access.ensure_can_manage_access(user, entry)
     if entry.status == "trashed":
         raise HTTPException(status_code=409, detail="entry_trashed")
-    eid = (employee_id or "").strip().upper()
+    eids = list(dict.fromkeys(e for e in ((x or "").strip().upper() for x in employee_ids) if e))
+    if not eids:
+        raise HTTPException(status_code=422, detail="grant_empty")
+    if len(eids) > GRANT_MANY_LIMIT:
+        raise HTTPException(status_code=422, detail="grant_too_many")
     try:
-        target = wb_users.fetch(db, eid)
+        targets = wb_users.fetch_many(db, eids)
     except wb_users.WbUnavailable:
         raise HTTPException(status_code=503, detail="wb_unavailable")
-    if target is None:
+    if any(e not in targets for e in eids):
         raise HTTPException(status_code=404, detail="user_not_found")
-    if not target.is_active:
+    if any(not targets[e].is_active for e in eids):
         raise HTTPException(status_code=422, detail="grant_user_inactive")
-    row = db.query(models.EntryGrant).filter_by(entry_id=entry.id, employee_id=eid).first()
-    if row is not None:
-        return row
-    row = models.EntryGrant(entry_id=entry.id, employee_id=eid, granted_by=user.employee_id)
-    db.add(row)
+    have = {e for (e,) in db.query(models.EntryGrant.employee_id)
+            .filter(models.EntryGrant.entry_id == entry.id, models.EntryGrant.employee_id.in_(eids))}
+    added = [e for e in eids if e not in have]
+    if not added:
+        return []
+    for eid in added:
+        db.add(models.EntryGrant(entry_id=entry.id, employee_id=eid, granted_by=user.employee_id))
     db.flush()
-    audit.record(db, storage, actor=user.employee_id, action="ENTRY_GRANT", target_type="entry",
-                 target_id=entry.entry_id, after={"employee_id": eid}, ip=ip)
+    for eid in added:
+        audit.record(db, storage, actor=user.employee_id, action="ENTRY_GRANT", target_type="entry",
+                     target_id=entry.entry_id, after={"employee_id": eid}, ip=ip)
     _after_access_change(db, storage, entry)
-    return row
+    return added
 
 
 def revoke(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User, employee_id: str,

@@ -10,13 +10,13 @@ import { mockApi } from '../test/mockApi.js';
 vi.mock('../components/preview/FilePreview.jsx', () => ({ default: () => null }));
 const OPTIONS = ['해석 보고서', '연구 보고서', '시험 보고서', '기술 검토', '발표자료', '회의자료', '계산서', '지침', '기타'];
 const row = (file_id, name, extra = {}) => ({ file_id, name, entry_id: 'E000001', entry_title: '자료', scope: 'unclassified',
-  project: null, document_type: '', hulls: [], model_count: 0, snippets: [], can_edit: true, ...extra });
+  document_type: '', hulls: [], model_count: 0, snippets: [], can_edit: true, ...extra });
 const ITEMS = [
   row(11, '검토.pdf'),
   row(12, '중간발표.pptx', { document_type: '발표자료', document_type_auto: true }),
   row(13, '남의.pdf', { can_edit: false }),
 ];
-const list = (items = ITEMS) => ({ total: items.length, items, projects: [], no_project: 0, scopes: {}, document_types: {},
+const list = (items = ITEMS) => ({ total: items.length, items, scopes: {}, document_types: {},
   document_type_options: OPTIONS, document_type_groups: [] });
 
 const setup = (map = {}) => {

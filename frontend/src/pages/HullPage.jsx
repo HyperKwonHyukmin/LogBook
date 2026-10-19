@@ -1,8 +1,8 @@
 import { useContext, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Anchor, Search } from 'lucide-react';
+import { Anchor, Search, Ship } from 'lucide-react';
 import { api } from '../api/client.js';
-import { buttonClass } from '../components/ui/Button.jsx';
+import Button, { buttonClass } from '../components/ui/Button.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
 import InlineText from '../components/ui/InlineText.jsx';
 import { AuthContext } from '../auth/AuthContext.jsx';
@@ -13,6 +13,7 @@ import { AccessBadge } from '../components/access/AccessPanel.jsx';
 import { ErrorNote, Page, SectionTitle } from '../components/ui/Page.jsx';
 import { Bar } from '../components/ui/Skeleton.jsx';
 import { errorText } from '../lib/labels.js';
+import { useToast } from '../components/ui/Toast.jsx';
 
 /** '2026-09' → '2026년 9월' */
 const monthLabel = (m) => {
@@ -20,6 +21,30 @@ const monthLabel = (m) => {
   return y && mo ? `${y}년 ${Number(mo)}월` : m || '날짜 없음';
 };
 const mmdd = (iso) => (iso ? iso.slice(5, 10) : '—');
+
+/** 30 — PLM 선박 정보 한 줄. 조회한 적이 없으면 아무것도 보이지 않는다. */
+function PlmLine({ plm }) {
+  if (!plm) return null;
+  if (plm.status !== 'found') {
+    return <p className="mt-1.5 text-meta text-n-500">PLM 에 없는 호선입니다 <span className="font-mono">({(plm.checked_at || '').slice(0, 10)} 조회)</span></p>;
+  }
+  // 인도 = 실적 인도일. 인도 전이면 날짜 뒤에 '(미인도)'
+  const delivery = `${plm.delivery_date || '—'}${plm.delivered ? '' : ' (미인도)'}`;
+  const items = [
+    plm.ship_type_raw && ['선형', plm.ship_type_raw],
+    plm.main_engine && ['주기관', plm.main_engine],
+    plm.ship_class && ['선급', plm.ship_class],
+    ['인도', delivery],
+  ].filter(Boolean);
+  return (
+    <p aria-label="PLM 선박 정보" className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-n-600">
+      {items.map(([k, v]) => (
+        <span key={k}><span className="mr-1 text-n-500">{k}</span><span className="font-mono text-n-800">{v}</span></span>
+      ))}
+      <span className="text-n-500">PLM · <span className="font-mono">{(plm.checked_at || '').slice(0, 10)}</span></span>
+    </p>
+  );
+}
 
 /** 분포 목록 — 값을 누르면 그 필터로 이 호선을 검색한다. 막대는 중립색. */
 function Distribution({ title, rows, hullNo, filterKey }) {
@@ -57,6 +82,8 @@ export default function HullPage() {
   // 15 — 호선 선종·메모는 공용 정보라 LV2 이상
   const readOnly = !!me && !canWriteShared(me);
   const [error, setError] = useState('');
+  const [plmBusy, setPlmBusy] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     let live = true; // 다른 호선으로 옮겨 간 뒤 온 옛 응답은 버린다
@@ -76,6 +103,22 @@ export default function HullPage() {
       setError('');
       return true;
     } catch (err) { setError(errorText(err, '저장하지 못했습니다.')); return false; }
+  }
+
+  // 30 — [선박 정보 검색]: PLM 에서 선형·주기관·선급·인도일을 읽어 채운다(선종은 선형으로 바뀐다)
+  async function lookupPlm() {
+    setPlmBusy(true);
+    try {
+      const h = await api(`/hulls/${encodeURIComponent(hullNo)}/plm`, { method: 'POST' });
+      setHull((cur) => ({ ...cur, ship_type: h.ship_type, plm: h.plm }));
+      setError('');
+      toast.show({ message: h.ship_type ? `선박 정보를 채웠습니다 — 선종 ${h.ship_type}` : '선박 정보를 채웠습니다.', tone: 'ok' });
+    } catch (err) {
+      setError(errorText(err, '선박 정보를 찾지 못했습니다.'));
+      if (err.status === 404) {   // 없음도 기록된다 — 화면의 PLM 줄을 맞춘다
+        api(`/hulls/${encodeURIComponent(hullNo)}`).then((h) => setHull(h)).catch(() => {});
+      }
+    } finally { setPlmBusy(false); }
   }
 
   if (missing) return <Page><EmptyState icon={Anchor} title="등록된 호선이 아닙니다">확정된 자료가 있는 호선만 볼 수 있습니다.</EmptyState></Page>;
@@ -109,6 +152,7 @@ export default function HullPage() {
             <span className="flex min-w-0 items-center gap-1.5"><span className="text-n-500">메모</span>
               <InlineText label="메모" value={hull.memo} disabled={readOnly} onSave={(v) => saveHull({ memo: v || null })} className="text-n-900" /></span>
           </div>
+          <PlmLine plm={hull.plm} />
           <p className="tnum mt-2 flex flex-wrap items-center gap-x-2 text-ui text-n-600">
             {stat(s.entries, '자료')}<span aria-hidden="true" className="text-n-300">·</span>
             {stat(s.files, '파일')}<span aria-hidden="true" className="text-n-300">·</span>
@@ -124,9 +168,17 @@ export default function HullPage() {
             )}
           </p>
         </div>
-        <Link to={`/?hull=${hull.hull_no}`} className={buttonClass('secondary', 'sm')}>
-          <Search size={14} aria-hidden="true" />이 호선 자료 검색
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {!readOnly && (
+            <Button variant="secondary" size="sm" loading={plmBusy} disabled={plmBusy} onClick={lookupPlm}
+                    title="사내 PLM 에서 선형·주기관·선급·인도일을 찾아 채웁니다(선종은 선형으로 바뀝니다)">
+              <Ship size={14} aria-hidden="true" />선박 정보 검색
+            </Button>
+          )}
+          <Link to={`/?hull=${hull.hull_no}`} className={buttonClass('secondary', 'sm')}>
+            <Search size={14} aria-hidden="true" />이 호선 자료 검색
+          </Link>
+        </div>
       </header>
       {error && <ErrorNote className="mt-4">{error}</ErrorNote>}
 

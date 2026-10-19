@@ -62,7 +62,7 @@ function MissingView() {
   return (
     <section aria-label="빠진 필수 분류">
       <p className="mb-3 text-meta text-n-600">
-        BDF 가 있는 확정 자료 중 호선(또는 프로젝트·'호선 없음(공용)')·구역·해석 종류가 빠진 것입니다. 자료는 그대로 보이고,
+        BDF 가 있는 확정 자료 중 호선(또는 '호선 없음(공용)')·구역·해석 종류가 빠진 것입니다. 자료는 그대로 보이고,
         올린 사람과 관리자에게만 ‘보완 필요’ 표시가 붙습니다. 번호를 눌러 자료 화면의 [변경하기]로 채워 주세요.
       </p>
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -94,7 +94,7 @@ function MissingView() {
                 <td className={td}><EntryCell id={it.entry_id} title={it.title} /></td>
                 <td className={`${td} font-medium text-wait`}>{requiredText(it.missing)}</td>
                 <td className={`${td} text-meta text-n-600`}>
-                  호선 {it.hulls.join(', ') || (it.no_hull ? '공용' : '—')}{it.project && ` · 프로젝트 ${it.project}`} · 구역 {it.zones.join(', ') || '—'} · 해석 종류 {it.analysis_type || '—'}
+                  호선 {it.hulls.join(', ') || (it.no_hull ? '공용' : '—')} · 구역 {it.zones.join(', ') || '—'} · 해석 종류 {it.analysis_type || '—'}
                 </td>
                 <td className={`${td} text-meta text-n-700`}>{who(it)}</td>
               </tr>

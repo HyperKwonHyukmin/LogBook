@@ -1,7 +1,7 @@
 """21 — 보고서별 정보(문서 분류)와 '보고서에 사용한 모델' 연결. 저장은 DB(report_meta·report_model_links).
 
 - 자료 소속(호선 관련 / 독립 프로젝트 / 공통 참고자료 / 미분류)은 따로 저장하지 않는다 — 자료(Entry)의 호선·프로젝트·
-  '호선 없음(공용)'에서 파생한다(scope_of). 프로젝트는 자료 값이다(entries.service.set_project, 태그 kind='project').
+  '호선 없음(공용)'에서 파생한다(scope_of). 29 — 프로젝트 소속은 없앴다.
 - 보고서 정보·연결은 파일 id 기준이라 파일이 자료 사이를 옮겨 가도(합치기 확정 등) 그대로 따라간다.
   휴지통: 행을 남기고 화면에서만 숨긴다(복원하면 그대로). 영구 삭제: 행도 지운다(purge_files).
 - 재구축 원천: 보고서가 든 자료의 entry.json `reports`(보고서 상대경로+sha256, 연결 모델 = 자료 번호+상대경로+sha256).
@@ -35,9 +35,9 @@ DOCUMENT_TYPE_GROUPS = (
 )
 # 23 — 문서 분류가 저장되지 않은 보고서 파일의 추정값(확장자). PDF 등은 추정하지 않는다
 AUTO_DOCUMENT_TYPES = {".ppt": "발표자료", ".pptx": "발표자료"}
-# 자료 소속(파생 값) — 호선이 있으면 호선 관련, 없고 프로젝트가 있으면 독립 프로젝트, 없고 '호선 없음(공용)'이면
-# 공통 참고자료, 그 밖은 미분류
-SCOPES = {"hull": "호선 관련", "project": "독립 프로젝트", "reference": "공통 참고자료", "unclassified": "미분류"}
+# 자료 소속(파생 값) — 호선이 있으면 호선 관련, 없고 '호선 없음(공용)'이면 공통 참고자료, 그 밖은 미분류
+# (29 — '독립 프로젝트' 소속은 없앴다)
+SCOPES = {"hull": "호선 관련", "reference": "공통 참고자료", "unclassified": "미분류"}
 META_ACTION = "REPORT_META"
 LINKS_ACTION = "REPORT_LINKS"
 MAX_LINKS = 50
@@ -45,11 +45,9 @@ SIDECAR = "report-catalog.json"
 SIDECAR_MIGRATED = "report-catalog.migrated.json"
 
 
-def scope_of(*, hulls, project, no_hull) -> str:
+def scope_of(*, hulls, no_hull) -> str:
     if list(hulls or []):
         return "hull"
-    if (project or "").strip():
-        return "project"
     if no_hull:
         return "reference"
     return "unclassified"
@@ -145,19 +143,18 @@ def report_file(db: Session, user, file_id: int) -> tuple[models.File, models.En
 
 def catalog(db: Session, user, report: models.File, entry: models.Entry) -> dict:
     """보고서 하나의 분류·관련 모델과 그 자료의 소속(파생)."""
-    from .entries.service import hulls_of, project_of
+    from .entries.service import hulls_of
 
     meta = meta_of(db, [report.id]).get(report.id)
     hulls = [h.hull_no for h in hulls_of(db, entry)]
-    project = project_of(db, entry)
     doc_type, auto = effective_document_type(meta, report.name)
     return {"file_id": report.id, "entry_id": entry.entry_id, "entry_title": entry.title,
             "document_type": doc_type, "document_type_auto": auto,
             "version": meta.version if meta else 0,
             "updated_by": meta.updated_by if meta else None,
             "updated_at": meta.updated_at.isoformat() if meta and meta.updated_at else None,
-            "scope": scope_of(hulls=hulls, project=project, no_hull=bool(entry.no_hull)),
-            "project": project, "hulls": hulls, "no_hull": bool(entry.no_hull),
+            "scope": scope_of(hulls=hulls, no_hull=bool(entry.no_hull)),
+            "hulls": hulls, "no_hull": bool(entry.no_hull),
             "related_models": related_models(db, user, report, entry),
             "can_edit": access.can_edit_entry(user, entry)}
 
@@ -485,15 +482,14 @@ def migrate_sidecars(db: Session, storage: StoragePaths, *, apply: bool = False)
 
     - 보고서별 문서 분류·명시 연결 → report_meta·report_model_links(이미 DB 에 정보가 있는 보고서는 건드리지 않는다).
       sha256 이 지금 파일과 다른 행은 옮기지 않는다(그 사이 대체된 파일).
-    - 'project' 소속의 프로젝트명 → 자료(Entry)의 프로젝트. 같은 자료 안 보고서끼리 이름이 다르거나 자료에 이미 다른
-      프로젝트가 있으면 충돌로 보고만 하고 프로젝트는 바꾸지 않는다(나머지 정보는 옮긴다).
-    - 'reference'(공통 참고자료)만 있는 자료는 호선·프로젝트가 없으면 '호선 없음(공용)'으로 표시한다(지금은 그 값에서 파생).
+    - 'reference'(공통 참고자료)·'project'(29 — 없앤 독립 프로젝트) 소속만 있는 자료는 호선이 없으면
+      '호선 없음(공용)'으로 표시한다(지금은 그 값에서 파생). 프로젝트 이름은 옮기지 않는다.
     - 옮긴 뒤 sidecar 는 지우지 않고 report-catalog.migrated.json 으로 이름만 바꾸고, .lock·임시 파일은 지운다.
-    - 감사: 프로젝트·공용은 자료 편집과 같은 경로(update_entry, actor system), 보고서 정보는 REPORT_META/LINKS(system)."""
-    from .entries.service import _write_meta_or_queue, project_of, update_entry, hulls_of
+    - 감사: 공용은 자료 편집과 같은 경로(update_entry, actor system), 보고서 정보는 REPORT_META/LINKS(system)."""
+    from .entries.service import _write_meta_or_queue, update_entry, hulls_of
 
     plan = {"applied": apply, "entries": [], "conflicts": [], "unreadable": [], "stale": [], "unresolved": [],
-            "meta": 0, "links": 0, "projects": 0, "no_hull": 0, "renamed": 0}
+            "meta": 0, "links": 0, "no_hull": 0, "renamed": 0}
     entries = (db.query(models.Entry).filter(models.Entry.status.in_(("confirmed", "trashed")))
                .order_by(models.Entry.id).all())
     for e in entries:
@@ -515,8 +511,8 @@ def migrate_sidecars(db: Session, storage: StoragePaths, *, apply: bool = False)
         files = {f.rel_path: f for f in db.query(models.File).filter(models.File.entry_id == e.id,
                                                                     models.File.kind == "report")}
         metas = meta_of(db, [f.id for f in files.values()])
-        item = {"entry_id": e.entry_id, "reports": [], "project": None, "no_hull": False}
-        projects, scopes = set(), set()
+        item = {"entry_id": e.entry_id, "reports": [], "no_hull": False}
+        scopes = set()
         for rel, row in sorted(data["reports"].items()):
             if not isinstance(row, dict):
                 continue
@@ -525,8 +521,6 @@ def migrate_sidecars(db: Session, storage: StoragePaths, *, apply: bool = False)
                 plan["stale"].append({"entry_id": e.entry_id, "report": rel})
                 continue
             scopes.add(row.get("scope"))
-            if row.get("scope") == "project" and str(row.get("project") or "").strip():
-                projects.add(" ".join(str(row["project"]).split()))
             if f.id in metas or linked_ids(db, [f.id]).get(f.id):
                 continue   # 이미 DB 에 정보가 있다(다시 돌린 경우) — 덮지 않는다
             dtype = row.get("document_type") if row.get("document_type") in DOCUMENT_TYPES else None
@@ -544,33 +538,18 @@ def migrate_sidecars(db: Session, storage: StoragePaths, *, apply: bool = False)
                 continue
             item["reports"].append({"file": f, "rel_path": rel, "document_type": dtype, "model_ids": model_ids,
                                     "row": row})
-        current = project_of(db, e)
-        if len(projects) > 1:
-            plan["conflicts"].append({"entry_id": e.entry_id, "projects": sorted(projects),
-                                      "reason": "같은 자료 안 보고서끼리 프로젝트가 다름"})
-        elif projects:
-            name = next(iter(projects))
-            if current and current.casefold() != name.casefold():
-                plan["conflicts"].append({"entry_id": e.entry_id, "projects": [current, name],
-                                          "reason": "자료에 이미 다른 프로젝트가 있음"})
-            elif not current:
-                item["project"] = name
-        if (scopes == {"reference"} and not current and not item["project"] and not e.no_hull
-                and not hulls_of(db, e)):
+        if (scopes and scopes <= {"reference", "project"} and not e.no_hull and not hulls_of(db, e)):
             item["no_hull"] = True
-        plan["entries"].append({"entry_id": e.entry_id, "project": item["project"], "no_hull": item["no_hull"],
+        plan["entries"].append({"entry_id": e.entry_id, "no_hull": item["no_hull"],
                                 "reports": [{"report": r["rel_path"], "document_type": r["document_type"],
                                              "models": len(r["model_ids"])} for r in item["reports"]]})
         if not apply:
             continue
         patch = {}
-        if item["project"]:
-            patch["project"] = item["project"]
         if item["no_hull"]:
             patch["no_hull"] = True
         if patch and e.status == "confirmed":
             update_entry(db, storage, e, None, {"version": e.version, **patch}, system_actor="system")
-            plan["projects"] += 1 if "project" in patch else 0
             plan["no_hull"] += 1 if "no_hull" in patch else 0
             db.expire_all()
             e = db.get(models.Entry, e.id)

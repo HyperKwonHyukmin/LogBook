@@ -445,7 +445,9 @@ def test_user_lookup_for_grants(world, client, auth_headers, wb):
     assert [u["employee_id"] for u in r] == ["N100001"] and r[0]["level"] == 1
     r = client.get("/api/users/lookup", params={"q": "W1"}, headers=h1).json()
     assert [(u["employee_id"], u["level"]) for u in r] == [(USERS["wbadmin"], 3)]
-    assert client.get("/api/users/lookup", params={"q": ""}, headers=h1).json() == []
+    # 31 — 검색어가 없으면 활성 가입자 전체(비활성 제외)
+    allr = {u["employee_id"] for u in client.get("/api/users/lookup", params={"q": ""}, headers=h1).json()}
+    assert "N100001" in allr and "N100002" not in allr and USERS["wbadmin"] in allr
 
 
 def test_entry_meta_has_access_but_not_grants(world, db, storage):

@@ -1,5 +1,6 @@
 """호선 화면용 조회·수정(설계 §6.1 `/h/{hull}` — 통계·월별 타임라인·구역 분포·참여자)."""
 from collections import Counter, defaultdict
+from datetime import datetime
 
 from fastapi import HTTPException
 from sqlalchemy import func
@@ -34,8 +35,10 @@ def list_hulls(db: Session, q: str = "", user=None) -> list[dict]:
             .group_by(models.EntryHull.hull_no))
     if q:
         rows = rows.filter(models.EntryHull.hull_no.like(f"{q.strip()}%"))
-    ships = dict(db.query(models.Hull.hull_no, models.Hull.ship_type))
-    out = [{"hull_no": h, "ship_type": ships.get(h), "entries": n, "last_at": last.isoformat() if last else None}
+    ships = {h.hull_no: h for h in db.query(models.Hull)}
+    out = [{"hull_no": h, "ship_type": ships[h].ship_type if h in ships else None,
+            "plm_status": ships[h].plm_status if h in ships else None,   # 30 — PLM 조회 여부(일괄 채우기 대상)
+            "entries": n, "last_at": last.isoformat() if last else None}
            for h, n, last in rows]
     return sorted(out, key=lambda r: (r["last_at"] or "", r["hull_no"]), reverse=True)[:500]
 
@@ -96,6 +99,7 @@ def hull_detail(db: Session, hull_no: str, user=None) -> dict:
 
     return {
         "hull_no": hull_no, "ship_type": hull.ship_type if hull else None, "memo": hull.memo if hull else None,
+        "plm": plm_of(hull),   # 30 — PLM 선박 정보(조회 안 했으면 None)
         "drafts": drafts,
         "stats": {"entries": len(entries), "files": files, "kinds": dict(kinds),
                   "analysis_types": ranked(types), "zones": ranked(zones),
@@ -127,3 +131,126 @@ def update_hull(db: Session, storage: StoragePaths, actor: str, hull_no: str, pa
 
     write_registry(db, storage)  # 선종·메모를 registry.json 에도 남긴다(05 — 재구축 원천)
     return hull
+
+
+# ---- 30 — 사내 PLM 선박 정보 ----
+
+PLM_FIELDS = ("plm_ship_type", "ship_capacity", "ship_kind", "ship_variant", "main_engine", "ship_class",
+              "delivery_date", "delivered")
+
+
+def plm_of(hull: models.Hull | None) -> dict | None:
+    """호선 화면·API 에 싣는 PLM 정보. 한 번도 조회하지 않았으면 None."""
+    if hull is None or hull.plm_status is None:
+        return None
+    return {"status": hull.plm_status, "ship_type_raw": hull.plm_ship_type, "capacity": hull.ship_capacity,
+            "ship_kind": hull.ship_kind, "variant": hull.ship_variant, "main_engine": hull.main_engine,
+            "ship_class": hull.ship_class, "delivery_date": hull.delivery_date,
+            "delivered": hull.delivered, "checked_at": hull.plm_checked_at.isoformat() if hull.plm_checked_at else None}
+
+
+def _snapshot(hull: models.Hull) -> dict:
+    return {"ship_type": hull.ship_type, **{k: getattr(hull, k) for k in PLM_FIELDS}}
+
+
+def _apply(db: Session, hull: models.Hull, result, *, replace_ship_type: bool) -> bool:
+    """조회 결과 하나를 호선 행에 옮긴다. 선종을 바꿨으면 True.
+    PLM 칸은 찾으면 늘 PLM 값으로, 선종(사람이 고칠 수 있는 값)은 replace_ship_type 이거나 비어 있을 때만 선형으로."""
+    hull.plm_checked_at = datetime.now().replace(microsecond=0)
+    if result.status != "found":
+        hull.plm_status = "not_found"   # 이전에 찾은 값은 지우지 않는다(PLM 에서 사라진 호선도 기록은 남긴다)
+        if hull.plm_ship_type is None:
+            for k in PLM_FIELDS:
+                setattr(hull, k, None)
+        return False
+    s = result.ship
+    hull.plm_status = "found"
+    hull.plm_ship_type, hull.ship_capacity, hull.ship_kind, hull.ship_variant = (
+        s["shipType"], s["capacity"], s["shipKind"], s["variant"])
+    hull.main_engine, hull.ship_class = s["mainEngine"], s["shipClass"]
+    hull.delivery_date, hull.delivered = s["deliveryDate"], s["delivered"]
+    label = (s["label"] or "")[:50] or None
+    if label and (replace_ship_type or not hull.ship_type) and hull.ship_type != label:
+        hull.ship_type = label
+        for e in _confirmed_entries(db, hull.hull_no):
+            jobs.enqueue(db, "write_meta", e.id)  # entry.json 의 호선 선종을 맞춘다
+        return True
+    return False
+
+
+_PLM_ERRORS = {"invalid": (422, "invalid_ship_no"), "not_found": (404, "ship_not_found"),
+               "error": (502, "plm_fetch_error")}
+
+
+def plm_http_error(result) -> HTTPException:
+    if result.status == "unavailable":
+        return HTTPException(status_code=503, detail=f"plm_{result.reason}")
+    code, detail = _PLM_ERRORS[result.status]
+    return HTTPException(status_code=code, detail=detail)
+
+
+def lookup_and_apply(db: Session, storage: StoragePaths, actor: str, hull_no: str, ip: str | None = None) -> models.Hull:
+    """호선 화면 [선박 정보 검색] — PLM 을 조회해 선종(선형)·PLM 칸을 채운다. 사람이 누른 것이라 선종을 바꾼다.
+    없음은 기록하고 404, 형식 오류 422, 설정·드라이버 없음 503, 조회 실패 502."""
+    from . import plm_ship
+
+    if not HULL_PATTERN.fullmatch(hull_no):
+        raise HTTPException(status_code=422, detail="invalid_ship_no")
+    result = plm_ship.lookup(hull_no)
+    if result.status not in ("found", "not_found"):
+        raise plm_http_error(result)
+    hull = db.get(models.Hull, hull_no)
+    if hull is None:
+        hull = models.Hull(hull_no=hull_no)
+        db.add(hull)
+        db.flush()
+    before = _snapshot(hull)
+    _apply(db, hull, result, replace_ship_type=True)
+    db.flush()
+    after = _snapshot(hull)
+    if before != after:
+        audit.record(db, storage, actor=actor, action="HULL_PLM", target_type="hull", target_id=hull_no,
+                     before=before, after=after, ip=ip)
+    db.commit()
+    from .ops.registry import write_registry  # 순환 import 방지
+
+    write_registry(db, storage)
+    if result.status == "not_found":
+        raise plm_http_error(result)
+    return hull
+
+
+def fill_from_plm(db: Session, storage: StoragePaths, actor: str, *, only_unchecked: bool = False,
+                  ip: str | None = None) -> dict:
+    """호선 목록 [선종 채우기]·확정 뒤 작업·CLI — 한 번의 조회로 여러 호선을 채운다. 선종은 비어 있을 때만 채운다.
+    대상: only_unchecked 면 아직 조회하지 않은 호선(자동), 아니면 찾지 못했거나 안 본 호선 + 선종이 빈 호선.
+    PLM 장애면 PlmUnavailable·예외를 그대로 올린다(아무것도 바꾸지 않는다)."""
+    from . import plm_ship
+
+    hulls = [h for h in db.query(models.Hull).order_by(models.Hull.hull_no) if HULL_PATTERN.fullmatch(h.hull_no)]
+    if only_unchecked:
+        hulls = [h for h in hulls if h.plm_status is None]
+    else:
+        hulls = [h for h in hulls if h.plm_status != "found" or not h.ship_type]
+    out = {"checked": len(hulls), "found": 0, "not_found": 0, "filled": 0}
+    if not hulls:
+        return out
+    results = plm_ship.lookup_many([h.hull_no for h in hulls])
+    bad = next((r for r in results.values() if r.status in ("unavailable", "error")), None)
+    if bad is not None:
+        raise plm_http_error(bad)
+    for h in hulls:
+        r = results[h.hull_no]
+        before = _snapshot(h)
+        filled = _apply(db, h, r, replace_ship_type=False)
+        out["found" if r.status == "found" else "not_found"] += 1
+        out["filled"] += int(filled)
+        after = _snapshot(h)
+        if before != after:
+            audit.record(db, storage, actor=actor, action="HULL_PLM", target_type="hull", target_id=h.hull_no,
+                         before=before, after=after, ip=ip)
+    db.commit()
+    from .ops.registry import write_registry
+
+    write_registry(db, storage)
+    return out

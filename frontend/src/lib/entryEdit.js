@@ -4,8 +4,8 @@
  */
 
 // 15 — 해석 시기(analysis_period)는 없앴다. 20 — '호선 없음(공용)'(no_hull, 참/거짓)
-// 21 — 프로젝트(자료의 소속, 글자 하나 — 비우면 지운다)
-export const EDIT_FIELDS = ['title', 'description', 'hulls', 'no_hull', 'project', 'zones', 'analysis_type', 'tags'];
+// 29 — 프로젝트(21)는 없앴다
+export const EDIT_FIELDS = ['title', 'description', 'hulls', 'no_hull', 'zones', 'analysis_type', 'tags'];
 const LIST_FIELDS = new Set(['hulls', 'zones', 'tags']);
 const BOOL_FIELDS = new Set(['no_hull']);
 
@@ -16,7 +16,6 @@ export function editValues(entry) {
     description: entry?.description || '',
     hulls: (entry?.hulls || []).map((h) => (typeof h === 'string' ? h : h.hull_no)),
     no_hull: !!entry?.no_hull,
-    project: entry?.project || '',
     zones: [...(entry?.zones || [])],
     analysis_type: entry?.analysis_type || '',
     tags: [...(entry?.tags || [])],
@@ -66,13 +65,12 @@ export function sameEditable(a, b) {
 
 /**
  * 20 — 확정에 필요한 분류 중 빠진 칸(BDF 자료만). 서버 quality.missing_fields 와 같은 규칙.
- * 21 — 프로젝트가 있으면 호선 칸을 채운 것으로 본다(독립 프로젝트 모델).
  * values: 고치는 값(editValues 모양), hasBdf: 이 자료에 BDF(kind=model) 파일이 있는가.
  */
 export function missingRequired(values, hasBdf) {
   if (!hasBdf) return [];
   const out = [];
-  if (!(values?.hulls || []).length && !values?.no_hull && !String(values?.project ?? '').trim()) out.push('hull');
+  if (!(values?.hulls || []).length && !values?.no_hull) out.push('hull');
   if (!(values?.zones || []).length) out.push('zone');
   if (!String(values?.analysis_type ?? '').trim()) out.push('analysis_type');
   return out;

@@ -81,12 +81,9 @@ function EntryRow({ item, on, terms, filters }) {
   const hullFilter = filterValues(filters, 'hull');
   const hulls = hullFilter.length === 1 ? item.hulls.filter((h) => h !== hullFilter[0]) : item.hulls;
   const shared = !!item.no_hull && !item.hulls.length;
-  // 둘째 줄 = 통제 값만, 고정 순서: 호선 · 프로젝트(21) · 구역 · 해석 종류 · 선종
+  // 둘째 줄 = 통제 값만, 고정 순서: 호선 · 구역 · 해석 종류 · 선종
   // 값마다 그 값으로 거른 검색 링크(09) — '선미부' 를 누르면 구역 선미부 전체
-  // 21 — 프로젝트 하나로 거른 검색이면 모든 행이 그 프로젝트라 뺀다(호선 칩과 같은 규칙)
-  const projectFilter = filterValues(filters, 'project');
-  const project = item.project && !(projectFilter.length === 1 && projectFilter[0] === item.project) ? item.project : null;
-  const meta = [...(project ? [['project', project]] : []), ...(item.zones || []).map((v) => ['zone', v]), ...(item.analysis_type ? [['analysis_type', item.analysis_type]] : []),
+  const meta = [...(item.zones || []).map((v) => ['zone', v]), ...(item.analysis_type ? [['analysis_type', item.analysis_type]] : []),
     ...(item.ship_types || []).map((v) => ['ship_type', v])];
   return (
     <div className="flex max-w-[1080px] items-start gap-3">
@@ -164,8 +161,6 @@ function FileRow({ item, on }) {
       <div className="mt-1 flex items-center gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2 text-meta text-n-600">
           <Hulls hulls={item.hulls} />
-          {/* 21 — 파일이 든 자료의 프로젝트 */}
-          {item.project && <FilterLink field="project" value={item.project} onClick={stop} className="shrink-0" />}
           <span className="truncate">{item.entry_title}</span>
         </div>
         <span className="shrink-0 font-mono text-meta text-n-500">{item.entry_id}</span>

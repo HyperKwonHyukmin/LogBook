@@ -13,8 +13,7 @@ import { FACET_LABELS, errorText } from '../lib/labels.js';
 import { writeSearch } from '../lib/search.js';
 
 /** 분류 화면의 속성 순서(09) — 검색 필터 차원 전부. */
-// 21 — 프로젝트(자료의 소속)
-export const BROWSE_KEYS = ['zone', 'analysis_type', 'hull', 'project', 'ship_type', 'tag', 'kind', 'uploaded_by'];
+export const BROWSE_KEYS = ['zone', 'analysis_type', 'hull', 'ship_type', 'tag', 'kind', 'uploaded_by'];
 const DEFAULT_KEY = 'zone';
 const SORTS = [{ id: 'count', label: '건수순' }, { id: 'name', label: '이름순' }];
 const VOCAB_KEYS = new Set(['zone', 'analysis_type']);

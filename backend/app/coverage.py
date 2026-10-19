@@ -1,10 +1,10 @@
-"""갖춤 현황(26) — 확정 자료를 호선(·프로젝트·공용) × 구역 칸으로 놓고, 칸마다 무엇을 갖췄는지 볼 재료 한 벌.
+"""갖춤 현황(26) — 확정 자료를 호선(·공용) × 구역 칸으로 놓고, 칸마다 무엇을 갖췄는지 볼 재료 한 벌.
 
 관계 지도(25)처럼 따로 저장하지 않고 화면을 열 때 이미 있는 값으로 묶는다. 칸 상태는 프런트(lib/coverage.js)가
 자료 목록에서 계산한다 — 해석 종류 거르기를 바꿀 때마다 다시 부르지 않게 하려는 것이다.
 
 자료 하나에 싣는 사실
-    rows        자료가 놓일 행 — 호선(entry_hulls, 주 호선 먼저) · 프로젝트(entry_tags kind=project) · 공용(no_hull)
+    rows        자료가 놓일 행 — 호선(entry_hulls, 주 호선 먼저) · 공용(no_hull)
     zones       구역(entry_tags kind=zone, 분류 목록의 대표 값 — 동의어가 갈라지지 않게)
     models      BDF 파일 수(휴지통 제외)
     reports     문서(kind=report) 파일 수
@@ -56,11 +56,11 @@ def build_coverage(db: Session, user) -> dict:
     ships = dict(db.query(models.Hull.hull_no, models.Hull.ship_type)
                  .filter(models.Hull.hull_no.in_({h for hs in hulls.values() for h in hs} or {""})))
 
-    vocabs = {k: Vocab(db, k) for k in ("zone", "project")}
-    tags: dict[int, dict[str, list[str]]] = defaultdict(lambda: {"zone": [], "project": []})
+    vocabs = {"zone": Vocab(db, "zone")}
+    tags: dict[int, dict[str, list[str]]] = defaultdict(lambda: {"zone": []})
     for eid, tag in (db.query(models.EntryTag.entry_id, models.Tag)
                      .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
-                     .filter(models.EntryTag.entry_id.in_(pks), models.Tag.kind.in_(("zone", "project")))):
+                     .filter(models.EntryTag.entry_id.in_(pks), models.Tag.kind == "zone")):
         v = vocabs[tag.kind].root(tag).value
         if v not in tags[eid][tag.kind]:
             tags[eid][tag.kind].append(v)
@@ -113,16 +113,15 @@ def build_coverage(db: Session, user) -> dict:
     zone_count: dict[str, int] = defaultdict(int)
     out = []
     for e in rows:
-        t = tags.get(e.id) or {"zone": [], "project": []}
+        t = tags.get(e.id) or {"zone": []}
         n_models = model_files.get(e.id, 0)
-        row_keys = [f"h:{h}" for h in hulls.get(e.id, [])] + [f"p:{p}" for p in t["project"]]
+        row_keys = [f"h:{h}" for h in hulls.get(e.id, [])]
         if e.no_hull:
             row_keys.append(f"c:{COMMON_ROW}")
         for z in t["zone"]:
             zone_count[z] += 1
         missing = quality.missing_fields(has_bdf=n_models > 0, hulls=hulls.get(e.id, []), no_hull=bool(e.no_hull),
-                                         zones=t["zone"], analysis_type=e.analysis_type,
-                                         project=t["project"][0] if t["project"] else None)
+                                         zones=t["zone"], analysis_type=e.analysis_type)
         out.append({
             "id": e.entry_id, "title": e.title,
             "analysis_type": atype.canon(e.analysis_type) if e.analysis_type else None,

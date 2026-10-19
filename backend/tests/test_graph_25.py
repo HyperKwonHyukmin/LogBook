@@ -58,7 +58,7 @@ def world(db, make_user, make_entry_file):
     # 태그: 동의어는 대표 값으로
     deck = _tag(db, a, "zone", "상갑판")
     _tag(db, b, "zone", "Upper Deck", alias_of=deck)
-    _tag(db, a, "project", "LNG 표준선")
+    _tag(db, a, "project", "LNG 표준선")   # 29 — 예전 프로젝트 값은 싣지 않는다
     h = db.get(models.Hull, "9001") or models.Hull(hull_no="9001")
     h.ship_type = "LNG 운반선"
     db.add(h)
@@ -78,7 +78,7 @@ def test_entries_tags_hulls_revisions(world, client, auth_headers):
     assert world["draft"] not in by                       # 초안은 빠진다
     assert world["d"] not in by                           # 블록 자료는 LV2 에게 숨는다
     a, b = by[world["a"]], by[world["b"]]
-    assert a["hulls"] == ["9001", "9002"] and a["projects"] == ["LNG 표준선"]
+    assert a["hulls"] == ["9001", "9002"] and "projects" not in a
     assert a["zones"] == ["상갑판"] and b["zones"] == ["상갑판"]   # 동의어 → 대표 값
     assert a["revisions"] == [{"count": 2, "name": "a_r1.bdf"}]
     assert a["files"] == 2

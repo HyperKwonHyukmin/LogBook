@@ -1,6 +1,6 @@
-"""21 — 보고서 화면·자료 프로젝트: 목록(DB 만으로·거른 뒤 쪽 자르기·소속 파생·프로젝트/문서 분류/모델 유무),
-보고서 정보·모델 연결 저장(권한·충돌·숨은 연결 보존·감사·entry.json), 프로젝트(자료 값 — 검색 필터·묶기·자동완성·
-필수 분류·제목 초안·감사), 휴지통·복원·영구 삭제 규칙, 재구축, 예전 report-catalog.json 이전 CLI."""
+"""21 — 보고서 화면: 목록(DB 만으로·거른 뒤 쪽 자르기·소속 파생·문서 분류/모델 유무),
+보고서 정보·모델 연결 저장(권한·충돌·숨은 연결 보존·감사·entry.json), 휴지통·복원·영구 삭제 규칙, 재구축,
+예전 report-catalog.json 이전 CLI. 29 — 21 의 '프로젝트'(자료 값)는 없앴다: 남은 값이 있어도 어디서도 쓰지 않는다."""
 import io
 import json
 import os
@@ -60,34 +60,27 @@ def test_scope_is_derived_from_entry_values(client, db, storage, world, make_ent
     w, h = world, world["h"]
     shared, shared_r = make_entry_file(title="공통 지침", hulls=(), name="지침.pdf")
     shared.no_hull = True
-    service.set_project(db, w["indep"], "크레인 연구")
     db.commit()
     rows = {i["file_id"]: i for i in client.get("/api/reports", headers=h).json()["items"]}
-    assert rows[w["only"].id]["scope"] == "project" and rows[w["only"].id]["project"] == "크레인 연구"
+    assert rows[w["only"].id]["scope"] == "unclassified" and "project" not in rows[w["only"].id]
     assert rows[w["report"].id]["scope"] == "hull"
     assert rows[shared_r.id]["scope"] == "reference"
-    r = client.get("/api/reports?scope=project&scope=reference", headers=h).json()
+    r = client.get("/api/reports?scope=unclassified&scope=reference", headers=h).json()
     assert {i["file_id"] for i in r["items"]} == {w["only"].id, shared_r.id}
-    assert r["scopes"] == {"hull": 1, "project": 1, "reference": 1}   # 자기 칸만 빼고 센다
-    # 프로젝트보다 호선이 앞선다(호선 관련)
-    service.set_project(db, w["bundled"], "크레인 연구")
+    assert r["scopes"] == {"hull": 1, "unclassified": 1, "reference": 1}   # 자기 칸만 빼고 센다
+    assert "projects" not in r and "no_project" not in r
+    # 29 — 예전 프로젝트 값이 DB 에 남아 있어도 '독립 프로젝트'가 되지 않는다
+    service.set_tags(db, w["indep"], "project", ["크레인 연구"])
     db.commit()
     rows = {i["file_id"]: i for i in client.get("/api/reports", headers=h).json()["items"]}
-    assert rows[w["report"].id]["scope"] == "hull" and rows[w["report"].id]["project"] == "크레인 연구"
+    assert rows[w["only"].id]["scope"] == "unclassified"
+    assert "project" not in report_catalog.SCOPES
 
 
-def test_project_filter_facets_and_pagination(client, db, world, make_entry_file):
+def test_pagination_filters_before_paging(client, db, world, make_entry_file):
     w, h = world, world["h"]
-    service.set_project(db, w["indep"], "크레인 연구")
-    other, other_r = make_entry_file(title="다른 과제", hulls=(), name="다른.pdf")
-    service.set_project(db, other, "풍하중 연구")
+    make_entry_file(title="다른 과제", hulls=(), name="다른.pdf")
     db.commit()
-    r = client.get("/api/reports?project=크레인%20연구", headers=h).json()
-    assert [i["file_id"] for i in r["items"]] == [w["only"].id]
-    # 대소문자 변형도 같은 프로젝트(대표 이름)
-    assert client.get("/api/reports?project=크레인%20연구&project=x", headers=h).json()["total"] == 1
-    assert {p["name"]: p["count"] for p in r["projects"]} == {"크레인 연구": 1, "풍하중 연구": 1}
-    assert r["no_project"] == 1
     first = client.get("/api/reports?limit=2", headers=h).json()
     second = client.get("/api/reports?limit=2&offset=2", headers=h).json()
     assert first["total"] == second["total"] == 3 and len(first["items"]) == 2 and len(second["items"]) == 1
@@ -179,14 +172,13 @@ def test_hidden_link_is_preserved(client, db, world, make_user, auth_headers):
 
 # ---- 검색어 ----
 
-def test_query_combines_project_body_and_document_type(client, db, world):
+def test_query_combines_title_body_and_document_type(client, db, world):
     w, h = world, world["h"]
-    service.set_project(db, w["indep"], "크레인 연구")
     db.add(models.FileText(file_id=w["only"].id, seq=0, locator="page:2", text="응력 집중 검토 결과"))
     db.commit()
-    r = client.get("/api/reports?q=크레인%20응력", headers=h).json()
+    r = client.get("/api/reports?q=독립%20응력", headers=h).json()
     assert r["total"] == 1 and r["items"][0]["snippets"][0]["locator"] == "page:2"
-    assert client.get("/api/reports?q=크레인%20없는단어", headers=h).json()["total"] == 0
+    assert client.get("/api/reports?q=독립%20없는단어", headers=h).json()["total"] == 0
     assert _put(client, h, w["report"].id, document_type="시험 보고서").status_code == 200
     r = client.get("/api/reports?q=시험", headers=h).json()
     assert [i["file_id"] for i in r["items"]] == [w["report"].id]
@@ -195,84 +187,43 @@ def test_query_combines_project_body_and_document_type(client, db, world):
     assert [i["file_id"] for i in r["items"]] == [w["report"].id]
 
 
-# ---- 프로젝트(자료 값) ----
+# ---- 29 — 프로젝트는 없앴다 ----
 
-def test_project_in_main_search_group_suggest_browse(client, db, world):
-    w, h = world, world["h"]
-    service.set_project(db, w["indep"], "크레인 연구")
-    db.commit()
-    r = client.get("/api/search?project=크레인%20연구", headers=h).json()
-    assert [i["entry_id"] for i in r["items"]] == [w["indep"].entry_id]
-    assert r["items"][0]["project"] == "크레인 연구" and r["applied_filters"] == {"project": ["크레인 연구"]}
-    assert {f["value"] for f in client.get("/api/search", headers=h).json()["facets"]["project"]} == {"크레인 연구"}
-    g = client.get("/api/search?group=project", headers=h).json()
-    assert [(x["value"], x["count"]) for x in g["groups"]] == [("크레인 연구", 1), (None, 1)]
-    assert client.get("/api/search?q=크레인", headers=h).json()["items"][0]["matched"] == ["project"]
-    assert client.get("/api/suggest?kind=project&q=크레", headers=h).json() == ["크레인 연구"]
-    assert client.get("/api/suggest/all?q=크레", headers=h).json()["project"] == ["크레인 연구"]
-    b = client.get("/api/search/browse", headers=h).json()
-    assert b["facets"]["project"][0]["value"] == "크레인 연구"
-
-
-def test_project_patch_audit_and_entry_json(client, db, storage, world):
+def test_project_is_gone_from_search_suggest_and_patch(client, db, storage, world):
     w, h = world, world["h"]
     e = w["indep"]
-    r = client.patch(f"/api/entries/{e.entry_id}", headers=h, json={"version": e.version, "project": "  크레인   연구 "})
-    assert r.status_code == 200, r.text
-    assert r.json()["project"] == "크레인 연구"
-    log = db.query(models.AuditLog).filter_by(target_id=e.entry_id).order_by(models.AuditLog.id.desc()).first()
-    assert log.action == "ENTRY_PROJECT" and log.after["project"] == "크레인 연구" and "project" not in log.before
-    assert _entry_json(storage, e)["project"] == "크레인 연구"
-    # 같은 이름은 대소문자·공백이 달라도 같은 프로젝트(이미 있는 이름으로)
-    service.set_project(db, w["bundled"], "Crane Study")
-    service.set_project(db, w["hidden"], "  crane   STUDY ")
+    # 예전에 남은 프로젝트 태그 — 검색어·필터·묶기·자동완성 어디에도 나오지 않는다
+    service.set_tags(db, e, "project", ["크레인 연구"])
     db.commit()
-    assert service.project_of(db, w["hidden"]) == "Crane Study"
-    assert db.query(models.Tag).filter_by(kind="project").count() == 2
-    # 지우기
-    v = r.json()["version"]
-    r = client.patch(f"/api/entries/{e.entry_id}", headers=h, json={"version": v, "project": ""})
-    assert r.json()["project"] is None
-    # 다른 칸과 함께 바꾸면 보통 '정보 수정'
+    r = client.get("/api/search", headers=h).json()
+    assert "project" not in r["facets"] and all("project" not in i for i in r["items"])
+    assert client.get("/api/search?project=크레인%20연구", headers=h).json()["total"] == r["total"]   # 거르지 않는다
+    assert client.get("/api/search?q=크레인", headers=h).json()["total"] == 0
+    assert client.get("/api/search?group=project", headers=h).status_code == 422
+    assert client.get("/api/suggest?kind=project&q=크레", headers=h).status_code == 422
+    assert set(client.get("/api/suggest/all?q=크레", headers=h).json()) == {"hull", "zone", "tag"}
+    assert "project" not in client.get("/api/search/browse", headers=h).json()["facets"]
+    # 자료 수정 — project 를 보내도 받지 않고, 응답·entry.json·감사에도 없다
     r = client.patch(f"/api/entries/{e.entry_id}", headers=h,
-                     json={"version": r.json()["version"], "project": "A", "description": "설명"})
+                     json={"version": e.version, "project": "새 연구", "description": "설명"})
+    assert r.status_code == 200, r.text
+    assert "project" not in r.json()
     log = db.query(models.AuditLog).filter_by(target_id=e.entry_id).order_by(models.AuditLog.id.desc()).first()
-    assert log.action == "ENTRY_UPDATE" and log.after["project"] == "A"
+    assert log.action == "ENTRY_UPDATE" and "project" not in log.after
+    assert "project" not in _entry_json(storage, e)
 
 
-def test_bdf_with_project_needs_no_hull_and_title_uses_project(db, storage, make_user, setup_entry_with_files):
+def test_bdf_needs_hull_or_shared_project_does_not_count(db, storage, make_user, setup_entry_with_files):
     u = make_user("A100001")
     _b, e = setup_entry_with_files(rels=("크레인연구_M01/model.bdf",))
     db.query(models.EntryHull).filter_by(entry_id=e.id).delete()
-    e.title = ""
+    service.set_tags(db, e, "project", ["크레인 연구"])   # 예전 값 — 호선 대신 인정하지 않는다
     db.commit()
     assert service.entry_to_dict(db, e)["required_missing"] == ["hull"]
-    service.update_entry(db, storage, e, u, {"version": e.version, "project": "크레인 연구"})
+    service.update_entry(db, storage, e, u, {"version": e.version, "no_hull": True})
     db.expire_all()
-    e = db.get(models.Entry, e.id)
-    d = service.entry_to_dict(db, e)
-    assert d["required_missing"] == []
-    # 초안 제목이 값을 따라간다 — 호선 대신 프로젝트가 머리, 구별자에서 프로젝트 표기는 뺀다
-    assert e.title == "크레인 연구 · 선수부 · 강도 평가 · M01"
-    service.confirm(db, storage, e, u)
-    db.expire_all()
-    assert db.get(models.Entry, e.id).status == "confirmed"
-    assert naming.compose_title(project="P", no_hull=True, zones=["Z"]) == "P · Z"
-    assert naming.compose_title(hulls=["3496"], project="P") == "3496"
-
-
-def test_cleanup_counts_project_as_hull(db, storage, make_entry_file):
-    from app.entries import cleanup
-
-    e, _f = make_entry_file(title="x", hulls=(), name="m.bdf", kind="model", analysis_type="강도 평가")
-    service.set_zones(db, e, ["선수부"])
-    db.commit()
-    assert [i["entry_id"] for i in cleanup.missing_list(db)["items"]] == [e.entry_id]
-    service.set_project(db, e, "크레인 연구")
-    db.commit()
-    assert cleanup.missing_list(db)["total"] == 0
-    prev = cleanup.title_preview(db)["items"]
-    assert prev[0]["new_title"].startswith("크레인 연구 · 선수부 · 강도 평가")
+    assert service.entry_to_dict(db, db.get(models.Entry, e.id))["required_missing"] == []
+    assert naming.compose_title(no_hull=True, zones=["Z"]) == "공용 · Z"
 
 
 # ---- 휴지통·복원·영구 삭제 ----
@@ -330,15 +281,17 @@ def test_file_id_follows_confirm_merge(db, storage, make_user, setup_entry_with_
 
 # ---- 재구축 ----
 
-def test_rebuild_restores_project_meta_and_links(db, storage, world, client):
+def test_rebuild_restores_meta_and_links_ignores_old_project(db, storage, world, client):
     from app.ops.rebuild import rebuild
 
     w, h = world, world["h"]
-    service.set_project(db, w["indep"], "크레인 연구")
-    db.commit()
     assert _put(client, h, w["only"].id, document_type="연구 보고서", model_ids=[w["model"].id]).status_code == 200
     for e in (w["indep"], w["bundled"]):
         write_entry_files(db, storage, db.get(models.Entry, e.id))
+    # 29 — 예전 entry.json 에 남은 project 는 읽지 않는다
+    data = _entry_json(storage, w["indep"])
+    with open(to_long(entry_dir(storage, w["indep"]) / "entry.json"), "w", encoding="utf-8") as fh:
+        json.dump({**data, "project": "크레인 연구"}, fh, ensure_ascii=False)
     codes = (w["indep"].entry_id, w["bundled"].entry_id)   # 블록 자료 폴더는 entry.json 이 없어 건너뛴다
     from app import database
     db.rollback()
@@ -348,7 +301,7 @@ def test_rebuild_restores_project_meta_and_links(db, storage, world, client):
     r = rebuild(db, storage, force=True)
     assert r["entries"] == 2 and r["report_meta"] == 1 and r["report_links"] == 1 and r["report_unresolved"] == 0
     indep = db.query(models.Entry).filter_by(entry_id=codes[0]).one()
-    assert service.project_of(db, indep) == "크레인 연구"
+    assert db.query(models.Tag).filter_by(kind="project").count() == 0
     rep = db.query(models.File).filter_by(entry_id=indep.id, kind="report").one()
     assert db.get(models.ReportMeta, rep.id).document_type == "연구 보고서"
     link = db.query(models.ReportModelLink).one()
@@ -379,6 +332,7 @@ def _sidecar(storage, entry, reports):
 
 
 def test_migrate_sidecar_dry_run_then_apply(db, storage, world, make_entry_file):
+    """예전 'project' 소속 보고서는 공통 참고자료처럼 '호선 없음(공용)'으로 옮긴다(29 — 프로젝트 이름은 옮기지 않는다)."""
     w = world
     folder = _sidecar(storage, w["indep"], {"연구.pdf": {
         "scope": "project", "project": " 크레인  연구", "document_type": "연구 보고서", "version": 3,
@@ -386,14 +340,15 @@ def test_migrate_sidecar_dry_run_then_apply(db, storage, world, make_entry_file)
         "models": [{"entry_id": w["bundled"].entry_id, "rel_path": "model.bdf", "sha256": w["model"].sha256}]}})
     out = io.StringIO()
     plan = cli.report_catalog_migrate(db, storage, out=out)
-    assert not plan["applied"] and plan["entries"][0]["project"] == "크레인 연구"
-    assert db.query(models.ReportMeta).count() == 0 and service.project_of(db, w["indep"]) is None
+    assert not plan["applied"] and plan["entries"][0]["no_hull"] is True and "project" not in plan["entries"][0]
+    assert db.query(models.ReportMeta).count() == 0 and not db.get(models.Entry, w["indep"].id).no_hull
     assert os.path.exists(to_long(folder / "report-catalog.json"))
     assert "아무것도 바꾸지 않았습니다" in out.getvalue()
     plan = cli.report_catalog_migrate(db, storage, apply=True, out=io.StringIO())
-    assert (plan["meta"], plan["links"], plan["projects"], plan["renamed"]) == (1, 1, 1, 1)
+    assert (plan["meta"], plan["links"], plan["no_hull"], plan["renamed"]) == (1, 1, 1, 1)
     db.expire_all()
-    assert service.project_of(db, db.get(models.Entry, w["indep"].id)) == "크레인 연구"
+    assert db.get(models.Entry, w["indep"].id).no_hull is True
+    assert db.query(models.Tag).filter_by(kind="project").count() == 0
     meta = db.get(models.ReportMeta, w["only"].id)
     assert (meta.document_type, meta.version) == ("연구 보고서", 3)
     assert db.query(models.ReportModelLink).one().model_file_id == w["model"].id
@@ -401,14 +356,13 @@ def test_migrate_sidecar_dry_run_then_apply(db, storage, world, make_entry_file)
     assert os.path.exists(to_long(folder / "report-catalog.migrated.json"))
     assert not os.path.exists(to_long(folder / "report-catalog.lock"))
     actions = {a.action for a in db.query(models.AuditLog)}
-    assert {"ENTRY_PROJECT", "REPORT_META", "REPORT_LINKS"} <= actions
-    assert _entry_json(storage, w["indep"])["project"] == "크레인 연구"
+    assert {"ENTRY_UPDATE", "REPORT_META", "REPORT_LINKS"} <= actions
     # 다시 돌려도 바뀌는 것이 없다(sidecar 이름이 바뀌어 대상이 없다)
     again = cli.report_catalog_migrate(db, storage, apply=True, out=io.StringIO())
     assert again["entries"] == [] and again["meta"] == 0
 
 
-def test_migrate_conflicting_projects_reports_only(db, storage, world, make_entry_file):
+def test_migrate_skips_stale_reports(db, storage, world, make_entry_file):
     w = world
     _e, second = make_entry_file(entry=w["indep"], name="둘째.pdf", kind="report")
     _sidecar(storage, w["indep"], {
@@ -419,11 +373,9 @@ def test_migrate_conflicting_projects_reports_only(db, storage, world, make_entr
         "사라진.pdf": {"scope": "reference", "project": "", "document_type": "기타", "version": 1,
                      "sha256": "x", "models": []}})
     plan = cli.report_catalog_migrate(db, storage, apply=True, out=io.StringIO())
-    assert plan["conflicts"][0]["projects"] == ["A 연구", "B 연구"]
     assert plan["stale"] == [{"entry_id": w["indep"].entry_id, "report": "사라진.pdf"}]
     db.expire_all()
-    assert service.project_of(db, db.get(models.Entry, w["indep"].id)) is None   # 충돌 — 프로젝트는 적용 안 함
-    assert db.get(models.ReportMeta, w["only"].id).document_type == "지침"        # 나머지는 옮긴다
+    assert db.get(models.ReportMeta, w["only"].id).document_type == "지침"
 
 
 def test_migrate_reference_scope_sets_no_hull(db, storage, world):
@@ -440,12 +392,3 @@ def test_cli_parser_has_migrate_command(capsys):
     with pytest.raises(SystemExit):
         cli.main(["report-catalog-migrate", "--help"])
     assert "--apply" in capsys.readouterr().out
-
-
-def test_project_suggest_and_facet_respect_visibility(client, db, world, auth_headers):
-    """볼 수 없는 자료에만 쓰인 프로젝트 이름은 제안·필터 값에 나오지 않는다(13 — 이름이 비공개 내용일 수 있다)."""
-    service.set_project(db, world["hidden"], "비밀 과제")
-    db.commit()
-    h = world["h"]
-    assert client.get("/api/suggest?kind=project&q=비밀", headers=h).json() == []
-    assert client.get("/api/search", headers=h).json()["facets"]["project"] == []

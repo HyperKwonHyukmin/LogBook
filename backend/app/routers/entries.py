@@ -28,7 +28,6 @@ class EntryPatch(BaseModel):
     access: str | None = Field(default=None, pattern="^(shared|normal|blocked)$")   # 15 — 초안에서만
     no_hull: bool | None = None       # 20 — '호선 없음(공용)'
     title_auto: bool | None = None    # 20 — 제목을 형식대로 다시 만들기(호선·구역·해석 종류 + 구별자)
-    project: str | None = Field(default=None, max_length=100)   # 21 — 프로젝트(빈 값·null 이면 지운다)
 
 
 class AccessBody(BaseModel):
@@ -39,6 +38,10 @@ class AccessBody(BaseModel):
 
 class GrantBody(BaseModel):
     employee_id: str = Field(min_length=1, max_length=20)
+
+
+class GrantManyBody(BaseModel):
+    employee_ids: list[str] = Field(min_length=1, max_length=200)
 
 
 class SplitBody(BaseModel):
@@ -192,6 +195,15 @@ def add_grant(entry_id: str, body: GrantBody, request: Request, db: Session = De
     return {"grants": service.grants_of(db, e)}
 
 
+@router.post("/entries/{entry_id}/grants")
+def add_grants(entry_id: str, body: GrantManyBody, request: Request, db: Session = Depends(get_db),
+               storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    """여러 사람에게 한 번에 열람 허락(31) — 사용자 목록에서 체크한 사람들. 한 명이라도 안 되면 아무도 더하지 않는다."""
+    e = _entry(db, entry_id, user)
+    added = service.grant_many(db, storage, e, user, body.employee_ids, client_ip(request))
+    return {"grants": service.grants_of(db, e), "added": added}
+
+
 @router.delete("/entries/{entry_id}/grants/{employee_id}")
 def delete_grant(entry_id: str, employee_id: str, request: Request, db: Session = Depends(get_db),
                  storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
@@ -200,19 +212,20 @@ def delete_grant(entry_id: str, employee_id: str, request: Request, db: Session 
     return {"grants": service.grants_of(db, e)}
 
 
+LOOKUP_LIMIT = 500
+
+
 @router.get("/users/lookup")
 def lookup_users(q: str = "", db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
-    """열람 허락 대상 찾기(15) — WorkBench 활성 사용자(이름·사번 앞부분, 20명). 로그인한 누구나(자기 자료에 허락을 준다)."""
+    """열람 허락 대상 고르기(15·31) — WorkBench 활성 사용자. 검색어가 없으면 가입자 전체(이름 순, 최대 500명),
+    있으면 이름·사번·부서에 그 글자가 들어간 사람. 로그인한 누구나(자기 자료에 허락을 준다)."""
     from .. import wb_users
 
-    q = q.strip()
-    if not q:
-        return []
     try:
-        rows = wb_users.list_active(db, q, limit=20)
+        rows = wb_users.list_active(db, q.strip(), limit=LOOKUP_LIMIT)
     except wb_users.WbUnavailable:
         raise HTTPException(status_code=503, detail="wb_unavailable")
     levels = dict(db.query(models.User.employee_id, models.User.level)
                   .filter(models.User.employee_id.in_([u.employee_id for u in rows] or [""])))
-    return [{"employee_id": u.employee_id, "name": u.name, "department": u.department,
+    return [{"employee_id": u.employee_id, "name": u.name, "department": u.department, "position": u.position,
              "level": 3 if u.is_admin else (levels.get(u.employee_id) or 1)} for u in rows]

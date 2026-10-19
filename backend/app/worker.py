@@ -9,6 +9,7 @@ import time
 from datetime import timedelta
 from logging.handlers import RotatingFileHandler
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from . import isolated, jobs, models
@@ -104,6 +105,17 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
                     log.info("entry.json 쓰기 대상이 없어 건너뜀: %s", job.target_id)
                 else:
                     write_entry_files(db, storage, entry)
+            elif job.type == "plm_fill":
+                # 30 — 확정 때 넣은 PLM 호선 조회. 설정이 없으면 할 일이 없고, 조회 실패는 재시도한다
+                from .hull_info import fill_from_plm
+
+                try:
+                    fill_from_plm(db, storage, "system", only_unchecked=True)
+                except HTTPException as exc:
+                    if exc.status_code == 503:
+                        log.info("PLM 이 설정되지 않아 호선 조회를 건너뜀: %s", exc.detail)
+                    else:
+                        raise RuntimeError(f"PLM 호선 조회 실패: {exc.detail}") from exc
             elif job.type == "extract_file":
                 f = db.get(models.File, job.target_id)
                 if f is None:

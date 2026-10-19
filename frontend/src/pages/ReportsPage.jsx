@@ -10,17 +10,16 @@ import { useToast } from '../components/ui/Toast.jsx';
 import KindBadge from '../components/ui/KindBadge.jsx';
 import FilePreview from '../components/preview/FilePreview.jsx';
 import { SCOPE_LABELS, errorText, formatDateTime } from '../lib/labels.js';
-import { filterHref, highlightParts } from '../lib/search.js';
+import { highlightParts } from '../lib/search.js';
 import { reportLocatorLabel } from '../lib/reportLocator.js';
 import { QUICK_BULK_TYPES, bulkResultText, bulkSummary } from '../lib/reportBulk.js';
 
 /**
  * 21 — 문서 화면(23 전 이름 '보고서'). 파일 종류 report(PDF·PPT·DOC·XLS) 파일 하나가 한 행이다(BDF 와 함께 등록된 것도 포함).
  *   주소(/reports)·API·DB 값(report)은 그대로 두고 화면 이름만 '문서'로 바꿨다.
- * - 자료 소속(호선 관련·독립 프로젝트·공통 참고자료·미분류)은 자료의 호선·프로젝트·공용에서 파생한 값이라 여기서 바꾸지 않는다
- *   — 자료 상세 [변경하기]에서 호선·프로젝트·'호선 없음(공용)'을 고친다.
+ * - 자료 소속(호선 관련·공통 참고자료·미분류)은 자료의 호선·공용에서 파생한 값이라 여기서 바꾸지 않는다
+ *   — 자료 상세 [변경하기]에서 호선·'호선 없음(공용)'을 고친다. 29 — '독립 프로젝트'와 프로젝트 거르기는 없앴다.
  * - 문서마다 저장하는 것은 문서 분류와 '문서에 사용한 모델'(API 이름은 보고서 모델 연결) 연결뿐이다(PUT /reports/{id}/catalog).
- * - 프로젝트 거르기는 검색 화면과 같은 규칙(같은 칸 여러 값은 '또는', 주소에 `project=` 를 되풀이).
  * - 23 — 문서 분류 목록과 상단 빠른 구분(전체 / 보고서 / 발표자료 / 기타)은 서버가 목록 응답으로 내려준다
  *   (document_type_options·document_type_groups). 빠른 구분은 문서 분류 거르기 값(`document_type=` 되풀이)을 묶어서 거는
  *   바로가기라 따로 저장·거르지 않는다. 저장된 문서 분류가 없는 .ppt/.pptx 는 서버가 '발표자료'로 추정해 주고(document_type_auto)
@@ -140,7 +139,6 @@ function ReportSummary({ fileId }) {
 
 function scopeText(c) {
   const label = SCOPE_LABELS[c.scope] || SCOPE_LABELS.unclassified;
-  if (c.scope === 'project' && c.project) return `${label} · ${c.project}`;
   if (c.scope === 'hull' && c.hulls?.length) return `${label} · ${c.hulls.join(', ')}`;
   return label;
 }
@@ -219,7 +217,7 @@ function ReportPanel({ fileId, options, onClose, onSaved }) {
             <dt className="text-meta text-n-500">자료 소속</dt>
             <dd className="min-w-0">
               <span>{scopeText(c)}</span>
-              {/* 소속·프로젝트는 자료 값 — 자료 상세의 [변경하기]에서 바꾼다(제목 형식·필수 분류와 함께 맞물린다) */}
+              {/* 소속은 자료 값 — 자료 상세의 [변경하기]에서 바꾼다(제목 형식·필수 분류와 함께 맞물린다) */}
               {c.can_edit && (
                 <Link to={`/e/${c.entry_id}?file=${fileId}`} className="ml-2 text-meta text-brand underline-offset-2 hover:underline">
                   자료 상세에서 변경
@@ -375,31 +373,6 @@ function TypeFilter({ options, counts, selected, onChange }) {
   );
 }
 
-/** 프로젝트 거르기 — 값 여러 개(같은 칸 안은 '또는'). 고른 값은 칩, 더 고를 값은 목록에서. */
-function ProjectFilter({ projects, noProject, selected, onChange }) {
-  const counts = new Map(projects.map((p) => [p.name, p.count]));
-  const rest = projects.filter((p) => !selected.includes(p.name));
-  const label = (v) => (v === NONE ? '프로젝트 없음' : v);
-  return (
-    <div role="group" aria-label="프로젝트" className="flex flex-wrap items-end gap-2">
-      <Labeled label="프로젝트">
-        <Select value="" onChange={(e) => { if (e.target.value) onChange([...selected, e.target.value]); }}>
-          <option value="">{selected.length ? '또는 프로젝트 더하기' : '전체 프로젝트'}</option>
-          {rest.map((p) => <option key={p.name} value={p.name}>{p.name} ({p.count})</option>)}
-          {!selected.includes(NONE) && noProject > 0 && <option value={NONE}>프로젝트 없음 ({noProject})</option>}
-        </Select>
-      </Labeled>
-      {selected.map((v) => (
-        <span key={v} className="inline-flex h-8 items-center gap-1 rounded-md bg-brand-subtle pl-2 text-ui text-brand">
-          {label(v)}{v !== NONE && counts.has(v) && <span className="font-mono text-meta">{counts.get(v)}</span>}
-          <button type="button" aria-label={`프로젝트 ${label(v)} 거르기 해제`} onClick={() => onChange(selected.filter((x) => x !== v))}
-                  className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-brand-muted"><X size={13} aria-hidden="true" /></button>
-        </span>
-      ))}
-    </div>
-  );
-}
-
 export default function ReportsPage() {
   const [params, setParams] = useSearchParams();
   const [data, setData] = useState(null);
@@ -407,12 +380,10 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
   const [search, setSearch] = useState(params.get('q') || '');
-  const projects = params.getAll('project').filter(Boolean);
   const docTypes = params.getAll('document_type').filter(Boolean);
   const q = params.get('q') || '';
   const query = new URLSearchParams();
   for (const key of LIST_KEYS) if (params.get(key)) query.set(key, params.get(key));
-  for (const p of projects) query.append('project', p);
   for (const t of docTypes) query.append('document_type', t);
   // 검색어가 있고 정렬을 고르지 않았으면 관련도순(키워드 일치 → 의미 추천)
   if (q && !params.get('sort')) query.set('sort', 'relevance');
@@ -497,7 +468,7 @@ export default function ReportsPage() {
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="border-b border-n-200 px-5 pt-4">
         <h1 className="text-title font-semibold text-n-900">문서</h1>
-        <p className="mt-1 mb-3 text-ui text-n-600">호선 자료와 독립 프로젝트의 보고서·발표자료·계산서 등을 본문(그림 속 글자 포함)까지 찾고, 관련 모델을 함께 확인합니다.</p>
+        <p className="mt-1 mb-3 text-ui text-n-600">호선 자료와 공용 자료의 보고서·발표자료·계산서 등을 본문(그림 속 글자 포함)까지 찾고, 관련 모델을 함께 확인합니다.</p>
         <nav aria-label="자료 보기" className="flex gap-5 text-ui">
           <Link to="/" className="border-b-2 border-transparent pb-2 text-n-600 hover:text-n-900">전체 자료</Link>
           <Link to="/?unit=file&kind=model" className="border-b-2 border-transparent pb-2 text-n-600 hover:text-n-900">모델</Link>
@@ -510,7 +481,7 @@ export default function ReportsPage() {
       </div>
       <div className="flex flex-wrap items-end gap-3 border-b border-n-200 px-5 py-3">
         <form onSubmit={(e) => { e.preventDefault(); update({ q: search.trim() }); }} className="flex flex-wrap items-end gap-2">
-          <Labeled label="문서 검색"><Input type="search" aria-label="문서 검색어" placeholder="제목, 프로젝트, 문서 분류, 본문" value={search} onChange={(e) => setSearch(e.target.value)} /></Labeled>
+          <Labeled label="문서 검색"><Input type="search" aria-label="문서 검색어" placeholder="제목, 문서 분류, 본문" value={search} onChange={(e) => setSearch(e.target.value)} /></Labeled>
           <Labeled label="검색 조건"><Select value={params.get('mode') || 'and'} onChange={(e) => update({ mode: e.target.value === 'and' ? '' : e.target.value })}>
             <option value="and">모든 단어 포함</option><option value="or">하나 이상 포함</option><option value="phrase">입력 문구 그대로</option>
           </Select></Labeled>
@@ -524,8 +495,6 @@ export default function ReportsPage() {
         <Labeled label="자료 소속"><Select value={params.get('scope') || ''} onChange={(e) => update({ scope: e.target.value })}>
           <option value="">전체</option>{Object.entries(SCOPE_LABELS).map(([v, label]) => <option key={v} value={v}>{label}{scopeCount(v)}</option>)}
         </Select></Labeled>
-        <ProjectFilter projects={data?.projects || []} noProject={data?.no_project || 0} selected={projects}
-                       onChange={(vs) => update({ project: vs })} />
         <TypeFilter options={typeMeta?.options} counts={data?.document_types} selected={docTypes}
                     onChange={(vs) => update({ document_type: vs })} />
         <Labeled label="관련 모델"><Select value={params.get('model') || ''} onChange={(e) => update({ model: e.target.value })}><option value="">전체</option><option value="yes">모델 있음</option><option value="no">문서만</option></Select></Labeled>
@@ -553,7 +522,7 @@ export default function ReportsPage() {
             <button type="button" aria-pressed={picked === r.file_id} onClick={() => update({ file: r.file_id }, true)} className={`min-w-0 flex-1 rounded-md px-3 py-3 text-left transition-colors hover:bg-n-50 ${picked === r.file_id ? 'bg-brand-subtle' : ''}`}>
               <span className="flex items-center gap-2"><KindBadge kind="report" name={r.name} /><span className="min-w-0 truncate text-ui font-medium text-n-900">{r.name}</span></span>
               <span className="mt-1 block truncate text-meta text-n-600">{r.entry_title}</span>
-              <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-meta text-n-500"><span>{SCOPE_LABELS[r.scope]}</span>{r.project && <span>{r.project}</span>}{r.hulls?.length > 0 && <span>호선 {r.hulls.join(', ')}</span>}{r.document_type && <span>{r.document_type}{r.document_type_auto && <AutoMark />}</span>}<span>{r.model_count ? `관련 모델 ${r.model_count}개` : '문서만'}</span>{r.posted_at && <span>{formatDateTime(r.posted_at).slice(0, 10)}</span>}</span>
+              <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-meta text-n-500"><span>{SCOPE_LABELS[r.scope]}</span>{r.hulls?.length > 0 && <span>호선 {r.hulls.join(', ')}</span>}{r.document_type && <span>{r.document_type}{r.document_type_auto && <AutoMark />}</span>}<span>{r.model_count ? `관련 모델 ${r.model_count}개` : '문서만'}</span>{r.posted_at && <span>{formatDateTime(r.posted_at).slice(0, 10)}</span>}</span>
               {q && r.match_type && <span className="mt-1 block text-meta font-medium text-brand">{r.match_type === 'semantic' ? '의미상 관련 추천' : '키워드 일치'}</span>}
               {r.snippets?.slice(0, 3).map((snippet, i) => <Passage key={i} snippet={snippet} />)}
               {r.index_state && INDEX_STATE_LABELS[r.index_state] && <span className="mt-1 block text-meta text-n-500">본문 색인: {INDEX_STATE_LABELS[r.index_state]}</span>}
@@ -564,12 +533,6 @@ export default function ReportsPage() {
             <span>{offset + 1}–{Math.min(offset + PAGE_SIZE, data.total)} / {data.total}</span>
             <Button variant="secondary" size="sm" disabled={offset + PAGE_SIZE >= data.total || loading} onClick={() => update({ offset: offset + PAGE_SIZE, file: null }, true)}>다음</Button>
           </div>}
-          {/* 프로젝트는 자료 값이라 전체 자료 검색에서도 같은 이름으로 거를 수 있다 */}
-          {projects.length === 1 && projects[0] !== NONE && (
-            <p className="mt-4 text-meta text-n-600">
-              <Link to={filterHref('project', projects[0])} className="text-brand underline-offset-2 hover:underline">‘{projects[0]}’ 프로젝트의 자료 전체 보기</Link>
-            </p>
-          )}
         </section>
         {confirmDialog}
         {picked && <ReportPanel key={picked} fileId={picked} options={typeMeta?.options} onClose={() => update({ file: null }, true)} onSaved={() => setAttempt((n) => n + 1)} />}

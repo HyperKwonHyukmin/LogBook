@@ -3,10 +3,10 @@ import { aggregate, buildModel, diffShort, explainAgg, explainPair, isMember, pa
 const DATA = {
   hulls: { 3370: '컨테이너선', 3508: '컨테이너선' },
   entries: [
-    { id: 'E000001', title: '권상 A', analysis_type: '권상', hulls: ['3370', '3508'], zones: ['상갑판'], free: [], projects: [], revisions: [] },
-    { id: 'E000002', title: '권상 B', analysis_type: '권상', hulls: ['3508'], zones: [], free: ['Truss'], projects: [], revisions: [] },
-    { id: 'E000003', title: '계류 C', analysis_type: '계류', hulls: ['3370'], zones: ['상갑판'], free: [], projects: [], revisions: [] },
-    { id: 'E000004', title: '공용', analysis_type: null, hulls: [], zones: [], free: [], projects: [], revisions: [] },
+    { id: 'E000001', title: '권상 A', analysis_type: '권상', hulls: ['3370', '3508'], zones: ['상갑판'], free: [], revisions: [] },
+    { id: 'E000002', title: '권상 B', analysis_type: '권상', hulls: ['3508'], zones: [], free: ['Truss'], revisions: [] },
+    { id: 'E000003', title: '계류 C', analysis_type: '계류', hulls: ['3370'], zones: ['상갑판'], free: [], revisions: [] },
+    { id: 'E000004', title: '공용', analysis_type: null, hulls: [], zones: [], free: [], revisions: [] },
   ],
   pairs: [
     { a: 'E000002', b: 'E000003', type: 'geom', differs: ['load'], files: ['b.bdf', 'c.bdf'], count: 1 },

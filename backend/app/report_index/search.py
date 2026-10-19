@@ -22,7 +22,7 @@ from .store import normalize
 
 log = logging.getLogger(__name__)
 
-NONE = report_catalog.NONE   # '미분류'·'프로젝트 없음' 거르기 값(화면과 같다)
+NONE = report_catalog.NONE   # '미분류' 거르기 값(화면과 같다)
 LIST_CAP = 100_000       # 검색 한 번에 받는 보고서 상한(보고서 수만 개 전제)
 MAX_SNIPPETS = 5         # 행마다 돌려주는 발췌(화면은 3개) — 후보 수는 줄이지 않는다
 FALLBACK_OR_TERMS = 8    # OR 검색을 기존 검색으로 대신할 때 낱말별로 부르는 최대 횟수
@@ -193,16 +193,15 @@ def list_reports(db, user, store, *, q="", mode="and", retrieval="keyword", filt
             indexed.add(fid)
         desc, analysis = extra.get(entry_of.get(fid), (None, None))
         rows[fid] = {
-            "item": {**it, "scope": report_catalog.scope_of(hulls=it["hulls"], project=it.get("project"),
-                                                            no_hull=it.get("no_hull")),
+            "item": {**it, "scope": report_catalog.scope_of(hulls=it["hulls"], no_hull=it.get("no_hull")),
                      "document_type": doc_type, "document_type_auto": doc_auto, "model_count": n, "snippets": [],
                      "index_state": index_state(doc, current) if index_available else None,
                      "match_type": None},
             "doc": doc,
             "metadata": " ".join(str(v or "") for v in [it["name"], it.get("entry_title"), desc, analysis,
-                                                        it.get("project"), doc_type, *it.get("hulls", []),
+                                                        doc_type, *it.get("hulls", []),
                                                         *tags.get(entry_of.get(fid), [])]),
-            "facet": {"scope": None, "project": it.get("project") or NONE, "document_type": doc_type or NONE,
+            "facet": {"scope": None, "document_type": doc_type or NONE,
                       "model": "yes" if n else "no"},
         }
         rows[fid]["facet"]["scope"] = rows[fid]["item"]["scope"]
@@ -243,7 +242,6 @@ def list_reports(db, user, store, *, q="", mode="and", retrieval="keyword", filt
     def facet(key):
         return Counter(r["facet"][key] for r in source if _passes(r, want, skip=key))
 
-    projects = facet("project")
     page = passed[offset: offset + limit]
     # 24 — 이 쪽 문서마다 문서 분류를 고칠 수 있는지(올린 사람·LV3) — 여러 문서 한꺼번에 바꾸기 체크박스에 쓴다
     page_entries = {e.id: e for e in db.query(models.Entry).filter(
@@ -255,9 +253,6 @@ def list_reports(db, user, store, *, q="", mode="and", retrieval="keyword", filt
         "total": len(passed),
         "items": [r["item"] for r in page],
         # 거르기 칸의 값과 건수 — 자기 칸만 빼고 센다(검색 필터 건수와 같은 셈법)
-        "projects": [{"name": n, "count": c} for n, c in sorted(projects.items(), key=lambda x: (x[0].casefold(), x[0]))
-                     if n != NONE],
-        "no_project": projects.get(NONE, 0),
         "scopes": dict(facet("scope")),
         "document_types": {("" if k == NONE else k): v for k, v in facet("document_type").items()},
         "applied": {k: sorted(v) for k, v in want.items() if v},

@@ -6,6 +6,9 @@
 LogBook 등급 바꾸기(15 — 1 게스트 | 2 일반 | 3 관리자. WorkBench 활성 사용자만, WorkBench 관리자는 못 바꿈):
     .venv\\Scripts\\python.exe -m app.cli set-level A100001 2
 
+관리자가 아닌 LV2 를 모두 LV1(게스트)로 내리기(31 — 모델 자료가 안 보이게. --apply 없으면 대상만 보고):
+    .venv\\Scripts\\python.exe -m app.cli level-guest [--apply]
+
 기존 파일(03 이전에 올라온 것)을 본문 추출 대기열에 넣기:
     .venv\\Scripts\\python.exe -m app.cli enqueue-extract [--force]
 
@@ -332,24 +335,20 @@ def naming_cleanup(db: Session, storage: StoragePaths, *, apply: bool = False, l
 
 
 def report_catalog_migrate(db: Session, storage: StoragePaths, *, apply: bool = False, out=None) -> dict:
-    """21 — 예전 report-catalog.json(공유 폴더) → DB(report_meta·report_model_links) + 자료 프로젝트."""
+    """21 — 예전 report-catalog.json(공유 폴더) → DB(report_meta·report_model_links) + '호선 없음(공용)'."""
     from .report_catalog import migrate_sidecars
 
     out = out or sys.stdout
     plan = migrate_sidecars(db, storage, apply=apply)
-    todo = [e for e in plan["entries"] if e["project"] or e["no_hull"] or e["reports"]]
+    todo = [e for e in plan["entries"] if e["no_hull"] or e["reports"]]
     print(f"[report-catalog.json 이 있는 자료] {len(plan['entries'])}건 — 옮길 것이 있는 자료 {len(todo)}건", file=out)
     for e in todo:
         parts = []
-        if e["project"]:
-            parts.append(f"프로젝트 '{e['project']}'")
         if e["no_hull"]:
             parts.append("호선 없음(공용)")
         for r in e["reports"]:
             parts.append(f"{r['report']}: 문서 분류 {r['document_type'] or '-'}, 모델 연결 {r['models']}개")
         print(f"  {e['entry_id']}  " + " / ".join(parts), file=out)
-    for c in plan["conflicts"]:
-        print(f"  [충돌·프로젝트 적용 안 함] {c['entry_id']}  {', '.join(c['projects'])} — {c['reason']}", file=out)
     for u in plan["unreadable"]:
         print(f"  [읽지 못함] {u['entry_id']}  {u['reason']}", file=out)
     for st in plan["stale"]:
@@ -361,9 +360,25 @@ def report_catalog_migrate(db: Session, storage: StoragePaths, *, apply: bool = 
     if not apply:
         print("\n아무것도 바꾸지 않았습니다. 옮기려면(먼저 backup 권장): report-catalog-migrate --apply", file=out)
     else:
-        print(f"\n옮김: 문서 분류 {plan['meta']}건 · 모델 연결 {plan['links']}건 · 프로젝트 {plan['projects']}건 · "
+        print(f"\n옮김: 문서 분류 {plan['meta']}건 · 모델 연결 {plan['links']}건 · "
               f"공용 {plan['no_hull']}건 · 이름을 바꾼 파일 {plan['renamed']}개(report-catalog.migrated.json)", file=out)
     return plan
+
+
+def plm_fill(db: Session, storage: StoragePaths, *, only_unchecked: bool = False, out=None) -> int:
+    """30 — 사내 PLM(VT_PLM_SHIP)에서 호선 선박 정보를 채운다. 선종은 비어 있는 호선만 선형으로."""
+    from fastapi import HTTPException
+
+    from .hull_info import fill_from_plm
+
+    out = out or sys.stdout
+    try:
+        r = fill_from_plm(db, storage, "system", only_unchecked=only_unchecked)
+    except HTTPException as exc:
+        print(f"PLM 조회 실패: {exc.detail}", file=out)
+        return 2
+    print(f"조회 {r['checked']}건 — 찾음 {r['found']} · 없음 {r['not_found']} · 선종 채움 {r['filled']}", file=out)
+    return 0
 
 
 def document_type_fill(db: Session, storage: StoragePaths, *, apply: bool = False, out=None) -> dict:
@@ -415,6 +430,8 @@ def main(argv: list[str]) -> int:
     sr = sub.add_parser("set-level", help="LogBook 등급 바꾸기(15) — 1 게스트 | 2 일반 | 3 관리자")
     sr.add_argument("employee_id")
     sr.add_argument("level", type=int, choices=(1, 2, 3))
+    lg = sub.add_parser("level-guest", help="31 — 관리자가 아닌 LV2 사용자를 모두 LV1(게스트)로 내린다(--apply 없으면 보고만)")
+    lg.add_argument("--apply", action="store_true", help="실제로 바꾼다")
     rv = sub.add_parser("revisions-refresh", help="모든 자료의 BDF 판 묶음(14)을 다시 맞추고 인접 판 비교를 넣는다")
     rv.add_argument("--no-diffs", action="store_true", help="판 묶음만 맞추고 비교 작업은 넣지 않는다")
     sub.add_parser("vocab-report", help="해석 종류·구역 값이 분류 목록 용어로 어떻게 맞춰질지 보고한다(쓰지 않음)")
@@ -429,6 +446,8 @@ def main(argv: list[str]) -> int:
     df = sub.add_parser("document-type-fill",
                         help="문서 분류가 없는 확정 자료의 .ppt/.pptx 에 '발표자료'를 저장한다(23) — --apply 없으면 목록만")
     df.add_argument("--apply", action="store_true", help="실제로 저장한다(감사 REPORT_META·entry.json 갱신)")
+    pf = sub.add_parser("plm-fill", help="30 — 사내 PLM 에서 호선 선박 정보를 한 번에 조회해 채운다(선종은 빈 것만)")
+    pf.add_argument("--unchecked", action="store_true", help="아직 조회하지 않은 호선만(기본: 못 찾은 것·선종 빈 것도)")
     vf = sub.add_parser("verify", help="DB 의 파일 위치와 공유 폴더를 대조한다(기본은 보고만)")
     vf.add_argument("--fix", action="store_true",
                     help="staging↔vault 사이 반쯤 옮겨진 파일만 DB 가 말하는 자리로 옮긴다")
@@ -465,6 +484,15 @@ def main(argv: list[str]) -> int:
             u = set_level_cli(db, get_storage(), args.employee_id, args.level)
             print(f"등급 변경: {u.employee_id} {u.name} → LV{u.level} {LEVEL_LABELS[u.level]}")
             return 0
+        if args.cmd == "level-guest":
+            from .roles import reset_to_guest
+
+            rows = reset_to_guest(db, get_storage(), apply=args.apply)
+            for u in rows:
+                print(f"  {u.employee_id} {u.name} {u.department or ''}")
+            verb = "LV1 로 내렸습니다" if args.apply else "LV1 로 내릴 대상입니다(--apply 로 실행)"
+            print(f"{len(rows)}명 {verb}. WorkBench 관리자와 LV3 지정자는 그대로입니다.")
+            return 0
         if args.cmd == "naming-cleanup":
             naming_cleanup(db, get_storage(), apply=args.apply, limit=max(1, args.limit))
             return 0
@@ -474,6 +502,8 @@ def main(argv: list[str]) -> int:
         if args.cmd == "document-type-fill":
             document_type_fill(db, get_storage(), apply=args.apply)
             return 0
+        if args.cmd == "plm-fill":
+            return plm_fill(db, get_storage(), only_unchecked=args.unchecked)
         if args.cmd == "verify":
             from .ops.verify import has_problems, verify
 

@@ -106,14 +106,10 @@ def _first_plus(values: list[str]) -> str:
 
 
 def compose_title(*, hulls=(), no_hull: bool = False, zones=(), analysis_type: str | None = None,
-                  distinct: str = "", project: str | None = None) -> str:
-    """구조화 값으로 제목을 만든다. 호선(또는 프로젝트·공용)·구역·해석 종류가 모두 없으면 '' (부르는 쪽이 예전 방식으로)."""
+                  distinct: str = "") -> str:
+    """구조화 값으로 제목을 만든다. 호선(또는 공용)·구역·해석 종류가 모두 없으면 '' (부르는 쪽이 예전 방식으로)."""
     hull_list = list(hulls or [])
-    project = (project or "").strip()
-    if hull_list:
-        hull_part = _first_plus(hull_list)
-    else:
-        hull_part = project or (SHARED_LABEL if no_hull else "")
+    hull_part = _first_plus(hull_list) if hull_list else (SHARED_LABEL if no_hull else "")
     head = [p for p in (hull_part, _first_plus(list(zones or [])), (analysis_type or "").strip()) if p]
     if not head:
         return ""
@@ -121,12 +117,12 @@ def compose_title(*, hulls=(), no_hull: bool = False, zones=(), analysis_type: s
 
 
 def title_draft(source: str | None, *, hulls=(), no_hull: bool = False, zones=(), analysis_type: str | None = None,
-                phrases=(), project: str | None = None) -> str:
-    """제목 초안 — 값이 하나라도 있으면 형식, 아니면 예전 방식(원래 이름). phrases 에 프로젝트 이름을 넣으면
-    구별자에서 그 표기를 뺀다(quality.TitleContext.draft 가 넣는다)."""
+                phrases=()) -> str:
+    """제목 초안 — 값이 하나라도 있으면 형식, 아니면 예전 방식(원래 이름). phrases(구역·해석 종류 표기)는
+    구별자에서 뺀다(quality.TitleContext.draft 가 넣는다)."""
     distinct = distinct_part(source, hulls=hulls, phrases=phrases)
     return compose_title(hulls=hulls, no_hull=no_hull, zones=zones, analysis_type=analysis_type,
-                         distinct=distinct, project=project) or legacy_title(source)
+                         distinct=distinct) or legacy_title(source)
 
 
 def title_words(title: str | None, drop=()) -> set[str]:

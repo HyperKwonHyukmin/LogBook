@@ -3,7 +3,7 @@
 원천:
 - 90_System\\registry.json — 사용자(등급 포함)·호선 선종/메모·태그 동의어·비공개 범위·열람 허락(13)·
   WorkBench 보내기 제한 규칙(18-b)
-- 10_Vault\\<연도>\\<EntryID>\\entry.json — 확정 Entry(21 — 프로젝트 `project`, 보고서 정보·연결 `reports`)
+- 10_Vault\\<연도>\\<EntryID>\\entry.json — 확정 Entry(21 — 보고서 정보·연결 `reports`. 29 — 옛 `project` 는 읽지 않는다)
 - 95_Trash\\<EntryID>_<시각>\\entry.json — 휴지통 Entry(draft_… 는 entry.json 이 없어 건너뛴다)
 - 90_System\\audit\\*.jsonl — 감사 로그
 - 10_Vault\\_staging\\<key> — 미확정 초안 대신 '주인 없는 배치'로 다시 처리한다
@@ -126,6 +126,15 @@ def _restore_hulls(db: Session, registry: dict) -> int:
             db.add(row)
             n += 1
         row.ship_type, row.memo = h.get("ship_type"), h.get("memo")
+        plm = h.get("plm") if isinstance(h.get("plm"), dict) else None
+        if plm and plm.get("status") in ("found", "not_found"):   # 30 — PLM 선박 정보
+            from ..hull_info import PLM_FIELDS
+
+            row.plm_status, row.plm_checked_at = plm["status"], _dt(plm.get("checked_at"))
+            for k in PLM_FIELDS:
+                v = plm.get(k)
+                setattr(row, k, (bool(v) if v is not None else None) if k == "delivered"
+                        else (str(v) if v is not None else None))
     db.flush()
     return n
 
@@ -172,8 +181,6 @@ def _restore_entry(db: Session, storage: StoragePaths, data: dict, *, status: st
         _ensure_hull(db, no, h.get("ship_type"))
     set_tags(db, e, "zone", [str(z) for z in data.get("zones") or []])
     set_tags(db, e, "free", [str(t) for t in data.get("tags") or []])
-    if data.get("project"):   # 21 — 프로젝트(자료의 소속)
-        set_tags(db, e, "project", [" ".join(str(data["project"]).split())[:100]])
     files: list[models.File] = []
     missing = 0
     for fd in data.get("files") or []:
@@ -232,7 +239,7 @@ def _restore_aliases(db: Session, registry: dict) -> int:
     n = 0
     for t in registry.get("tags") or []:
         kind, value, target = t.get("kind"), t.get("value"), t.get("alias_of")
-        if kind not in ("zone", "free", "atype", "project") or not value or not target or value == target:
+        if kind not in ("zone", "free", "atype") or not value or not target or value == target:
             continue
         rows = {}
         for v in (value, target):

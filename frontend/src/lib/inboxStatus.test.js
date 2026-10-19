@@ -58,7 +58,7 @@ test('20 — BDF 자료는 호선(또는 공용)·구역·해석 종류가 확�
   expect(shared).toEqual([]);
   // 기존 자료에 추가하는 초안은 그 자료의 분류를 따른다
   expect(draftChecks({ title: '검토', hulls: [], zones: [], analysis_type: '' }, { ...entry, merge_into: { entry_id: 'E1' } })).toEqual([]);
-  // 21 — 프로젝트가 있으면 BDF 자료도 호선 없이 확정할 수 있다
+  // 29 — 프로젝트는 없앴다: 예전 값이 있어도 호선 대신 인정하지 않는다
   const project = draftChecks({ title: '검토', hulls: [], project: '크레인 연구', zones: ['선수부'], analysis_type: '강도 평가' }, entry);
-  expect(project.filter((x) => x.blocking)).toEqual([]);
+  expect(project.filter((x) => x.blocking).map((x) => x.id)).toEqual(['hull']);
 });

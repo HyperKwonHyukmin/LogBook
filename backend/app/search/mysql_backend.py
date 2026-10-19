@@ -8,8 +8,8 @@ Entry 수가 수만 건을 넘지 않는다는 전제로, 후보 Entry 의 필�
 15: 해석 시기·해석 연도는 없앴다. 정렬은 관련도·최신순(올린 날짜 = 확정일, 초안은 등록일)·즐겨찾기한 순.
 19: 한 칸에 여러 값(같은 칸 안은 OR, 칸끼리는 AND) · 필터 건수 개수 제한을 크게(수백 호선) · 숫자 검색어의
     호선 앞부분 일치 · 호선순·제목순 정렬 · 태그별 묶기.
-21: 프로젝트(태그 kind='project', 자료당 하나) 필터·묶기·검색어 적중 · 보고서 문서 분류(report_meta)의 파일 적중 ·
-    파일 보기 행에 프로젝트·공용 여부(보고서 화면이 '자료 소속'을 파생한다)."""
+21: 보고서 문서 분류(report_meta)의 파일 적중 · 파일 보기 행에 공용 여부(보고서 화면이 '자료 소속'을 파생한다).
+29: 프로젝트(21) 필터·묶기·검색어 적중은 없앴다."""
 import re
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -90,7 +90,7 @@ def hull_known(db: Session, hull_no: str, user=None) -> bool:
 
 
 class _FreeTags:
-    """자유 태그 값 → 동의어 묶음의 대표 값(태그 필터·건수용). 21 — 프로젝트(kind='project')도 같은 규칙."""
+    """자유 태그 값 → 동의어 묶음의 대표 값(태그 필터·건수용)."""
 
     def __init__(self, db: Session, kind: str = "free"):
         tags = db.query(models.Tag).filter(models.Tag.kind == kind).all()
@@ -115,9 +115,8 @@ _MATCH = "MATCH(file_texts.text) AGAINST (:p IN BOOLEAN MODE)"
 
 
 def _vocabs(db: Session) -> dict:
-    """요청 하나 동안 쓰는 값 정규화 스냅숏 — 해석 종류·구역(통제 어휘)·자유 태그·프로젝트(21)."""
-    return {"atype": Vocab(db, "atype"), "zone": Vocab(db, "zone"), "free": _FreeTags(db),
-            "project": _FreeTags(db, "project")}
+    """요청 하나 동안 쓰는 값 정규화 스냅숏 — 해석 종류·구역(통제 어휘)·자유 태그."""
+    return {"atype": Vocab(db, "atype"), "zone": Vocab(db, "zone"), "free": _FreeTags(db)}
 
 
 class _Hits:
@@ -262,8 +261,6 @@ class MySqlSearch:
                 f["aliases"] = [x.value for x in v.synonyms(t)] if t is not None else []
         for f in out["tag"]:
             f["aliases"] = vocab["free"].aliases(f["value"])
-        for f in out["project"]:   # 21
-            f["aliases"] = vocab["project"].aliases(f["value"])
         ships = dict(db.query(models.Hull.hull_no, models.Hull.ship_type)
                      .filter(models.Hull.hull_no.in_([f["value"] for f in out["hull"]] or [""])))
         for f in out["hull"]:
@@ -336,8 +333,6 @@ class MySqlSearch:
             return vocab["zone"].canon(value) or value
         if key == "tag":
             return vocab["free"].canon(value) or value
-        if key == "project":
-            return vocab["project"].canon(value) or value
         return value
 
     @staticmethod
@@ -379,12 +374,6 @@ class MySqlSearch:
             for (eid,) in (db.query(models.EntryTag.entry_id).join(E, E.id == models.EntryTag.entry_id)
                            .filter(live, models.EntryTag.tag_id.in_(group_ids(db, tag_ids)))):
                 h.entry(eid, S_TAG, "tag")
-        # 21 — 프로젝트 이름(동의어 포함). 자료의 소속이라 태그와 같은 점수, 맞은 곳은 'project'
-        project_ids = [i for i, kind in tag_rows if kind == "project"]
-        if project_ids:
-            for (eid,) in (db.query(models.EntryTag.entry_id).join(E, E.id == models.EntryTag.entry_id)
-                           .filter(live, models.EntryTag.tag_id.in_(group_ids(db, project_ids)))):
-                h.entry(eid, S_TAG, "project")
         for (eid,) in db.query(E.id).filter(live, E.analysis_type.like(like, escape="\\")):
             h.entry(eid, S_TYPE, "analysis_type")
         # 해석 종류 사전(08) — 동의어(FEM)로 찾아도 그 용어(FE 해석)를 쓴 Entry 가 맞는다
@@ -480,7 +469,7 @@ class MySqlSearch:
             rows[e.id] = {"id": e.id, "entry": e, "hulls": [], "ship_types": set(), "zones": set(), "tags": set(),
                           "kinds": set(), "kind_counts": Counter(), "file_count": 0,
                           "analysis_type": atype.canon(e.analysis_type), "uploaded_by": e.uploaded_by,
-                          "no_hull": bool(e.no_hull), "project": None,
+                          "no_hull": bool(e.no_hull),
                           "sort_at": e.confirmed_at or e.created_at}
         hull_rows = (db.query(models.EntryHull.entry_id, models.EntryHull.hull_no, models.Hull.ship_type)
                      .outerjoin(models.Hull, models.Hull.hull_no == models.EntryHull.hull_no)
@@ -492,14 +481,11 @@ class MySqlSearch:
                 rows[eid]["ship_types"].add(ship)
         tag_rows = (db.query(models.EntryTag.entry_id, models.Tag.kind, models.Tag.value)
                     .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
-                    .filter(models.EntryTag.entry_id.in_(id_list), models.Tag.kind.in_(("zone", "free", "project")))
+                    .filter(models.EntryTag.entry_id.in_(id_list), models.Tag.kind.in_(("zone", "free")))
                     .order_by(models.Tag.value))
         for eid, kind, value in tag_rows:
             if kind == "zone":
                 rows[eid]["zones"].add(vocab["zone"].canon(value))
-            elif kind == "project":
-                if rows[eid]["project"] is None:   # 자료당 하나(만약 둘이면 이름순 첫 값)
-                    rows[eid]["project"] = vocab["project"].canon(value)
             else:
                 rows[eid]["tags"].add(vocab["free"].canon(value))
         # 파일 행을 다 읽지 않고 (Entry, 종류) 별 개수만 센다
@@ -530,7 +516,7 @@ class MySqlSearch:
             return sorted(r["kinds"])
         if key == "tag":
             return sorted(r["tags"])
-        v = r[key]   # analysis_type·uploaded_by·project(21) — 값 하나
+        v = r[key]   # analysis_type·uploaded_by — 값 하나
         return [v] if v else []
 
     def _passes(self, r: dict, filters: dict, skip: str | None = None) -> bool:
@@ -578,11 +564,10 @@ class MySqlSearch:
                     aliases = [x.value for x in vocab[kind].synonyms(t)] if t is not None else []
                     if aliases:
                         f["aliases"] = aliases
-            for key, kind in (("tag", "free"), ("project", "project")):   # 21 — 프로젝트 동의어
-                for f in out[key]:
-                    aliases = vocab[kind].aliases(f["value"])
-                    if aliases:
-                        f["aliases"] = aliases
+            for f in out["tag"]:   # 자유 태그 동의어
+                aliases = vocab["free"].aliases(f["value"])
+                if aliases:
+                    f["aliases"] = aliases
         return out
 
     def _hull_suggestion(self, db: Session, terms: list[str], filters: dict, user=None) -> dict | None:
@@ -672,11 +657,9 @@ class MySqlSearch:
                 # 13·15 — 공개 단계(공유·블록이면 배지). 볼 수 있는 사람에게만 실린다
                 **access.access_brief(e),
                 "no_hull": r["no_hull"],
-                "project": r["project"],   # 21
                 # 20 — '보완 필요'(확정 BDF 자료의 빠진 필수 칸) — 고칠 수 있는 사람(올린 사람·LV3)에게만
                 "needs_fix": (missing_fields(has_bdf=r["kind_counts"].get("model", 0) > 0, hulls=r["hulls"],
-                                             no_hull=r["no_hull"], zones=r["zones"], analysis_type=r["analysis_type"],
-                                             project=r["project"])
+                                             no_hull=r["no_hull"], zones=r["zones"], analysis_type=r["analysis_type"])
                               if e.status == "confirmed" and user is not None and access.can_edit_entry(user, e)
                               else []),
             })
@@ -743,7 +726,7 @@ class MySqlSearch:
                           "entry_id": r["entry"].entry_id, "entry_title": r["entry"].title,
                           "entry_status": r["entry"].status, "hulls": r["hulls"], "score": score,
                           # 21 — 파일이 든 자료의 소속(보고서 화면이 '자료 소속'을 파생한다)
-                          "no_hull": r["no_hull"], "project": r["project"],
+                          "no_hull": r["no_hull"],
                           "posted_at": r["sort_at"].isoformat() if r["sort_at"] else None,
                           "matched": matched, "snippets": snippets.get(fid, []),
                           "model_state": model_rows.get(fid, (None, None))[0],

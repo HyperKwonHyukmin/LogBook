@@ -1,5 +1,16 @@
 # LogBook 설명회 시연 자료
 
+## 소개 발표자료(HTML 덱) — 2026-10-19 기준 v8
+
+- 위치: `C:\Coding\ClaudeCode\Huashu_Design\huashu-design\Results\LogBook-Deck-v8.html` / `.pdf` (18쪽, v1~v7도 같은 폴더). huashu-design 장부(帳簿) 문법 디자인.
+- 구성: 표지 → 序 이름(왜 LogBook인가) → Ⅰ 필요성 → Ⅱ LogBook(정의 · 세 가지 지식자산 · 4대 목표) → Ⅲ 사용성(올리기 · 찾기 · 확인 · 문서 · 신뢰) → Ⅳ 활용(관계 지도 · 갖춤 현황 · 선례 찾기) → Ⅴ 확장(Hi-TESS 그림 · 모델링 AI) → 마무리.
+- 정한 메시지: WorkBench = 구조해석 **자동화** 플랫폼, LogBook = 구조해석 **지식자산** 플랫폼. 지식자산 = 해석 모델 · 연구 내용(현업 경험 · 기술개발) · 보고서.
+- 이름 쪽은 ① 유래(칩 로그 · 노트 · 항해일지 = 역사적 사실)와 ② 고른 이유(항해 기록을 보듯 연구를 돌아본다) · ③ 더한 방향(Record → Connect → Insight = 우리의 해석)을 칸으로 가른다. 이름 본뜻을 '통찰'까지 부풀리지 않는다.
+- 용어: '지식자산'(지적자산 X), '후속선'(자매선 X), '연구실의 자산'(팀의 자산 X), 9쪽 확인은 '웹 브라우저에서 3D로'.
+- 고치는 법: 새 버전은 최신본을 복사해 만든다(이전 버전 보존). v8 빌드 원본은 `Results\LogBook-deck-src\v8\` — `build8.py`(v7 → v8 문자열 치환, 치환마다 일치 횟수 assert) · `name.html` · `assets.html`(새 쪽) · `view8.js`(쪽마다 `.sb` 넘침 점검, `node view8.js <접두어> <쪽 번호…>`).
+  PDF: huashu-design 폴더에서 `node scripts/export_single_absolute_deck_pdf.mjs --html Results/LogBook-Deck-v8.html --out Results/LogBook-Deck-v8.pdf`.
+- 쪽을 넣거나 빼면 본문의 「→ NN쪽」 참조, `data-entry` 기록 번호, 스크립트의 `PARTS[].at`을 함께 고친다.
+
 ## 통합 데모 (설명회용)
 
 **`LogBook-설명회-통합데모.html`을 Chrome에서 열면 됩니다.** 다른 파일이나 서버, 인터넷 연결 없이 실행됩니다.

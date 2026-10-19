@@ -21,12 +21,12 @@ def has_model(db: Session, entry: models.Entry) -> bool:
                                            models.File.location != "trash").first() is not None
 
 
-def missing_fields(*, has_bdf: bool, hulls, no_hull: bool, zones, analysis_type, project=None) -> list[str]:
-    """빠진 필수 칸 — BDF 가 없으면 늘 빈 목록(권하기만 한다). 'hull' = 호선·공용·프로젝트(21) 모두 없음."""
+def missing_fields(*, has_bdf: bool, hulls, no_hull: bool, zones, analysis_type) -> list[str]:
+    """빠진 필수 칸 — BDF 가 없으면 늘 빈 목록(권하기만 한다). 'hull' = 호선·'호선 없음(공용)' 모두 없음."""
     if not has_bdf:
         return []
     out = []
-    if not list(hulls or []) and not no_hull and not (project or "").strip():
+    if not list(hulls or []) and not no_hull:
         out.append("hull")
     if not list(zones or []):
         out.append("zone")
@@ -36,11 +36,10 @@ def missing_fields(*, has_bdf: bool, hulls, no_hull: bool, zones, analysis_type,
 
 
 def missing_required(db: Session, entry: models.Entry) -> list[str]:
-    from .service import hulls_of, project_of, zones_of
+    from .service import hulls_of, zones_of
 
     return missing_fields(has_bdf=has_model(db, entry), hulls=[h.hull_no for h in hulls_of(db, entry)],
-                          no_hull=bool(entry.no_hull), zones=zones_of(db, entry), analysis_type=entry.analysis_type,
-                          project=project_of(db, entry))
+                          no_hull=bool(entry.no_hull), zones=zones_of(db, entry), analysis_type=entry.analysis_type)
 
 
 class TitleContext:
@@ -73,20 +72,18 @@ class TitleContext:
         return naming.source_from_files([r for r, _k in rows])
 
     def draft(self, entry: models.Entry, *, hulls=None, no_hull=None, zones=None, analysis_type=None,
-              source: str | None = None, project=None) -> str:
-        """제목 초안 — 값을 안 주면 지금 저장된 값으로. 21 — 호선이 없으면 프로젝트 이름이 제목 머리."""
-        from .service import hulls_of, project_of, zones_of
+              source: str | None = None) -> str:
+        """제목 초안 — 값을 안 주면 지금 저장된 값으로."""
+        from .service import hulls_of, zones_of
 
         hulls = [h.hull_no for h in hulls_of(self.db, entry)] if hulls is None else list(hulls)
         zones = zones_of(self.db, entry) if zones is None else list(zones)
         atype = entry.analysis_type if analysis_type is None else analysis_type
         no_hull = bool(entry.no_hull) if no_hull is None else bool(no_hull)
-        project = project_of(self.db, entry) if project is None else project
         source = self.source_of(entry) if source is None else source
-        phrases = (self.phrases("zone", zones) + self.phrases("atype", [atype] if atype else [])
-                   + ([project] if project else []))
+        phrases = self.phrases("zone", zones) + self.phrases("atype", [atype] if atype else [])
         return naming.title_draft(source, hulls=hulls, no_hull=no_hull, zones=zones, analysis_type=atype,
-                                  phrases=phrases, project=project)
+                                  phrases=phrases)
 
     def is_auto(self, entry: models.Entry) -> bool:
         """지금 제목이 사람이 고친 것이 아니라 초안 그대로인가(형식 초안 또는 예전 방식 이름)."""
@@ -99,10 +96,10 @@ class TitleContext:
 
 def similar_entries(db: Session, entry: models.Entry, viewer=None, *, title: str | None = None,
                     limit: int = SIMILAR_LIMIT) -> list[dict]:
-    """같은 호선(공용 자료는 공용 자료끼리, 21 — 호선 없는 프로젝트 자료는 같은 프로젝트끼리)에 같은·비슷한 제목의
+    """같은 호선(공용 자료는 공용 자료끼리)에 같은·비슷한 제목의
     확정 자료 — 확정 때 알림(막지 않는다). 호선 번호는 비교 낱말에서 뺀다(같은 호선이니 늘 겹친다).
     viewer 가 볼 수 없는 자료는 뺀다(13)."""
-    from .service import hulls_of, project_of
+    from .service import hulls_of
 
     hulls = [h.hull_no for h in hulls_of(db, entry)]
     title = entry.title if title is None else title
@@ -113,11 +110,6 @@ def similar_entries(db: Session, entry: models.Entry, viewer=None, *, title: str
     if hulls:
         q = (q.join(models.EntryHull, models.EntryHull.entry_id == models.Entry.id)
              .filter(models.EntryHull.hull_no.in_(hulls)).distinct())
-    elif (project := project_of(db, entry)):
-        tag_ids = [t.id for t in db.query(models.Tag).filter(models.Tag.kind == "project",
-                                                             models.Tag.value == project)]
-        q = (q.join(models.EntryTag, models.EntryTag.entry_id == models.Entry.id)
-             .filter(models.EntryTag.tag_id.in_(tag_ids or [0])).distinct())
     elif entry.no_hull:
         q = q.filter(models.Entry.no_hull.is_(True))
     else:

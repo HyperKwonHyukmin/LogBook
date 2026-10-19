@@ -58,6 +58,16 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("user_sessions", "wb_ref", "VARCHAR(64) NULL"),                         # 18 — WorkBench 세션 연결 고리
     ("entries", "no_hull", "TINYINT(1) NOT NULL DEFAULT 0"),                 # 20 — 호선 없음(공용)
     ("entries", "title_source", "VARCHAR(255) NULL"),                        # 20 — 제목 초안의 원래 이름
+    ("hulls", "plm_status", "VARCHAR(12) NULL"),   # 30 — PLM 선박 정보
+    ("hulls", "plm_checked_at", "DATETIME NULL"),
+    ("hulls", "plm_ship_type", "VARCHAR(60) NULL"),
+    ("hulls", "ship_capacity", "VARCHAR(20) NULL"),
+    ("hulls", "ship_kind", "VARCHAR(40) NULL"),
+    ("hulls", "ship_variant", "VARCHAR(60) NULL"),
+    ("hulls", "main_engine", "VARCHAR(100) NULL"),
+    ("hulls", "ship_class", "VARCHAR(20) NULL"),
+    ("hulls", "delivery_date", "VARCHAR(10) NULL"),
+    ("hulls", "delivered", "TINYINT(1) NULL"),
 )
 # 기존 표에 더하는 색인 (표, 색인 이름, 열들). 이름은 SQLAlchemy index=True 가 새 표에 만드는 이름과 같게 둔다.
 ADDED_INDEXES: tuple[tuple[str, str, tuple[str, ...]], ...] = (

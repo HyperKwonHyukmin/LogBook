@@ -11,7 +11,6 @@ import { DuplicateTargets } from '../components/inbox/DuplicateBlocked.jsx';
 import Button, { buttonClass } from '../components/ui/Button.jsx';
 import ChipInput from '../components/ui/ChipInput.jsx';
 import VocabInput from '../components/ui/VocabInput.jsx';
-import ProjectInput from '../components/ui/ProjectInput.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
 import { useConfirm } from '../components/ui/ConfirmDialog.jsx';
 import { inputClass } from '../components/ui/Field.jsx';
@@ -37,7 +36,7 @@ import RevisionSection from '../components/revisions/RevisionSection.jsx';
 import NeedsFixBadge from '../components/ui/NeedsFixBadge.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
-// 21 — 프로젝트(있을 때만 기록 — 지우면 after 에서 빠진다)
+// 21 — 프로젝트(있을 때만 기록). 29 — 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
 const FIELD_LABELS = { title: '제목', analysis_type: '해석 종류', description: '설명',
   hulls: '호선', no_hull: '호선 없음(공용)', project: '프로젝트', zones: '구역', tags: '태그' };
 // 감사 기록에서 '참/값일 때만' 실리는 칸 — before 에만 있으면 지운 것이다
@@ -283,7 +282,7 @@ function Prop({ label, changed = false, error, children }) {
   );
 }
 
-const FIELD_ORDER = ['title', 'description', 'hulls', 'no_hull', 'project', 'zones', 'analysis_type', 'tags'];
+const FIELD_ORDER = ['title', 'description', 'hulls', 'no_hull', 'zones', 'analysis_type', 'tags'];
 
 /** Entry 상세(설계 §6.1 `/e/{entryId}`) — 머리, 파일·미리보기, 속성 레일과 변경 이력. */
 export default function EntryPage() {
@@ -614,10 +613,6 @@ export default function EntryPage() {
                   호선 없음(공용){isChanged('no_hull') && <ChangedMark />}
                 </label>
               </Prop>
-              {/* 21 — 프로젝트(자료의 소속). 호선과 상관없는 독립 프로젝트면 호선 대신 넣는다 */}
-              <Prop label="프로젝트" changed={isChanged('project')}>
-                <ProjectInput value={draft.project} onChange={set('project')} />
-              </Prop>
               <Prop label="구역" changed={isChanged('zones')}>
                 <VocabInput multiple kind="zone" label="구역" values={draft.zones} onChange={set('zones')} />
               </Prop>
@@ -639,10 +634,6 @@ export default function EntryPage() {
                 {entry.no_hull && entry.hulls.length === 0 && (
                   <span className="text-meta text-n-600">공용(호선 없음)</span>
                 )}
-              </Prop>
-              <Prop label="프로젝트">
-                {entry.project ? <FilterLink field="project" value={entry.project}>{entry.project}</FilterLink>
-                  : <span className="text-n-500">—</span>}
               </Prop>
               <Prop label="구역">
                 <VocabInput compact disabled multiple kind="zone" label="구역" values={entry.zones} onChange={() => {}}

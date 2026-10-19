@@ -11,7 +11,7 @@ import { Segmented, Tabs } from '../components/ui/Tabs.jsx';
 import { errorText } from '../lib/labels.js';
 import { titleWithoutHull } from '../lib/similar.js';
 import {
-  ALL, buildGrid, cellKey, cellSentence, LIST_TABS, listRows, rowsOf, sortRows, STATE_INFO, STATES, todoCells, atypesOf,
+  ALL, buildGrid, cellKey, cellSentence, headerLines, LIST_TABS, listRows, rowsOf, sortRows, STATE_INFO, STATES, todoCells, atypesOf,
 } from '../lib/coverage.js';
 
 const SORTS = [{ id: 'hull', label: '호선 번호' }, { id: 'recent', label: '최근 확정' }, { id: 'gaps', label: '빈 구역 많은 순' }];
@@ -55,7 +55,7 @@ function EntryLine({ e }) {
 }
 
 /**
- * 갖춤 현황(26, `/coverage`) — 확정 자료를 호선(·프로젝트·공용) × 구역 칸에 놓고, 칸마다 무엇을 갖췄는지 보인다.
+ * 갖춤 현황(26, `/coverage`) — 확정 자료를 호선(·공용) × 구역 칸에 놓고, 칸마다 무엇을 갖췄는지 보인다.
  * 칸 상태·목록은 lib/coverage.js(순수 함수). 해석 종류 거르기는 다시 부르지 않고 그 자리에서 다시 센다.
  */
 export default function CoveragePage() {
@@ -162,13 +162,13 @@ export default function CoveragePage() {
               <thead>
                 <tr>
                   <th scope="col" className="sticky left-0 top-0 z-30 min-w-[138px] border-b border-r border-n-200 bg-n-50 px-2.5 pb-2 text-left align-bottom text-meta font-medium text-n-600">
-                    호선 · 프로젝트<br /><span className="font-normal">채운 구역</span>
+                    호선<br /><span className="font-normal">채운 구역</span>
                   </th>
                   {grid.cols.map((c) => (
                     <th key={c.key} scope="col" title={c.label}
                         className={`sticky top-0 z-20 w-[45px] min-w-[45px] max-w-[45px] border-b border-n-200 px-px pb-1.5 pt-2 text-center align-bottom text-meta font-medium leading-tight
                           ${sel?.colKey === c.key ? 'bg-n-100 text-n-900' : 'bg-n-50 text-n-700'}`}>
-                      <span className="line-clamp-2 break-keep">{c.label}</span>
+                      <span className="block">{headerLines(c.label).map((l, k) => <span key={k} className={`block ${/[가-힣]/.test(l) ? 'whitespace-nowrap' : 'break-all'}`}>{l}</span>)}</span>
                       <span className="mx-[7px] mt-1.5 block h-[3px] overflow-hidden rounded-full bg-n-150" aria-hidden="true">
                         <span className="block h-full bg-n-400" style={{ width: `${(grid.colFilled.get(c.key) / grid.rows.length) * 100}%` }} />
                       </span>
@@ -246,7 +246,7 @@ export default function CoveragePage() {
                 <table className="w-full border-collapse text-ui">
                   <thead>
                     <tr className="h-9 bg-n-50 text-left text-meta font-medium text-n-600">
-                      {['자료', '호선 · 프로젝트', '구역 · 해석 종류', '파일 · 검증', '올린 사람', '확정'].map((h) => (
+                      {['자료', '호선', '구역 · 해석 종류', '파일 · 검증', '올린 사람', '확정'].map((h) => (
                         <th key={h} className="whitespace-nowrap border-b border-n-200 px-2.5 font-medium">{h}</th>
                       ))}
                     </tr>

@@ -32,8 +32,13 @@ def build_registry(db: Session) -> dict:
               "status": u.status, "level": u.level or 1, "wb_admin": bool(u.wb_admin),
               "created_at": u.created_at.isoformat() if u.created_at else None}
              for u in db.query(models.User).order_by(models.User.employee_id)]
+    from ..hull_info import PLM_FIELDS   # 30 — PLM 선박 정보(조회한 호선만)
+
     hulls = [{"hull_no": h.hull_no, "ship_type": h.ship_type, "memo": h.memo}
-             for h in db.query(models.Hull).order_by(models.Hull.hull_no) if h.ship_type or h.memo]
+             | ({"plm": {"status": h.plm_status,
+                         "checked_at": h.plm_checked_at.isoformat() if h.plm_checked_at else None,
+                         **{k: getattr(h, k) for k in PLM_FIELDS}}} if h.plm_status else {})
+             for h in db.query(models.Hull).order_by(models.Hull.hull_no) if h.ship_type or h.memo or h.plm_status]
     roots = {t.id: t.value for t in db.query(models.Tag).filter(models.Tag.alias_of_id.is_(None))}
     tags = [{"kind": t.kind, "value": t.value, "alias_of": roots.get(t.alias_of_id)}
             for t in db.query(models.Tag).filter(models.Tag.alias_of_id.isnot(None))

@@ -90,7 +90,7 @@ test('열람 허락을 주면 변경 이력을 다시 읽는다 — 허락은 ve
         : [];
     },
     'GET /api/users/lookup?q=%EB%B0%95': [{ employee_id: 'M2', name: '박승인', department: '구조', level: 1 }],
-    'PUT /api/entries/E000001/grants': () => {
+    'POST /api/entries/E000001/grants': () => {
       grants = [{ employee_id: 'M2', name: '박승인', level: 1, effective: true }];
       return { grants };
     },
@@ -107,9 +107,10 @@ test('열람 허락을 주면 변경 이력을 다시 읽는다 — 허락은 ve
   const box = await screen.findByRole('textbox', { name: '열람 허락할 사람 찾기' });
   const before = historyReads;
   await userEvent.type(box, '박');
-  await userEvent.click(await screen.findByRole('button', { name: /박승인/ }));
+  await userEvent.click(await screen.findByRole('checkbox', { name: '박승인 고르기' }));
+  await userEvent.click(screen.getByRole('button', { name: '1명 허락' }));
   await screen.findByRole('list', { name: '열람 허락 목록' });
   await waitFor(() => expect(historyReads).toBeGreaterThan(before));
   expect(await screen.findByText('박승인 (M2)')).toBeInTheDocument();   // 이력에 대상 이름
-  expect(fn.mock.calls.some(([u, i]) => i?.method === 'PUT' && u === '/api/entries/E000001/grants')).toBe(true);
+  expect(fn.mock.calls.some(([u, i]) => i?.method === 'POST' && u === '/api/entries/E000001/grants')).toBe(true);
 });

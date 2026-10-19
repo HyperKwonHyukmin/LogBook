@@ -110,40 +110,72 @@ export default function AccessPanel({ entry, onChanged, disabled = false }) {
   );
 }
 
-/** 열람 허락 목록 — WorkBench 사용자 찾기로 더하고, 줄마다 회수. */
+/** 고르기 칸 상태 — 이미 허락받았거나 고를 필요가 없는 사람은 잠근다. */
+function pickState(u, have, uploader) {
+  if (have.has(u.employee_id)) return { locked: true, checked: true, note: '허락됨' };
+  if (u.employee_id === uploader) return { locked: true, checked: false, note: '올린 사람' };
+  if (u.level === 3) return { locked: true, checked: false, note: '관리자 — 이미 봄' };
+  return { locked: false, checked: false, note: '' };
+}
+
+/**
+ * 열람 허락(13 구조, 15 규칙, 31 화면) — 허락받은 사람 목록 + WorkBench 가입자 목록에서 여러 명 골라 한 번에 허락.
+ * 찾기 칸을 누르면 가입자 전체가 뜨고, 이름·사번·부서 글자로 좁힌다. 고른 사람은 검색어를 바꿔도 남는다.
+ */
 function Grants({ entry, onChanged, disabled }) {
   const grants = entry.grants || [];
+  const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
-  const [result, setResult] = useState({ term: '', rows: [] });   // 받은 후보와 그 검색어
+  const [result, setResult] = useState({ term: null, rows: [], failed: false });   // 받은 목록과 그 검색어
+  const [picked, setPicked] = useState(() => new Map());                         // 사번 → 사용자
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const seq = useRef(0);
+  const boxRef = useRef(null);
   const listId = useId();
 
   useEffect(() => {
+    if (!open) return undefined;
     const term = q.trim();
-    if (!term) { setResult({ term: '', rows: [] }); return undefined; }
     const id = ++seq.current;
     const t = setTimeout(() => {
       api(`/users/lookup?q=${encodeURIComponent(term)}`)
-        .then((rows) => { if (id === seq.current) setResult({ term, rows: rows || [] }); })
-        .catch(() => { if (id === seq.current) setResult({ term, rows: [] }); });
-    }, 200);
+        .then((rows) => { if (id === seq.current) setResult({ term, rows: rows || [], failed: false }); })
+        .catch(() => { if (id === seq.current) setResult({ term, rows: [], failed: true }); });
+    }, term ? 200 : 0);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, open]);
+
+  // 바깥을 누르거나 Esc 면 닫는다(고른 사람은 남겨 둔다)
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => { if (!boxRef.current?.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
 
   const have = new Set(grants.map((g) => g.employee_id));
-  const found = result.term === q.trim() ? result.rows : [];
-  // LV3 는 이미 모두 보므로 후보에서 뺀다
-  const candidates = found.filter((u) => !have.has(u.employee_id) && u.employee_id !== entry.uploaded_by && u.level !== 3);
+  const loading = open && result.term !== q.trim();
+  const rows = loading ? [] : result.rows;
+
+  function toggle(u) {
+    setPicked((m) => {
+      const next = new Map(m);
+      if (next.has(u.employee_id)) next.delete(u.employee_id); else next.set(u.employee_id, u);
+      return next;
+    });
+  }
 
   async function run(fn, fallback) {
     setBusy(true); setError('');
     try { await fn(); await onChanged?.(); } catch (err) { setError(errorText(err, fallback)); } finally { setBusy(false); }
   }
-  const add = (u) => run(async () => {
-    await api(`/entries/${encodeURIComponent(entry.entry_id)}/grants`, { method: 'PUT', body: { employee_id: u.employee_id } });
-    setQ(''); setResult({ term: '', rows: [] });
+  const addPicked = () => run(async () => {
+    await api(`/entries/${encodeURIComponent(entry.entry_id)}/grants`,
+      { method: 'POST', body: { employee_ids: [...picked.keys()] } });
+    setPicked(new Map()); setQ(''); setOpen(false);
   }, '열람을 허락하지 못했습니다.');
   const revoke = (g) => run(() => api(`/entries/${encodeURIComponent(entry.entry_id)}/grants/${encodeURIComponent(g.employee_id)}`,
     { method: 'DELETE' }), '허락을 회수하지 못했습니다.');
@@ -152,14 +184,19 @@ function Grants({ entry, onChanged, disabled }) {
     <div className="mt-4">
       <h3 className="text-meta font-medium text-n-700">열람 허락 <span className="font-mono font-normal text-n-500">{grants.length}</span></h3>
       <p className="mt-0.5 text-meta text-n-500">공개 범위와 상관없이 이 자료를 볼 수 있게 할 사람(WorkBench 사용자).</p>
-      {grants.length > 0 && (
+      {grants.length > 0 ? (
         <ul aria-label="열람 허락 목록" className="mt-2 flex flex-col">
           {grants.map((g) => (
-            <li key={g.employee_id} className="group flex min-h-8 items-center gap-2 border-b border-n-200 text-ui last:border-0">
-              <span className="min-w-0 flex-1 truncate" title={g.employee_id}>
-                {g.name || <span className="font-mono">{g.employee_id}</span>}
-                {g.level && <span className="ml-1.5 text-meta text-n-500">{levelName(g.level)}</span>}
-                {g.effective === false && <span className="ml-1.5 text-meta text-wait">효력 없음</span>}
+            <li key={g.employee_id} className="group flex min-h-8 items-center gap-2 border-b border-n-200 py-1 text-ui last:border-0">
+              <span className="min-w-0 flex-1" title={g.employee_id}>
+                <span className="block truncate">
+                  {g.name || <span className="font-mono">{g.employee_id}</span>}
+                  {g.level && <span className="ml-1.5 text-meta text-n-500">{levelName(g.level)}</span>}
+                  {g.effective === false && <span className="ml-1.5 text-meta text-wait">효력 없음</span>}
+                </span>
+                <span className="block truncate text-meta text-n-500">
+                  <span className="font-mono">{g.employee_id}</span>{g.department && ` · ${g.department}`}
+                </span>
               </span>
               <Button variant="ghost" size="sm" disabled={busy || disabled} aria-label={`${g.name || g.employee_id} 허락 회수`}
                       onClick={() => revoke(g)}>
@@ -168,29 +205,56 @@ function Grants({ entry, onChanged, disabled }) {
             </li>
           ))}
         </ul>
+      ) : (
+        <p className="mt-2 text-meta text-n-500">아직 허락받은 사람이 없습니다.</p>
       )}
-      <div className="relative mt-2">
+      <div ref={boxRef} className="relative mt-2">
         <label className="flex items-center gap-1.5">
           <UserPlus size={14} className="shrink-0 text-n-400" aria-hidden="true" />
-          <input aria-label="열람 허락할 사람 찾기" value={q} disabled={busy || disabled} onChange={(e) => setQ(e.target.value)}
-                 placeholder="이름 또는 사번" aria-controls={candidates.length ? listId : undefined}
+          <input aria-label="열람 허락할 사람 찾기" value={q} disabled={busy || disabled}
+                 onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+                 onFocus={() => setOpen(true)} onClick={() => setOpen(true)}
+                 placeholder="눌러서 고르기 · 이름·사번·부서 검색" aria-expanded={open} aria-controls={open ? listId : undefined}
                  className={inputClass('h-7 min-w-0 flex-1 text-meta')} />
         </label>
-        {candidates.length > 0 && (
-          <ul id={listId} aria-label="허락할 사람 후보" className="absolute left-0 right-0 top-full z-30 mt-1 animate-pop rounded-lg bg-n-0 py-1 shadow-md">
-            {candidates.map((u) => (
-              <li key={u.employee_id}>
-                <button type="button" onClick={() => add(u)} disabled={busy}
-                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ui text-n-800 hover:bg-n-50">
-                  <span className="min-w-0 flex-1 truncate">{u.name}</span>
-                  <span className="font-mono text-meta text-n-500">{u.employee_id}</span>
-                  <span className="text-meta text-n-500">{levelName(u.level)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+        {open && (
+          <div id={listId} className="absolute left-0 right-0 top-full z-30 mt-1 animate-pop rounded-lg bg-n-0 shadow-md">
+            <ul aria-label="허락할 사람 후보" className="max-h-72 overflow-y-auto py-1">
+              {rows.map((u) => {
+                const st = pickState(u, have, entry.uploaded_by);
+                const checked = st.locked ? st.checked : picked.has(u.employee_id);
+                return (
+                  <li key={u.employee_id}>
+                    <label className={`flex items-center gap-2 px-3 py-1.5 text-ui ${st.locked ? 'cursor-default text-n-500' : 'cursor-pointer text-n-800 hover:bg-n-50'}`}>
+                      <input type="checkbox" checked={checked} disabled={st.locked || busy} onChange={() => toggle(u)}
+                             aria-label={`${u.name || u.employee_id} 고르기`} className="h-3.5 w-3.5 shrink-0" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{u.name || u.employee_id}</span>
+                        <span className="block truncate text-meta text-n-500">
+                          <span className="font-mono">{u.employee_id}</span>{u.department && ` · ${u.department}`}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-meta text-n-500">{st.note || levelName(u.level)}</span>
+                    </label>
+                  </li>
+                );
+              })}
+              {loading && <li className="px-3 py-2 text-meta text-n-500">불러오는 중…</li>}
+              {!loading && result.failed && <li role="alert" className="px-3 py-2 text-meta text-err">사용자 목록을 읽지 못했습니다.</li>}
+              {!loading && !result.failed && rows.length === 0 && <li className="px-3 py-2 text-meta text-n-500">찾는 사람이 없습니다.</li>}
+            </ul>
+            <div className="flex items-center gap-2 border-t border-n-200 px-3 py-2">
+              <span className="min-w-0 flex-1 truncate text-meta text-n-600"
+                    title={[...picked.values()].map((u) => u.name || u.employee_id).join(', ')}>
+                {picked.size ? `${picked.size}명 선택` : '허락할 사람을 체크하세요'}
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={busy}>닫기</Button>
+              <Button size="sm" variant="primary" disabled={!picked.size || busy || disabled} loading={busy} onClick={addPicked}>
+                {picked.size ? `${picked.size}명 허락` : '허락'}
+              </Button>
+            </div>
+          </div>
         )}
-        {q.trim() && result.term === q.trim() && candidates.length === 0 && <p className="mt-1 text-meta text-n-500">찾는 사람이 없습니다(관리자는 이미 모두 봅니다).</p>}
       </div>
       {error && <p role="alert" className="mt-2 text-meta text-err">{error}</p>}
     </div>

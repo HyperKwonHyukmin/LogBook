@@ -39,21 +39,14 @@ def _facts(db: Session, user=None) -> list[dict]:
                    .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
                    .filter(models.EntryTag.entry_id.in_(ids), models.Tag.kind == "zone").order_by(models.Tag.value)):
         zones[eid].append(v)
-    # 21 — 프로젝트(자료당 하나). 호선이 없으면 제목 머리이고, 호선 대신 필수 칸을 채운다
-    projects: dict[int, str] = {}
-    for eid, v in (db.query(models.EntryTag.entry_id, models.Tag.value)
-                   .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
-                   .filter(models.EntryTag.entry_id.in_(ids), models.Tag.kind == "project").order_by(models.Tag.value)):
-        projects.setdefault(eid, v)
     bdf = {eid for (eid,) in db.query(models.File.entry_id).filter(
         models.File.entry_id.in_(ids), models.File.kind == "model", models.File.location != "trash").distinct()}
     out = []
     for e in entries:
         missing = quality.missing_fields(has_bdf=e.id in bdf, hulls=hulls[e.id], no_hull=bool(e.no_hull),
-                                         zones=zones[e.id], analysis_type=e.analysis_type,
-                                         project=projects.get(e.id))
+                                         zones=zones[e.id], analysis_type=e.analysis_type)
         out.append({"entry": e, "hulls": hulls[e.id], "zones": zones[e.id], "has_bdf": e.id in bdf,
-                    "project": projects.get(e.id), "missing": missing})
+                    "missing": missing})
     return out
 
 
@@ -87,7 +80,7 @@ def missing_list(db: Session, user=None, *, missing: str | None = None, uploader
                       for k, n in sorted(by_uploader.items(), key=lambda x: (-x[1], x[0]))],
         "items": [{"entry_id": r["entry"].entry_id, "title": r["entry"].title, "version": r["entry"].version,
                    "missing": r["missing"], "hulls": r["hulls"], "no_hull": bool(r["entry"].no_hull),
-                   "project": r.get("project"), "zones": r["zones"], "analysis_type": r["entry"].analysis_type,
+                   "zones": r["zones"], "analysis_type": r["entry"].analysis_type,
                    "uploaded_by": r["entry"].uploaded_by, "uploader_name": names.get(r["entry"].uploaded_by),
                    "confirmed_at": r["entry"].confirmed_at.isoformat() if r["entry"].confirmed_at else None}
                   for r in page],
@@ -98,11 +91,9 @@ def _proposal(ctx: quality.TitleContext, r: dict) -> dict | None:
     """자료 하나의 제목 제안. 바꿀 것이 없으면 None. blocked 면 reason 을 단다."""
     e = r["entry"]
     source = ctx.source_of(e)
-    project = r.get("project")
-    phrases = (ctx.phrases("zone", r["zones"]) + ctx.phrases("atype", [e.analysis_type] if e.analysis_type else [])
-               + ([project] if project else []))
+    phrases = ctx.phrases("zone", r["zones"]) + ctx.phrases("atype", [e.analysis_type] if e.analysis_type else [])
     structured = naming.compose_title(hulls=r["hulls"], no_hull=bool(e.no_hull), zones=r["zones"],
-                                      analysis_type=e.analysis_type, project=project,
+                                      analysis_type=e.analysis_type,
                                       distinct=naming.distinct_part(source, hulls=r["hulls"], phrases=phrases))
     current = (e.title or "").strip()
     if structured and structured == current:
@@ -179,15 +170,14 @@ def apply_titles(db: Session, storage: StoragePaths, items: list[dict], *, user=
 
 
 def _facts_one(db: Session, e: models.Entry) -> list[dict]:
-    from .service import hulls_of, project_of, zones_of
+    from .service import hulls_of, zones_of
 
     hulls = [h.hull_no for h in hulls_of(db, e)]
     zones = zones_of(db, e)
-    project = project_of(db, e)
     has_bdf = quality.has_model(db, e)
-    return [{"entry": e, "hulls": hulls, "zones": zones, "has_bdf": has_bdf, "project": project,
+    return [{"entry": e, "hulls": hulls, "zones": zones, "has_bdf": has_bdf,
              "missing": quality.missing_fields(has_bdf=has_bdf, hulls=hulls, no_hull=bool(e.no_hull), zones=zones,
-                                               analysis_type=e.analysis_type, project=project)}]
+                                               analysis_type=e.analysis_type)}]
 
 
 def applied_list(db: Session, user=None, limit: int = 100) -> list[dict]:

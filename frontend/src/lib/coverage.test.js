@@ -1,4 +1,4 @@
-import { ALL, buildGrid, buildZones, cellKey, listRows, MAX_ZONES, NO_ZONE, OTHER_ZONE, sortRows, todoCells, UNSET_ROW } from './coverage.js';
+import { ALL, buildGrid, headerLines, buildZones, cellKey, listRows, MAX_ZONES, NO_ZONE, OTHER_ZONE, sortRows, todoCells, UNSET_ROW } from './coverage.js';
 
 const E = (id, o) => ({ id, title: id, analysis_type: 'Truss', rows: ['h:9001'], zones: ['정반'], models: 1, reports: 1,
   doc_linked: false, model_linked: false, solve: 'pass', needs_fix: false, unsigned: false, confirmed_at: '2026-09', ...o });
@@ -11,14 +11,14 @@ const DATA = {
     E('noreport', { rows: ['h:9002'], reports: 0 }),
     E('fail', { rows: ['h:9001'], zones: ['블록'], reports: 0, solve: 'fail' }),
     E('doc', { rows: ['h:9002'], zones: ['블록'], models: 0, solve: null, model_linked: true, analysis_type: '권상' }),
-    E('nomodel', { rows: ['p:표준'], models: 0, solve: null }),
+    E('nomodel', { rows: ['c:공용'], models: 0, solve: null }),
     E('unset', { rows: [], zones: [], needs_fix: true }),
   ],
 };
 
-test('행은 호선 → 프로젝트 → 미지정, 열은 자료 많은 구역 + 구역 없음', () => {
+test('행은 호선 → 공용 → 미지정, 열은 자료 많은 구역 + 구역 없음', () => {
   const g = buildGrid(DATA, ALL);
-  expect(g.rows.map((r) => r.key)).toEqual(['h:9001', 'h:9002', 'p:표준', UNSET_ROW]);
+  expect(g.rows.map((r) => r.key)).toEqual(['h:9001', 'h:9002', 'c:공용', UNSET_ROW]);
   expect(g.rows[0].sub).toBe('LNGC');
   expect(g.rows[1].sub).toBe('선종 미입력');
   expect(g.cols.map((c) => c.key)).toEqual(['정반', '블록', NO_ZONE]);
@@ -32,8 +32,8 @@ test('칸 상태 — 갖춤 · 문서 없음 · 검증 실패만 · 모델 연�
   expect(st('h:9001', '블록')).toBe('fail');
   expect(st('h:9002', '블록')).toBe('full');
   expect(g.cells.get(cellKey('h:9002', '블록')).linkedOnly).toBe(true);
-  expect(st('p:표준', '정반')).toBe('nomodel');
-  expect(st('p:표준', '블록')).toBe('empty');
+  expect(st('c:공용', '정반')).toBe('nomodel');
+  expect(st('c:공용', '블록')).toBe('empty');
   expect(st(UNSET_ROW, NO_ZONE)).toBe('full');
   expect(g.rowFilled.get('h:9001')).toBe(2);
   expect(g.colFilled.get('정반')).toBe(3);
@@ -65,4 +65,11 @@ test('먼저 볼 칸은 검증 실패 → 문서 없음, 정렬과 목록', () =
   expect(l.needs_fix.map((e) => e.id)).toEqual(['unset']);
   const scoped = listRows(DATA, ALL, { rowKey: 'h:9002', col: { key: '정반', label: '정반' } });
   expect(scoped.no_report.map((e) => e.id)).toEqual(['noreport']);
+});
+
+test('열 머리 두 줄 표기', () => {
+  expect(headerLines('데크하우스')).toEqual(['데크', '하우스']);
+  expect(headerLines('크레인 받침')).toEqual(['크레인', '받침']);
+  expect(headerLines('SidePassage')).toEqual(['SidePassage']);
+  expect(headerLines('정반')).toEqual(['정반']);
 });

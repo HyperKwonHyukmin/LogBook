@@ -22,9 +22,9 @@ vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: () => ({ isAdmin: false }) 
 const DATA = {
   hulls: { 3370: '컨테이너선', 3508: '컨테이너선' },
   entries: [
-    { id: 'E000001', title: '권상 A', analysis_type: '권상', confirmed_at: '2026-09', hulls: ['3370', '3508'], zones: [], free: [], projects: [], files: 3,
+    { id: 'E000001', title: '권상 A', analysis_type: '권상', confirmed_at: '2026-09', hulls: ['3370', '3508'], zones: [], free: [], files: 3,
       revisions: [{ name: 'a_r1.bdf', count: 2 }] },
-    { id: 'E000002', title: '권상 B', analysis_type: '권상', confirmed_at: '2026-08', hulls: ['3508'], zones: [], free: [], projects: [], files: 1, revisions: [] },
+    { id: 'E000002', title: '권상 B', analysis_type: '권상', confirmed_at: '2026-08', hulls: ['3508'], zones: [], free: [], files: 1, revisions: [] },
   ],
   pairs: [{ a: 'E000001', b: 'E000002', type: 'geom', differs: ['load'], files: ['a.bdf', 'b.bdf'], count: 1 }],
   unsigned_models: 3, truncated: false,

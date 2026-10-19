@@ -3,7 +3,6 @@ import { AlertTriangle, CheckCircle2, Copy, GripVertical, Layers, Lock, Papercli
 import Button from '../ui/Button.jsx';
 import ChipInput from '../ui/ChipInput.jsx';
 import VocabInput from '../ui/VocabInput.jsx';
-import ProjectInput from '../ui/ProjectInput.jsx';
 import { useConfirm } from '../ui/ConfirmDialog.jsx';
 import { Labeled, inputClass, selectClass } from '../ui/Field.jsx';
 import KindBadge from '../ui/KindBadge.jsx';
@@ -32,11 +31,11 @@ const hullRule = (v) => /^\d{4}$/.test(v) || '호선은 숫자 4자리입니다.
  * 바뀐 칸 전부를 한 번의 PATCH 로 보낸다. 카드 자체가 고치는 양식이라 [변경하기] 단계는 두지 않는다.
  */
 // 15 — 해석 시기는 없앴다
-// 20 — '호선 없음(공용)'(no_hull). 21 — 프로젝트(자료의 소속, 호선 대신 인정)
-const CARD_FIELDS = ['title', 'analysis_type', 'hulls', 'no_hull', 'project', 'zones', 'description'];
-const FIELD_LABELS = { title: '제목', analysis_type: '해석 종류', hulls: '호선', no_hull: '호선 없음(공용)', project: '프로젝트', zones: '구역', description: '설명' };
+// 20 — '호선 없음(공용)'(no_hull). 29 — 프로젝트(21)는 없앴다
+const CARD_FIELDS = ['title', 'analysis_type', 'hulls', 'no_hull', 'zones', 'description'];
+const FIELD_LABELS = { title: '제목', analysis_type: '해석 종류', hulls: '호선', no_hull: '호선 없음(공용)', zones: '구역', description: '설명' };
 // 20 — 바뀌면 (사람이 고치지 않은) 초안 제목이 따라 바뀌는 칸(서버 update_entry 의 TITLE_VALUE_FIELDS 와 같다)
-const TITLE_VALUE_FIELDS = ['hulls', 'no_hull', 'project', 'zones', 'analysis_type'];
+const TITLE_VALUE_FIELDS = ['hulls', 'no_hull', 'zones', 'analysis_type'];
 /** 서버 쪽 내용이 실제로 바뀌었을 때만 달라지는 열쇠 — 폴링으로 같은 내용의 새 객체가 와도 입력을 지우지 않는다. */
 const entryKey = (e) => `${e.entry_id}|${e.version}|${e.files.map((f) => f.id).join(',')}`;
 
@@ -297,7 +296,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
           </Labeled>
           {/* 20 — 제목 형식: 호선 · 구역 · 해석 종류 · 구별자(원래 이름에서 호선·분류·잡음을 뺀 나머지) */}
           {canEdit && willFollow && (
-            <span className="text-meta text-n-500">저장하면 제목이 형식대로 바뀝니다(호선 또는 프로젝트 · 구역 · 해석 종류).</span>
+            <span className="text-meta text-n-500">저장하면 제목이 형식대로 바뀝니다(호선 · 구역 · 해석 종류).</span>
           )}
           {showRegen && (
             <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-n-500">
@@ -327,10 +326,6 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
           {entry.hull_evidence?.length > 0 && (
             <span className="font-normal text-n-500">추정 근거: {entry.hull_evidence.map((h) => `${h.hull_no} (${(h.reasons || []).join(', ')})`).join(' · ')}</span>
           )}
-        </div>
-        {/* 21 — 프로젝트: 호선과 상관없는 독립 프로젝트 자료면 호선 대신 넣는다(BDF 자료의 필수 분류를 채운다) */}
-        <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600"><span>프로젝트{mark('project')}</span>
-          <ProjectInput value={values.project} disabled={fieldDisabled} onChange={set('project')} />
         </div>
         <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600"><span>구역{mark('zones')}</span>
           <VocabInput multiple kind="zone" label="구역" values={values.zones} disabled={fieldDisabled} onChange={set('zones')} />

@@ -176,10 +176,10 @@ def test_suggest_all(client, db, make_user, auth_headers, make_entry_file):
     _tag(db, e, "Truss")
     _tag(db, e, "50%_tag")
     res = client.get("/api/suggest/all", params={"q": "94"}, headers=h).json()
-    assert res == {"hull": ["9496"], "zone": [], "tag": [], "project": []}   # 21 — 프로젝트도 함께
+    assert res == {"hull": ["9496"], "zone": [], "tag": []}   # 29 — 프로젝트는 없앴다
     assert client.get("/api/suggest/all", params={"q": "truss"}, headers=h).json()["tag"] == ["Truss"]
     assert client.get("/api/suggest/all", params={"q": "선수"}, headers=h).json()["zone"] == ["선수부"]
-    assert client.get("/api/suggest/all", params={"q": "  "}, headers=h).json() == {"hull": [], "zone": [], "tag": [], "project": []}
+    assert client.get("/api/suggest/all", params={"q": "  "}, headers=h).json() == {"hull": [], "zone": [], "tag": []}
     # % · _ 는 글자 그대로
     assert client.get("/api/suggest/all", params={"q": "%"}, headers=h).json()["tag"] == ["50%_tag"]
     assert client.get("/api/suggest/all", params={"q": "x"}).status_code == 401

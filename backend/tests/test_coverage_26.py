@@ -54,7 +54,7 @@ def world(db, make_user, make_entry_file):
     _tag(db, fail, "zone", "정반 구역", alias_of=deck)
     _tag(db, doc, "zone", "블록")
     _tag(db, hidden, "zone", "블록")
-    _tag(db, common, "project", "표준 정반")
+    _tag(db, common, "project", "표준 정반")   # 29 — 예전 프로젝트 값은 행이 되지 않는다
     h = db.get(models.Hull, "9001")
     h.ship_type = "LNGC"
     db.commit()
@@ -74,7 +74,7 @@ def test_rows_zones_and_facts(world, client, auth_headers):
     full, fail, doc, common = (by[world[k]] for k in ("full", "fail", "doc", "common"))
     assert full["rows"] == ["h:9001"] and full["zones"] == ["정반"]
     assert fail["zones"] == ["정반"]                                  # 동의어 → 대표 값
-    assert common["rows"] == ["p:표준 정반", "c:공용"]
+    assert common["rows"] == ["c:공용"]
     assert full["models"] == 1 and full["reports"] == 1 and full["solve"] == "pass"
     assert fail["solve"] == "fail" and fail["reports"] == 0
     assert doc["models"] == 0 and doc["solve"] is None

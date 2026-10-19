@@ -1,7 +1,7 @@
 /** 검색 상태는 주소가 원본이다(메신저로 공유하면 같은 결과가 열린다 — 설계 §6.1). */
 // 15 — '해석 연도'(year)는 해석 시기와 함께 없앴다(옛 주소의 year= 는 읽지 않는다)
-// 21 — 프로젝트(자료의 소속, 자료당 하나)
-export const FILTER_KEYS = ['hull', 'project', 'ship_type', 'analysis_type', 'zone', 'tag', 'uploaded_by', 'kind'];
+// 29 — 프로젝트(21) 필터는 없앴다(옛 주소의 project= 는 읽지 않는다)
+export const FILTER_KEYS = ['hull', 'ship_type', 'analysis_type', 'zone', 'tag', 'uploaded_by', 'kind'];
 
 /**
  * 정렬(08·15) — 주소에 없으면 서버가 정한다(검색어가 있으면 관련도, 없으면 최신순 = 올린 날짜).
@@ -25,7 +25,6 @@ export const GROUPS = [
   { id: 'analysis_type', label: '해석 종류별', none: '해석 종류 없음' },
   { id: 'uploaded_by', label: '올린 사람별', none: '올린 사람 미상' },
   { id: 'tag', label: '태그별', none: '태그 없음' },   // 19 — 태그가 여러 개인 자료는 여러 묶음에 나온다
-  { id: 'project', label: '프로젝트별', none: '프로젝트 없음' },   // 21
 ];
 export const GROUP_IDS = GROUPS.map((g) => g.id);
 export const GROUP_NONE = '__none__';

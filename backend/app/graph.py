@@ -23,7 +23,7 @@ from .vocab import Vocab
 MAX_ENTRIES = 3000        # 최근 확정 순으로 이만큼 — 넘으면 truncated
 MAX_GROUP = 60            # 같은 형상 묶음 하나에서 쌍을 만들 파일 수 상한(쌍 수가 제곱으로 늘지 않게)
 MAX_PAIRS = 6000
-TAG_KINDS = ("zone", "free", "project")
+TAG_KINDS = ("zone", "free")   # 29 — 프로젝트 기준은 없앴다
 _SIG = ("geometry", "property", "material", "load")
 
 
@@ -127,7 +127,7 @@ def build_graph(db: Session, user) -> dict:
             "id": r.entry_id, "title": r.title,
             "analysis_type": atype.canon(r.analysis_type) if r.analysis_type else None,
             "confirmed_at": r.confirmed_at.strftime("%Y-%m") if r.confirmed_at else None,
-            "hulls": hulls.get(r.id, []), "zones": t["zone"], "free": t["free"], "projects": t["project"],
+            "hulls": hulls.get(r.id, []), "zones": t["zone"], "free": t["free"],
             "files": file_counts.get(r.id, 0), "revisions": revisions.get(r.id, []),
         })
     out_pairs = [{"a": code[a], "b": code[b], "type": p["type"], "differs": p["differs"],

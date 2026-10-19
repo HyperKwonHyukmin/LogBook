@@ -8,7 +8,7 @@ export const ACTION_LABELS = {
   BATCH_RECEIVED: '자료 받음', BATCH_CLAIM: '배치 가져감',
   ENTRY_UPDATE: '정보 수정', ENTRY_CONFIRM: '확정', ENTRY_FILES_ADDED: '파일 추가',
   ENTRY_TRASH: '휴지통으로', ENTRY_RESTORE: '복원', DRAFT_DISCARD: '초안 버림',
-  TAG_ALIAS: '동의어 묶기', TAG_UNALIAS: '동의어 풀기', HULL_UPDATE: '호선 정보 수정',
+  TAG_ALIAS: '동의어 묶기', TAG_UNALIAS: '동의어 풀기', HULL_UPDATE: '호선 정보 수정', HULL_PLM: '선박 정보(PLM) 반영',
   TRASH_PURGE: '영구 삭제', JOB_RETRY: '작업 다시 시도',
   OPS_REEXTRACT: '본문 다시 추출', OPS_RECONVERT: 'BDF 다시 변환', OPS_BACKUP: '수동 백업',
   SOLVE_CHECK: '해석 검증 요청', OPS_SOLVE_CHECK: '해석 검증 일괄',
@@ -29,13 +29,13 @@ export const ACTION_LABELS = {
   WB_RULE_SET: 'WorkBench 연결 규칙 변경', WB_RULE_SEED: 'WorkBench 연결 규칙 기본값',
   // 20 — 자료 정비(제목 형식)
   ENTRY_RETITLE: '제목 형식 정비', ENTRY_RETITLE_REVERT: '제목 정비 되돌림',
-  // 21 — 프로젝트·문서(보고서 종류 파일) 정보. 23 — 메뉴 이름 '보고서' → '문서'
+  // 21 — 프로젝트(29 에서 없앰 — 옛 이력 표시용)·문서(보고서 종류 파일) 정보. 23 — 메뉴 이름 '보고서' → '문서'
   ENTRY_PROJECT: '프로젝트 변경', REPORT_META: '문서 분류 변경', REPORT_LINKS: '문서 모델 연결 변경',
 };
 
 /** 20 — 확정에 필요한 분류 칸(BDF 자료). 서버 required_missing·409 required_fields 의 missing 과 같은 이름. */
-// 21 — 'hull' = 호선·'호선 없음(공용)'·프로젝트가 모두 없음(프로젝트가 있으면 호선 대신 인정)
-export const REQUIRED_LABELS = { hull: '호선(또는 프로젝트)', zone: '구역', analysis_type: '해석 종류' };
+// 'hull' = 호선·'호선 없음(공용)'이 모두 없음
+export const REQUIRED_LABELS = { hull: '호선(또는 공용)', zone: '구역', analysis_type: '해석 종류' };
 export const requiredText = (missing) => (missing || []).map((k) => REQUIRED_LABELS[k] || k).join(', ');
 
 /** 워커 작업 종류·상태(관리자 운영 화면). */
@@ -101,6 +101,12 @@ export const ERROR_LABELS = {
   kind_mismatch: '같은 종류의 태그끼리만 묶을 수 있습니다.',
   same_tag: '자기 자신이나 자기 동의어에는 묶을 수 없습니다.',
   hull_not_found: '등록된 호선이 아닙니다.',
+  // 30 — 사내 PLM 선박 정보 조회
+  ship_not_found: 'PLM 에 없는 호선 번호입니다.',
+  invalid_ship_no: '호선 번호 형식이 아닙니다.',
+  plm_not_configured: 'PLM 접속 정보가 설정되지 않았습니다. 관리자에게 알려 주세요.',
+  plm_driver_missing: 'PLM 조회 드라이버(oracledb)가 설치되지 않았습니다. 관리자에게 알려 주세요.',
+  plm_fetch_error: 'PLM 에 접속하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
   invalid_hull: '호선은 숫자 4자리입니다.',
   entry_not_found: '자료를 찾을 수 없습니다.',
   model_not_ready: '아직 3D 변환이 끝나지 않았습니다.',
@@ -135,7 +141,7 @@ export const ERROR_LABELS = {
   too_many_values: '구역·태그는 각각 20개까지 정할 수 있습니다.',
   too_many_entries: '한 번에 확인할 수 있는 자료 수를 넘었습니다.',
   // 20 — 필수 분류·자료 정비
-  required_fields: 'BDF 자료는 호선(또는 프로젝트)·구역·해석 종류가 있어야 확정할 수 있습니다.',
+  required_fields: 'BDF 자료는 호선(또는 공용)·구역·해석 종류가 있어야 확정할 수 있습니다.',
   no_hull_with_hulls: "'호선 없음(공용)' 과 호선을 함께 넣을 수 없습니다.",
   nothing_to_revert: '되돌릴 제목 정비 기록이 없습니다.',
   title_changed_since: '정비 뒤에 제목이 다시 바뀌어 되돌리지 않았습니다.',
@@ -152,7 +158,7 @@ export const ERROR_LABELS = {
 export function errorText(err, fallback = '요청을 처리하지 못했습니다.') {
   const code = typeof err?.detail === 'string' ? err.detail : err?.detail?.code;
   if (code === 'required_fields' && err.detail?.missing?.length) {
-    return `BDF 자료는 호선(또는 프로젝트)·구역·해석 종류가 있어야 확정할 수 있습니다 — 빠진 칸: ${requiredText(err.detail.missing)}`;
+    return `BDF 자료는 호선(또는 공용)·구역·해석 종류가 있어야 확정할 수 있습니다 — 빠진 칸: ${requiredText(err.detail.missing)}`;
   }
   return ERROR_LABELS[code] || fallback;
 }
@@ -167,7 +173,7 @@ export function formatBytes(n) {
 }
 
 // 15 — '해석 연도'(year)는 해석 시기와 함께 없앴다
-export const FACET_LABELS = { hull: '호선', project: '프로젝트', ship_type: '선종', analysis_type: '해석 종류', zone: '구역',
+export const FACET_LABELS = { hull: '호선', ship_type: '선종', analysis_type: '해석 종류', zone: '구역',
   tag: '태그', uploaded_by: '올린 사람', kind: '파일 종류' };
 
 export const EXTRACT_LABELS = {
@@ -192,12 +198,12 @@ export const MODEL_STATE_LABELS = {
 
 export const MATCH_LABELS = { entry_id: 'Entry 번호', hull: '호선', title: '제목', tag: '태그',
   analysis_type: '해석 종류', description: '설명', file: '파일명', body: '본문',
-  project: '프로젝트', document_type: '문서 분류' };   // 21
+  document_type: '문서 분류' };   // 21
 
 // 23 — 문서 분류 목록과 빠른 구분(보고서/발표자료/기타) 묶음은 프런트에 사본을 두지 않는다 — 서버(models.REPORT_DOCUMENT_TYPES·
 // report_catalog.DOCUMENT_TYPE_GROUPS)가 GET /api/reports 의 document_type_options·document_type_groups 로 내려준다.
-/** 21 — 자료 소속(호선·프로젝트·공용에서 파생 — 서버 report_catalog.scope_of). */
-export const SCOPE_LABELS = { hull: '호선 관련', project: '독립 프로젝트', reference: '공통 참고자료', unclassified: '미분류' };
+/** 21 — 자료 소속(호선·공용에서 파생 — 서버 report_catalog.scope_of). 29 — '독립 프로젝트'는 없앴다. */
+export const SCOPE_LABELS = { hull: '호선 관련', reference: '공통 참고자료', unclassified: '미분류' };
 
 /** ISO 시각 → 'YYYY-MM-DD HH:MM'. 없으면 '—'. */
 export function formatDateTime(iso) {

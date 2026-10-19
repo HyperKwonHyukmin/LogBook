@@ -70,7 +70,9 @@ export default function ModelPicker({ onPick, onClose, currentId }) {
           <input ref={inputRef} type="search" value={q} onChange={(e) => setQ(e.target.value)}
                  placeholder="호선 번호, 제목, 파일 이름, 자료 번호" aria-label="기준 BDF 찾기"
                  aria-controls="model-picker-list" aria-activedescendant={items?.[active] ? `mp-${items[active].file_id}` : undefined}
-                 className="min-w-0 flex-1 bg-transparent text-ui text-n-900 outline-none placeholder:text-n-500 focus-visible:outline-none" />
+                 // 칸 테두리(.field:focus-within)가 포커스를 보이므로 입력 자체의 전역 포커스 링은 끈다(전역 규칙이 유틸리티보다 강하다)
+                 style={{ outline: 'none' }}
+                 className="min-w-0 flex-1 bg-transparent text-ui text-n-900 placeholder:text-n-500" />
         </label>
         <Segmented label="범위" items={SCOPES} value={scope} onChange={setScope} />
         {onClose && <Button variant="ghost" size="icon-sm" aria-label="고르기 닫기" onClick={onClose}><X size={16} /></Button>}
@@ -98,7 +100,6 @@ export default function ModelPicker({ onPick, onClose, currentId }) {
                   {it.hulls?.slice(0, 3).map((h) => (
                     <span key={h} className="inline-flex h-5 items-center rounded-sm bg-brand px-1.5 font-mono text-meta font-medium text-on-navy">{h}</span>
                   ))}
-                  {!it.hulls?.length && it.project && <span className="inline-flex h-5 items-center rounded-sm bg-n-100 px-1.5 text-meta text-n-800">{it.project}</span>}
                   <span className={`truncate text-ui font-medium ${i === active ? 'text-brand' : 'text-n-900'}`}>{titleWithoutHull(it.entry_title, it.hulls)}</span>
                 </span>
                 <span className="mt-0.5 block truncate text-meta text-n-600">

@@ -1,7 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Anchor, Search } from 'lucide-react';
+import { Anchor, Search, Ship } from 'lucide-react';
 import { api } from '../api/client.js';
+import { AuthContext } from '../auth/AuthContext.jsx';
+import Button from '../components/ui/Button.jsx';
+import { useToast } from '../components/ui/Toast.jsx';
+import { canWriteShared } from '../lib/levels.js';
 import EmptyState from '../components/ui/EmptyState.jsx';
 import { inputClass } from '../components/ui/Field.jsx';
 import { ErrorNote, Page, PageHeader } from '../components/ui/Page.jsx';
@@ -20,13 +24,32 @@ export default function HullsPage() {
   const [error, setError] = useState('');
   const reqRef = useRef(0);
   const timerRef = useRef(null);
+  const me = useContext(AuthContext)?.user;
+  const canFill = !me || canWriteShared(me);   // 15 — 호선 선종은 공용 정보라 LV2 이상
+  const [filling, setFilling] = useState(false);
+  const [reload, setReload] = useState(0);
+  const toast = useToast();
 
   useEffect(() => {
     const id = ++reqRef.current; // 늦게 온 옛 응답은 버린다
     api(`/hulls?q=${encodeURIComponent(q)}`)
       .then((r) => { if (id === reqRef.current) { setRows(r); setError(''); } })
       .catch((err) => { if (id === reqRef.current) setError(errorText(err, '호선 목록을 불러오지 못했습니다.')); });
-  }, [q]);
+  }, [q, reload]);
+
+  // 30 — 선종이 비었거나 PLM 에서 찾지 못한 호선을 한 번에 조회한다(사람이 적은 선종은 그대로)
+  async function fillFromPlm() {
+    setFilling(true);
+    try {
+      const r = await api('/hulls/plm-fill', { method: 'POST' });
+      toast.show({ tone: 'ok', message: r.checked === 0 ? '채울 호선이 없습니다.'
+        : `PLM 조회 ${r.checked}건 — 찾음 ${r.found} · 없음 ${r.not_found} · 선종 채움 ${r.filled}` });
+      setReload((n) => n + 1);
+    } catch (err) {
+      setError(errorText(err, 'PLM 에서 선박 정보를 가져오지 못했습니다.'));
+    } finally { setFilling(false); }
+  }
+  const unfilled = (rows || []).filter((r) => !r.ship_type && r.plm_status !== 'not_found').length;
   // 주소가 밖에서 바뀌면(뒤로 가기·메뉴) 입력칸을 맞춘다. 입력 중인 앞뒤 공백은 지우지 않는다.
   useEffect(() => { setText((cur) => (cur.trim() === q ? cur : q)); }, [q]);
   useEffect(() => () => clearTimeout(timerRef.current), []);
@@ -46,11 +69,19 @@ export default function HullsPage() {
     <Page>
       <PageHeader title="호선" description="확정 자료가 있는 호선입니다. 최근 확정 순으로 보입니다."
         actions={(
+          <div className="flex flex-wrap items-center gap-2">
+          {canFill && (
+            <Button variant="secondary" size="sm" loading={filling} disabled={filling} onClick={fillFromPlm}
+                    title="선종이 비었거나 PLM 에서 찾지 못한 호선을 사내 PLM 에서 한 번에 조회합니다. 사람이 적은 선종은 바꾸지 않습니다.">
+              <Ship size={14} aria-hidden="true" />선종 채우기(PLM){unfilled > 0 && <span className="font-mono">{unfilled}</span>}
+            </Button>
+          )}
           <label className={inputClass('flex w-56 items-center gap-2 px-2')}>
             <Search size={14} className="shrink-0 text-n-500" aria-hidden="true" />
             <input aria-label="호선 번호" value={text} onChange={onChange} onKeyDown={onKeyDown} placeholder="호선 번호로 거르기" inputMode="numeric"
                    className="min-w-0 flex-1 bg-transparent font-mono text-ui outline-none placeholder:font-sans focus-visible:outline-none" />
           </label>
+          </div>
         )} />
       {error && <ErrorNote className="mb-4">{error}</ErrorNote>}
       {rows === null && !error && (

@@ -8,8 +8,8 @@ from ..dependencies import require_auth
 
 router = APIRouter(prefix="/api", tags=["suggest"])
 
-# 19 — 상단 검색창 자동완성이 한 번에 묻는 종류(호선·구역·태그), 21 — 프로젝트
-ALL_KINDS = ("hull", "zone", "tag", "project")
+# 19 — 상단 검색창 자동완성이 한 번에 묻는 종류(호선·구역·태그)
+ALL_KINDS = ("hull", "zone", "tag")
 
 
 def _like_escape(q: str) -> str:
@@ -35,9 +35,9 @@ def suggest_values(db: Session, user, kind: str, q: str, limit: int) -> list[str
         rows = (db.query(models.Tag.value).filter(models.Tag.kind == "zone",
                                                   models.Tag.value.like(f"%{q}%", escape="\\"))
                 .order_by(models.Tag.value).limit(limit))
-    elif kind in ("tag", "project"):
-        # 자유 태그·프로젝트(21) — 볼 수 없는 Entry 에만 쓰인 이름은 제안하지 않는다(13)
-        rows = db.query(models.Tag.value).filter(models.Tag.kind == ("free" if kind == "tag" else "project"),
+    elif kind == "tag":
+        # 자유 태그 — 볼 수 없는 Entry 에만 쓰인 이름은 제안하지 않는다(13)
+        rows = db.query(models.Tag.value).filter(models.Tag.kind == "free",
                                                  models.Tag.value.like(f"%{q}%", escape="\\"))
         if not access.is_admin(user):
             used = db.query(models.EntryTag.tag_id)
@@ -55,7 +55,7 @@ def suggest_values(db: Session, user, kind: str, q: str, limit: int) -> list[str
 
 
 @router.get("/suggest")
-def suggest(kind: str = Query(pattern="^(hull|zone|tag|analysis_type|project)$"), q: str = "",
+def suggest(kind: str = Query(pattern="^(hull|zone|tag|analysis_type)$"), q: str = "",
             limit: int = Query(default=10, ge=1, le=50),
             db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
     return suggest_values(db, user, kind, q, limit)
@@ -64,7 +64,7 @@ def suggest(kind: str = Query(pattern="^(hull|zone|tag|analysis_type|project)$")
 @router.get("/suggest/all")
 def suggest_all(q: str = Query(default="", max_length=100), limit: int = Query(default=5, ge=1, le=20),
                 db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
-    """상단 검색창 자동완성(19) — 호선·구역·태그·프로젝트(21) 제안을 한 번에 {hull:[…], zone:[…], tag:[…], project:[…]}.
+    """상단 검색창 자동완성(19) — 호선·구역·태그 제안을 한 번에 {hull:[…], zone:[…], tag:[…]}.
     빈 검색어는 아무것도 제안하지 않는다(목록 전체가 쏟아지지 않게)."""
     if not q.strip():
         return {k: [] for k in ALL_KINDS}

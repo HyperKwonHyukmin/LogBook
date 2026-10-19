@@ -9,9 +9,9 @@ import { api } from '../../api/client.js';
 import { FACET_LABELS } from '../../lib/labels.js';
 
 const DEBOUNCE_MS = 200;
-// 19 — 자동완성: 종류마다 몇 개까지, 순서는 호선 · 프로젝트(21) · 구역 · 태그
+// 19 — 자동완성: 종류마다 몇 개까지, 순서는 호선 · 구역 · 태그
 const SUGGEST_LIMIT = 5;
-const SUGGEST_KINDS = ['hull', 'project', 'zone', 'tag'];
+const SUGGEST_KINDS = ['hull', 'zone', 'tag'];
 
 /** /api/suggest/all 응답 → 한 줄 목록 [{key, value}] (종류 순서대로). */
 export function suggestOptions(res) {

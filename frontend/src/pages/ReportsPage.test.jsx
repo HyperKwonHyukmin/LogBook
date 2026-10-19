@@ -10,7 +10,7 @@ vi.mock('../components/preview/FilePreview.jsx', () => ({ default: ({ file }) =>
 vi.mock('../components/compare/CompareBasket.jsx', () => ({ CompareToggle: () => null }));
 vi.mock('../components/workbench/WorkbenchSend.jsx', () => ({ SendToWorkbenchButton: () => null }));
 const report = { file_id: 11, name: '독립연구.pdf', entry_id: 'E000001', entry_title: '독립 연구',
-  scope: 'unclassified', project: null, document_type: '', hulls: [], model_count: 0, snippets: [], posted_at: '2026-10-12T10:00:00' };
+  scope: 'unclassified', document_type: '', hulls: [], model_count: 0, snippets: [], posted_at: '2026-10-12T10:00:00' };
 // 23 — 문서 분류 목록·빠른 구분 묶음은 서버가 목록 응답으로 내려준다(프런트에 사본 없음)
 const OPTIONS = ['해석 보고서', '연구 보고서', '시험 보고서', '기술 검토', '발표자료', '회의자료', '계산서', '지침', '기타'];
 const GROUPS = [
@@ -18,10 +18,10 @@ const GROUPS = [
   { key: 'presentation', label: '발표자료', values: ['발표자료', '회의자료'] },
   { key: 'other', label: '기타', values: ['계산서', '기타', '__none__'] },
 ];
-const list = { total: 1, items: [report], projects: [{ name: '크레인 연구', count: 1 }], no_project: 1,
-  scopes: { unclassified: 1, project: 1 }, document_types: {}, document_type_options: OPTIONS, document_type_groups: GROUPS };
-// 21 — 소속·프로젝트는 자료 값(파생)이라 읽기만 한다. 보고서별로 저장하는 것은 문서 분류·모델 연결뿐
-const catalog = { file_id: 11, entry_id: 'E000001', entry_title: '독립 연구', scope: 'unclassified', project: null,
+const list = { total: 1, items: [report],
+  scopes: { unclassified: 1, reference: 1 }, document_types: {}, document_type_options: OPTIONS, document_type_groups: GROUPS };
+// 21 — 소속은 자료 값(파생)이라 읽기만 한다. 보고서별로 저장하는 것은 문서 분류·모델 연결뿐
+const catalog = { file_id: 11, entry_id: 'E000001', entry_title: '독립 연구', scope: 'unclassified',
   hulls: [], no_hull: false, document_type: '', version: 0, related_models: [], can_edit: true };
 const entry = { entry_id: 'E000001', title: '독립 연구', files: [{ id: 11, name: report.name, kind: 'report' }] };
 const setup = (map = {}, path = '/reports') => {
@@ -46,11 +46,12 @@ test('문서만 있는 독립 자료를 표시하고 모델 없이 바로 미리
   expect(screen.getByRole('link', { name: '독립 연구' })).toHaveAttribute('href', '/e/E000001?file=11');
 });
 
-test('자료 소속·프로젝트는 자료 값에서 보이고 바꾸기는 자료 상세로 보낸다', async () => {
+test('자료 소속은 자료 값에서 보이고 바꾸기는 자료 상세로 보낸다(29 — 프로젝트 거르기 없음)', async () => {
   const user = userEvent.setup();
-  setup({ 'GET /api/reports/11/catalog': { ...catalog, scope: 'project', project: '크레인 연구' } });
+  setup({ 'GET /api/reports/11/catalog': { ...catalog, scope: 'reference' } });
   await user.click(await screen.findByRole('button', { name: /독립연구.pdf/ }));
-  expect(await screen.findByText('독립 프로젝트 · 크레인 연구')).toBeInTheDocument();
+  expect(await screen.findByText('공통 참고자료')).toBeInTheDocument();
+  expect(screen.queryByRole('combobox', { name: '프로젝트' })).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: '자료 상세에서 변경' })).toHaveAttribute('href', '/e/E000001?file=11');
   await user.click(screen.getByRole('button', { name: '문서 분류·모델 연결' }));
   expect(screen.queryByLabelText('프로젝트명')).not.toBeInTheDocument();
@@ -89,24 +90,6 @@ test('문서만(관련 모델 없음) 필터는 서버에 보내고 검색 상�
   await screen.findByRole('button', { name: /독립연구.pdf/ });
   await user.selectOptions(screen.getByLabelText('관련 모델'), 'no');
   await waitFor(() => expect(fetch.mock.calls.some(([url]) => url.includes('/reports?model=no'))).toBe(true));
-});
-
-test('프로젝트는 여러 개를 고를 수 있고(또는) 주소에 되풀이해 보낸다', async () => {
-  const user = userEvent.setup();
-  const two = { ...list, projects: [{ name: '크레인 연구', count: 1 }, { name: '풍하중 연구', count: 2 }] };
-  const fetch = setup({
-    'GET /api/reports?limit=50&offset=0': two,
-    'GET /api/reports?project=%ED%81%AC%EB%A0%88%EC%9D%B8+%EC%97%B0%EA%B5%AC&limit=50&offset=0': two,
-    'GET /api/reports?project=%ED%81%AC%EB%A0%88%EC%9D%B8+%EC%97%B0%EA%B5%AC&project=%ED%92%8D%ED%95%98%EC%A4%91+%EC%97%B0%EA%B5%AC&limit=50&offset=0': two,
-  });
-  await screen.findByRole('button', { name: /독립연구.pdf/ });
-  await user.selectOptions(screen.getByRole('combobox', { name: '프로젝트' }), '크레인 연구');
-  await screen.findByRole('button', { name: '프로젝트 크레인 연구 거르기 해제' });
-  await user.selectOptions(screen.getByRole('combobox', { name: '프로젝트' }), '풍하중 연구');
-  await waitFor(() => expect(fetch.mock.calls.some(([url]) => url.includes('project=%ED%81%AC%EB%A0%88%EC%9D%B8+%EC%97%B0%EA%B5%AC&project=%ED%92%8D'))).toBe(true));
-  await user.click(screen.getByRole('button', { name: '프로젝트 크레인 연구 거르기 해제' }));
-  expect(screen.queryByRole('button', { name: '프로젝트 크레인 연구 거르기 해제' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '프로젝트 풍하중 연구 거르기 해제' })).toBeInTheDocument();
 });
 
 test('접근 불가 문서는 빈 미리보기 대신 오류와 재시도를 표시한다', async () => {
@@ -206,13 +189,12 @@ test('색인을 쓸 수 없으면 목록은 그대로 두고 제한을 알린다
   expect(await screen.findByText(/본문 색인을 사용할 수 없어/)).toBeInTheDocument();
 });
 
-test('문구 조건과 반복 프로젝트 필터를 함께 보낸다', async () => {
-  const fetch = setup({ [endpoint([['q', '계류 하중'], ['mode', 'phrase'], ['project', '크레인 연구'], ['project', '계류 연구'], ['sort', 'relevance'], ['limit', '50'], ['offset', '0']])]: list },
-    '/reports?q=계류+하중&project=크레인+연구&project=계류+연구&mode=phrase');
+test('문구 조건을 보내고, 옛 주소의 project= 는 보내지 않는다', async () => {
+  const fetch = setup({ [endpoint([['q', '계류 하중'], ['mode', 'phrase'], ['sort', 'relevance'], ['limit', '50'], ['offset', '0']])]: list },
+    '/reports?q=계류+하중&project=크레인+연구&mode=phrase');
   await screen.findByRole('button', { name: /독립연구.pdf/ });
   expect(screen.getByRole('combobox', { name: '검색 조건' })).toHaveValue('phrase');
-  expect(screen.getByRole('button', { name: '프로젝트 크레인 연구 거르기 해제' })).toBeInTheDocument();
-  expect(fetch.mock.calls.some(([url]) => url.startsWith('/api/reports?') && new URLSearchParams(url.split('?')[1]).getAll('project').length === 2)).toBe(true);
+  expect(fetch.mock.calls.some(([url]) => url.startsWith('/api/reports?') && url.includes('project='))).toBe(false);
 });
 
 test('근거 요약은 단추를 눌렀을 때만 선택 파일로 요청하고 근거 위치를 보인다', async () => {

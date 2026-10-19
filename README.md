@@ -88,6 +88,24 @@ SHOW GRANTS FOR '<logbook 계정>'@'<호스트>';
 확인: 관리자 화면 '운영' 의 'WorkBench 사용자 표' 가 '연결됨 · 활성 N명'. 권한이 없으면 로그인이 'WorkBench 사용자 정보를 읽을 수 없습니다'(503)로 실패한다.
 개발 PC 테스트는 `logbook_test` 안의 가짜 표 `wb_users`(conftest 가 만든다)를 쓴다 — 실제 `hitessworkbench` 에 접속하지 않는다.
 
+## 사내 PLM 선박 정보 (30)
+
+호선 화면 [선박 정보 검색]·호선 목록 [선종 채우기(PLM)]·확정 때 자동 조회는 사내 PLM(`VT_PLM_SHIP`)을 **LogBook 이 직접** 읽는다
+(WorkBench 가 꺼져 있어도 된다). 145 에서 한 번:
+
+1. Server Manager ⟳ Update — `requirements.txt` 에 `oracledb` 가 새로 들어와 Update 가 pip install 까지 한다(수동이면 `.venv\Scripts\python.exe -m pip install -r requirements.txt`).
+2. `.env` 에 WorkBench `.env` 의 같은 이름 줄을 그대로 옮긴다: `PLM_ORACLE_DSN` · `PLM_ORACLE_USER` · `PLM_ORACLE_PASSWORD` ·
+   `PLM_ORACLE_LIB_DIR`(145 의 PLM 은 10G password verifier 라 Oracle Client 폴더를 주는 thick mode 가 필요하다).
+3. 서버 재시작 → 호선 화면에서 [선박 정보 검색]. 처음 한 번은 `.venv\Scripts\python.exe -m app.cli plm-fill` 로 기존 호선을 모두 채운다.
+
+비워 두면 기능만 꺼진다(단추를 누르면 'PLM 접속 정보가 설정되지 않았습니다'). 개발 PC 는 PLM 에 닿지 않아 늘 이 상태다.
+
+## 등급 정리 · WorkBench 연동 (31)
+
+관리자가 아닌 사람은 LV1(게스트 — 공유·허락받은 자료·자기 자료만)로 둔다. 145 에서 한 번:
+`.venv\Scripts\python.exe -m app.cli level-guest` 로 대상을 보고 `level-guest --apply`. WorkBench 관리자는 자동 LV3, LogBook 에서 LV3 로
+지정한 사람도 그대로다. WorkBench 사용자 관리 표의 'LogBook' 열은 `/api/integration/levels`(공유 비밀키)를 읽어 보여 준다.
+
 ## 운영 참고 (145)
 
 - **uvicorn 실행 계정 권한**: 145 에서 `uvicorn app.main:app` 을 실행하는 Windows 계정은 `999_LogBook` UNC 경로(`\\storage.hpc.hd.com\a476854\00_PROJECT\AA_300_CF44\999_LogBook`)에 **쓰기 권한**이 있어야 한다. 없으면 폴더 구조 생성(`ensure_layout`)·업로드·감사 로그 JSONL 기록이 조용히 실패한다(DB 기록은 남지만 파일 기록은 경고 로그만 남고 사라짐 — `app/audit.py` 참고).

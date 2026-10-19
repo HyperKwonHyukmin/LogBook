@@ -106,6 +106,18 @@ class Hull(Base):
     ship_type = Column(String(50), nullable=True)
     memo = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=_now)
+    # 30 — 사내 PLM(VT_PLM_SHIP)에서 읽은 선박 정보. 선종(ship_type)은 사람이 고칠 수 있는 값이라 따로 두고,
+    # 여기는 PLM 원문과 그 분해 값이다(관계 지도 등에서 선종·용량·선급·주기관으로 묶을 재료).
+    plm_status = Column(String(12), nullable=True)        # found | not_found | None(아직 조회 안 함)
+    plm_checked_at = Column(DateTime, nullable=True)
+    plm_ship_type = Column(String(60), nullable=True)     # SHIP_TYPE_NAME 원문 '174K-LNG'
+    ship_capacity = Column(String(20), nullable=True)     # '174K' · '4500'(단위 없음)
+    ship_kind = Column(String(40), nullable=True)         # 'LNG' · 'B/C'
+    ship_variant = Column(String(60), nullable=True)      # 괄호 부가정보 'DF' · 'MOSS'
+    main_engine = Column(String(100), nullable=True)
+    ship_class = Column(String(20), nullable=True)        # SHIP_CLASS1
+    delivery_date = Column(String(10), nullable=True)     # 'YYYY-MM-DD'
+    delivered = Column(Boolean, nullable=True)
 
 
 class Entry(Base):
@@ -178,7 +190,7 @@ class Tag(Base):
     __table_args__ = (UniqueConstraint("kind", "value", name="uq_tags_kind_value"),)
 
     id = Column(Integer, primary_key=True)
-    # zone | free | atype(해석 종류 사전 — Entry 와 잇지 않는다, 08) | project(21 — 자료의 프로젝트, 자료당 하나)
+    # zone | free | atype(해석 종류 사전 — Entry 와 잇지 않는다, 08) (29 — 21 의 project 는 없앴다. 남은 행이 있어도 읽지 않는다)
     kind = Column(String(10), nullable=False)
     value = Column(String(100), nullable=False)
     alias_of_id = Column(Integer, ForeignKey("tags.id"), nullable=True)

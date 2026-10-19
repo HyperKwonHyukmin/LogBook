@@ -110,7 +110,6 @@ export function hasPendingConvert(batch) {
  * 초안에서 사람이 확인할 것 — 확정을 막는 것(blocking)과 권하는 것.
  * form: 화면에서 고치는 중인 값(제목·호선·호선 없음(공용)·구역·해석 종류), entry: 서버 값(파일).
  * 20 — BDF 가 있는 자료는 호선(또는 '호선 없음(공용)')·구역·해석 종류가 확정을 막는다(서버 409 required_fields 와 같은 규칙).
- * 21 — 프로젝트가 있으면 호선 대신 인정한다(독립 프로젝트 모델).
  * BDF 없는 자료(보고서만 등)는 호선·해석 종류를 권하기만 한다.
  * 기존 자료에 파일을 더하는 초안(merge_into)은 그 자료의 분류를 따르므로 보지 않는다.
  * @returns {Array<{ id, text, blocking?: boolean }>}
@@ -120,9 +119,9 @@ export function draftChecks(form, entry) {
   if (!(form.title || '').trim()) out.push({ id: 'title', text: '제목 없음: 확정하려면 필요합니다', blocking: true });
   const files = entry.files || [];
   const bdf = !entry.merge_into && files.some((f) => f.kind === 'model' && f.location !== 'trash');
-  const noHull = !(form.hulls || []).length && !form.no_hull && !String(form.project ?? '').trim();
+  const noHull = !(form.hulls || []).length && !form.no_hull;
   if (bdf) {
-    if (noHull) out.push({ id: 'hull', text: "호선 없음: BDF 자료는 호선(또는 프로젝트·'호선 없음(공용)')이 필요합니다", blocking: true });
+    if (noHull) out.push({ id: 'hull', text: "호선 없음: BDF 자료는 호선(또는 '호선 없음(공용)')이 필요합니다", blocking: true });
     if (!(form.zones || []).length) out.push({ id: 'zone', text: '구역 없음: BDF 자료는 구역이 필요합니다', blocking: true });
     if (!(form.analysis_type || '').trim()) out.push({ id: 'type', text: '해석 종류 없음: BDF 자료는 해석 종류가 필요합니다', blocking: true });
   } else if (!entry.merge_into) {

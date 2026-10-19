@@ -92,3 +92,25 @@ def set_level(db: Session, storage: StoragePaths, actor: models.User | None, emp
 
     write_registry(db, storage)
     return user
+
+
+def reset_to_guest(db: Session, storage: StoragePaths, apply: bool = False) -> list[models.User]:
+    """31 — 관리자가 아닌 사용자를 모두 LV1(게스트)로 내린다(CLI level-guest). 모델 자료(일반 공개)가 보이지 않게
+    하려는 일괄 정리다. 관리자는 그대로 둔다: WorkBench 관리자(wb_admin, 실효 LV3)와 LogBook 에서 LV3 로 지정한 사람.
+    apply 가 거짓이면 대상만 돌려준다. 참이면 사람마다 감사 USER_LEVEL(행위자 system)을 남기고 registry 를 한 번 쓴다."""
+    rows = (db.query(models.User)
+            .filter(models.User.level == 2, models.User.wb_admin.is_(False))
+            .order_by(models.User.name, models.User.employee_id).all())
+    if not apply or not rows:
+        return rows
+    for user in rows:
+        before = user_snapshot(user)
+        user.level = 1
+        db.flush()
+        audit.record(db, storage, actor="system", action="USER_LEVEL", target_type="user",
+                     target_id=user.employee_id, before=before, after=user_snapshot(user))
+    db.commit()
+    from .ops.registry import write_registry  # 순환 import 방지
+
+    write_registry(db, storage)
+    return rows

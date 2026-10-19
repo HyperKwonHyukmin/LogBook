@@ -78,6 +78,18 @@ def wb_logout(body: LogoutBody, db: Session = Depends(get_db)):
     return {"revoked": sessions.revoke_wb_ref(db, body.wb_ref.lower())}
 
 
+# ---- 31: LogBook 등급 알려 주기(WorkBench 사용자 관리 화면) ----
+
+@router.get("/levels", dependencies=[Depends(require_integration)])
+def wb_levels(db: Session = Depends(get_db)):
+    """LogBook 에 행이 있는 사용자의 저장 등급. WorkBench 는 자기 관리자(is_admin)면 3, 여기 없는 사람은 1 로 본다
+    (access.level_of 와 같은 규칙 — 관리자 여부는 WorkBench 가 원본이라 여기서 다시 판단하지 않는다)."""
+    rows = db.query(models.User.employee_id, models.User.level, models.User.last_login)
+    return {"labels": {str(k): v for k, v in access.LEVEL_LABELS.items()},
+            "levels": {e: {"level": lv if lv in access.LEVELS else 1,
+                           "last_login": last.isoformat() if last else None} for e, lv, last in rows}}
+
+
 # ---- 모델 파일 내보내기(WorkBench GMU 가져오기) ----
 
 def _acting_user(db: Session, employee_id: str) -> models.User:

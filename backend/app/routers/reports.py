@@ -23,7 +23,6 @@ from ..dependencies import client_ip, get_storage, require_auth
 from ..report_index import search as report_search
 from ..search.base import filter_values
 from ..storage.paths import StoragePaths
-from ..tags import root_value
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -52,7 +51,7 @@ def get_report_index():
 def list_reports(q: str = Query(default="", max_length=500),
                  mode: str = Query(default="and", pattern="^(and|or|phrase)$"),
                  retrieval: str = Query(default="keyword", pattern="^(keyword|hybrid)$"),
-                 scope: list[str] | None = Query(default=None), project: list[str] | None = Query(default=None),
+                 scope: list[str] | None = Query(default=None),
                  document_type: list[str] | None = Query(default=None),
                  model: str = Query(default="", pattern="^(|yes|no)$"),
                  sort: str = Query(default="recent", pattern="^(recent|title|relevance)$"),
@@ -60,8 +59,6 @@ def list_reports(q: str = Query(default="", max_length=500),
                  db: Session = Depends(get_db), user: models.User = Depends(require_auth),
                  store=Depends(get_report_index)):
     filters = {"scope": set(filter_values(scope)) & set(report_catalog.SCOPES),
-               # 프로젝트 이름은 동의어·대소문자 변형도 대표 이름으로(검색 필터와 같은 규칙)
-               "project": {v if v == NONE else root_value(db, "project", v) for v in filter_values(project)},
                "document_type": set(filter_values(document_type)),
                "model": {model} if model else set()}
     return report_search.list_reports(db, user, store, q=q.strip()[:500], mode=mode, retrieval=retrieval,

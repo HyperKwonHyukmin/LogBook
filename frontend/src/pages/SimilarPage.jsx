@@ -315,7 +315,22 @@ function Detail({ base, item, row }) {
         <div><Thumb item={base} className="h-[110px]" /><p className="mt-1 text-meta text-n-600">기준</p></div>
         <div><Thumb item={item} className="h-[110px]" /><p className="mt-1 text-meta text-n-600">선례</p></div>
       </div>
-      <table className="mt-2.5 w-full border-collapse text-ui">
+      {/* 닮은 정도를 썸네일 바로 아래에 — 왜 이 순위인지 먼저 보고, 그다음 값 비교·단면 */}
+      {s && (
+        <>
+          <h3 className="mt-3 text-ui font-semibold text-n-800">닮은 정도 {s.total.toFixed(2)}{s.shape ? ' · 형상이 같아 맨 위' : ''}</h3>
+          <div className="mt-1.5 grid gap-1.5">
+            {Object.keys(PART_LABELS).map((k) => (
+              <div key={k} className="grid grid-cols-[76px_minmax(0,1fr)_38px] items-center gap-2 text-ui">
+                <span className="text-n-700">{PART_LABELS[k]}</span>
+                <span className="h-1.5 overflow-hidden rounded-full bg-n-150"><span className="block h-full bg-navy-600" style={{ width: `${Math.round(s.raw[k] * 100)}%` }} /></span>
+                <span className="text-right font-mono text-meta text-n-700">{s.raw[k].toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      <table className="mt-3 w-full border-collapse text-ui">
         <thead><tr className="text-meta text-n-600"><th className="w-[72px]" /><th className="py-1 text-left font-normal">기준</th><th className="py-1 text-left font-normal">선례 (다른 값은 주황)</th></tr></thead>
         <tbody>
           {cells.map(([k, a, b, d]) => (
@@ -341,20 +356,6 @@ function Detail({ base, item, row }) {
         <Link to={`/v/${item.file_id}`} className={buttonClass('ghost', 'sm')}>3D 로 보기</Link>
       </div>
       {!item.reports && <p className="mt-2 text-meta text-n-600">이 선례에는 문서가 없습니다. 올린 사람에게 결과를 물어보세요.</p>}
-      {s && (
-        <>
-          <h3 className="mt-4 text-ui font-semibold text-n-800">닮은 정도 {s.total.toFixed(2)}{s.shape ? ' · 형상이 같아 맨 위' : ''}</h3>
-          <div className="mt-1.5 grid gap-1.5">
-            {Object.keys(PART_LABELS).map((k) => (
-              <div key={k} className="grid grid-cols-[76px_minmax(0,1fr)_38px] items-center gap-2 text-ui">
-                <span className="text-n-700">{PART_LABELS[k]}</span>
-                <span className="h-1.5 overflow-hidden rounded-full bg-n-150"><span className="block h-full bg-navy-600" style={{ width: `${Math.round(s.raw[k] * 100)}%` }} /></span>
-                <span className="text-right font-mono text-meta text-n-700">{s.raw[k].toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
     </>
   );
 }

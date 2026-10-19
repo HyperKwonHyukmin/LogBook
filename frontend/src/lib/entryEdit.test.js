@@ -4,16 +4,8 @@ const E = { title: '제목', description: null, hulls: [{ hull_no: '9001' }, { h
   analysis_type: 'FE 해석', analysis_period: '2025-11', tags: [], version: 3, files: [] };   // 해석 시기는 15 부터 쓰지 않는다
 
 test('서버 값 → 고칠 값', () => {
-  expect(editValues(E)).toEqual({ title: '제목', description: '', hulls: ['9001', '9002'], no_hull: false, project: '', zones: ['선미부'],
+  expect(editValues(E)).toEqual({ title: '제목', description: '', hulls: ['9001', '9002'], no_hull: false, zones: ['선미부'],
     analysis_type: 'FE 해석', tags: [] });
-});
-
-test('21 — 프로젝트는 글자 하나: 바꾸면 그 값, 비우면 null(지운다)', () => {
-  const base = editValues({ ...E, project: '크레인 연구' });
-  expect(base.project).toBe('크레인 연구');
-  expect(patchBody(base, { ...base, project: ' 풍하중 연구 ' })).toEqual({ project: '풍하중 연구' });
-  expect(patchBody(base, { ...base, project: '' })).toEqual({ project: null });
-  expect(changedFields(base, { ...base, project: ' 크레인 연구 ' })).toEqual([]);
 });
 
 test('바뀐 칸만 PATCH 본문에 — 빈 글자는 null, 앞뒤 공백 무시, 호선은 순서도 본다', () => {
@@ -50,9 +42,8 @@ test('20 — 확정 필수 분류(BDF 자료만, 서버 규칙과 같다)', () =
   const v = editValues({ ...E, hulls: [], zones: [], analysis_type: '' });
   expect(missingRequired(v, true)).toEqual(['hull', 'zone', 'analysis_type']);
   expect(missingRequired({ ...v, no_hull: true }, true)).toEqual(['zone', 'analysis_type']);
-  // 21 — 프로젝트가 있으면 호선 대신 인정(독립 프로젝트 모델)
-  expect(missingRequired({ ...v, project: '크레인 연구' }, true)).toEqual(['zone', 'analysis_type']);
-  expect(missingRequired({ ...v, project: '  ' }, true)).toEqual(['hull', 'zone', 'analysis_type']);
+  // 29 — 프로젝트는 없앴다: 예전 값이 있어도 호선 대신 인정하지 않는다
+  expect(missingRequired({ ...v, project: '크레인 연구' }, true)).toEqual(['hull', 'zone', 'analysis_type']);
   expect(missingRequired(v, false)).toEqual([]);
   expect(hasBdf({ files: [{ kind: 'report' }, { kind: 'model', location: 'trash' }] })).toBe(false);
   expect(hasBdf({ files: [{ kind: 'model', location: 'vault' }] })).toBe(true);

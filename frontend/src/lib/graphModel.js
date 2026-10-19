@@ -1,15 +1,16 @@
 /**
  * 관계 지도(25) — /api/graph 응답을 지도용 모델로 바꾸는 순수 함수.
  *
- * 점은 두 종류다. 기준 점(호선·구역·프로젝트·자유 태그 값 하나)과 자료 점(확정 Entry 하나).
+ * 점은 두 종류다. 기준 점(호선·구역·자유 태그 값 하나)과 자료 점(확정 Entry 하나).
  * 고른 기준(pivot)의 값마다 기준 점이 생기고 자료가 그 둘레에 앉는다. 기준 값이 없는 자료는 '○○ 없음' 점 하나로 모은다.
  * 기준 점끼리의 굵은 곡선(aggregate) = 두 기준에 함께 등록된 자료 + 형상만 같은 BDF 쌍 + 똑같은 BDF 쌍.
  */
-export const GROUP = { hull: '호선', zone: '구역', free: '자유 태그', project: '프로젝트' };
-export const JOSA = { hull: '이', zone: '이', free: '가', project: '가' };
-export const PIVOTS = ['hull', 'zone', 'project'];
-export const GROUP_KEYS = ['hull', 'zone', 'free', 'project'];
-const FIELD = { hull: 'hulls', zone: 'zones', free: 'free', project: 'projects' };
+// 29 — 프로젝트 기준은 없앴다
+export const GROUP = { hull: '호선', zone: '구역', free: '자유 태그' };
+export const JOSA = { hull: '이', zone: '이', free: '가' };
+export const PIVOTS = ['hull', 'zone'];
+export const GROUP_KEYS = ['hull', 'zone', 'free'];
+const FIELD = { hull: 'hulls', zone: 'zones', free: 'free' };
 export const DIFF_LABEL = { property: '물성', material: '재료', load: '하중' };
 
 // 자료 점 색(해석 종류·선종) — 많은 값 8개만 색을 주고 나머지는 회색

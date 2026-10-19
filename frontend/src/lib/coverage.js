@@ -1,5 +1,5 @@
 /**
- * 갖춤 현황(26) — GET /api/coverage 의 자료 목록을 호선(·프로젝트·공용) × 구역 칸으로 놓는 순수 함수.
+ * 갖춤 현황(26) — GET /api/coverage 의 자료 목록을 호선(·공용) × 구역 칸으로 놓는 순수 함수.
  * 해석 종류를 바꿔 걸러도 다시 부르지 않고 여기서 다시 센다.
  */
 
@@ -20,18 +20,17 @@ export const UNSET_ROW = 'x:미지정';
 
 const hullNo = (k) => k.slice(2);
 
-/** 행 목록 — 호선(번호 순) → 프로젝트 → 공용 → 미지정. 자료가 있는 행만. */
+/** 행 목록 — 호선(번호 순) → 공용 → 미지정. 자료가 있는 행만. */
 export function buildRows(data) {
   const used = new Set();
   for (const e of data.entries) for (const r of rowsOf(e)) used.add(r);
   const hulls = [...used].filter((k) => k.startsWith('h:')).sort((a, b) => hullNo(a).localeCompare(hullNo(b), 'ko', { numeric: true }));
-  const projects = [...used].filter((k) => k.startsWith('p:')).sort();
   const rest = [...used].filter((k) => k.startsWith('c:') || k === UNSET_ROW);
-  return [...hulls, ...projects, ...rest].map((key) => ({
+  return [...hulls, ...rest].map((key) => ({
     key,
-    kind: key.startsWith('h:') ? 'hull' : key.startsWith('p:') ? 'project' : key === UNSET_ROW ? 'unset' : 'common',
+    kind: key.startsWith('h:') ? 'hull' : key === UNSET_ROW ? 'unset' : 'common',
     label: key === UNSET_ROW ? '미지정' : key.slice(2),
-    sub: key.startsWith('h:') ? (data.hulls?.[hullNo(key)] || '선종 미입력') : key.startsWith('p:') ? '프로젝트' : key === UNSET_ROW ? '호선·프로젝트 없음' : '호선 없음',
+    sub: key.startsWith('h:') ? (data.hulls?.[hullNo(key)] || '선종 미입력') : key === UNSET_ROW ? '호선 없음' : '공용 자료',
   }));
 }
 
@@ -151,7 +150,7 @@ export const LIST_TABS = [
     test: (e) => !e.models && !e.model_linked },
   { id: 'solve_fail', label: '해석 검증 실패', note: '원본을 바꾸지 않은 사본으로 Nastran 을 돌렸을 때 모든 모델이 실패한 자료입니다.',
     test: (e) => e.solve === 'fail' },
-  { id: 'needs_fix', label: '분류 보완 필요', note: '호선(또는 프로젝트)·구역·해석 종류 중 빠진 칸이 있는 BDF 자료입니다.',
+  { id: 'needs_fix', label: '분류 보완 필요', note: '호선(또는 공용)·구역·해석 종류 중 빠진 칸이 있는 BDF 자료입니다.',
     test: (e) => e.needs_fix },
   { id: 'unsigned', label: '서명 없는 모델', note: '옛 방식으로 변환되어 내용 서명이 없습니다. 관리자가 다시 변환하면 채워집니다.',
     test: (e) => e.unsigned },
@@ -173,4 +172,12 @@ export function cellSentence(row, col, cell) {
   const fails = (cell.models || []).filter((e) => e.solve === 'fail').length;
   if (fails) parts.push(`검증 실패 ${fails}`);
   return { title: `${row.label} · ${col.label}`, state: info.name, desc: `${info.desc}.`, parts: parts.join(' · ') };
+}
+
+/** 열 머리(폭 45px) 두 줄 표기 — 띄어쓰기가 있으면 그 자리, 붙은 다섯 글자 이상이면 두 글자 뒤에서 나눈다('데크 / 하우스'). */
+export function headerLines(label) {
+  const s = String(label || '');
+  if (s.includes(' ')) { const i = s.indexOf(' '); return [s.slice(0, i), s.slice(i + 1)]; }
+  if (s.length >= 5 && /^[가-힣]+$/.test(s)) return [s.slice(0, 2), s.slice(2)];
+  return [s];
 }

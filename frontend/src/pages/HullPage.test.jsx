@@ -77,3 +77,44 @@ test('타임라인 행의 별은 서버 값을 보이고, 눌러도 상세로 �
   expect(within(tl).getAllByRole('button', { name: '즐겨찾기 해제' })).toHaveLength(2);
   expect(screen.getByRole('heading', { name: /9999/ })).toBeInTheDocument();   // 상세로 가지 않았다
 });
+
+// ---- 30 — 사내 PLM 선박 정보 ----
+
+const PLM = { status: 'found', ship_type_raw: '174K-LNG', capacity: '174K', ship_kind: 'LNG', variant: null,
+  main_engine: 'G70ME-C10.5-GA-EGRBP', ship_class: 'BV', delivery_date: '2025-02-28', delivered: true,
+  checked_at: '2026-10-16T15:00:00' };
+
+test('[선박 정보 검색] — PLM 값으로 선종과 선박 정보 줄을 채운다', async () => {
+  renderAt('/h/9999', { 'GET /api/hulls/9999': HULL,
+    'POST /api/hulls/9999/plm': { hull_no: '9999', ship_type: '174K LNG', memo: null, plm: PLM } });
+  await userEvent.click(await screen.findByRole('button', { name: '선박 정보 검색' }));
+  expect(await screen.findByText('174K LNG')).toBeInTheDocument();
+  const line = screen.getByLabelText('PLM 선박 정보');
+  expect(line).toHaveTextContent('G70ME-C10.5-GA-EGRBP');
+  expect(line).toHaveTextContent('BV');
+  expect(line).toHaveTextContent('2025-02-28');
+  expect(line).not.toHaveTextContent('미인도');
+});
+
+test('[선박 정보 검색] — PLM 에 없거나 접속하지 못하면 이유를 보인다', async () => {
+  renderAt('/h/9999', { 'GET /api/hulls/9999': HULL,
+    'POST /api/hulls/9999/plm': { __status: 503, detail: 'plm_not_configured' } });
+  await userEvent.click(await screen.findByRole('button', { name: '선박 정보 검색' }));
+  expect(await screen.findByText(/PLM 접속 정보가 설정되지 않았습니다/)).toBeInTheDocument();
+});
+
+test('호선 목록 [선종 채우기(PLM)] — 한 번에 조회하고 목록을 다시 읽는다', async () => {
+  let n = 0;
+  const fetch = (() => {
+    const rows = () => (n === 0
+      ? [{ hull_no: '9999', ship_type: null, plm_status: null, entries: 2, last_at: '2026-09-05T00:00:00' }]
+      : [{ hull_no: '9999', ship_type: '174K LNG', plm_status: 'found', entries: 2, last_at: '2026-09-05T00:00:00' }]);
+    return { 'GET /api/hulls?q=': rows,
+      'POST /api/hulls/plm-fill': () => { n += 1; return { checked: 1, found: 1, not_found: 0, filled: 1 }; } };
+  })();
+  renderAt('/hulls', fetch);
+  const btn = await screen.findByRole('button', { name: /선종 채우기\(PLM\)/ });
+  expect(btn).toHaveTextContent('1');   // 선종이 빈 호선 수
+  await userEvent.click(btn);
+  expect(await screen.findByText('174K LNG')).toBeInTheDocument();
+});

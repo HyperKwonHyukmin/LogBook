@@ -27,7 +27,7 @@
 ### 무엇을 보여 주나
 관계 지도가 "무엇이 이어져 있나"라면, 빈칸 지도는 "무엇이 비어 있나"를 보여 준다.
 
-**① 격자** — 행은 호선(또는 프로젝트·공용), 열은 구역(분류 목록의 대표 값)이다. 칸 하나 = 그 호선 × 구역의 확정 자료.
+**① 격자** — 행은 호선(또는 공용 — 29 에서 프로젝트 행은 뺐다), 열은 구역(분류 목록의 대표 값)이다. 칸 하나 = 그 호선 × 구역의 확정 자료.
 위쪽 거르개로 해석 종류를 고르면 그 종류만으로 칸을 다시 칠한다.
 
 | 칸 상태 | 뜻 | 표시 |
@@ -52,7 +52,7 @@
 ### 계산 — 관계 지도와 같은 방식
 저장하지 않고 요청마다 묶는다(`backend/app/coverage.py`, `GET /api/coverage`).
 - 자료: 확정 Entry + `visible_entries_filter(user)`
-- 호선: `entry_hulls`, 공용: `entries.no_hull`, 프로젝트·구역: `entry_tags`(대표 값 `Vocab.root`)
+- 호선: `entry_hulls`, 공용: `entries.no_hull`, 구역: `entry_tags`(대표 값 `Vocab.root`)
 - 모델/문서 유무: `files.kind`(`model`·`report`, 휴지통 제외)
 - 모델↔문서 연결: `report_model_links`(21) — 문서만 있는 자료도 다른 자료의 모델과 이어져 있으면 '모델 없음'으로 세지 않는다
 - 검증: `solve_checks.state`
