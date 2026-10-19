@@ -1,6 +1,6 @@
 # 39 — WorkBench 해석 출처(Hi-TESS Core 1단계, LogBook 쪽)
 
-작성 2026-10-19 · 상태: **구현(키 꺼짐, 커밋 전)** · 원 변경안: `hitess-core` `docs/10-phase1-provenance.md`(A1~A6)
+작성 2026-10-19 · 상태: **완료 — 145 에서 키를 켜고 확인(2026-10-19, E000054)** · 소스 b27bfe4·dist dd21035·후속 0589016 · 원 변경안: `hitess-core` `docs/10-phase1-provenance.md`(A1~A6)
 
 ## 하는 일
 WorkBench 관리자가 All Projects 에서 해석 1건을 LogBook 으로 보낼 때(19, `/api/integration/uploads`) 실어 오는

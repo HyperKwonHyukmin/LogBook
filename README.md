@@ -109,6 +109,13 @@ SHOW GRANTS FOR '<logbook 계정>'@'<호스트>';
 `.venv\Scripts\python.exe -m app.cli level-guest` 로 대상을 보고 `level-guest --apply`. WorkBench 관리자는 자동 LV3, LogBook 에서 LV3 로
 지정한 사람도 그대로다. WorkBench 사용자 관리 표의 'LogBook' 열은 `/api/integration/levels`(공유 비밀키)를 읽어 보여 준다.
 
+## WorkBench 해석 출처 (39, Hi-TESS Core 1단계)
+
+WorkBench 관리자가 All Projects 에서 해석 1건을 보내면 자료 화면 속성 칸 '출처'에 `WB #번호`·프로그램·해석자·일시와
+'WB 산출물과 같음'(해석 여권 sha256 대조)이 보인다. 검색창에 `WB #번호` 로도 찾는다. 145 `.env` 두 곳에 키가 있어야 한다(2026-10-19 넣음):
+LogBook `LOGBOOK_WB_ORIGIN_SHOW=1`(화면·검색), WorkBench `LOGBOOK_SEND_PASSPORT=1`(여권 싣기). 비우고 재시작하면 꺼진다(출처 저장은 늘 한다).
+두 플랫폼 사이 약속은 `hitess-core` 저장소(`docs/02-current-links.md`·`docs/03-safety.md`) — 연동을 바꾸기 전에 먼저 본다.
+
 ## 운영 참고 (145)
 
 - **uvicorn 실행 계정 권한**: 145 에서 `uvicorn app.main:app` 을 실행하는 Windows 계정은 `999_LogBook` UNC 경로(`\\storage.hpc.hd.com\a476854\00_PROJECT\AA_300_CF44\999_LogBook`)에 **쓰기 권한**이 있어야 한다. 없으면 폴더 구조 생성(`ensure_layout`)·업로드·감사 로그 JSONL 기록이 조용히 실패한다(DB 기록은 남지만 파일 기록은 경고 로그만 남고 사라짐 — `app/audit.py` 참고).
