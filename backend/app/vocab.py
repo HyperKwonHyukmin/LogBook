@@ -1,9 +1,10 @@
-"""해석 종류·구역 통제 어휘(08 — SharePoint 관리 용어·M-Files 값 목록에 해당).
+"""해석 종류·구역·대상 구조물 통제 어휘(08 — SharePoint 관리 용어·M-Files 값 목록에 해당).
 
 새 체계를 따로 만들지 않고 태그 동의어(tags.py)를 넓힌다.
 - 용어 = `listed=1` 인 대표 태그(alias_of 없음). 동의어 = 용어를 alias_of 로 가리키는 태그(한 단계).
 - 구역(zone) 은 기존처럼 entry_tags 로 Entry 와 잇는다. 해석 종류(atype) 태그는 사전 역할만 하고,
   Entry 의 값은 entries.analysis_type 문자열이 갖는다.
+- 38 — 대상 구조물(target) 은 구역처럼 entry_tags 로 잇되 자료당 하나(선택 칸)다. 태그로 잇는 종류 = TAG_KINDS.
 - 정규화(canon): 같은 값의 태그 → 그 대표 / 공백·대소문자만 다른 표기 → 용어 / 그 밖은 원래 값.
 - 못 맞춘 값은 지우거나 바꾸지 않는다 — '목록 밖 값'으로 남아 관리자가 합치거나 용어로 올린다."""
 import logging
@@ -17,15 +18,19 @@ from .storage.paths import StoragePaths
 
 log = logging.getLogger(__name__)
 
-KINDS = ("atype", "zone")
-FIELD = {"atype": "analysis_type", "zone": "zones"}   # Entry 이력(감사)의 칸 이름
+KINDS = ("atype", "zone", "target")
+TAG_KINDS = ("zone", "target")   # entry_tags 로 Entry 와 잇는 종류(atype 은 entries.analysis_type 문자열)
+FIELD = {"atype": "analysis_type", "zone": "zones", "target": "target"}   # Entry 이력(감사)의 칸 이름
 OTHER = "기타"
 LIVE = ("draft", "confirmed")
-MAX_LEN = {"atype": 50, "zone": 100}                  # entries.analysis_type = String(50)
+MAX_LEN = {"atype": 50, "zone": 100, "target": 100}                  # entries.analysis_type = String(50)
 
 DEFAULTS = {
     "atype": ["강도 평가", "FE 해석", "진동 해석", "피로 평가", "좌굴 평가", "권상 해석", "계류 해석", "운송 해석", OTHER],
     "zone": ["선수부", "선미부", "화물창", "기관실", "거주구", "상갑판", "이중저", OTHER],
+    # 38 — 대상 구조물(제목 네 번째 칸). 첫 목록은 자주 보는 의장·구조물 — 관리자가 '분류 목록'에서 고친다
+    "target": ["전선 모델", "블록", "계류 의장품", "크레인 받침", "래싱 브리지", "해치 커버", "레이더 마스트",
+               "연돌", "장비 받침", "권상 러그", "타", OTHER],
 }
 # 기본 동의어 — 이미 다른 용어 묶음에 든 값은 건드리지 않는다
 DEFAULT_SYNONYMS = {
@@ -48,7 +53,27 @@ DEFAULT_SYNONYMS = {
         "상갑판": ["Upper Deck"],
         "이중저": ["Double Bottom"],
     },
+    "target": {
+        "전선 모델": ["Global", "Global Model", "전선", "전체 모델"],
+        "블록": ["Block"],
+        "계류 의장품": ["Mooring Fitting", "Bollard", "Chock", "Fairlead"],
+        "크레인 받침": ["Crane Pedestal", "Pedestal"],
+        "래싱 브리지": ["Lashing Bridge"],
+        "해치 커버": ["Hatch Cover"],
+        "레이더 마스트": ["Radar Mast", "Mast"],
+        "연돌": ["Funnel"],
+        "장비 받침": ["Foundation", "Seating", "Seat"],
+        "권상 러그": ["Lifting Lug", "Lug"],
+        "타": ["Rudder"],
+    },
 }
+
+
+def field_value(kind: str, values: list[str]):
+    """감사 기록의 칸 값 — 대상(target)은 하나라 글자, 구역은 목록."""
+    if kind == "target":
+        return values[0] if values else None
+    return values
 
 
 def clean(value, kind: str | None = None) -> str:
@@ -269,7 +294,7 @@ def value_counts(db: Session, kind: str, user=None) -> Counter:
     rows = (db.query(models.Tag.value, models.EntryTag.entry_id)
             .join(models.EntryTag, models.EntryTag.tag_id == models.Tag.id)
             .join(E, E.id == models.EntryTag.entry_id)
-            .filter(models.Tag.kind == "zone", E.status.in_(LIVE), vis))
+            .filter(models.Tag.kind == kind, E.status.in_(LIVE), vis))
     return Counter(v for v, _e in rows)
 
 
@@ -339,7 +364,7 @@ def _plan(db: Session, kind: str, v: Vocab, only: models.Tag | None = None) -> l
     for eid, tag in (db.query(models.EntryTag.entry_id, models.Tag)
                      .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
                      .join(E, E.id == models.EntryTag.entry_id)
-                     .filter(models.Tag.kind == "zone", E.status.in_(LIVE))):
+                     .filter(models.Tag.kind == kind, E.status.in_(LIVE))):
         by_entry[eid].append(tag)
     for eid in sorted(by_entry):
         tags = sorted(by_entry[eid], key=lambda t: t.value)
@@ -365,12 +390,13 @@ def _apply(db: Session, storage: StoragePaths, actor: str, kind: str, plan: list
         if kind == "atype":
             e.analysis_type = after
         else:
-            service.set_tags(db, e, "zone", after)
+            service.set_tags(db, e, kind, after)
         e.version += 1
         db.flush()
         if e.status == "confirmed":
+            b, a = (before, after) if kind == "atype" else (field_value(kind, before), field_value(kind, after))
             audit.record(db, storage, actor=actor, action="ENTRY_UPDATE", target_type="entry", target_id=e.entry_id,
-                         before={FIELD[kind]: before}, after={FIELD[kind]: after}, ip=ip)
+                         before={FIELD[kind]: b}, after={FIELD[kind]: a}, ip=ip)
             service._write_meta_or_queue(db, storage, e)
         else:
             db.commit()
@@ -446,27 +472,29 @@ def update_term(db: Session, storage: StoragePaths, actor: str, term: models.Tag
         if kind == "atype":
             _apply(db, storage, actor, kind, _plan(db, kind, Vocab(db, kind), only=term), ip)
         else:
-            # 구역은 Entry 가 태그 행을 가리켜 화면 값은 이미 바뀌었다 — 이력과 entry.json 만 맞춘다
-            _touch_zone_entries(db, storage, actor, term, renamed_from, ip)
+            # 구역·대상은 Entry 가 태그 행을 가리켜 화면 값은 이미 바뀌었다 — 이력과 entry.json 만 맞춘다
+            _touch_tag_entries(db, storage, actor, term, renamed_from, ip)
     _write_registry(db, storage)
     return term
 
 
-def _touch_zone_entries(db: Session, storage: StoragePaths, actor: str, term: models.Tag, old: str,
-                        ip: str | None) -> None:
+def _touch_tag_entries(db: Session, storage: StoragePaths, actor: str, term: models.Tag, old: str,
+                       ip: str | None) -> None:
     from .entries import service
 
     E = models.Entry
     entries = (db.query(E).join(models.EntryTag, models.EntryTag.entry_id == E.id)
                .filter(models.EntryTag.tag_id == term.id, E.status.in_(LIVE)).order_by(E.id).all())
+    kind = term.kind
     for e in entries:
-        after = service.zones_of(db, e)
+        after = service.tags_of(db, e, kind)
         before = sorted({old if z == term.value else z for z in after})
         e.version += 1
         db.flush()
         if e.status == "confirmed":
             audit.record(db, storage, actor=actor, action="ENTRY_UPDATE", target_type="entry", target_id=e.entry_id,
-                         before={"zones": before}, after={"zones": after}, ip=ip)
+                         before={FIELD[kind]: field_value(kind, before)}, after={FIELD[kind]: field_value(kind, after)},
+                         ip=ip)
             service._write_meta_or_queue(db, storage, e)
         else:
             db.commit()

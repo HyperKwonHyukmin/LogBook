@@ -23,6 +23,7 @@ class EntryPatch(BaseModel):
     description: str | None = None
     hulls: list[str] | None = None
     zones: list[str] | None = None
+    target: str | None = Field(default=None, max_length=100)   # 38 — 대상 구조물(빈 값 = 지움)
     tags: list[str] | None = None
     merge_into_id: str | None = None
     access: str | None = Field(default=None, pattern="^(shared|normal|blocked)$")   # 15 — 초안에서만
@@ -54,6 +55,12 @@ class MergeBody(BaseModel):
 
 class MoveBody(BaseModel):
     to_entry_id: str
+
+
+class FilesBody(BaseModel):
+    """37 — 확정 자료에서 파일 빼기·되돌리기."""
+    file_ids: list[int] = Field(min_length=1, max_length=500)
+    version: int | None = None
 
 
 def _entry(db: Session, entry_id: str, user: models.User) -> models.Entry:
@@ -150,6 +157,23 @@ def move_file(file_id: int, body: MoveBody, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="file_not_found")
     service.move_file(db, f, _entry(db, body.to_entry_id, user), user)
     return {"ok": True}
+
+
+@router.post("/entries/{entry_id}/files/remove")
+def remove_files(entry_id: str, body: FilesBody, request: Request, db: Session = Depends(get_db),
+                 storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    """37 — 확정 자료에서 파일을 뺀다(휴지통 폴더로, 되돌릴 수 있다). 올린 사람·LV3. 감사 ENTRY_FILES_REMOVED."""
+    e = service.remove_files(db, storage, _entry(db, entry_id, user), user, body.file_ids, body.version,
+                             client_ip(request))
+    return _detail(db, storage, e, user)
+
+
+@router.post("/entries/{entry_id}/files/restore")
+def restore_files(entry_id: str, body: FilesBody, request: Request, db: Session = Depends(get_db),
+                  storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    """37 — 뺀 파일 되돌리기. 감사 ENTRY_FILES_RESTORED."""
+    e = service.restore_files(db, storage, _entry(db, entry_id, user), user, body.file_ids, client_ip(request))
+    return _detail(db, storage, e, user)
 
 
 @router.delete("/entries/{entry_id}")

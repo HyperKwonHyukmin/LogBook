@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom';
-import { Check, ChevronDown, ChevronRight, Copy, FileQuestion, Folder, Link2, Lock, MoreHorizontal, Pencil, RefreshCw, Trash2, Upload } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Copy, FileQuestion, Folder, Link2, Lock, MoreHorizontal, Pencil, RefreshCw, Trash2, Undo2, Upload } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import FilePreview from '../components/preview/FilePreview.jsx';
@@ -35,17 +35,20 @@ import { canWriteLevel } from '../lib/levels.js';
 import RevisionSection from '../components/revisions/RevisionSection.jsx';
 import HullPlmLookup, { HullPlmSummary } from '../components/hull/HullPlmLookup.jsx';
 import NeedsFixBadge from '../components/ui/NeedsFixBadge.jsx';
+import ModelTraits from '../components/preview/ModelTraits.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
 // 21 — 프로젝트(있을 때만 기록). 29 — 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
 const FIELD_LABELS = { title: '제목', analysis_type: '해석 종류', description: '설명',
-  hulls: '호선', no_hull: '호선 없음(공용)', project: '프로젝트', zones: '구역', tags: '태그' };
+  hulls: '호선', no_hull: '호선 없음(공용)', project: '프로젝트', zones: '구역', target: '대상', tags: '태그' };
 // 감사 기록에서 '참/값일 때만' 실리는 칸 — before 에만 있으면 지운 것이다
-const OPTIONAL_KEYS = new Set(['no_hull', 'project']);
+const OPTIONAL_KEYS = new Set(['no_hull', 'project', 'target']);
 const hullRule = (v) => /^\d{4}$/.test(v) || '호선은 숫자 4자리입니다.';
 const show = (v) => (v === true ? '예' : (Array.isArray(v) ? v.join(', ') : v) || '(없음)');
 const HISTORY_FILES_SHOWN = 5;
 const HISTORY_SHOWN = 5;
+// 이력에 파일 이름을 늘어놓는 동작(37 — 파일 삭제·되돌리기)
+const FILE_ACTIONS = new Set(['ENTRY_FILES_ADDED', 'ENTRY_FILES_REMOVED', 'ENTRY_FILES_RESTORED']);
 
 /** 감사 기록의 before/after → "제목: a → b" 줄들. */
 function changes(before, after) {
@@ -59,7 +62,7 @@ function changes(before, after) {
 /** 이력 한 줄의 자세한 내용 — 파일 추가는 파일 이름, 확정은 파일 수, 수정은 바뀐 칸. */
 function detailLines(r) {
   const files = r.after?.files;
-  if (r.action === 'ENTRY_FILES_ADDED' && Array.isArray(files)) {
+  if (FILE_ACTIONS.has(r.action) && Array.isArray(files)) {
     const more = files.length - HISTORY_FILES_SHOWN;
     return [files.slice(0, HISTORY_FILES_SHOWN).join(', ') + (more > 0 ? ` 외 ${more}개` : '')];
   }
@@ -118,11 +121,29 @@ const activate = (fn) => (e) => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); }
 };
 
+/** 37 — 고치는 중 파일 한 줄의 [삭제]/[삭제 취소]. 저장은 [변경 완료] 때 한 번에. */
+function RemoveToggle({ file, marked, disabled, onToggle }) {
+  const label = marked ? `${file.name} 삭제 취소` : `${file.name} 삭제`;
+  return (
+    <button type="button" aria-label={label} aria-pressed={marked} disabled={disabled}
+            title={disabled ? '파일을 모두 뺄 수는 없습니다' : marked ? '삭제 취소' : '이 파일 삭제(변경 완료 때 반영)'}
+            onClick={(e) => { e.stopPropagation(); onToggle(file.id); }}
+            onKeyDown={(e) => e.stopPropagation()}
+            className={`inline-flex h-6 shrink-0 items-center gap-1 rounded-sm border px-1.5 text-micro font-medium
+              transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40
+              ${marked ? 'border-n-300 bg-n-0 text-n-700 hover:bg-n-100' : 'border-err-line bg-err-bg text-err hover:bg-n-0'}`}>
+      {marked ? <Undo2 size={12} aria-hidden="true" /> : <Trash2 size={12} aria-hidden="true" />}
+      {marked ? '취소' : '삭제'}
+    </button>
+  );
+}
+
 /**
  * 파일 트리 한 층. 재귀 컴포넌트라 층마다 접힘 상태가 따로 있다(의도된 동작).
  * 로빙 tabindex — 고른 파일만 0, 나머지는 -1 이라 Tab 한 번으로 트리에 들어온다.
+ * removal(37) — 고치는 중일 때만 { marked: Set, toggle, lastLeft } — 파일마다 삭제 표시 단추가 붙는다.
  */
-function TreeNodes({ nodes, selectedId, onPick, entryId, depth = 0 }) {
+function TreeNodes({ nodes, selectedId, onPick, entryId, removal = null, depth = 0 }) {
   const [closed, setClosed] = useState({});
   const toggle = (path) => setClosed((c) => ({ ...c, [path]: !c[path] }));
   return nodes.map((n) => (n.file ? (
@@ -134,7 +155,9 @@ function TreeNodes({ nodes, selectedId, onPick, entryId, depth = 0 }) {
           focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-ring
           ${n.file.id === selectedId ? 'bg-brand-subtle text-brand' : 'text-n-800 hover:bg-n-100 active:bg-n-150'}`}>
       <KindBadge kind={n.file.kind} name={n.name} />
-      <span className={`min-w-0 flex-1 truncate ${n.file.id === selectedId ? 'font-medium' : ''}`} title={n.file.rel_path}>{n.name}</span>
+      <span className={`min-w-0 flex-1 truncate ${n.file.id === selectedId ? 'font-medium' : ''}
+        ${removal?.marked.has(n.file.id) ? 'text-n-500 line-through decoration-err/60' : ''}`} title={n.file.rel_path}>{n.name}</span>
+      {removal?.marked.has(n.file.id) && <span className="shrink-0 text-micro font-medium text-err">삭제 예정</span>}
       {sameInfo(n.file.model)?.sameTotal > 0 && (
         <span title="동일 BDF 가 이미 있음" className="inline-flex shrink-0 items-center gap-0.5 rounded-xs bg-wait-bg px-1 text-micro font-medium text-wait">
           <Copy size={10} aria-hidden="true" />동일
@@ -143,6 +166,8 @@ function TreeNodes({ nodes, selectedId, onPick, entryId, depth = 0 }) {
       <span className="shrink-0 font-mono text-meta text-n-500">{formatBytes(n.file.size)}</span>
       {/* 18 — WorkBench 가 연 창에서만 보인다 */}
       <SendToWorkbenchButton file={n.file} entryId={entryId} compact stop />
+      {removal && <RemoveToggle file={n.file} marked={removal.marked.has(n.file.id)} onToggle={removal.toggle}
+                                disabled={!removal.marked.has(n.file.id) && removal.lastLeft} />}
     </li>
   ) : (
     <li key={n.path} role="treeitem" aria-expanded={!closed[n.path]} aria-label={n.name} tabIndex={-1}
@@ -153,7 +178,7 @@ function TreeNodes({ nodes, selectedId, onPick, entryId, depth = 0 }) {
         {closed[n.path] ? <ChevronRight size={14} className="text-n-400" aria-hidden="true" /> : <ChevronDown size={14} className="text-n-400" aria-hidden="true" />}
         <Folder size={14} className="text-n-400" aria-hidden="true" />{n.name}
       </div>
-      {!closed[n.path] && <ul role="group"><TreeNodes nodes={n.children} selectedId={selectedId} onPick={onPick} entryId={entryId} depth={depth + 1} /></ul>}
+      {!closed[n.path] && <ul role="group"><TreeNodes nodes={n.children} selectedId={selectedId} onPick={onPick} entryId={entryId} removal={removal} depth={depth + 1} /></ul>}
     </li>
   )));
 }
@@ -260,6 +285,55 @@ function AddFilesStatus({ watch }) {
   return <p role="alert" className="mt-2 text-meta text-err">{message}</p>;
 }
 
+/**
+ * 37 — 자료 번호(E000051) 배지 + 바로 복사. 다른 사람에게 번호만 붙여 넣어 알려 주기 쉽게 머리에서 가장 먼저 보인다.
+ * 복사하면 아이콘이 잠깐 체크로 바뀐다(토스트는 부르는 쪽).
+ */
+function EntryIdBadge({ entryId, onCopy }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return undefined;
+    const t = setTimeout(() => setCopied(false), 1600);
+    return () => clearTimeout(t);
+  }, [copied]);
+  async function click() {
+    if (await onCopy(entryId)) setCopied(true);
+  }
+  return (
+    <span className="inline-flex h-7 items-center rounded-md border border-brand-muted bg-brand-subtle pl-2.5 pr-0.5 text-brand">
+      <span className="select-all font-mono text-[15px] font-semibold leading-none tracking-[0.04em]" data-testid="entry-id">{entryId}</span>
+      <button type="button" onClick={click} aria-label={`자료 번호 ${entryId} 복사`} title="번호 복사"
+              className="ml-1.5 inline-flex h-6 items-center gap-1 rounded-sm px-1.5 text-micro font-medium text-brand
+                         transition-colors duration-150 hover:bg-brand-muted active:bg-brand-muted">
+        {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
+        {copied ? '복사됨' : '복사'}
+      </button>
+    </span>
+  );
+}
+
+/** 37 — 이 자료에서 뺀 파일(고칠 수 있는 사람에게만 서버가 싣는다). 하나씩 바로 되돌린다. */
+function RemovedFiles({ files, busy, onRestore }) {
+  if (!files?.length) return null;
+  return (
+    <details className="mt-3 rounded-md border border-n-200 px-3 py-2 text-meta text-n-600">
+      <summary className="cursor-pointer select-none">뺀 파일 <span className="font-mono">{files.length}</span></summary>
+      <ul aria-label="뺀 파일" className="mt-2 flex flex-col gap-1">
+        {files.map((f) => (
+          <li key={f.id} className="flex min-w-0 items-center gap-2">
+            <KindBadge kind={f.kind} name={f.name} />
+            <span className="min-w-0 flex-1 truncate text-n-700" title={f.rel_path}>{f.name}</span>
+            <span className="shrink-0 font-mono text-n-500">{formatBytes(f.size)}</span>
+            <Button variant="ghost" size="sm" onClick={() => onRestore([f.id])} disabled={busy}>
+              <Undo2 size={14} aria-hidden="true" />되돌리기
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 /** 고친 칸 표시 — 작은 남색 점(색만으로 알리지 않게 화면 읽기용 글자를 함께 둔다). */
 function ChangedMark() {
   return (
@@ -283,7 +357,7 @@ function Prop({ label, changed = false, error, children }) {
   );
 }
 
-const FIELD_ORDER = ['title', 'description', 'hulls', 'no_hull', 'zones', 'analysis_type', 'tags'];
+const FIELD_ORDER = ['title', 'description', 'hulls', 'no_hull', 'zones', 'analysis_type', 'target', 'tags'];
 
 /** Entry 상세(설계 §6.1 `/e/{entryId}`) — 머리, 파일·미리보기, 속성 레일과 변경 이력. */
 export default function EntryPage() {
@@ -313,11 +387,13 @@ export default function EntryPage() {
   const [editVersion, setEditVersion] = useState(0);
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState(false); // 다른 사람이 먼저 고쳐 저장하지 못했다
+  const [removing, setRemoving] = useState(() => new Set()); // 37 — [변경 완료] 때 뺄 파일 id
+  const [restoring, setRestoring] = useState(false);
   const baseEntryRef = useRef(null);
   const titleRef = useRef(null);
 
   function stopEditing() {
-    setEditing(false); setBase(null); setDraft(null); setConflict(false); setSaving(false);
+    setEditing(false); setBase(null); setDraft(null); setConflict(false); setSaving(false); setRemoving(new Set());
   }
 
   useEffect(() => {
@@ -337,7 +413,9 @@ export default function EntryPage() {
   useEffect(() => { if (editing) titleRef.current?.focus(); }, [editing]);
 
   const changed = editing && draft ? changedFields(base, draft) : [];
-  const dirty = changed.length > 0;
+  // 37 — 고치는 동안 다시 불러온 목록에 없는 파일(다른 경로로 이미 빠짐)은 셈에서 뺀다
+  const removeIds = editing && entry ? entry.files.filter((f) => removing.has(f.id)).map((f) => f.id) : [];
+  const dirty = changed.length > 0 || removeIds.length > 0;
   const errors = editing && draft ? editErrors(draft) : {};
   const invalid = Object.keys(errors).length > 0;
   useUnsavedGuard(editing && dirty, confirm);
@@ -402,21 +480,65 @@ export default function EntryPage() {
   async function finish() {
     if (!editing || !dirty || invalid || saving) return;
     setSaving(true); setError('');
+    let version = editVersion;
     try {
-      await commit(patchBody(base, draft), editVersion);
-      stopEditing();
-      toast.show({ message: '변경을 저장했습니다.' });
+      if (changed.length) version = (await commit(patchBody(base, draft), editVersion)).version;
     } catch (err) {
       setSaving(false);
       if (err?.detail === 'version_conflict') setConflict(true);
       else setError(errorText(err, '저장하지 못했습니다.'));
+      return;
     }
+    // 37 — 칸 저장 뒤 파일 빼기(칸 저장이 돌려준 version 을 이어 받는다)
+    const ids = removeIds;
+    if (ids.length) {
+      try {
+        await api(`/entries/${encodeURIComponent(entry.entry_id)}/files/remove`, { method: 'POST', body: { file_ids: ids, version } });
+      } catch (err) {
+        if (!changed.length && err?.detail === 'version_conflict') { setSaving(false); setConflict(true); return; }
+        await reload().catch(() => {});
+        stopEditing();
+        setError(errorText(err, '파일을 삭제하지 못했습니다.') + (changed.length ? ' (정보 변경은 저장했습니다)' : ''));
+        return;
+      }
+      await reload().catch(() => {});
+    }
+    stopEditing();
+    if (ids.length) {
+      if (ids.includes(picked)) setPicked(null);
+      toast.show({
+        message: `변경을 저장했습니다. 파일 ${ids.length}개를 삭제했습니다.`,
+        action: { label: '되돌리기', onClick: () => restoreFiles(ids) },
+      });
+    } else toast.show({ message: '변경을 저장했습니다.' });
+  }
+  /** 37 — 뺀 파일 되돌리기(토스트·'뺀 파일' 목록). 원래 자리로, 이름이 겹치면 'name (2)'. */
+  async function restoreFiles(ids) {
+    setRestoring(true);
+    try {
+      await api(`/entries/${encodeURIComponent(entry.entry_id)}/files/restore`, { method: 'POST', body: { file_ids: ids } });
+      await reload().catch(() => {});
+      toast.show({ message: `파일 ${ids.length}개를 되돌렸습니다.` });
+    } catch (err) {
+      toast.show({ tone: 'err', message: errorText(err, '되돌리지 못했습니다.') });
+    } finally {
+      setRestoring(false);
+    }
+  }
+  function toggleRemove(id) {
+    setRemoving((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   }
   /** [취소] — 고친 것이 있으면 버릴지 묻는다. */
   async function cancel() {
     if (saving) return;
     if (dirty) {
-      const ok = await confirm({ title: '고친 내용을 버릴까요?', body: `저장하지 않은 변경 ${changed.length}칸이 사라집니다.`,
+      const ok = await confirm({ title: '고친 내용을 버릴까요?', body: removeIds.length
+        ? `저장하지 않은 변경${changed.length ? ` ${changed.length}칸과` : ''} 파일 삭제 ${removeIds.length}개가 취소됩니다.`
+        : `저장하지 않은 변경 ${changed.length}칸이 사라집니다.`,
                                  confirmLabel: '버리기', cancelLabel: '계속 고치기' });
       if (!ok) return;
     }
@@ -466,14 +588,18 @@ export default function EntryPage() {
   async function copy(text, what) {
     const ok = await copyText(text);
     toast.show(ok ? { message: `${what}를 복사했습니다.` } : { tone: 'err', message: '복사하지 못했습니다.' });
+    return ok;
   }
+  const copyId = (id) => copy(id, `자료 번호 ${id}`);
 
   const menuItems = [
+    { label: '번호 복사', icon: Copy, onSelect: () => copyId(entry.entry_id) },
     { label: '링크 복사', icon: Link2, onSelect: () => copy(window.location.href, '링크') },
     ...(entry.vault_unc ? [{ label: '폴더 경로 복사', icon: Copy, onSelect: () => copy(entry.vault_unc, '폴더 경로') }] : []),
     ...(editable && !editing ? [{ divider: true }, { label: '휴지통으로 보내기', icon: Trash2, tone: 'danger', onSelect: onTrash }] : []),
   ];
-  const changedLabels = FIELD_ORDER.filter((k) => changed.includes(k)).map((k) => FIELD_LABELS[k]);
+  const changedLabels = [...FIELD_ORDER.filter((k) => changed.includes(k)).map((k) => FIELD_LABELS[k]),
+    ...(removeIds.length ? [`파일 삭제 ${removeIds.length}개`] : [])];
 
   return (
     <Page>
@@ -483,7 +609,7 @@ export default function EntryPage() {
         <div role="region" aria-label="고치기" className="sticky top-0 z-20 -mx-6 -mt-6 mb-4 flex min-h-12 flex-wrap items-center gap-x-3 gap-y-1 border-b border-n-200 bg-n-0 px-6 py-2 min-[1441px]:-mx-8 min-[1441px]:px-8">
           <span className="flex items-center gap-1.5 text-ui font-semibold text-n-900"><Pencil size={14} aria-hidden="true" className="text-n-500" />고치는 중</span>
           <span role="status" className="min-w-0 truncate text-meta text-n-600">
-            {dirty ? <>바뀐 칸 <span className="font-mono">{changed.length}</span> · {changedLabels.join(', ')}</> : '바뀐 칸이 없습니다'}
+            {dirty ? <>바뀐 칸 <span className="font-mono">{changedLabels.length}</span> · {changedLabels.join(', ')}</> : '바뀐 칸이 없습니다'}
           </span>
           <span className="ml-auto hidden whitespace-nowrap text-meta text-n-500 lg:inline">
             <kbd className="rounded-sm bg-n-50 px-1 font-mono text-micro text-n-600">Ctrl+Enter</kbd> 완료 ·
@@ -498,7 +624,7 @@ export default function EntryPage() {
       )}
       <header className="border-b border-n-200 pb-5">
         <div className="flex h-7 items-center gap-3">
-          <span className="font-mono text-meta text-n-500">{entry.entry_id}</span>
+          <EntryIdBadge entryId={entry.entry_id} onCopy={copyId} />
           <StatusDot status={entry.status} />
           {/* 13 — 비공개 자료(볼 수 있는 사람에게만 보인다) */}
           <AccessBadge item={entry} />
@@ -512,7 +638,7 @@ export default function EntryPage() {
           )}
           {editable && !editing && (
             <Button variant="secondary" size="sm" onClick={startEdit} disabled={revEditing}
-                    title={revEditing ? '판 정리를 먼저 끝내 주세요' : '제목·설명·속성을 고칩니다'}>
+                    title={revEditing ? '판 정리를 먼저 끝내 주세요' : '제목·설명·속성·파일을 고칩니다'}>
               <Pencil size={14} aria-hidden="true" />변경하기
             </Button>
           )}
@@ -543,6 +669,8 @@ export default function EntryPage() {
         ) : (
           <>
             <h1 className="mt-1 text-entry font-semibold tracking-[-0.02em] text-n-900">{entry.title}</h1>
+            {/* 38 — 모델 특성 줄(대표 BDF 기준, 저장하지 않고 그때그때 만든다) */}
+            <ModelTraits entry={entry} />
             <p className={`mt-1 whitespace-pre-wrap text-body ${entry.description ? 'text-n-700' : 'text-n-500'}`}>
               {entry.description || '설명 없음'}
             </p>
@@ -572,6 +700,7 @@ export default function EntryPage() {
           )}
           <div className="mb-2 flex h-7 items-center gap-2">
             <SectionTitle>파일 <span className="font-mono font-normal text-n-500">{entry.files.length}</span></SectionTitle>
+            {editing && <span className="text-meta text-n-500">지울 파일은 줄 오른쪽 [삭제] — 변경 완료 때 반영</span>}
             {editable && (
               <Button variant="ghost" size="sm" onClick={() => setAdding(!adding)} aria-expanded={adding} className="ml-auto">
                 <Upload size={14} aria-hidden="true" />파일 추가
@@ -590,8 +719,10 @@ export default function EntryPage() {
             </div>
           )}
           <ul role="tree" aria-label="파일" onKeyDown={onTreeKeyDown} className="flex flex-col gap-px">
-            <TreeNodes nodes={buildTree(entry.files)} selectedId={file?.id} onPick={setPicked} entryId={entry.entry_id} />
+            <TreeNodes nodes={buildTree(entry.files)} selectedId={file?.id} onPick={setPicked} entryId={entry.entry_id}
+                       removal={editing ? { marked: removing, toggle: toggleRemove, lastLeft: entry.files.length - removeIds.length <= 1 } : null} />
           </ul>
+          {editable && <RemovedFiles files={entry.removed_files} busy={restoring || editing} onRestore={restoreFiles} />}
           <div className="mt-4">
             {file && <SameModelNotice model={file.model} />}
             {file ? <FilePreview key={file.id} file={file} vaultUnc={entry.vault_unc} trashed={trashed} hideTitles={[entry.title]}
@@ -622,6 +753,9 @@ export default function EntryPage() {
               <Prop label="해석 종류" changed={isChanged('analysis_type')}>
                 <VocabInput kind="atype" label="해석 종류" value={draft.analysis_type || null} onChange={(v) => set('analysis_type')(v || '')} />
               </Prop>
+              <Prop label="대상" changed={isChanged('target')}>
+                <VocabInput kind="target" label="대상" value={draft.target || null} onChange={(v) => set('target')(v || '')} />
+              </Prop>
               <Prop label="태그" changed={isChanged('tags')}>
                 <ChipInput label="태그" kind="tag" values={draft.tags} onChange={set('tags')} />
               </Prop>
@@ -646,6 +780,9 @@ export default function EntryPage() {
               <Prop label="해석 종류">
                 <VocabInput compact disabled kind="atype" label="해석 종류" value={entry.analysis_type} onChange={() => {}}
                             valueHref={(v) => filterHref('analysis_type', v)} />
+              </Prop>
+              <Prop label="대상">
+                {entry.target ? <FilterLink field="target" value={entry.target} /> : <span className="text-n-500">—</span>}
               </Prop>
               <Prop label="태그">
                 {entry.tags.length ? <span className="flex flex-wrap gap-1">{entry.tags.map((t) => <TagLink key={t} tag={t} />)}</span>

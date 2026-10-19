@@ -53,6 +53,7 @@ export default function EntryPreviewPanel({ entryId, fileId, onClose, width, pan
             {entry.hulls.map((h) => <HullChip key={h.hull_no} hull={h.hull_no} title={h.ship_type || undefined} />)}
             {entry.zones?.map((z) => <FilterLink key={z} field="zone" value={z} />)}
             {entry.analysis_type && <FilterLink field="analysis_type" value={entry.analysis_type} />}
+            {entry.target && <FilterLink field="target" value={entry.target} />}
             <StatusDot status={entry.status} />
             <AccessBadge item={entry} />
             <span className="font-mono text-n-500">{entry.entry_id}</span>

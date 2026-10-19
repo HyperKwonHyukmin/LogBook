@@ -13,10 +13,10 @@ import { FACET_LABELS, errorText } from '../lib/labels.js';
 import { writeSearch } from '../lib/search.js';
 
 /** 분류 화면의 속성 순서(09) — 검색 필터 차원 전부. */
-export const BROWSE_KEYS = ['zone', 'analysis_type', 'hull', 'ship_type', 'tag', 'kind', 'uploaded_by'];
+export const BROWSE_KEYS = ['zone', 'analysis_type', 'target', 'hull', 'ship_type', 'tag', 'kind', 'uploaded_by'];
 const DEFAULT_KEY = 'zone';
 const SORTS = [{ id: 'count', label: '건수순' }, { id: 'name', label: '이름순' }];
-const VOCAB_KEYS = new Set(['zone', 'analysis_type']);
+const VOCAB_KEYS = new Set(['zone', 'analysis_type', 'target']);
 const COLS = 'grid grid-cols-[minmax(0,1fr)_minmax(80px,200px)_56px] items-center gap-4';
 
 /** 값 하나로 거른 검색 주소 — '미확정 포함'으로 셌으면 검색도 같은 조건으로 연다. */

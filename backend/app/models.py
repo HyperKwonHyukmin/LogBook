@@ -247,6 +247,11 @@ class File(Base):
     drm_encrypted = Column(Boolean, nullable=False, default=False)
     location = Column(String(8), nullable=False, default="staging")  # staging|vault|trash
     created_at = Column(DateTime, nullable=False, default=_now)
+    # 37 — 확정 자료에서 파일 하나만 뺀 것(파일 삭제). entry_id 를 비우고 원래 자료 pk 를 남긴다 — entry_id 로
+    # 파일을 고르는 모든 경로(검색·판·문서·관계 지도)에서 저절로 빠진다. 실제 파일은 95_Trash/<trash_rel>/<rel_path>
+    # FK 는 걸지 않는다 — 원래 자료가 영구 삭제(ops/purge)돼도 이 행을 막지 않게
+    removed_from_id = Column(Integer, nullable=True, index=True)
+    trash_rel = Column(String(80), nullable=True)   # "E000051_files_20261019-101500"
 
 
 class Job(Base):

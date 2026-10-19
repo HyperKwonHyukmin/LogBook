@@ -35,10 +35,11 @@ def test_seed_defaults_once(db, storage):
     assert v.canon("fe해석") == "FE 해석"
     assert v.canon("모르는 값") == "모르는 값"
     assert v.is_listed("기타") and not v.is_listed("모르는 값")
-    assert db.query(models.AuditLog).filter_by(action="VOCAB_SEED").count() == 2
+    assert "계류 의장품" in added["target"]          # 38 — 대상 구조물
+    assert db.query(models.AuditLog).filter_by(action="VOCAB_SEED").count() == 3
     # 이미 용어가 있으면 다시 넣지 않는다
     assert vocab.seed(db, storage) == {}
-    assert db.query(models.AuditLog).filter_by(action="VOCAB_SEED").count() == 2
+    assert db.query(models.AuditLog).filter_by(action="VOCAB_SEED").count() == 3
 
 
 def test_seed_keeps_existing_groups_together(db, storage):

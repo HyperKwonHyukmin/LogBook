@@ -1,5 +1,5 @@
 import { Check, FileText, X } from 'lucide-react';
-import { familySegments, familyText, formatSize, num, reportText } from '../../lib/insight.js';
+import { STRUCTURES, familySegments, familyText, formatSize, num, reportText, structureOf } from '../../lib/insight.js';
 import { solveBadge } from '../../lib/solveCheck.js';
 
 const TONE_TEXT = { ok: 'text-ok', err: 'text-err', wait: 'text-wait', busy: 'text-n-600', none: 'text-n-500' };
@@ -44,8 +44,11 @@ export function ModelLine({ model }) {
     <SolveMark key="solve" solve={model.solve} />,
     model.groups != null && <span key="groups" title="해석 검증이 센 연결 그룹 수">그룹 <span className="font-mono">{num(model.groups)}</span></span>,
   ].filter(Boolean);
+  const structure = structureOf(model.families);
   return (
     <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-meta text-n-600">
+      {/* 38 — 모델 구성(빔·판·판+보강재) — 자료 상세의 특성 줄과 같은 규칙 */}
+      {structure && <span className="font-medium text-n-800">{STRUCTURES[structure]}</span>}
       <span className="tnum">요소 <span className="font-mono text-n-800">{num(model.elements)}</span></span>
       <FamilyBar families={model.families} />
       <span className="tnum">노드 <span className="font-mono text-n-800">{num(model.nodes)}</span></span>

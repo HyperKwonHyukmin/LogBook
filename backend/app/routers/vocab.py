@@ -1,4 +1,4 @@
-"""분류 목록 API(08) — 해석 종류·구역 통제 어휘. 목록 읽기는 누구나, 바꾸기는 관리자만(모두 기록)."""
+"""분류 목록 API(08) — 해석 종류·구역·대상 구조물(38) 통제 어휘. 목록 읽기는 누구나, 바꾸기는 관리자만(모두 기록)."""
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -9,11 +9,11 @@ from ..dependencies import client_ip, get_storage, require_admin, require_auth
 from ..storage.paths import StoragePaths
 
 router = APIRouter(prefix="/api/vocab", tags=["vocab"])
-KIND = Query(pattern="^(atype|zone)$")
+KIND = Query(pattern="^(atype|zone|target)$")
 
 
 class TermBody(BaseModel):
-    kind: str = Field(pattern="^(atype|zone)$")
+    kind: str = Field(pattern="^(atype|zone|target)$")
     value: str = Field(min_length=1, max_length=100)
 
 
@@ -23,7 +23,7 @@ class TermPatch(BaseModel):
 
 
 class OrderBody(BaseModel):
-    kind: str = Field(pattern="^(atype|zone)$")
+    kind: str = Field(pattern="^(atype|zone|target)$")
     ids: list[int]
 
 

@@ -72,17 +72,19 @@ class TitleContext:
         return naming.source_from_files([r for r, _k in rows])
 
     def draft(self, entry: models.Entry, *, hulls=None, no_hull=None, zones=None, analysis_type=None,
-              source: str | None = None) -> str:
+              target=None, source: str | None = None) -> str:
         """제목 초안 — 값을 안 주면 지금 저장된 값으로."""
-        from .service import hulls_of, zones_of
+        from .service import hulls_of, target_of, zones_of
 
         hulls = [h.hull_no for h in hulls_of(self.db, entry)] if hulls is None else list(hulls)
         zones = zones_of(self.db, entry) if zones is None else list(zones)
         atype = entry.analysis_type if analysis_type is None else analysis_type
         no_hull = bool(entry.no_hull) if no_hull is None else bool(no_hull)
         source = self.source_of(entry) if source is None else source
-        phrases = self.phrases("zone", zones) + self.phrases("atype", [atype] if atype else [])
-        return naming.title_draft(source, hulls=hulls, no_hull=no_hull, zones=zones, analysis_type=atype,
+        target = target_of(self.db, entry) if target is None else (target or None)
+        phrases = (self.phrases("zone", zones) + self.phrases("atype", [atype] if atype else [])
+                   + self.phrases("target", [target] if target else []))
+        return naming.title_draft(source, hulls=hulls, no_hull=no_hull, zones=zones, analysis_type=atype, target=target,
                                   phrases=phrases)
 
     def is_auto(self, entry: models.Entry) -> bool:

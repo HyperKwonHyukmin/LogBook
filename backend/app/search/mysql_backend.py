@@ -116,7 +116,8 @@ _MATCH = "MATCH(file_texts.text) AGAINST (:p IN BOOLEAN MODE)"
 
 def _vocabs(db: Session) -> dict:
     """요청 하나 동안 쓰는 값 정규화 스냅숏 — 해석 종류·구역(통제 어휘)·자유 태그."""
-    return {"atype": Vocab(db, "atype"), "zone": Vocab(db, "zone"), "free": _FreeTags(db)}
+    return {"atype": Vocab(db, "atype"), "zone": Vocab(db, "zone"), "target": Vocab(db, "target"),
+            "free": _FreeTags(db)}
 
 
 class _Hits:
@@ -250,7 +251,7 @@ class MySqlSearch:
             for r in rows.values():
                 c.update(self._values(r, key))
             out[key] = [{"value": v, "count": n} for v, n in c.items()]
-        for key, kind in (("zone", "zone"), ("analysis_type", "atype")):
+        for key, kind in (("zone", "zone"), ("target", "target"), ("analysis_type", "atype")):
             v = vocab[kind]
             seen = {f["value"] for f in out[key]}
             out[key] += [{"value": t.value, "count": 0} for t in v.terms
@@ -329,8 +330,8 @@ class MySqlSearch:
     def _canon_filter(vocab: dict, key: str, value: str) -> str:
         if key == "analysis_type":
             return vocab["atype"].canon(value) or value
-        if key == "zone":
-            return vocab["zone"].canon(value) or value
+        if key in ("zone", "target"):
+            return vocab[key].canon(value) or value
         if key == "tag":
             return vocab["free"].canon(value) or value
         return value
@@ -428,12 +429,12 @@ class MySqlSearch:
         - 선종: 호선 정보의 선종(LIKE) — 그 선종 호선을 가진 Entry.
         - 올린 사람: 이름·사번이 낱말과 정확히 같을 때만(한 글자 성으로 너무 많이 맞지 않게)."""
         E = models.Entry
-        for kind, where in (("zone", "zone"), ("atype", "analysis_type")):
+        for kind, where in (("zone", "zone"), ("target", "target"), ("atype", "analysis_type")):
             t = vocab[kind].target(term)
             if t is None:
                 continue
             values = [t.value] + [s.value for s in vocab[kind].synonyms(t)]
-            if kind == "zone":
+            if kind in ("zone", "target"):
                 # 묶인 동의어뿐 아니라 아직 묶이지 않은 표기 변형('선미 부')도 — 필터·건수와 같은 canon 기준
                 ids = [x.id for x in vocab[kind].by_id.values() if vocab[kind].canon(x.value) == t.value]
                 for (eid,) in (db.query(models.EntryTag.entry_id).join(E, E.id == models.EntryTag.entry_id)
@@ -466,7 +467,7 @@ class MySqlSearch:
         id_list = list(ids)
         atype = vocab["atype"]
         for e in db.query(models.Entry).filter(models.Entry.id.in_(id_list)):
-            rows[e.id] = {"id": e.id, "entry": e, "hulls": [], "ship_types": set(), "zones": set(), "tags": set(),
+            rows[e.id] = {"id": e.id, "entry": e, "hulls": [], "ship_types": set(), "zones": set(), "targets": set(), "tags": set(),
                           "kinds": set(), "kind_counts": Counter(), "file_count": 0,
                           "analysis_type": atype.canon(e.analysis_type), "uploaded_by": e.uploaded_by,
                           "no_hull": bool(e.no_hull),
@@ -481,11 +482,13 @@ class MySqlSearch:
                 rows[eid]["ship_types"].add(ship)
         tag_rows = (db.query(models.EntryTag.entry_id, models.Tag.kind, models.Tag.value)
                     .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
-                    .filter(models.EntryTag.entry_id.in_(id_list), models.Tag.kind.in_(("zone", "free")))
+                    .filter(models.EntryTag.entry_id.in_(id_list), models.Tag.kind.in_(("zone", "target", "free")))
                     .order_by(models.Tag.value))
         for eid, kind, value in tag_rows:
             if kind == "zone":
                 rows[eid]["zones"].add(vocab["zone"].canon(value))
+            elif kind == "target":
+                rows[eid]["targets"].add(vocab["target"].canon(value))
             else:
                 rows[eid]["tags"].add(vocab["free"].canon(value))
         # 파일 행을 다 읽지 않고 (Entry, 종류) 별 개수만 센다
@@ -512,6 +515,8 @@ class MySqlSearch:
             return sorted(r["ship_types"])
         if key == "zone":
             return sorted(r["zones"])
+        if key == "target":
+            return sorted(r["targets"])
         if key == "kind":
             return sorted(r["kinds"])
         if key == "tag":
@@ -558,7 +563,7 @@ class MySqlSearch:
                 if ships.get(f["value"]):
                     f["label"] = ships[f["value"]]
         if vocab is not None:
-            for key, kind in (("zone", "zone"), ("analysis_type", "atype")):
+            for key, kind in (("zone", "zone"), ("target", "target"), ("analysis_type", "atype")):
                 for f in out[key]:
                     t = vocab[kind].term(f["value"])
                     aliases = [x.value for x in vocab[kind].synonyms(t)] if t is not None else []
@@ -641,7 +646,8 @@ class MySqlSearch:
                 "_pk": e.id, "entry_id": e.entry_id, "title": e.title, "status": e.status, "analysis_type": r["analysis_type"],
                 # 15 — 결과 행의 날짜 = 올린 날짜(확정일, 초안은 등록일)
                 "posted_at": r["sort_at"].isoformat() if r["sort_at"] else None, "hulls": r["hulls"], "ship_types": sorted(r["ship_types"]),
-                "zones": sorted(r["zones"]), "tags": free[e.id],
+                "zones": sorted(r["zones"]), "target": min(r["targets"]) if r["targets"] else None,
+                "tags": free[e.id],
                 "uploaded_by": e.uploaded_by,
                 "confirmed_at": e.confirmed_at.isoformat() if e.confirmed_at else None,
                 "file_count": r["file_count"], "kinds": sorted(r["kinds"]),

@@ -3,7 +3,8 @@ import { api } from '../api/client.js';
 /** 해석 종류·구역 통제 어휘(08). 서버 vocab.key 와 같은 비교 열쇠 — 공백을 빼고 대소문자를 무시한다. */
 export const vocabKey = (v) => String(v ?? '').replace(/\s+/g, '').toLowerCase();
 
-export const VOCAB_KINDS = [{ id: 'atype', label: '해석 종류' }, { id: 'zone', label: '구역' }];
+// 38 — 대상 구조물(제목 네 번째 칸, 선택)
+export const VOCAB_KINDS = [{ id: 'atype', label: '해석 종류' }, { id: 'zone', label: '구역' }, { id: 'target', label: '대상' }];
 export const OTHER_TERM = '기타';
 
 // 한 화면에서 여러 칸이 같은 목록을 쓴다 — 종류별로 한 번만 받는다(관리자가 바꾸면 invalidate).

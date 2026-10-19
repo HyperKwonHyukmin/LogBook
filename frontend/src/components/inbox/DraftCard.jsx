@@ -33,8 +33,9 @@ const hullRule = (v) => /^\d{4}$/.test(v) || '호선은 숫자 4자리입니다.
  */
 // 15 — 해석 시기는 없앴다
 // 20 — '호선 없음(공용)'(no_hull). 29 — 프로젝트(21)는 없앴다
-const CARD_FIELDS = ['title', 'analysis_type', 'hulls', 'no_hull', 'zones', 'description'];
-const FIELD_LABELS = { title: '제목', analysis_type: '해석 종류', hulls: '호선', no_hull: '호선 없음(공용)', zones: '구역', description: '설명' };
+const CARD_FIELDS = ['title', 'analysis_type', 'hulls', 'no_hull', 'zones', 'target', 'description'];
+const FIELD_LABELS = { title: '제목', analysis_type: '해석 종류', hulls: '호선', no_hull: '호선 없음(공용)', zones: '구역',
+  target: '대상', description: '설명' };
 // 20 — 바뀌면 (사람이 고치지 않은) 초안 제목이 따라 바뀌는 칸(서버 update_entry 의 TITLE_VALUE_FIELDS 와 같다)
 const TITLE_VALUE_FIELDS = ['hulls', 'no_hull', 'zones', 'analysis_type'];
 /** 서버 쪽 내용이 실제로 바뀌었을 때만 달라지는 열쇠 — 폴링으로 같은 내용의 새 객체가 와도 입력을 지우지 않는다. */
@@ -331,6 +332,11 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
         </div>
         <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600"><span>구역{mark('zones')}</span>
           <VocabInput multiple kind="zone" label="구역" values={values.zones} disabled={fieldDisabled} onChange={set('zones')} />
+        </div>
+        {/* 38 — 대상 구조물(선택). 고르면 초안 제목의 해석 종류 뒤에 붙는다 */}
+        <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600"><span>대상 <span className="font-normal text-n-500">(선택)</span>{mark('target')}</span>
+          <VocabInput kind="target" label="대상" value={values.target || null} disabled={fieldDisabled}
+                      onChange={(v) => set('target')(v || '')} />
         </div>
         <Labeled label={<>설명{mark('description')}</>}>
           <input aria-label="설명" className={inputClass()} value={values.description} disabled={fieldDisabled}

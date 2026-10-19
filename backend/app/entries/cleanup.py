@@ -39,14 +39,19 @@ def _facts(db: Session, user=None) -> list[dict]:
                    .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
                    .filter(models.EntryTag.entry_id.in_(ids), models.Tag.kind == "zone").order_by(models.Tag.value)):
         zones[eid].append(v)
+    targets: dict[int, str] = {}   # 38 — 대상 구조물(자료당 하나)
+    for eid, v in (db.query(models.EntryTag.entry_id, models.Tag.value)
+                   .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
+                   .filter(models.EntryTag.entry_id.in_(ids), models.Tag.kind == "target").order_by(models.Tag.value)):
+        targets.setdefault(eid, v)
     bdf = {eid for (eid,) in db.query(models.File.entry_id).filter(
         models.File.entry_id.in_(ids), models.File.kind == "model", models.File.location != "trash").distinct()}
     out = []
     for e in entries:
         missing = quality.missing_fields(has_bdf=e.id in bdf, hulls=hulls[e.id], no_hull=bool(e.no_hull),
                                          zones=zones[e.id], analysis_type=e.analysis_type)
-        out.append({"entry": e, "hulls": hulls[e.id], "zones": zones[e.id], "has_bdf": e.id in bdf,
-                    "missing": missing})
+        out.append({"entry": e, "hulls": hulls[e.id], "zones": zones[e.id], "target": targets.get(e.id),
+                    "has_bdf": e.id in bdf, "missing": missing})
     return out
 
 
@@ -91,9 +96,11 @@ def _proposal(ctx: quality.TitleContext, r: dict) -> dict | None:
     """자료 하나의 제목 제안. 바꿀 것이 없으면 None. blocked 면 reason 을 단다."""
     e = r["entry"]
     source = ctx.source_of(e)
-    phrases = ctx.phrases("zone", r["zones"]) + ctx.phrases("atype", [e.analysis_type] if e.analysis_type else [])
+    target = r.get("target")
+    phrases = (ctx.phrases("zone", r["zones"]) + ctx.phrases("atype", [e.analysis_type] if e.analysis_type else [])
+               + ctx.phrases("target", [target] if target else []))
     structured = naming.compose_title(hulls=r["hulls"], no_hull=bool(e.no_hull), zones=r["zones"],
-                                      analysis_type=e.analysis_type,
+                                      analysis_type=e.analysis_type, target=target,
                                       distinct=naming.distinct_part(source, hulls=r["hulls"], phrases=phrases))
     current = (e.title or "").strip()
     if structured and structured == current:
@@ -170,12 +177,12 @@ def apply_titles(db: Session, storage: StoragePaths, items: list[dict], *, user=
 
 
 def _facts_one(db: Session, e: models.Entry) -> list[dict]:
-    from .service import hulls_of, zones_of
+    from .service import hulls_of, target_of, zones_of
 
     hulls = [h.hull_no for h in hulls_of(db, e)]
     zones = zones_of(db, e)
     has_bdf = quality.has_model(db, e)
-    return [{"entry": e, "hulls": hulls, "zones": zones, "has_bdf": has_bdf,
+    return [{"entry": e, "hulls": hulls, "zones": zones, "target": target_of(db, e), "has_bdf": has_bdf,
              "missing": quality.missing_fields(has_bdf=has_bdf, hulls=hulls, no_hull=bool(e.no_hull), zones=zones,
                                                analysis_type=e.analysis_type)}]
 

@@ -66,6 +66,9 @@ def _expected(ctx: _Ctx, f: models.File) -> tuple[Path | None, str]:
     if f.location == "staging":
         batch = ctx.batches.get(f.batch_id)
         return (ctx.storage.staging / batch.key, f.rel_path) if batch else (None, "batch_missing")
+    if f.location == "trash" and f.trash_rel:
+        # 37 — 자료에서 하나만 뺀 파일(entry_id 없음)
+        return ctx.storage.trash / f.trash_rel, f.rel_path
     if entry is None or not (entry.vault_rel or entry.trash_rel):
         return None, "entry_missing"
     if f.location == "vault":
@@ -180,6 +183,8 @@ def verify(db: Session, storage: StoragePaths, *, fix: bool = False, out=None, p
             result["orphan_staging"].append({"folder": name})
             say(f"[배치 행 없는 staging 폴더] {name}")
     trash_rels = {e.trash_rel for e in ctx.entries.values() if e.status == "trashed" and e.trash_rel}
+    # 37 — 자료에서 하나만 뺀 파일의 폴더(<자료번호>_files_<시각>)
+    trash_rels |= {r for (r,) in db.query(models.File.trash_rel).filter(models.File.trash_rel.isnot(None)).distinct()}
     for name in ctx.trash_dirs:
         if name not in trash_rels:
             m = TRASH_RE.fullmatch(name)

@@ -7,6 +7,7 @@ export const ACTION_LABELS = {
   USER_ADMIN_GRANT: '관리자 지정', USER_ADMIN_REVOKE: '관리자 해제', ADMIN_BOOTSTRAP: '관리자 초기 설정',
   BATCH_RECEIVED: '자료 받음', BATCH_CLAIM: '배치 가져감',
   ENTRY_UPDATE: '정보 수정', ENTRY_CONFIRM: '확정', ENTRY_FILES_ADDED: '파일 추가',
+  ENTRY_FILES_REMOVED: '파일 삭제', ENTRY_FILES_RESTORED: '파일 되돌리기',   // 37
   ENTRY_TRASH: '휴지통으로', ENTRY_RESTORE: '복원', DRAFT_DISCARD: '초안 버림',
   TAG_ALIAS: '동의어 묶기', TAG_UNALIAS: '동의어 풀기', HULL_UPDATE: '호선 정보 수정', HULL_PLM: '선박 정보(PLM) 반영',
   TRASH_PURGE: '영구 삭제', JOB_RETRY: '작업 다시 시도',
@@ -80,6 +81,10 @@ export const ERROR_LABELS = {
   attachment_still_processing: '파일을 처리 중입니다. 잠시 뒤 상태를 다시 확인해 주세요.',
   already_claimed: '이미 다른 사람이 가져갔습니다.',
   entry_trashed: '휴지통에 있는 자료입니다.',
+  // 37 — 파일 삭제·되돌리기
+  last_file: '파일을 모두 뺄 수는 없습니다. 자료 전체를 지우려면 휴지통으로 보내 주세요.',
+  file_not_in_vault: '공유 폴더에 없는 파일이라 뺄 수 없습니다.',
+  entry_not_confirmed: '확정된 자료에서만 할 수 있습니다.',
   incomplete: '일부 파일이 끝까지 올라가지 않았습니다. 다시 올려 주세요.',
   invalid_path: '파일 경로에 쓸 수 없는 이름이 있습니다.',
   chunk_too_large: '한 번에 보낸 조각이 너무 큽니다.',
@@ -173,7 +178,7 @@ export function formatBytes(n) {
 }
 
 // 15 — '해석 연도'(year)는 해석 시기와 함께 없앴다
-export const FACET_LABELS = { hull: '호선', ship_type: '선종', analysis_type: '해석 종류', zone: '구역',
+export const FACET_LABELS = { hull: '호선', ship_type: '선종', analysis_type: '해석 종류', zone: '구역', target: '대상',
   tag: '태그', uploaded_by: '올린 사람', kind: '파일 종류' };
 
 export const EXTRACT_LABELS = {
@@ -197,7 +202,7 @@ export const MODEL_STATE_LABELS = {
 };
 
 export const MATCH_LABELS = { entry_id: 'Entry 번호', hull: '호선', title: '제목', tag: '태그',
-  analysis_type: '해석 종류', description: '설명', file: '파일명', body: '본문',
+  analysis_type: '해석 종류', target: '대상', description: '설명', file: '파일명', body: '본문',
   document_type: '문서 분류' };   // 21
 
 // 23 — 문서 분류 목록과 빠른 구분(보고서/발표자료/기타) 묶음은 프런트에 사본을 두지 않는다 — 서버(models.REPORT_DOCUMENT_TYPES·

@@ -5,7 +5,7 @@ const E = { title: '제목', description: null, hulls: [{ hull_no: '9001' }, { h
 
 test('서버 값 → 고칠 값', () => {
   expect(editValues(E)).toEqual({ title: '제목', description: '', hulls: ['9001', '9002'], no_hull: false, zones: ['선미부'],
-    analysis_type: 'FE 해석', tags: [] });
+    analysis_type: 'FE 해석', target: '', tags: [] });
 });
 
 test('바뀐 칸만 PATCH 본문에 — 빈 글자는 null, 앞뒤 공백 무시, 호선은 순서도 본다', () => {

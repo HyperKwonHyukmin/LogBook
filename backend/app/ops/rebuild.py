@@ -37,6 +37,7 @@ log = logging.getLogger(__name__)
 ENTRY_ID_PATTERN = re.compile(r"^E[0-9]{6,9}$")
 YEAR_PATTERN = re.compile(r"^[0-9]{4}$")
 TRASH_PATTERN = re.compile(r"^(E[0-9]{6,9})_([0-9]{8})-([0-9]{6})$")
+FILES_TRASH_PATTERN = re.compile(r"^E[0-9]{6,9}_files_[0-9]{8}-[0-9]{6}$")   # 37 — 자료에서 뺀 파일
 COMMIT_EVERY = 500      # Entry 이만큼마다 중간 커밋(실패하면 빈 DB 에서 다시 하면 된다)
 AUDIT_CHUNK = 5000
 
@@ -180,6 +181,8 @@ def _restore_entry(db: Session, storage: StoragePaths, data: dict, *, status: st
         db.add(models.EntryHull(entry_id=e.id, hull_no=no, is_primary=(i == 0)))
         _ensure_hull(db, no, h.get("ship_type"))
     set_tags(db, e, "zone", [str(z) for z in data.get("zones") or []])
+    if isinstance(data.get("target"), str) and data["target"].strip():   # 38 — 대상 구조물
+        set_tags(db, e, "target", [data["target"]])
     set_tags(db, e, "free", [str(t) for t in data.get("tags") or []])
     files: list[models.File] = []
     missing = 0
@@ -239,7 +242,7 @@ def _restore_aliases(db: Session, registry: dict) -> int:
     n = 0
     for t in registry.get("tags") or []:
         kind, value, target = t.get("kind"), t.get("value"), t.get("alias_of")
-        if kind not in ("zone", "free", "atype") or not value or not target or value == target:
+        if kind not in ("zone", "free", "atype", "target") or not value or not target or value == target:
             continue
         rows = {}
         for v in (value, target):
@@ -262,7 +265,7 @@ def _restore_vocab(db: Session, registry: dict) -> int:
     n = 0
     for t in registry.get("vocab") or []:
         kind, value = t.get("kind"), str(t.get("value") or "")[:100]
-        if kind not in ("zone", "atype") or not value:
+        if kind not in ("zone", "atype", "target") or not value:
             continue
         row = db.query(models.Tag).filter_by(kind=kind, value=value).first()
         if row is None:
@@ -425,6 +428,8 @@ def rebuild(db: Session, storage: StoragePaths, *, force: bool = False) -> dict:
         if folder.startswith("draft_"):
             result["skipped_drafts"] += 1
             continue
+        if FILES_TRASH_PATTERN.fullmatch(folder):
+            continue   # 37 — 자료에서 하나만 뺀 파일(DB 에만 기록 — 재구축하지 않는다)
         m = TRASH_PATTERN.fullmatch(folder)
         if m is None:
             result["skipped_bad"] += 1

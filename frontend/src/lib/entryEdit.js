@@ -5,7 +5,8 @@
 
 // 15 — 해석 시기(analysis_period)는 없앴다. 20 — '호선 없음(공용)'(no_hull, 참/거짓)
 // 29 — 프로젝트(21)는 없앴다
-export const EDIT_FIELDS = ['title', 'description', 'hulls', 'no_hull', 'zones', 'analysis_type', 'tags'];
+// 38 — 대상 구조물(target, 하나·선택)
+export const EDIT_FIELDS = ['title', 'description', 'hulls', 'no_hull', 'zones', 'analysis_type', 'target', 'tags'];
 const LIST_FIELDS = new Set(['hulls', 'zones', 'tags']);
 const BOOL_FIELDS = new Set(['no_hull']);
 
@@ -18,6 +19,7 @@ export function editValues(entry) {
     no_hull: !!entry?.no_hull,
     zones: [...(entry?.zones || [])],
     analysis_type: entry?.analysis_type || '',
+    target: entry?.target || '',
     tags: [...(entry?.tags || [])],
   };
 }

@@ -216,6 +216,9 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry, b
         meta["no_hull"] = True
     if d["title_source"]:
         meta["title_source"] = d["title_source"]
+    # 38 — 대상 구조물(있을 때만)
+    if d["target"]:
+        meta["target"] = d["target"]
     # 21 — 프로젝트(자료의 소속, 있을 때만)
     meta["files"] = [{k: f[k] for k in ("rel_path", "kind", "size", "sha256")} for f in d["files"]]
     # 14 — 사용자가 정리한 판 배치(재구축 원천). 정리한 것이 없으면 쓰지 않는다(자동 추정은 다시 계산된다)
@@ -234,7 +237,8 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry, b
     hulls = ", ".join(h["hull_no"] + (f" ({h['ship_type']})" if h["ship_type"] else "") for h in d["hulls"])
     info = (f"{d['entry_id']}  {d['title']}\n호선: {hulls or ('공용' if d['no_hull'] else '-')}\n"
             + f"구역: {', '.join(d['zones']) or '-'}\n"
-            f"태그: {', '.join(d['tags']) or '-'}\n"
+            + (f"대상: {d['target']}\n" if d["target"] else "")
+            + f"태그: {', '.join(d['tags']) or '-'}\n"
             f"공개 범위: {d['label'] or '일반'}\n"
             f"올린 사람: {d['uploaded_by'] or '-'}  확정: {d['confirmed_by'] or '-'} {d['confirmed_at'] or ''}\n"
             f"파일 {len(d['files'])}개 — 원본은 files 폴더. 이 폴더는 Hi-TESS LogBook 이 관리합니다(직접 수정 금지).\n")

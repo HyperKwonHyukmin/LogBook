@@ -12,6 +12,39 @@ export const FAMILIES = [
   { key: 'other', label: '기타', className: 'bg-n-250' },
 ];
 
+// 요소 카드 → 묶음(서버 search/insight.FAMILIES 와 같은 표) — 자료 상세는 파일의 counts 로 직접 센다(38)
+const FAMILY_CARDS = {
+  beam: ['CBAR', 'CBEAM', 'CROD', 'CONROD', 'CBUSH'],
+  shell: ['CQUAD4', 'CQUAD8', 'CQUADR', 'CTRIA3', 'CTRIA6', 'CTRIAR'],
+  rigid: ['RBE2', 'RBE3'],
+  mass: ['CONM2'],
+};
+const FAMILY_OF = Object.fromEntries(Object.entries(FAMILY_CARDS).flatMap(([fam, cards]) => cards.map((c) => [c, fam])));
+
+/** 카드별 개수(model_summaries.counts) → 묶음별 개수. GRID 는 요소가 아니라 뺀다(서버 family_counts 와 같다). */
+export function familyCounts(counts) {
+  const out = { beam: 0, shell: 0, rigid: 0, mass: 0, other: 0 };
+  for (const [card, n] of Object.entries(counts || {})) {
+    if (card === 'GRID') continue;
+    out[FAMILY_OF[card] || 'other'] += Number(n) || 0;
+  }
+  return out;
+}
+
+/**
+ * 38 — 모델 구성 한 낱말. 보(빔) 요소와 판(쉘) 요소가 있느냐로만 나눈다(비율은 보지 않는다 —
+ * 판 모델의 보강재는 보 요소 수가 적어도 판+보강재다). 보·판 요소가 하나도 없으면 null.
+ */
+export const STRUCTURES = { beam: '빔 모델', shell: '판 모델', stiffened: '판+보강재' };
+export function structureOf(families) {
+  const beam = families?.beam || 0;
+  const shell = families?.shell || 0;
+  if (beam && shell) return 'stiffened';
+  if (shell) return 'shell';
+  if (beam) return 'beam';
+  return null;
+}
+
 export const num = (n) => Number(n ?? 0).toLocaleString('ko-KR', { maximumFractionDigits: 0 });
 
 /** 1,234 → '1.2천', 12,431 → '1.2만'. 막대 옆 짧은 수치·범위용. */

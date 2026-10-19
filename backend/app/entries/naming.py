@@ -1,6 +1,7 @@
 """20 — 자료 제목 형식(순수 함수, DB 와 무관).
 
-제목 초안 = `{호선} · {구역} · {해석 종류} · {구별자}` — 값이 없는 칸은 건너뛴다.
+제목 초안 = `{호선} · {구역} · {해석 종류} · {대상} · {구별자}` — 값이 없는 칸은 건너뛴다.
+- 38 — 대상(대상 구조물, 통제 어휘·선택 칸)이 있으면 해석 종류 뒤에 온다. 구별자에서는 대상 표기도 뺀다.
 - 호선·구역이 여럿이면 첫 값 + ' 외 N'(예: `3496 외 1`). '호선 없음(공용)' 이면 호선 칸이 `공용`.
 - 21 — 호선이 없고 프로젝트가 있으면 호선 칸이 프로젝트 이름(`크레인 연구 · 기관실 · FE 해석`). 프로젝트가 '공용'보다 앞선다.
 - 구별자 = 원래 폴더/파일 이름(title_source)에서 이 자료의 호선 번호·구역·해석 종류에 해당하는 토큰과
@@ -106,22 +107,24 @@ def _first_plus(values: list[str]) -> str:
 
 
 def compose_title(*, hulls=(), no_hull: bool = False, zones=(), analysis_type: str | None = None,
-                  distinct: str = "") -> str:
-    """구조화 값으로 제목을 만든다. 호선(또는 공용)·구역·해석 종류가 모두 없으면 '' (부르는 쪽이 예전 방식으로)."""
+                  target: str | None = None, distinct: str = "") -> str:
+    """구조화 값으로 제목을 만든다. 호선(또는 공용)·구역·해석 종류가 모두 없으면 '' (부르는 쪽이 예전 방식으로).
+    38 — 대상(target)은 머리 세 칸 뒤·구별자 앞. 대상만 있고 머리 세 칸이 없으면 역시 ''."""
     hull_list = list(hulls or [])
     hull_part = _first_plus(hull_list) if hull_list else (SHARED_LABEL if no_hull else "")
     head = [p for p in (hull_part, _first_plus(list(zones or [])), (analysis_type or "").strip()) if p]
     if not head:
         return ""
-    return SEP.join(head + ([distinct] if distinct else []))[:TITLE_MAX]
+    tail = [p for p in ((target or "").strip(), distinct) if p]
+    return SEP.join(head + tail)[:TITLE_MAX]
 
 
 def title_draft(source: str | None, *, hulls=(), no_hull: bool = False, zones=(), analysis_type: str | None = None,
-                phrases=()) -> str:
+                target: str | None = None, phrases=()) -> str:
     """제목 초안 — 값이 하나라도 있으면 형식, 아니면 예전 방식(원래 이름). phrases(구역·해석 종류 표기)는
     구별자에서 뺀다(quality.TitleContext.draft 가 넣는다)."""
     distinct = distinct_part(source, hulls=hulls, phrases=phrases)
-    return compose_title(hulls=hulls, no_hull=no_hull, zones=zones, analysis_type=analysis_type,
+    return compose_title(hulls=hulls, no_hull=no_hull, zones=zones, analysis_type=analysis_type, target=target,
                          distinct=distinct) or legacy_title(source)
 
 

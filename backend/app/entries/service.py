@@ -37,6 +37,12 @@ def zones_of(db: Session, entry: models.Entry) -> list[str]:
     return tags_of(db, entry, "zone")
 
 
+def target_of(db: Session, entry: models.Entry) -> str | None:
+    """38 — 대상 구조물(자료당 하나, 선택 칸). 옛 자료에 여럿이 남아 있으면 첫 값."""
+    values = tags_of(db, entry, "target")
+    return values[0] if values else None
+
+
 def file_rank(f: models.File, model_rows: dict[int, models.ModelSummary] | None = None) -> int:
     """파일 목록 순서 — 해석 모델을 맨 위에 둬 목록에서 바로 열어 보게 한다.
     0 = 변환된 모델(본 BDF, 3D 로 열림) · 1 = 그 밖의 모델 파일(변환 전·INCLUDE) · 2 = 나머지."""
@@ -138,6 +144,7 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
                   for h in hulls],
         "no_hull": bool(entry.no_hull),
         "zones": zones,
+        "target": target_of(db, entry),   # 38 — 대상 구조물
         "tags": tags_of(db, entry, "free"),
         "hull_evidence": entry.hull_evidence or [],
         "uploaded_by": entry.uploaded_by, "confirmed_by": entry.confirmed_by,
@@ -170,6 +177,9 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
         if not merge_into:
             d["merge_into_id"] = None
         d["can_edit"] = access.can_edit_entry(viewer, entry)
+        # 37 — 이 자료에서 뺀 파일(되돌리기용). 고칠 수 있는 사람에게만
+        if d["can_edit"] and entry.status == "confirmed":
+            d["removed_files"] = removed_files_of(db, entry)
         # 15 — 공유/일반·허락은 올린 사람 + LV3(블록된 자료는 LV3 만), 블록 지정·해제는 LV3 만
         d["can_manage_access"] = access.can_manage_access(viewer, entry) and entry.status != "trashed"
         d["can_block"] = access.is_admin(viewer) and entry.status != "trashed"
@@ -190,7 +200,8 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
 def snapshot(db: Session, entry: models.Entry) -> dict:
     d = entry_to_dict(db, entry)
     return {k: d[k] for k in ("title", "analysis_type", "description", "zones", "tags")} | {
-        "hulls": [h["hull_no"] for h in d["hulls"]]} | ({"no_hull": True} if d["no_hull"] else {})
+        "hulls": [h["hull_no"] for h in d["hulls"]]} | ({"no_hull": True} if d["no_hull"] else {}) | (
+        {"target": d["target"]} if d["target"] else {})   # 38 — 값이 있을 때만(no_hull 과 같은 방식)
 
 
 def can_edit_draft(user: models.User, entry: models.Entry) -> bool:
@@ -277,7 +288,7 @@ def _set_merge_into(db: Session, entry: models.Entry, value: str | None, user: m
 
 
 # 20 — 이 칸이 바뀌면 (사람이 고치지 않은) 초안 제목을 형식대로 다시 만든다
-TITLE_VALUE_FIELDS = ("hulls", "no_hull", "zones", "analysis_type")
+TITLE_VALUE_FIELDS = ("hulls", "no_hull", "zones", "analysis_type", "target")
 
 
 def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User | None,
@@ -313,6 +324,9 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
     if "zones" in patch:
         patch = {**patch, "zones": vocab.normalize_inputs(
             db, "zone", patch["zones"] or [], current=zones_of(db, entry), admin=admin)}
+    if "target" in patch:   # 38 — 대상 구조물(선택 칸, 하나)
+        patch = {**patch, "target": vocab.normalize_input(
+            db, "target", patch["target"], current=target_of(db, entry), admin=admin)}
     before = snapshot(db, entry) if entry.status == "confirmed" else None
     for field_name in EDITABLE_FIELDS:
         if field_name in patch:
@@ -328,6 +342,8 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
             set_hulls(db, entry, [])   # '호선 없음(공용)' 을 고르면 호선을 비운다
     if "zones" in patch:
         set_zones(db, entry, patch["zones"] or [])
+    if "target" in patch:
+        set_tags(db, entry, "target", [patch["target"]] if patch["target"] else [])
     if "tags" in patch:
         set_tags(db, entry, "free", patch["tags"] or [])
     if "merge_into_id" in patch:
@@ -684,6 +700,100 @@ def restore(db: Session, storage: StoragePaths, entry: models.Entry, user: model
     db.commit()
     _reenqueue_extract(db, entry)
     _reenqueue_convert(db, entry)
+    _write_meta_or_queue(db, storage, entry)
+    return entry
+
+
+# ---- 37: 확정 자료에서 파일 하나씩 빼기·되돌리기 ----
+
+def removed_files_of(db: Session, entry: models.Entry) -> list[dict]:
+    """이 자료에서 뺀 파일(아직 되돌릴 수 있는 것) — 고칠 수 있는 사람에게만 싣는다."""
+    rows = (db.query(models.File).filter(models.File.removed_from_id == entry.id, models.File.location == "trash")
+            .order_by(models.File.rel_path).all())
+    return [{"id": f.id, "name": f.name, "rel_path": f.rel_path, "kind": f.kind, "size": f.size} for f in rows]
+
+
+def remove_files(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User, file_ids: list[int],
+                 version: int | None, ip: str | None = None) -> models.Entry:
+    """확정 자료에서 파일을 뺀다 — 실제 파일은 95_Trash/<자료번호>_files_<시각>/ 로 옮기고 행은 남긴다(되돌리기).
+
+    File.entry_id 를 비우고 removed_from_id 에 원래 자료를 남긴다 — entry_id 로 파일을 고르는 모든 경로
+    (검색·판 묶음·문서·관계 지도·같은 BDF)에서 저절로 빠진다. 마지막 파일은 뺄 수 없다(자료를 휴지통으로)."""
+    from .files import entry_dir, move_all, rel_move_pairs
+
+    entry = _lock(db, entry)
+    ensure_editable(user, entry)
+    if entry.status != "confirmed":
+        raise HTTPException(status_code=409, detail="entry_not_confirmed")
+    if version is not None and version != entry.version:
+        raise HTTPException(status_code=409, detail="version_conflict")
+    ids = set(file_ids or [])
+    if not ids:
+        raise HTTPException(status_code=422, detail="no_files")
+    files = (db.query(models.File).filter(models.File.entry_id == entry.id, models.File.id.in_(ids))
+             .order_by(models.File.rel_path).all())
+    if len(files) != len(ids):
+        raise HTTPException(status_code=404, detail="file_not_found")
+    if any(f.location != "vault" for f in files):
+        raise HTTPException(status_code=409, detail="file_not_in_vault")
+    left = db.query(models.File.id).filter(models.File.entry_id == entry.id, ~models.File.id.in_(ids)).count()
+    if left == 0:
+        raise HTTPException(status_code=422, detail="last_file")
+    rel = f"{entry.entry_id}_files_{_stamp()}"
+    files_root = entry_dir(storage, entry) / "files"
+    undo = move_all(rel_move_pairs(files_root, storage.trash / rel, [(f, f.rel_path) for f in files]))
+    try:
+        for f in files:
+            f.entry_id, f.location, f.removed_from_id, f.trash_rel = None, "trash", entry.id, rel
+        db.query(models.ModelRevision).filter(models.ModelRevision.file_id.in_(ids)).delete(synchronize_session=False)
+        entry.version += 1
+        db.flush()
+        audit.record(db, storage, actor=user.employee_id, action="ENTRY_FILES_REMOVED", target_type="entry",
+                     target_id=entry.entry_id, after={"files": [f.rel_path for f in files], "trash_rel": rel}, ip=ip)
+    except Exception:
+        db.rollback()
+        undo()
+        raise
+    db.commit()
+    refresh_revisions(db, entry.id)   # 14 — 판 묶음에서 빠진 모델을 뺀다
+    _write_meta_or_queue(db, storage, entry)
+    return entry
+
+
+def restore_files(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User, file_ids: list[int],
+                  ip: str | None = None) -> models.Entry:
+    """remove_files 되돌리기 — 원래 자리로(그 사이 같은 이름이 생겼으면 'name (2).ext')."""
+    from .files import entry_dir, move_all, unique_rel
+
+    entry = _lock(db, entry)
+    ensure_editable(user, entry)
+    if entry.status != "confirmed":
+        raise HTTPException(status_code=409, detail="entry_not_confirmed")
+    ids = set(file_ids or [])
+    if not ids:
+        raise HTTPException(status_code=422, detail="no_files")
+    files = (db.query(models.File).filter(models.File.removed_from_id == entry.id, models.File.id.in_(ids),
+                                          models.File.location == "trash").order_by(models.File.rel_path).all())
+    if len(files) != len(ids) or any(not f.trash_rel for f in files):
+        raise HTTPException(status_code=404, detail="file_not_found")
+    files_root = entry_dir(storage, entry) / "files"
+    planned = {r.casefold() for (r,) in db.query(models.File.rel_path).filter_by(entry_id=entry.id)}
+    plans = [(f, unique_rel(files_root, f.rel_path, planned)) for f in files]
+    undo = move_all([(Path(long_join(storage.trash / f.trash_rel, f.rel_path)), Path(long_join(files_root, r)),
+                      f.size, f.sha256) for f, r in plans])
+    try:
+        for f, r in plans:
+            f.entry_id, f.rel_path, f.location, f.removed_from_id, f.trash_rel = entry.id, r, "vault", None, None
+        entry.version += 1
+        db.flush()
+        audit.record(db, storage, actor=user.employee_id, action="ENTRY_FILES_RESTORED", target_type="entry",
+                     target_id=entry.entry_id, after={"files": [r for _f, r in plans]}, ip=ip)
+    except Exception:
+        db.rollback()
+        undo()
+        raise
+    db.commit()
+    refresh_revisions(db, entry.id)
     _write_meta_or_queue(db, storage, entry)
     return entry
 

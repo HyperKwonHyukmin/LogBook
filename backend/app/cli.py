@@ -245,7 +245,7 @@ def _cmd_rebuild(yes: bool, force: bool = False) -> int:
     return 0
 
 
-_VOCAB_NAMES = {"atype": "해석 종류", "zone": "구역"}
+_VOCAB_NAMES = {"atype": "해석 종류", "zone": "구역", "target": "대상"}
 
 
 def _print_vocab_report(rep: dict) -> None:

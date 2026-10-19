@@ -27,6 +27,9 @@ const VOCAB = {
   '/api/vocab?kind=zone': { kind: 'zone', other: '기타', terms: [
     { id: 4, value: '선수부', active: true, count: 0, synonyms: [{ id: 8, value: 'FWD' }] },
     { id: 5, value: '기타', active: true, count: 0, synonyms: [] }] },
+  // 38 — 대상 구조물
+  '/api/vocab?kind=target': { kind: 'target', other: '기타', terms: [
+    { id: 6, value: '계류 의장품', active: true, count: 0, synonyms: [{ id: 7, value: 'Mooring Fitting' }] }] },
 };
 const vocabReply = (url) => VOCAB[url] && Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(VOCAB[url]) });
 
