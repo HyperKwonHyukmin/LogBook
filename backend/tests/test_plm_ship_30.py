@@ -258,3 +258,23 @@ def test_cli_plm_fill(db, storage, make_entry_file, plm):
     db.commit()
     out = io.StringIO()
     assert cli.plm_fill(db, storage, out=out) == 2 and "plm_not_configured" in out.getvalue()
+
+
+# ---- CLI plm-check(접속 진단) ----
+
+def test_plm_check_shows_tns_entry_and_lookup(tmp_path, monkeypatch, plm):
+    (tmp_path / "tnsnames.ora").write_text(
+        "OTHER =\n  (DESCRIPTION = (ADDRESS = (HOST = 1.1.1.1)(PORT = 1521)))\n"
+        "HIPLM =\n  (DESCRIPTION =\n    (ADDRESS = (PROTOCOL = TCP)(HOST = 10.0.0.9)(PORT = 1522))\n  )\n"
+        "LAST = (DESCRIPTION = (ADDRESS = (HOST = 2.2.2.2)))\n", encoding="utf-8")
+    for k, v in {"PLM_ORACLE_DSN": "HIPLM", "PLM_ORACLE_USER": "caduser", "PLM_ORACLE_PASSWORD": "secret",
+                 "TNS_ADMIN": str(tmp_path)}.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("PLM_ORACLE_LIB_DIR", raising=False)
+    path, entry = plm_ship._tns_entry("HIPLM", "")
+    assert path.endswith("tnsnames.ora") and "10.0.0.9" in entry and "1.1.1.1" not in entry and "2.2.2.2" not in entry
+    pytest.importorskip("oracledb")
+    monkeypatch.setattr(plm_ship, "set_fetcher", lambda f: plm_ship._cache.clear())   # 진단이 가짜 PLM 을 그대로 쓰게
+    out = "\n".join(plm_ship.diagnose("3370"))
+    assert "secret" not in out
+    assert "mode=thin" in out and "10.0.0.9" in out and "조회 성공: 3370 → 174K-LNG" in out

@@ -145,6 +145,60 @@ def _ensure_thick_mode(oracledb) -> None:
             log.warning("PLM thick mode 초기화 실패 (lib_dir=%s): %s", lib_dir, exc)
 
 
+def _tns_entry(alias: str, lib_dir: str) -> tuple[Optional[str], Optional[str]]:
+    """별칭이 적힌 tnsnames.ora 와 그 항목 원문. thick 모드 탐색 순서대로 TNS_ADMIN → lib_dir/network/admin → ORACLE_HOME."""
+    import re
+    from pathlib import Path
+
+    dirs = [os.getenv("TNS_ADMIN") or ""]
+    if lib_dir:
+        dirs.append(str(Path(lib_dir) / "network" / "admin"))
+    if os.getenv("ORACLE_HOME"):
+        dirs.append(str(Path(os.environ["ORACLE_HOME"]) / "network" / "admin"))
+    for d in filter(None, dirs):
+        f = Path(d) / "tnsnames.ora"
+        try:
+            text = f.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        m = re.search(rf"^\s*{re.escape(alias)}(\.[\w.]+)?\s*=", text, re.I | re.M)
+        if m:
+            nxt = re.search(r"^[A-Za-z_][\w.]*\s*=", text[m.end():], re.M)
+            return str(f), text[m.start(): m.end() + (nxt.start() if nxt else len(text))].strip()
+    return None, None
+
+
+def diagnose(ship_no: str = "3370") -> list[str]:
+    """CLI plm-check — WorkBench 조사 스크립트와 견줄 수 있게 접속 환경과 한 번의 조회 결과를 줄로 돌려준다(비밀번호는 빼고)."""
+    lines: list[str] = []
+    settings = plm_settings()
+    lib_dir = (os.getenv("PLM_ORACLE_LIB_DIR") or "").strip()
+    if settings is None:
+        return ["PLM_ORACLE_DSN/USER/PASSWORD 중 비어 있는 값이 있습니다(.env)."]
+    lines += [f"DSN={settings['dsn']}  USER={settings['user']}  LIB_DIR={lib_dir or '(없음 — thin)'}",
+              f"TNS_ADMIN={os.getenv('TNS_ADMIN') or '(없음)'}  ORACLE_HOME={os.getenv('ORACLE_HOME') or '(없음)'}"]
+    try:
+        import oracledb  # type: ignore[import-not-found]
+    except ImportError:
+        return lines + ["oracledb 가 설치되지 않았습니다(pip install -r requirements.txt)."]
+    _ensure_thick_mode(oracledb)
+    thin = oracledb.is_thin_mode()
+    client = "" if thin else " client=" + ".".join(map(str, oracledb.clientversion()))
+    lines.append(f"oracledb {oracledb.__version__}  mode={'thin' if thin else 'thick'}{client}")
+    if "/" not in settings["dsn"] and ":" not in settings["dsn"]:
+        path, entry = _tns_entry(settings["dsn"], lib_dir)
+        lines.append(f"tnsnames: {path or '(이 별칭이 적힌 tnsnames.ora 를 찾지 못함)'}")
+        if entry:
+            lines += ["  " + ln for ln in entry.splitlines()]
+    set_fetcher(None)   # 캐시를 비우고 실제로 묻는다
+    r = lookup(ship_no)
+    if r.status == "found":
+        lines.append(f"조회 성공: {ship_no} → {r.ship['shipType']} · {r.ship['mainEngine']} · {r.ship['shipClass']}")
+    else:
+        lines.append(f"조회 결과: {r.status}{(' — ' + str(r.reason)) if r.reason else ''}")
+    return lines
+
+
 def _default_fetcher(ship_nos: list[str]) -> dict[str, dict]:
     """운영용 — 번호들을 한 번 접속해 IN 목록으로 읽는다. {번호: 원시 행}. 설정·드라이버가 없으면 PlmUnavailable,
     접속·질의 오류는 그대로 올린다(분류는 lookup·fill 이 한다)."""

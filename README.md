@@ -98,6 +98,8 @@ SHOW GRANTS FOR '<logbook 계정>'@'<호스트>';
    `PLM_ORACLE_LIB_DIR`(145 의 PLM 은 10G password verifier 라 Oracle Client 폴더를 주는 thick mode 가 필요하다).
 3. 서버 재시작 → 호선 화면에서 [선박 정보 검색]. 처음 한 번은 `.venv\Scripts\python.exe -m app.cli plm-fill` 로 기존 호선을 모두 채운다.
 
+접속이 안 되면 `.venv\Scripts\python.exe -m app.cli plm-check 3370` — 모드(thin/thick)·`TNS_ADMIN`·별칭이 가리키는 tnsnames 항목을 보이고 한 번 조회해 본다(WorkBench `scripts\inspect_plm_hull_tables.py` 결과와 견준다).
+
 비워 두면 기능만 꺼진다(단추를 누르면 'PLM 접속 정보가 설정되지 않았습니다'). 개발 PC 는 PLM 에 닿지 않아 늘 이 상태다.
 
 ## 등급 정리 · WorkBench 연동 (31)

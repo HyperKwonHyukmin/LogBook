@@ -448,11 +448,18 @@ def main(argv: list[str]) -> int:
     df.add_argument("--apply", action="store_true", help="실제로 저장한다(감사 REPORT_META·entry.json 갱신)")
     pf = sub.add_parser("plm-fill", help="30 — 사내 PLM 에서 호선 선박 정보를 한 번에 조회해 채운다(선종은 빈 것만)")
     pf.add_argument("--unchecked", action="store_true", help="아직 조회하지 않은 호선만(기본: 못 찾은 것·선종 빈 것도)")
+    pc = sub.add_parser("plm-check", help="30 — PLM 접속 환경(모드·tnsnames 항목)을 보이고 호선 하나를 조회해 본다(바꾸지 않음)")
+    pc.add_argument("ship_no", nargs="?", default="3370")
     vf = sub.add_parser("verify", help="DB 의 파일 위치와 공유 폴더를 대조한다(기본은 보고만)")
     vf.add_argument("--fix", action="store_true",
                     help="staging↔vault 사이 반쯤 옮겨진 파일만 DB 가 말하는 자리로 옮긴다")
     args = parser.parse_args(argv)
 
+    if args.cmd == "plm-check":
+        from . import plm_ship
+        for line in plm_ship.diagnose(args.ship_no):
+            print(line)
+        return 0
     if args.cmd == "vocab-report":
         return _cmd_vocab(False)
     if args.cmd == "vocab-normalize":
