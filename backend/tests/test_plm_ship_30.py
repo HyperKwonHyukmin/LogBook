@@ -245,6 +245,21 @@ def test_edit_confirmed_entry_hulls_enqueues_plm_fill(db, storage, make_user, ma
     assert db.query(models.Job).filter_by(type="plm_fill", state="queued").count() == 1
 
 
+def test_bulk_fill_includes_confirmed_hulls_without_row(client, db, make_user, make_entry_file, auth_headers, plm):
+    """예전에 확정 자료를 수정해 더한 호선(호선 행 없음)도 일괄 채우기가 찾아 채운다."""
+    make_user("A100001")
+    e, _ = make_entry_file(title="x", hulls=("3370",), name="a.pdf")
+    db.add(models.EntryHull(entry_id=e.id, hull_no="3371", is_primary=False))   # 행 없이 더해진 호선
+    d, _ = make_entry_file(title="y", status="draft", hulls=("3372",), name="b.pdf")   # 초안 호선은 대상 아님
+    db.commit()
+    assert db.get(models.Hull, "3371") is None
+    plm["rows"]["3371"] = {**ROW_3370, "SHIP_NO": "3371"}
+    r = client.post("/api/hulls/plm-fill", headers=auth_headers("A100001")).json()
+    assert r == {"checked": 2, "found": 2, "not_found": 0, "filled": 2}
+    assert db.get(models.Hull, "3371").ship_type == "174K LNG"
+    assert db.get(models.Hull, "3372") is None
+
+
 def test_cli_plm_fill(db, storage, make_entry_file, plm):
     import io
 

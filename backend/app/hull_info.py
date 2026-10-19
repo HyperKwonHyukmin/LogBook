@@ -238,6 +238,23 @@ def preview_plm(hull_no: str) -> dict:
                     "checked_at": None}}
 
 
+def _ensure_confirmed_hull_rows(db: Session) -> int:
+    """확정 자료에 쓰였는데 호선 행이 없는 번호에 행을 만든다(만든 수). 예전에는 확정 자료를 수정해 더한 호선에
+    행이 생기지 않아 일괄 채우기 대상에서 빠졌다. 형식 밖 번호는 PLM 에 물을 수 없으니 두지 않는다."""
+    missing = (db.query(models.EntryHull.hull_no).distinct()
+               .join(models.Entry, models.Entry.id == models.EntryHull.entry_id)
+               .outerjoin(models.Hull, models.Hull.hull_no == models.EntryHull.hull_no)
+               .filter(models.Entry.status == "confirmed", models.Hull.hull_no.is_(None)))
+    added = 0
+    for (no,) in missing:
+        if HULL_PATTERN.fullmatch(no):
+            db.add(models.Hull(hull_no=no))
+            added += 1
+    if added:
+        db.flush()
+    return added
+
+
 def fill_from_plm(db: Session, storage: StoragePaths, actor: str, *, only_unchecked: bool = False,
                   ip: str | None = None) -> dict:
     """호선 목록 [선종 채우기]·확정 뒤 작업·CLI — 한 번의 조회로 여러 호선을 채운다. 선종은 비어 있을 때만 채운다.
@@ -245,6 +262,7 @@ def fill_from_plm(db: Session, storage: StoragePaths, actor: str, *, only_unchec
     PLM 장애면 PlmUnavailable·예외를 그대로 올린다(아무것도 바꾸지 않는다)."""
     from . import plm_ship
 
+    _ensure_confirmed_hull_rows(db)
     hulls = [h for h in db.query(models.Hull).order_by(models.Hull.hull_no) if HULL_PATTERN.fullmatch(h.hull_no)]
     if only_unchecked:
         hulls = [h for h in hulls if h.plm_status is None]
