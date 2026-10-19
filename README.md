@@ -120,4 +120,4 @@ LogBook `LOGBOOK_WB_ORIGIN_SHOW=1`(화면·검색), WorkBench `LOGBOOK_SEND_PASS
 
 - **uvicorn 실행 계정 권한**: 145 에서 `uvicorn app.main:app` 을 실행하는 Windows 계정은 `999_LogBook` UNC 경로(`\\storage.hpc.hd.com\a476854\00_PROJECT\AA_300_CF44\999_LogBook`)에 **쓰기 권한**이 있어야 한다. 없으면 폴더 구조 생성(`ensure_layout`)·업로드·감사 로그 JSONL 기록이 조용히 실패한다(DB 기록은 남지만 파일 기록은 경고 로그만 남고 사라짐 — `app/audit.py` 참고).
 - **`logbook_test` 는 개발 PC 전용**이다. 145 운영 서버에는 만들 필요가 없다(위 SQL 참고, `create_db.py` 도 145 에서는 실행하지 않는다). 테스트는 개발 PC 에서만 돌린다.
-- **재부팅 시 자동 시작은 아직 설정돼 있지 않다.** 145 를 재부팅하면 `uvicorn` 을 수동으로 다시 실행해야 한다. Windows 서비스 등록/자동 시작은 이후 계획(05)에서 다룰 예정.
+- **145 는 Server Manager**(`Logbook_Server.bat`)가 API·Worker·보고서 색인 워커를 띄운다(41). 자동 시작은 로그온 때만이라, 145 를 재부팅하면 그 계정으로 한 번 로그온해야 한다. 작업 스케줄러 방식과 함께 쓰지 않는다 — `ops/README.md` 6절.

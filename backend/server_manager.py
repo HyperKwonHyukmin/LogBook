@@ -1,9 +1,10 @@
-"""Hi-TESS LogBook Server Manager — API(9095) 와 Worker 를 하나의 GUI 창에서 관리한다.
+"""Hi-TESS LogBook Server Manager — API(9095)·Worker·보고서 색인 워커를 하나의 GUI 창에서 관리한다.
 
-- 두 자식을 각각 Popen 으로 품고, 로그를 한 창에 Tee 한다.
+- 세 자식을 각각 Popen 으로 품고, 로그를 한 창에 Tee 한다.
 - 크래시 시 지수 백오프로 자동 재시작(각자 독립 예산).
 - API 는 HTTP 좀비 감지 — 3분(15초×12) 응답 없으면 강제 재시작.
-- Worker 는 HTTP endpoint 가 없어 프로세스 생존만 판정.
+- Worker·Index 는 HTTP endpoint 가 없어 프로세스 생존만 판정(BackgroundChild 한 틀).
+- Index(41) = `app.report_index.worker --loop`. 145 는 작업 스케줄러를 쓰지 않아 여기서 띄운다.
 - Update 버튼: git pull + requirements 변경 시 pip install + 재시작.
 - 중복 실행 방지: PID 파일.
 - 로그온 자동 시작: install-autostart.ps1 가 shell:startup 폴더에 바로가기 생성.
@@ -44,6 +45,7 @@ else:
 API_CMD = [PYTHON, "-m", "uvicorn", "app.main:app",
            "--host", "0.0.0.0", "--port", "9095", "--no-access-log"]
 WORKER_CMD = [PYTHON, "-m", "app.worker"]
+INDEX_CMD = [PYTHON, "-m", "app.report_index.worker", "--loop"]
 HEALTH_URL = "http://127.0.0.1:9095/api/system/health"
 API_PORT = 9095
 
@@ -64,18 +66,38 @@ LOG_BG = "#161925"
 LOG_FG = "#c8d0e0"
 
 
+class BackgroundChild:
+    """HTTP 없이 프로세스 생존만 보는 자식(Worker·Index) 하나의 상태.
+
+    name 은 화면 라벨·로그 머리·이벤트 이름(소문자)에 쓴다. 로그는 logs\\<subdir>\\YYYYMMDD.log."""
+
+    def __init__(self, name, cmd, subdir, tag):
+        self.name = name
+        self.key = name.lower()
+        self.cmd = cmd
+        self.subdir = subdir
+        self.tag = tag
+        self.proc = None
+        self.log = events.DailyLogWriter(LOG_DIR, subdir=subdir)
+        self.policy = RestartPolicy()
+        self.dot = None
+        self.label = None
+
+    def running(self):
+        return self.proc is not None and self.proc.poll() is None
+
+
 class LogbookManager:
     def __init__(self, root):
         self.root = root
         self.api_proc = None
-        self.worker_proc = None
         self.intentional_stop = False
         self.is_updating = False
         self.uvicorn_log = events.DailyLogWriter(LOG_DIR, subdir="uvicorn")
-        self.worker_log = events.DailyLogWriter(LOG_DIR, subdir="worker")
         self.health_tracker = health.HealthTracker()
         self.api_restart_policy = RestartPolicy()
-        self.worker_restart_policy = RestartPolicy()
+        self.children = [BackgroundChild("Worker", WORKER_CMD, "worker", "worker"),
+                         BackgroundChild("Index", INDEX_CMD, "report-index", "index")]
 
         if self._abort_if_already_running():
             self.aborted = True
@@ -88,10 +110,12 @@ class LogbookManager:
         self._write_pidfile()
         events.append_event(LOG_DIR, "L1", "manager_start", {"pid": os.getpid()})
         events.prune_events(LOG_DIR)
-        events.prune_uvicorn_logs(LOG_DIR)
+        for subdir in ["uvicorn"] + [c.subdir for c in self.children]:
+            events.prune_uvicorn_logs(LOG_DIR, subdir=subdir)
 
         self._start_api()
-        self._start_worker()
+        for child in self.children:
+            self._start_child(child)
         self.root.after(HEALTH_INTERVAL_MS, self._health_tick)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -167,16 +191,16 @@ class LogbookManager:
                                  bg=BG, fg=FG_DIM)
         self.api_port.pack(side="left", padx=(6, 0))
 
-        # Worker 상태
-        worker_box = tk.Frame(state, bg=BG)
-        worker_box.pack(side="left")
-        self.worker_dot = tk.Label(worker_box, text="●", font=("Segoe UI", 18), bg=BG, fg=RED)
-        self.worker_dot.pack(side="left")
-        tk.Label(worker_box, text="Worker", font=("Segoe UI", 11, "bold"),
-                 bg=BG, fg=FG).pack(side="left", padx=(4, 2))
-        self.worker_label = tk.Label(worker_box, text="Stopped", font=("Segoe UI", 11),
-                                     bg=BG, fg=RED)
-        self.worker_label.pack(side="left", padx=(4, 0))
+        # Worker·Index 상태
+        for child in self.children:
+            box = tk.Frame(state, bg=BG)
+            box.pack(side="left", padx=(0, 24))
+            child.dot = tk.Label(box, text="●", font=("Segoe UI", 18), bg=BG, fg=RED)
+            child.dot.pack(side="left")
+            tk.Label(box, text=child.name, font=("Segoe UI", 11, "bold"),
+                     bg=BG, fg=FG).pack(side="left", padx=(4, 2))
+            child.label = tk.Label(box, text="Stopped", font=("Segoe UI", 11), bg=BG, fg=RED)
+            child.label.pack(side="left", padx=(4, 0))
 
         # 버튼
         btn_frame = tk.Frame(state, bg=BG)
@@ -219,6 +243,7 @@ class LogbookManager:
         self.log_text.tag_config("dim", foreground=FG_DIM)
         self.log_text.tag_config("api", foreground="#8bc1ff")
         self.log_text.tag_config("worker", foreground="#f7c994")
+        self.log_text.tag_config("index", foreground="#c9a7f7")
 
     def _log(self, message, tag="info"):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -243,13 +268,10 @@ class LogbookManager:
             self.api_label.configure(text="Stopped", fg=RED)
             self.api_port.configure(text="")
 
-    def _set_worker_state(self, running):
-        if running:
-            self.worker_dot.configure(fg=GREEN)
-            self.worker_label.configure(text="Running", fg=GREEN)
-        else:
-            self.worker_dot.configure(fg=RED)
-            self.worker_label.configure(text="Stopped", fg=RED)
+    def _set_child_state(self, child, running):
+        color = GREEN if running else RED
+        child.dot.configure(fg=color)
+        child.label.configure(text="Running" if running else "Stopped", fg=color)
 
     def _kill_port(self, port):
         try:
@@ -329,59 +351,56 @@ class LogbookManager:
         events.append_event(LOG_DIR, "L1", "api_crash", detail)
         self._schedule_api_restart()
 
-    # ── Worker 시작/스트리밍/종료 ──────────────────────────────────────
-    def _start_worker(self):
-        if self.worker_proc and self.worker_proc.poll() is None:
+    # ── Worker·Index 시작/스트리밍/종료 ────────────────────────────────
+    def _start_child(self, child):
+        if child.running():
             return True
-        self._log("Worker 시작 중...", "info")
+        self._log(f"{child.name} 시작 중...", "info")
         try:
-            self.worker_proc = subprocess.Popen(
-                WORKER_CMD, cwd=str(BASE_DIR),
+            child.proc = subprocess.Popen(
+                child.cmd, cwd=str(BASE_DIR),
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding="utf-8", errors="replace",
                 env=_CHILD_ENV,
                 creationflags=subprocess.CREATE_NO_WINDOW
             )
-            self._set_worker_state(True)
-            self._log(f"Worker 시작됨 (PID {self.worker_proc.pid})", "success")
-            events.append_event(LOG_DIR, "L1", "worker_start", {"pid": self.worker_proc.pid})
-            threading.Thread(target=self._stream_worker,
-                             args=(self.worker_proc,), daemon=True).start()
+            self._set_child_state(child, True)
+            self._log(f"{child.name} 시작됨 (PID {child.proc.pid})", "success")
+            events.append_event(LOG_DIR, "L1", f"{child.key}_start", {"pid": child.proc.pid})
+            threading.Thread(target=self._stream_child,
+                             args=(child, child.proc), daemon=True).start()
             return True
         except OSError as exc:
-            self._log(f"Worker 시작 실패: {type(exc).__name__}: {exc}", "error")
-            events.append_event(LOG_DIR, "L1", "worker_start_failed",
+            self._log(f"{child.name} 시작 실패: {type(exc).__name__}: {exc}", "error")
+            events.append_event(LOG_DIR, "L1", f"{child.key}_start_failed",
                                 {"error": f"{type(exc).__name__}: {exc}"[:300]})
             return False
 
-    def _stream_worker(self, proc):
+    def _stream_child(self, child, proc):
         for line in proc.stdout:
             line = line.rstrip()
             if not line:
                 continue
-            self.worker_log.write(line)
-            tag = "worker"
+            child.log.write(line)
+            tag = child.tag
             lower = line.lower()
             if "error" in lower:
                 tag = "error"
             elif "warning" in lower:
                 tag = "warning"
-            self.root.after(0, self._log, "[Worker] " + line, tag)
-        self.root.after(0, self._on_worker_exit, proc)
+            self.root.after(0, self._log, f"[{child.name}] " + line, tag)
+        self.root.after(0, self._on_child_exit, child, proc)
 
-    def _on_worker_exit(self, proc):
-        if proc is not self.worker_proc:
+    def _on_child_exit(self, child, proc):
+        if proc is not child.proc:
             return
-        self._set_worker_state(False)
+        self._set_child_state(child, False)
         if self.is_updating or self.intentional_stop:
             return
-        self._log("Worker 가 예기치 않게 종료되었습니다.", "error")
-        detail = {}
-        if self.worker_proc is not None:
-            detail["crashed_pid"] = self.worker_proc.pid
-            detail["exit_code"] = self.worker_proc.poll()
-        events.append_event(LOG_DIR, "L1", "worker_crash", detail)
-        self._schedule_worker_restart()
+        self._log(f"{child.name} 가 예기치 않게 종료되었습니다.", "error")
+        detail = {"crashed_pid": proc.pid, "exit_code": proc.poll()}
+        events.append_event(LOG_DIR, "L1", f"{child.key}_crash", detail)
+        self._schedule_child_restart(child)
 
     # ── 자동 재시작 ─────────────────────────────────────────────────────
     def _schedule_api_restart(self):
@@ -398,19 +417,18 @@ class LogbookManager:
         self._log(f"{RESTART_DELAY_MS // 1000}초 뒤 API 자동 재시작.", "warning")
         self.root.after(RESTART_DELAY_MS, self._api_restart_fire)
 
-    def _schedule_worker_restart(self):
+    def _schedule_child_restart(self, child):
         now = time.monotonic()
-        action, delay = self.worker_restart_policy.on_crash(now)
+        action, delay = child.policy.on_crash(now)
         if action == "wait":
             minutes = round(delay / 60, 1)
-            self._log(f"Worker 연속 실패 — {minutes}분 뒤 다시 시도.", "error")
-            events.append_event(LOG_DIR, "L1", "worker_backoff_wait",
-                                {"delay_sec": round(delay),
-                                 "level": self.worker_restart_policy.backoff_level})
-            self.root.after(int(delay * 1000), self._worker_restart_fire)
+            self._log(f"{child.name} 연속 실패 — {minutes}분 뒤 다시 시도.", "error")
+            events.append_event(LOG_DIR, "L1", f"{child.key}_backoff_wait",
+                                {"delay_sec": round(delay), "level": child.policy.backoff_level})
+            self.root.after(int(delay * 1000), self._child_restart_fire, child)
             return
-        self._log(f"{RESTART_DELAY_MS // 1000}초 뒤 Worker 자동 재시작.", "warning")
-        self.root.after(RESTART_DELAY_MS, self._worker_restart_fire)
+        self._log(f"{RESTART_DELAY_MS // 1000}초 뒤 {child.name} 자동 재시작.", "warning")
+        self.root.after(RESTART_DELAY_MS, self._child_restart_fire, child)
 
     def _api_restart_fire(self):
         if self.is_updating or self.intentional_stop:
@@ -422,17 +440,17 @@ class LogbookManager:
         else:
             self._schedule_api_restart()
 
-    def _worker_restart_fire(self):
+    def _child_restart_fire(self, child):
         if self.is_updating or self.intentional_stop:
             return
-        if self.worker_proc and self.worker_proc.poll() is None:
+        if child.running():
             return
-        if self._start_worker():
-            events.append_event(LOG_DIR, "L1", "worker_restart_done", {"reason": "crash"})
+        if self._start_child(child):
+            events.append_event(LOG_DIR, "L1", f"{child.key}_restart_done", {"reason": "crash"})
         else:
-            self._schedule_worker_restart()
+            self._schedule_child_restart(child)
 
-    # ── 좀비 감지 (API 만, Worker 는 HTTP endpoint 없음) ────────────────
+    # ── 좀비 감지 (API 만, Worker·Index 는 HTTP endpoint 없음) ──────────
     def _health_tick(self):
         self.root.after(HEALTH_INTERVAL_MS, self._health_tick)
         proc = self.api_proc
@@ -529,36 +547,41 @@ class LogbookManager:
             self.api_proc = None
         self._set_api_state(False)
 
-    def _stop_worker(self):
-        if self.worker_proc and self.worker_proc.poll() is None:
-            self._log("Worker 중지...", "warning")
+    def _stop_child(self, child):
+        if child.running():
+            self._log(f"{child.name} 중지...", "warning")
             try:
-                self.worker_proc.terminate()
+                child.proc.terminate()
                 try:
-                    self.worker_proc.wait(timeout=5)
+                    child.proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    self.worker_proc.kill()
+                    child.proc.kill()
             except Exception as exc:
-                self._log(f"  Worker 종료 실패: {exc}", "error")
-            self.worker_proc = None
-        self._set_worker_state(False)
+                self._log(f"  {child.name} 종료 실패: {exc}", "error")
+            child.proc = None
+        self._set_child_state(child, False)
+
+    def _stop_children(self):
+        for child in self.children:
+            self._stop_child(child)
 
     def _toggle_all(self):
         running = ((self.api_proc and self.api_proc.poll() is None)
-                   or (self.worker_proc and self.worker_proc.poll() is None))
+                   or any(c.running() for c in self.children))
         if running:
             self.intentional_stop = True
             self._stop_api()
-            self._stop_worker()
+            self._stop_children()
             self._log("모든 서비스가 중지되었습니다.", "warning")
             self.toggle_btn.configure(text="Start All", bg=GREEN,
                                      activebackground="#2db87a")
         else:
             self.intentional_stop = False
             self.api_restart_policy.reset()
-            self.worker_restart_policy.reset()
             self._start_api()
-            self._start_worker()
+            for child in self.children:
+                child.policy.reset()
+                self._start_child(child)
             self.toggle_btn.configure(text="Stop All", bg=RED,
                                      activebackground="#d45f5f")
 
@@ -576,7 +599,7 @@ class LogbookManager:
 
         self.root.after(0, self._log, "[1/4] 서비스 중지", "info")
         self.root.after(0, self._stop_api)
-        self.root.after(0, self._stop_worker)
+        self.root.after(0, self._stop_children)
 
         self.root.after(0, self._log, "[2/4] git pull origin main", "info")
         before = self._get_git_hash()
@@ -612,11 +635,12 @@ class LogbookManager:
     def _post_update_start(self):
         self.intentional_stop = False
         self.api_restart_policy.reset()
-        self.worker_restart_policy.reset()
         if not self._start_api():
             self._schedule_api_restart()
-        if not self._start_worker():
-            self._schedule_worker_restart()
+        for child in self.children:
+            child.policy.reset()
+            if not self._start_child(child):
+                self._schedule_child_restart(child)
 
     def _get_git_hash(self):
         try:
@@ -693,11 +717,12 @@ class LogbookManager:
     def _on_close(self):
         self.intentional_stop = True
         self._stop_api()
-        self._stop_worker()
+        self._stop_children()
         events.append_event(LOG_DIR, "L1", "manager_stop")
         pidfile.clear(LOG_DIR)
         self.uvicorn_log.close()
-        self.worker_log.close()
+        for child in self.children:
+            child.log.close()
         self.root.destroy()
 
 

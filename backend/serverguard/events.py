@@ -83,9 +83,9 @@ def prune_events(log_dir, retention_days=RETENTION_DAYS, *, now=None):
         return 0
 
 
-def prune_uvicorn_logs(log_dir, retention_days=RETENTION_DAYS, *, now=None):
-    """보존 기간이 지난 일자별 로그 파일을 삭제하고 삭제 개수를 반환한다."""
-    directory = Path(log_dir) / UVICORN_SUBDIR
+def prune_uvicorn_logs(log_dir, retention_days=RETENTION_DAYS, *, now=None, subdir=UVICORN_SUBDIR):
+    """보존 기간이 지난 일자별 로그 파일을 삭제하고 삭제 개수를 반환한다(subdir 로 worker 등 다른 폴더도)."""
+    directory = Path(log_dir) / subdir
     if not directory.exists():
         return 0
 

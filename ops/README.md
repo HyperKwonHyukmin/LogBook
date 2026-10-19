@@ -1,7 +1,9 @@
 # Logbook 145 서버 설치·운영 안내
 
 145 서버(10.14.42.145)에서 Logbook 을 혼자 돌아가게 하는 절차다. API(포트 9095)·워커·보고서 색인 워커(22) 세 프로세스를
-Windows 작업 스케줄러가 "시작 시 실행" 으로 띄우고, 프로세스가 끝나면 `run-*.ps1` 안의 루프가 60초 뒤 다시 띄운다. 서비스 관리 도구(NSSM 등)는 쓰지 않는다.
+**Server Manager**(`backend\server_manager.py`, `Logbook_Server.bat`) 한 창이 띄우고, 끝나면 다시 띄운다(6절). 145 는 이 방식이다(2026-10-20 확인 — 작업 스케줄러 작업 없음).
+작업 스케줄러 방식(6-2절)은 대안으로 남겨 둔다. **두 방식을 함께 쓰지 않는다** — 프로세스가 둘씩 떠 서로 포트를 빼앗고 옛 워커가 작업을 계속 처리한다.
+서비스 관리 도구(NSSM 등)는 쓰지 않는다.
 
 - 원본은 공유 폴더 `999_LogBook` 이고 DB 는 다시 세울 수 있는 캐시다(설계 §2.1).
 - 워커가 매일 02시 이후 첫 주기에 레지스트리 갱신·DB 백업·90일 지난 휴지통 비우기를 한다.
@@ -90,8 +92,22 @@ cd C:\Coding\Logbook\backend
 .venv\Scripts\python.exe -m app.cli create-admin <사번> <이름> [부서]
 ```
 
-## 6. 작업 스케줄러 등록
+## 6. 프로세스 띄우기 — Server Manager(145 기본)
 
+`Logbook_Server.bat` 를 두 번 누르면 창 하나가 API·Worker·Index(보고서 색인 워커, 41 에서 추가) 셋을 띄운다.
+
+- 창 위의 점(●) 셋이 각 프로세스 상태다. 끝나면 3초 뒤 다시 띄우고, 연달아 죽으면 점점 길게 기다린다(각자 따로).
+  API 는 3분 동안 응답이 없으면 강제로 다시 띄운다. Worker·Index 는 프로세스가 살아 있는지만 본다.
+- **[⟳ Update]**: 셋을 멈춤 → `git pull origin main` → `requirements.txt` 가 바뀌었으면 pip install → 셋을 다시 띄운다(9절).
+- 로그: `backend\logs\uvicorn\`·`worker\`·`report-index\` 의 `YYYYMMDD.log`, 사건 기록 `backend\logs\server_events.jsonl`.
+  30일 지난 일자 로그는 Manager 가 시작할 때 지운다.
+- 이미 떠 있으면 두 번째 창은 경고만 하고 닫힌다(`backend\logs\server_manager.pid`).
+- **자동 시작은 로그온 때만**이다. `install-autostart.ps1` 이 시작 프로그램(`shell:startup`)에 바로가기를 만든다.
+  145 를 재부팅하면 **누군가 그 계정으로 로그온해야** 서비스가 뜬다. 재부팅 뒤에는 원격 데스크톱으로 한 번 로그온한다.
+
+## 6-2. (대안) 작업 스케줄러 등록
+
+로그온 없이 부팅만으로 띄워야 할 때 쓴다. 쓰려면 먼저 Server Manager 를 닫고 시작 프로그램 바로가기를 지운다.
 관리자 권한 PowerShell 에서 실행한다. 공유 폴더 권한이 있는 **도메인 계정**을 쓴다(SYSTEM 은 공유 폴더를 못 읽는다).
 
 - 그 계정에 **'일괄 작업으로 로그온'(Log on as a batch job, `SeBatchLogonRight`)** 권한이 있어야 한다
@@ -128,18 +144,20 @@ Start-ScheduledTask -TaskName 'Logbook Report Index'
 ## 8. 팀원 안내
 
 - 공유 폴더의 `Logbook.url` 을 두 번 누르거나 크롬에서 `http://10.14.42.145:9095` 를 북마크한다.
-- 처음 쓰는 사람은 사번으로 가입을 신청하고, 관리자가 **관리 → 사용자 관리** 에서 승인한다.
+- WorkBench 가입자는 사번으로 바로 들어온다(15 — 따로 가입·승인 없음). 처음에는 LV1(게스트)이고, 등급은 관리자가 **관리 → 사용자 관리** 에서 바꾼다.
 - 자료 원본은 공유 폴더에 있다. `10_Vault` 를 직접 고치지 않는다.
 
 ## 9. 업데이트
 
+**Server Manager(145)**: 창의 **[⟳ Update]** 한 번이면 된다(6절). 로그 창에서 `[2/4] git pull` 의 After 해시와
+`[3/4]` 의 pip 결과를 본다 — pip 가 실패해도 재시작은 진행되니 오류 줄이 보이면 아래 명령으로 다시 설치하고 Update 를 한 번 더 누른다.
+
 ```powershell
 cd C:\Coding\Logbook
-git pull
 backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
 ```
 
-재시작은 다음 순서로 한다. `run-*.ps1` 은 python 을 `cmd` 아래 자식 프로세스로 띄우므로 **작업을 멈춰도 python 이
+**작업 스케줄러(6-2절)** 를 쓸 때는 `git pull`·pip install 뒤 재시작을 다음 순서로 한다. `run-*.ps1` 은 python 을 `cmd` 아래 자식 프로세스로 띄우므로 **작업을 멈춰도 python 이
 남을 수 있다.** 남은 것을 끝내지 않으면 새 워커와 옛 워커가 동시에 돈다(일일 작업은 잠금으로 한쪽만 돌지만,
 옛 코드가 계속 작업을 처리한다).
 
@@ -166,7 +184,7 @@ Start-ScheduledTask -TaskName 'Logbook Report Index' -ErrorAction SilentlyContin
 1. **업데이트 전 수동 백업**: `backend\.venv\Scripts\python.exe -m app.cli backup`
 2. 새 `.env` 키가 생겼는지 `backend\.env.example` 과 비교한다(3절 표). 특히 `LOGBOOK_WB_INTEGRATION_SECRET`.
 3. WorkBench 사용자 표 GRANT(3절)가 되어 있는지 확인한다.
-4. 새 작업이 생겼으면 `install-tasks.ps1` 을 **다시 실행**해 등록한다(예: 22 이후 `Logbook Report Index`).
+4. (작업 스케줄러 방식일 때만) 새 작업이 생겼으면 `install-tasks.ps1` 을 **다시 실행**해 등록한다(예: 22 이후 `Logbook Report Index`).
 5. 재시작 뒤 확인: 로그인 → 관리 › 운영 화면에서 워커 박동·'WorkBench 사용자 표: 연결됨' → Inbox 에 시험 파일 하나를 올려 확정까지.
 6. 1회 정비 명령(해당 업데이트의 계획 문서·WorkLog 에 적힌 것만, **한 곳에서 한 번**). 예(09~24 업데이트):
    ```powershell
@@ -299,7 +317,8 @@ CREATE DATABASE logbook CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 보고서 화면(`/reports`)의 검색은 보고서 **본문 색인**(그림 속 글자 OCR 포함, 쪽·시트·슬라이드 위치)으로 찾고, '의미 추천 포함'을
 켜면 로컬 Ollama 임베딩으로 관련 보고서를 덧붙이며, 미리보기의 [이 보고서 근거로 요약]이 Ollama 채팅 모델로 근거 요약을 만든다.
-색인을 만드는 것은 따로 도는 **보고서 색인 워커**(`python -m app.report_index.worker --loop`, 작업 `Logbook Report Index`)다.
+색인을 만드는 것은 따로 도는 **보고서 색인 워커**(`python -m app.report_index.worker --loop`)다. 145 는 Server Manager 의 Index 가 띄운다
+(41 — 그 전에는 145 에서 한 번도 돌지 않아 2026-10-20 `--status` 가 `documents: 0`). 작업 스케줄러 방식이면 작업 `Logbook Report Index`.
 
 - **색인은 서버 로컬**: `backend\.report-search\index.sqlite3`(SQLite, gitignore). 서버마다 따로 만든다(개발 PC 색인을 복사하지 않는다).
   공유 폴더 경로(`\\…`)를 색인 위치로 주면 시작하지 않는다(SQLite 잠금을 SMB 에서 믿을 수 없다).
@@ -321,7 +340,7 @@ CREATE DATABASE logbook CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
    개발 PC 의 `%USERPROFILE%\.ollama\models` 를 복사한다. Ollama 가 없으면 키워드 검색만 된다.
 3. **구형 PPT(.ppt)**: LibreOffice(`soffice`) 또는 Microsoft PowerPoint 가 있어야 변환해 색인한다. 둘 다 없으면 그 파일은 '실패'로
    남고(지수 백오프로 최대 하루 한 번 다시 시도) 목록·미리보기는 그대로다.
-4. 작업 등록: 6절 `install-tasks.ps1`(세 번째 작업 `Logbook Report Index`). 이미 API·워커를 등록했어도 같은 명령을 다시 실행하면 된다.
+4. 띄우기: Server Manager 면 따로 할 일 없다(Update 뒤 Index 점이 초록인지 본다). 작업 스케줄러 방식이면 6-2절 `install-tasks.ps1`(세 번째 작업 `Logbook Report Index`).
 
 ### 13-2. 초기 색인
 
