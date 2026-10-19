@@ -53,7 +53,7 @@
 
 ## 배포 (145)
 
-README '사내 PLM 선박 정보 (30)'. ⟳ Update(requirements 변경 → pip install) → `.env` 에 WorkBench 의 `PLM_ORACLE_*` 4줄 → 재시작 →
+README '사내 PLM 선박 정보 (30)'. ⟳ Update(requirements 변경 → pip install) → `.env` 에 WorkBench 의 `PLM_ORACLE_*` 4줄 + `TNS_ADMIN`(빠지면 ORA-12541 — 2026-10-19 145 에서 겪음) → 재시작 →
 `app.cli plm-fill` 한 번. DB 열은 시작할 때 저절로 더해진다.
 
 ## 테스트

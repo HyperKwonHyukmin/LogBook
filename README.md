@@ -95,7 +95,8 @@ SHOW GRANTS FOR '<logbook 계정>'@'<호스트>';
 
 1. Server Manager ⟳ Update — `requirements.txt` 에 `oracledb` 가 새로 들어와 Update 가 pip install 까지 한다(수동이면 `.venv\Scripts\python.exe -m pip install -r requirements.txt`).
 2. `.env` 에 WorkBench `.env` 의 같은 이름 줄을 그대로 옮긴다: `PLM_ORACLE_DSN` · `PLM_ORACLE_USER` · `PLM_ORACLE_PASSWORD` ·
-   `PLM_ORACLE_LIB_DIR`(145 의 PLM 은 10G password verifier 라 Oracle Client 폴더를 주는 thick mode 가 필요하다).
+   `PLM_ORACLE_LIB_DIR`(145 의 PLM 은 10G password verifier 라 Oracle Client 폴더를 주는 thick mode 가 필요하다) ·
+   **`TNS_ADMIN`**(별칭 `HIPLM` 을 풀 tnsnames.ora 폴더 — 빠지면 다른 tnsnames 의 옛 주소로 가서 `ORA-12541 No listener`).
 3. 서버 재시작 → 호선 화면에서 [선박 정보 검색]. 처음 한 번은 `.venv\Scripts\python.exe -m app.cli plm-fill` 로 기존 호선을 모두 채운다.
 
 접속이 안 되면 `.venv\Scripts\python.exe -m app.cli plm-check 3370` — 모드(thin/thick)·`TNS_ADMIN`·별칭이 가리키는 tnsnames 항목을 보이고 한 번 조회해 본다(WorkBench `scripts\inspect_plm_hull_tables.py` 결과와 견준다).
