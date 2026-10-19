@@ -343,6 +343,13 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
     entry.version += 1
     db.flush()
     if entry.status == "confirmed":
+        if "hulls" in patch:
+            # 30 — 확정 자료에 새로 넣은 호선도 호선 행을 만들고 PLM 자동 조회 대상에 올린다(설정돼 있을 때만)
+            _ensure_hulls(db, entry)
+            db.flush()
+            from .. import plm_ship
+
+            plm_ship.enqueue_fill(db)
         after = snapshot(db, entry)
         audit.record(db, storage, actor=actor, action=action, target_type="entry",
                      target_id=entry.entry_id, before=before, after=after, ip=ip)

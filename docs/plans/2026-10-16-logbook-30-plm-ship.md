@@ -32,6 +32,13 @@
 `plm_status`(found · not_found · NULL=아직 안 봄) · `plm_checked_at` · `plm_ship_type`(원문 '174K-LNG') · `ship_capacity`('174K', 컨테이너는 단위 없이 '4500') ·
 `ship_kind`('LNG') · `ship_variant`(괄호 부가정보 'DF' · 'MOSS') · `main_engine` · `ship_class`(SHIP_CLASS1) · `delivery_date`('YYYY-MM-DD') · `delivered`.
 
+### 추가 (2026-10-19) — 자료 수정 화면에서도
+
+- 자료 화면 [수정] · 정리 대기 카드의 호선 칸 아래 **[선박 정보 검색]**(`components/hull/HullPlmLookup.jsx`) — 입력한 호선마다
+  선종·주기관·선급·인도일을 **보여 주기만** 한다. `GET /api/hulls/{hull_no}/plm`(`hull_info.preview_plm`, 로그인만 — 저장·감사·없음 기록 없음).
+- 확정 자료에서 호선을 바꾸면(`update_entry`) 새 호선 행을 만들고 `enqueue_fill` — 확정 때와 같이 빈 선종을 자동으로 채운다
+  (전에는 수정으로 더한 호선은 호선 행이 없어 PLM 일괄 조회 대상에서 빠졌다).
+
 ## 규칙
 
 - **선종 덮어쓰기**: [선박 정보 검색](사람이 누름)은 선종을 선형으로 **바꾼다**(감사 before/after 에 남는다). 일괄·자동은 선종이 **빈 호선만** 채운다 —

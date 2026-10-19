@@ -57,3 +57,9 @@ def plm_lookup(hull_no: str, request: Request, db: Session = Depends(get_db),
     access.require_shared_writer(user)
     h = hull_info.lookup_and_apply(db, storage, user.employee_id, hull_no, client_ip(request))
     return {"hull_no": h.hull_no, "ship_type": h.ship_type, "memo": h.memo, "plm": hull_info.plm_of(h)}
+
+
+@router.get("/{hull_no}/plm")
+def plm_preview(hull_no: str, user: models.User = Depends(require_auth)):
+    """30 — 자료 수정 화면 [선박 정보 검색]: PLM 값을 읽어 보여 주기만 한다(저장은 자료를 저장할 때 자동 조회가 한다)."""
+    return hull_info.preview_plm(hull_no)

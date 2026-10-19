@@ -33,6 +33,7 @@ import { useUnsavedGuard } from '../lib/useUnsavedGuard.js';
 import AccessPanel, { AccessBadge } from '../components/access/AccessPanel.jsx';
 import { canWriteLevel } from '../lib/levels.js';
 import RevisionSection from '../components/revisions/RevisionSection.jsx';
+import HullPlmLookup from '../components/hull/HullPlmLookup.jsx';
 import NeedsFixBadge from '../components/ui/NeedsFixBadge.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
@@ -612,6 +613,8 @@ export default function EntryPage() {
                          onChange={(e) => { const on = e.target.checked; setDraft((d) => ({ ...d, no_hull: on, hulls: on ? [] : d.hulls })); }} />
                   호선 없음(공용){isChanged('no_hull') && <ChangedMark />}
                 </label>
+                {/* 30 — 입력한 호선의 PLM 선박 정보(보여 주기만) */}
+                <HullPlmLookup hulls={draft.hulls} />
               </Prop>
               <Prop label="구역" changed={isChanged('zones')}>
                 <VocabInput multiple kind="zone" label="구역" values={draft.zones} onChange={set('zones')} />

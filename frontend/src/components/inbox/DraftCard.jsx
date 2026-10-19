@@ -17,6 +17,7 @@ import { accessOf, isAdminLevel } from '../../lib/levels.js';
 import { AuthContext } from '../../auth/AuthContext.jsx';
 import { DuplicateTargets } from './DuplicateBlocked.jsx';
 import DraftAttachments from './DraftAttachments.jsx';
+import HullPlmLookup from '../hull/HullPlmLookup.jsx';
 import { DROP_ZONE_ATTR, isOsFileDrag, useOsFileDragActive } from './UploadZone.jsx';
 
 const DRAG_TYPE = 'application/x-logbook-file';
@@ -323,6 +324,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
               호선 없음(공용){mark('no_hull')}
             </label>
           ) : values.no_hull && <span className="font-normal text-n-600">공용(호선 없음)</span>}
+          {canEdit && <HullPlmLookup hulls={values.hulls} disabled={fieldDisabled} />}
           {entry.hull_evidence?.length > 0 && (
             <span className="font-normal text-n-500">추정 근거: {entry.hull_evidence.map((h) => `${h.hull_no} (${(h.reasons || []).join(', ')})`).join(' · ')}</span>
           )}

@@ -206,6 +206,45 @@ def test_confirm_does_not_enqueue_when_not_configured(db, storage, make_user, ma
     assert plm_ship.enqueue_fill(db) is None and db.query(models.Job).filter_by(type="plm_fill").count() == 0
 
 
+# ---- 자료 수정 화면 [선박 정보 검색](읽기만) · 확정 자료에 호선을 더하면 자동 조회 ----
+
+def test_plm_preview_reads_only(client, db, make_user, make_entry_file, auth_headers, plm):
+    make_user("C300003", level=1)   # 미리 보기는 공용 정보를 바꾸지 않으니 LV1 도 된다
+    make_entry_file(title="x", hulls=("3370",), name="a.pdf")
+    h = auth_headers("C300003")
+    r = client.get("/api/hulls/3370/plm", headers=h)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ship_type"] == "174K LNG" and body["plm"]["main_engine"] == "G70ME-C10.5-GA-EGRBP"
+    hull = db.get(models.Hull, "3370")
+    db.refresh(hull)
+    assert hull.ship_type is None and hull.plm_status is None   # 저장하지 않는다
+    assert db.query(models.AuditLog).filter_by(action="HULL_PLM").count() == 0
+    r = client.get("/api/hulls/9999/plm", headers=h)
+    assert (r.status_code, r.json()["detail"]) == (404, "ship_not_found")
+    assert db.get(models.Hull, "9999") is None                   # 없음도 기록하지 않는다
+    assert client.get("/api/hulls/99999/plm", headers=h).status_code == 422
+    plm["raise"] = plm_ship.PlmUnavailable("not_configured")
+    r = client.get("/api/hulls/3380/plm", headers=h)   # 3370 은 찾음 캐시에 있다
+    assert (r.status_code, r.json()["detail"]) == (503, "plm_not_configured")
+
+
+def test_edit_confirmed_entry_hulls_enqueues_plm_fill(db, storage, make_user, make_entry_file, monkeypatch, plm):
+    from app.entries import service
+
+    u = make_user("A100001", level=3)
+    monkeypatch.setattr(plm_ship, "is_configured", lambda: True)
+    e, _ = make_entry_file(title="x", hulls=("3370",), name="a.pdf")
+    db.get(models.Hull, "3370").plm_status = "found"
+    db.commit()
+    service.update_entry(db, storage, e, u, {"version": e.version, "title": "y"})
+    assert db.query(models.Job).filter_by(type="plm_fill").count() == 0   # 호선을 안 바꾸면 그대로
+    e = db.get(models.Entry, e.id)
+    service.update_entry(db, storage, e, u, {"version": e.version, "hulls": ["3370", "3371"]})
+    assert db.get(models.Hull, "3371") is not None                         # 새 호선 행
+    assert db.query(models.Job).filter_by(type="plm_fill", state="queued").count() == 1
+
+
 def test_cli_plm_fill(db, storage, make_entry_file, plm):
     import io
 

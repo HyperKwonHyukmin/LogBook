@@ -220,6 +220,24 @@ def lookup_and_apply(db: Session, storage: StoragePaths, actor: str, hull_no: st
     return hull
 
 
+def preview_plm(hull_no: str) -> dict:
+    """자료 수정 화면 [선박 정보 검색] — PLM 을 읽기만 한다(호선 행·선종은 바꾸지 않는다). 아무 로그인 사용자나.
+    오류 코드는 lookup_and_apply 와 같다(없음 404 · 형식 422 · 설정 없음 503 · 조회 실패 502)."""
+    from . import plm_ship
+
+    if not HULL_PATTERN.fullmatch(hull_no):
+        raise HTTPException(status_code=422, detail="invalid_ship_no")
+    result = plm_ship.lookup(hull_no)
+    if result.status != "found":
+        raise plm_http_error(result)
+    s = result.ship
+    return {"hull_no": hull_no, "ship_type": (s["label"] or "")[:50] or None,
+            "plm": {"status": "found", "ship_type_raw": s["shipType"], "capacity": s["capacity"],
+                    "ship_kind": s["shipKind"], "variant": s["variant"], "main_engine": s["mainEngine"],
+                    "ship_class": s["shipClass"], "delivery_date": s["deliveryDate"], "delivered": s["delivered"],
+                    "checked_at": None}}
+
+
 def fill_from_plm(db: Session, storage: StoragePaths, actor: str, *, only_unchecked: bool = False,
                   ip: str | None = None) -> dict:
     """호선 목록 [선종 채우기]·확정 뒤 작업·CLI — 한 번의 조회로 여러 호선을 채운다. 선종은 비어 있을 때만 채운다.
