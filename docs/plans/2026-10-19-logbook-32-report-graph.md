@@ -64,6 +64,9 @@
   같은 자료 보고서 판(이름 규칙 · 본문 규칙 · 발표자료 제외 · 색인 전 단계 없음), 옛 색인 무시, 지도 uses·rrev·text·숨은 자료·
   색인 현황, 임계값 환경 변수, 색인 없이 이름만(흔한 짧은 이름 제외), 지도 보고서 판.
 - 프런트 `lib/graphModel.test.js`(+3), `pages/GraphPage.test.jsx`(+1).
+- 결과(2026-10-19): 프런트 전체 99파일 725건 통과. **백엔드 32·25·22·21 은 아직 돌려 보지 못함** — 다른 세션이 같은
+  `logbook_test` 로 전체 테스트를 돌리던 중이라 충돌했다. 다른 pytest 가 없을 때 아래를 돌린다(표를 손으로 지우지 않는다).
+  `.\.venv\Scripts\python.exe -m pytest tests/test_report_graph_32.py tests/test_graph_25.py tests/test_report_index_22.py tests/test_reports_21.py -q -p no:cacheprovider`
 
 ## 배포
 
