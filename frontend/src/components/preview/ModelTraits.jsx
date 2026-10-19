@@ -2,12 +2,16 @@ import { STRUCTURES, familyCounts, formatSize, num, structureOf } from '../../li
 
 /**
  * 38 — 대표 BDF 고르기: 변환이 끝난(done) 모델 중 절점(GRID)이 가장 많은 것(검색 결과 행·썸네일과 같은 규칙,
- * 같으면 큰 파일). 없으면 null.
+ * 같으면 큰 파일). 판 묶음(14)이 있으면 각 계열의 최신 판 안에서만 고른다(R0·R1 보다 R2). 없으면 null.
  */
-export function representativeModel(files) {
+export function representativeModel(files, revisions) {
+  const done = (files || []).filter((f) => f.kind === 'model' && f.model?.state === 'done' && f.model.counts);
+  // 옛 판(최신이 아닌 판)은 뺀다 — 판으로 묶이지 않은 모델은 그대로 후보. 다 빠지면 전체에서
+  const stale = new Set((revisions || []).flatMap((s) => (s.items || []).filter((x) => !x.is_latest).map((x) => x.file_id)));
+  const fresh = done.filter((f) => !stale.has(f.id));
+  const pool = fresh.length ? fresh : done;
   let best = null;
-  for (const f of files || []) {
-    if (f.kind !== 'model' || f.model?.state !== 'done' || !f.model.counts) continue;
+  for (const f of pool) {
     const rank = [Number(f.model.counts.GRID) || 0, f.size || 0];
     if (!best || rank[0] > best.rank[0] || (rank[0] === best.rank[0] && rank[1] > best.rank[1])) best = { file: f, rank };
   }
@@ -19,10 +23,18 @@ const bboxSize = (bbox) => {
   return [0, 1, 2].map((k) => Number(bbox.max[k]) - Number(bbox.min[k]));
 };
 
+/**
+ * 자료를 열었을 때 처음 미리 볼 파일 — BDF 가 있으면 대표 BDF(3D 뷰어), 변환된 BDF 가 없으면 첫 문서, 그다음 첫 파일.
+ */
+export function defaultFile(entry) {
+  const files = entry?.files || [];
+  return representativeModel(files, entry?.revisions) || files.find((f) => f.kind === 'report') || files[0] || null;
+}
+
 /** 자료 사전 → 특성 조각 [{ key, text, title? }] — 모델 구성·절점·크기·판·선형. 순수 함수(테스트용). */
 export function traitParts(entry) {
   const parts = [];
-  const rep = representativeModel(entry?.files);
+  const rep = representativeModel(entry?.files, entry?.revisions);
   if (rep) {
     const structure = structureOf(familyCounts(rep.model.counts));
     if (structure) parts.push({ key: 'structure', text: STRUCTURES[structure], strong: true });

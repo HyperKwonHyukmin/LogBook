@@ -35,7 +35,7 @@ import { canWriteLevel } from '../lib/levels.js';
 import RevisionSection from '../components/revisions/RevisionSection.jsx';
 import HullPlmLookup, { HullPlmSummary } from '../components/hull/HullPlmLookup.jsx';
 import NeedsFixBadge from '../components/ui/NeedsFixBadge.jsx';
-import ModelTraits from '../components/preview/ModelTraits.jsx';
+import ModelTraits, { defaultFile } from '../components/preview/ModelTraits.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
 // 21 — 프로젝트(있을 때만 기록). 29 — 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
@@ -461,7 +461,8 @@ export default function EntryPage() {
     ? '올린 사람·관리자(LV3)만 고칠 수 있습니다.' : '';
   const trashed = entry.status === 'trashed';
   const offline = storage?.reachable === false;
-  const file = entry.files.find((f) => f.id === picked) || entry.files.find((f) => f.kind === 'report') || entry.files[0];
+  // 처음 보는 파일 — 고른 파일(주소 ?file=)이 없으면 대표 BDF(3D), BDF 가 없으면 첫 문서
+  const file = entry.files.find((f) => f.id === picked) || defaultFile(entry);
   const set = (k) => (v) => setDraft((d) => ({ ...d, [k]: v }));
   const isChanged = (k) => changed.includes(k);
 

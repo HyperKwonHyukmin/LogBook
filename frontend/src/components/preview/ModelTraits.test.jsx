@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import ModelTraits, { representativeModel, traitParts } from './ModelTraits.jsx';
+import ModelTraits, { defaultFile, representativeModel, traitParts } from './ModelTraits.jsx';
 import { familyCounts, structureOf } from '../../lib/insight.js';
 
 // 38 — 모델 특성 줄
@@ -33,4 +33,16 @@ test('특성 조각 — 구성·절점·크기·판·선형', () => {
 test('모델도 선종도 없으면 그리지 않는다', () => {
   const { container } = render(<ModelTraits entry={{ files: [{ id: 1, kind: 'report' }], hulls: [] }} />);
   expect(container).toBeEmptyDOMElement();
+});
+
+test('처음 볼 파일 — 변환된 BDF(최신 판) > 첫 문서 > 첫 파일', () => {
+  const report = { id: 9, kind: 'report', name: 'r.pdf' };
+  const r0 = model(1, { GRID: 2000, CQUAD4: 10 });
+  const r2 = model(2, { GRID: 1500, CQUAD4: 10 });
+  const revisions = [{ key: 's', items: [{ file_id: 1, display: 'R0', is_latest: false }, { file_id: 2, display: 'R2', is_latest: true }] }];
+  expect(defaultFile({ files: [report, r0, r2], revisions }).id).toBe(2);   // 절점이 적어도 최신 판
+  expect(defaultFile({ files: [report, r0, r2] }).id).toBe(1);              // 판 묶음이 없으면 절점 최다
+  const queued = { id: 3, kind: 'model', model: { state: 'queued' } };
+  expect(defaultFile({ files: [queued, report] }).id).toBe(9);              // 변환 전 BDF 뿐이면 문서
+  expect(defaultFile({ files: [queued] }).id).toBe(3);
 });
