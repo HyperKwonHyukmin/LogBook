@@ -177,6 +177,11 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
         if not merge_into:
             d["merge_into_id"] = None
         d["can_edit"] = access.can_edit_entry(viewer, entry)
+        # 39 — WorkBench 해석 출처(LOGBOOK_WB_ORIGIN_SHOW 가 켜졌을 때만 — Core 03-safety '기본 꺼짐')
+        from ..config import settings as _settings
+        if _settings.wb_origin_show:
+            from .. import wb_origin
+            d["wb_origins"] = wb_origin.entry_origins(db, files)
         # 37 — 이 자료에서 뺀 파일(되돌리기용). 고칠 수 있는 사람에게만
         if d["can_edit"] and entry.status == "confirmed":
             d["removed_files"] = removed_files_of(db, entry)

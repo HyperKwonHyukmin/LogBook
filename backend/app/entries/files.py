@@ -216,6 +216,11 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry, b
         meta["no_hull"] = True
     if d["title_source"]:
         meta["title_source"] = d["title_source"]
+    # 39 — WorkBench 해석 출처(재구축 원천, 있을 때만 — 화면 노출 키와 무관하게 늘 보존)
+    from .. import wb_origin
+    origins = wb_origin.export(db, db.query(models.File).filter_by(entry_id=entry.id).all())
+    if origins:
+        meta["origins"] = origins
     # 38 — 대상 구조물(있을 때만)
     if d["target"]:
         meta["target"] = d["target"]

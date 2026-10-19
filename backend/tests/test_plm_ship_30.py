@@ -208,25 +208,43 @@ def test_confirm_does_not_enqueue_when_not_configured(db, storage, make_user, ma
 
 # ---- 자료 수정 화면 [선박 정보 검색](읽기만) · 확정 자료에 호선을 더하면 자동 조회 ----
 
-def test_plm_preview_reads_only(client, db, make_user, make_entry_file, auth_headers, plm):
-    make_user("C300003", level=1)   # 미리 보기는 공용 정보를 바꾸지 않으니 LV1 도 된다
+def test_plm_preview_saves_once_and_reuses(client, db, make_user, make_entry_file, auth_headers, plm):
+    make_user("C300003", level=1)   # PLM 사실값만 저장하니 LV1 도 된다
     make_entry_file(title="x", hulls=("3370",), name="a.pdf")
     h = auth_headers("C300003")
     r = client.get("/api/hulls/3370/plm", headers=h)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ship_type"] == "174K LNG" and body["plm"]["main_engine"] == "G70ME-C10.5-GA-EGRBP"
+    assert body["plm"]["checked_at"]
     hull = db.get(models.Hull, "3370")
     db.refresh(hull)
-    assert hull.ship_type is None and hull.plm_status is None   # 저장하지 않는다
-    assert db.query(models.AuditLog).filter_by(action="HULL_PLM").count() == 0
+    assert hull.plm_status == "found" and hull.ship_class == "BV"   # 처음 찾으면 저장한다
+    assert hull.ship_type == "174K LNG"                             # 빈 선종은 채운다
+    assert db.query(models.AuditLog).filter_by(action="HULL_PLM").count() == 1
+    # 저장된 호선은 PLM 에 다시 묻지 않는다(메모리 캐시를 비워도 — 재시작 뒤에도)
+    plm_ship.clear_cache()
+    calls = len(plm["calls"])
+    r = client.get("/api/hulls/3370/plm", headers=h)
+    assert r.status_code == 200 and r.json() == body
+    assert len(plm["calls"]) == calls
+    assert db.query(models.AuditLog).filter_by(action="HULL_PLM").count() == 1
+    # 사람이 고친 선종은 덮어쓰지 않는다
+    plm["rows"]["3380"] = {**ROW_3370, "SHIP_NO": "3380"}
+    db.add(models.Hull(hull_no="3380", ship_type="LNG 운반선"))
+    db.commit()
+    assert client.get("/api/hulls/3380/plm", headers=h).json()["ship_type"] == "174K LNG"
+    h3380 = db.get(models.Hull, "3380")
+    db.refresh(h3380)
+    assert h3380.ship_type == "LNG 운반선" and h3380.plm_status == "found"
     r = client.get("/api/hulls/9999/plm", headers=h)
     assert (r.status_code, r.json()["detail"]) == (404, "ship_not_found")
-    assert db.get(models.Hull, "9999") is None                   # 없음도 기록하지 않는다
+    assert db.get(models.Hull, "9999") is None                   # 못 찾은 번호는 기록하지 않는다
     assert client.get("/api/hulls/99999/plm", headers=h).status_code == 422
     plm["raise"] = plm_ship.PlmUnavailable("not_configured")
-    r = client.get("/api/hulls/3380/plm", headers=h)   # 3370 은 찾음 캐시에 있다
+    r = client.get("/api/hulls/3390/plm", headers=h)
     assert (r.status_code, r.json()["detail"]) == (503, "plm_not_configured")
+    assert client.get("/api/hulls/3370/plm", headers=h).status_code == 200   # 저장된 호선은 PLM 장애와 무관
 
 
 def test_edit_confirmed_entry_hulls_enqueues_plm_fill(db, storage, make_user, make_entry_file, monkeypatch, plm):

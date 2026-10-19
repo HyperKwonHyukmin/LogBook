@@ -209,6 +209,9 @@ def _restore_entry(db: Session, storage: StoragePaths, data: dict, *, status: st
     from ..revisions.series import restore_manual
     restore_manual(db, e, files, data.get("revisions"))
     db.flush()
+    # 39 — WorkBench 해석 출처(entry.json origins) — 출처마다 묶음을 만들어 그 파일을 옮겨 단다
+    from .. import wb_origin
+    wb_origin.restore(db, e, files, data.get("origins"))
     return e, files, missing
 
 

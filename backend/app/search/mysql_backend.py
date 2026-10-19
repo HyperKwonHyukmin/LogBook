@@ -28,6 +28,8 @@ from ..vocab import key as vocab_key
 from ..entries.quality import missing_fields
 from .base import FILTER_KEYS, GROUP_KEYS, GROUP_NONE, GROUP_SHARED, GROUP_SORTS, SORT_ALIASES, SORTS, SearchQuery, filter_values
 from . import insight
+from .. import wb_origin
+from ..config import settings
 from .snippets import make_snippet
 
 MAX_TERMS = 8
@@ -170,6 +172,11 @@ class MySqlSearch:
         # 13 — 볼 수 없는 Entry 는 모든 적중 질의의 SQL 조건에서 뺀다(건수·묶음·요약이 그 뒤에 계산된다)
         vis = access.visible_entries_filter(query.user)
         hits = [self._term_hits(db, t, statuses, vocab, vis) for t in terms]
+        # 39 — 검색어 전체가 'WB #123' 꼴이면 그 WorkBench 해석에서 온 자료(Core 01 표기). 키가 꺼져 있으면 글자 검색 그대로
+        wb_id = wb_origin.parse_term(query.q) if settings.wb_origin_show else None
+        if wb_id is not None:
+            terms = [query.q.strip()]
+            hits = [self._wb_hits(db, wb_id, statuses, vis)]
         if terms:
             ids = set(hits[0].entries)
             for h in hits[1:]:
@@ -349,6 +356,18 @@ class MySqlSearch:
         return (-r.get("score", 0), -_ts(r), -r["id"])
 
     # ---- 낱말 적중 ----
+    @staticmethod
+    def _wb_hits(db: Session, analysis_id: int, statuses, vis=None) -> _Hits:
+        """39 — 그 WorkBench 해석에서 온 파일(묶음 wb_analysis_id)과 그 파일이 든 자료."""
+        h = _Hits()
+        E, F, B = models.Entry, models.File, models.Batch
+        live = E.status.in_(statuses) if vis is None else (E.status.in_(statuses) & vis)
+        for fid, eid in (db.query(F.id, E.id).join(E, E.id == F.entry_id).join(B, B.id == F.batch_id)
+                         .filter(live, B.wb_analysis_id == analysis_id, F.location != "trash")):
+            h.entry(eid, S_ID, "wb_origin")
+            h.file(fid, S_ID, "wb_origin")
+        return h
+
     def _term_hits(self, db: Session, term: str, statuses, vocab: dict | None = None, vis=None) -> _Hits:
         h = _Hits()
         E, F = models.Entry, models.File

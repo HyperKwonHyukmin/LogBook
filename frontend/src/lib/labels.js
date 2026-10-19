@@ -203,6 +203,7 @@ export const MODEL_STATE_LABELS = {
 
 export const MATCH_LABELS = { entry_id: 'Entry 번호', hull: '호선', title: '제목', tag: '태그',
   analysis_type: '해석 종류', target: '대상', description: '설명', file: '파일명', body: '본문',
+  wb_origin: 'WorkBench 해석',   // 39 — 'WB #123' 검색
   document_type: '문서 분류' };   // 21
 
 // 23 — 문서 분류 목록과 빠른 구분(보고서/발표자료/기타) 묶음은 프런트에 사본을 두지 않는다 — 서버(models.REPORT_DOCUMENT_TYPES·

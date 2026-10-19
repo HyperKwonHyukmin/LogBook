@@ -46,6 +46,8 @@ class Settings:
     # 리뷰 9 — 파일 하나의 본문 추출·BDF 변환 제한 시간(초). 자식 프로세스에서 돌리고 넘으면 끝낸다(0 = 제한 없이 워커 안에서)
     extract_timeout: int
     convert_timeout: int
+    # 39 — WorkBench 해석 출처를 자료 화면·검색에 보인다(Hi-TESS Core 1단계). 기본 꺼짐 — 저장·entry.json 보존은 늘 한다
+    wb_origin_show: bool = False
 
 
 def load_settings() -> Settings:
@@ -77,6 +79,7 @@ def load_settings() -> Settings:
         wb_api_url=os.getenv("LOGBOOK_WB_API_URL", "http://127.0.0.1:9091").strip().rstrip("/"),
         extract_timeout=int(os.getenv("LOGBOOK_EXTRACT_TIMEOUT", "600")),
         convert_timeout=int(os.getenv("LOGBOOK_CONVERT_TIMEOUT", "1800")),
+        wb_origin_show=os.getenv("LOGBOOK_WB_ORIGIN_SHOW", "").strip().lower() in ("1", "true", "yes", "on"),
     )
 
 

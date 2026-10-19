@@ -220,22 +220,36 @@ def lookup_and_apply(db: Session, storage: StoragePaths, actor: str, hull_no: st
     return hull
 
 
-def preview_plm(hull_no: str) -> dict:
-    """자료 수정 화면 [선박 정보 검색] — PLM 을 읽기만 한다(호선 행·선종은 바꾸지 않는다). 아무 로그인 사용자나.
+def preview_plm(db: Session, storage: StoragePaths, actor: str, hull_no: str, ip: str | None = None) -> dict:
+    """자료 수정 화면 [선박 정보 검색] — 아무 로그인 사용자나.
+    한 번 찾은 호선은 저장된 값을 그대로 돌려준다(PLM 에 다시 묻지 않는다 — 새로 받으려면 호선 화면의 같은 단추).
+    처음 찾으면 호선 행에 PLM 칸을 저장한다. 선종은 비어 있을 때만 채운다(확정 뒤 자동 조회와 같은 규칙 —
+    찾음으로 기록되면 자동 조회가 이 호선을 건너뛰므로 여기서 채워 둔다). 못 찾은 번호는 기록하지 않는다(오타가 쌓이지 않게).
     오류 코드는 lookup_and_apply 와 같다(없음 404 · 형식 422 · 설정 없음 503 · 조회 실패 502)."""
     from . import plm_ship
 
     if not HULL_PATTERN.fullmatch(hull_no):
         raise HTTPException(status_code=422, detail="invalid_ship_no")
-    result = plm_ship.lookup(hull_no)
-    if result.status != "found":
-        raise plm_http_error(result)
-    s = result.ship
-    return {"hull_no": hull_no, "ship_type": (s["label"] or "")[:50] or None,
-            "plm": {"status": "found", "ship_type_raw": s["shipType"], "capacity": s["capacity"],
-                    "ship_kind": s["shipKind"], "variant": s["variant"], "main_engine": s["mainEngine"],
-                    "ship_class": s["shipClass"], "delivery_date": s["deliveryDate"], "delivered": s["delivered"],
-                    "checked_at": None}}
+    hull = db.get(models.Hull, hull_no)
+    if hull is None or hull.plm_status != "found":
+        result = plm_ship.lookup(hull_no)
+        if result.status != "found":
+            raise plm_http_error(result)
+        if hull is None:
+            hull = models.Hull(hull_no=hull_no)
+            db.add(hull)
+            db.flush()
+        before = _snapshot(hull)
+        _apply(db, hull, result, replace_ship_type=False)
+        db.flush()
+        audit.record(db, storage, actor=actor, action="HULL_PLM", target_type="hull", target_id=hull_no,
+                     before=before, after=_snapshot(hull), ip=ip)
+        db.commit()
+        from .ops.registry import write_registry  # 순환 import 방지
+
+        write_registry(db, storage)
+    label = plm_ship.parse_ship_type(hull.plm_ship_type)["label"]
+    return {"hull_no": hull_no, "ship_type": (label or "")[:50] or None, "plm": plm_of(hull)}
 
 
 def _ensure_confirmed_hull_rows(db: Session) -> int:

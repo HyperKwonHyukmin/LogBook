@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from .. import access, audit, models, roles, sessions, wb_targets, wb_users
+from .. import wb_origin
 from ..config import settings
 from ..database import get_db
 from ..dependencies import client_ip, get_storage
@@ -179,7 +180,8 @@ def export_content(file_id: int, request: Request, as_: str = Query(default="", 
 
 class WbUploadBegin(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    # 출처 — {analysis_id, owner, program, project, note}. 감사 기록(WB_UPLOAD)에만 남긴다.
+    # 출처 — {analysis_id, owner, program, project, created_at, note, passport?}. 감사 기록(WB_UPLOAD)과
+    # 묶음(batches.origin, 39 — wb_origin.clean 이 정한 칸만)에 남긴다.
     origin: dict | None = None
 
 
@@ -212,6 +214,13 @@ def wb_upload_begin(body: WbUploadBegin, request: Request, as_: str = Query(defa
                     db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage)):
     user = _wb_sender(db, storage, as_, client_ip(request))
     b = upload_service.begin(db, storage, user, name=body.name, target_entry_id=None)
+    try:
+        # 39 — 출처를 묶음에도 남긴다(Hi-TESS Core 1단계). 실패해도 업로드는 계속 — 출처만 빠진다
+        if wb_origin.stamp(b, body.origin):
+            db.commit()
+    except Exception:
+        db.rollback()
+        log.exception("WorkBench 보내기 %s 출처 저장 실패(업로드는 계속)", b.key)
     try:
         audit.record(db, storage, actor=user.employee_id, action="WB_UPLOAD", target_type="batch",
                      target_id=b.key, after={"name": b.original_name, "origin": body.origin or {}},

@@ -70,12 +70,15 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("hulls", "delivered", "TINYINT(1) NULL"),
     ("files", "removed_from_id", "INT NULL"),      # 37 — 자료에서 뺀 파일(원래 자료 pk)
     ("files", "trash_rel", "VARCHAR(80) NULL"),
+    ("batches", "origin", "JSON NULL"),            # 39 — WorkBench 해석 출처
+    ("batches", "wb_analysis_id", "INT NULL"),
 )
 # 기존 표에 더하는 색인 (표, 색인 이름, 열들). 이름은 SQLAlchemy index=True 가 새 표에 만드는 이름과 같게 둔다.
 ADDED_INDEXES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("model_summaries", "ix_model_summaries_sig_geometry", ("sig_geometry",)),   # 12 — 같은 형상 찾기
     ("user_sessions", "ix_user_sessions_wb_ref", ("wb_ref",)),                    # 18 — WorkBench 로그아웃 연동
     ("files", "ix_files_removed_from_id", ("removed_from_id",)),                  # 37 — 자료에서 뺀 파일
+    ("batches", "ix_batches_wb_analysis_id", ("wb_analysis_id",)),               # 39 — 'WB #123' 검색
 )
 
 

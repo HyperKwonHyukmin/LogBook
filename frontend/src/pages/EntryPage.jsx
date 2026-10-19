@@ -36,6 +36,7 @@ import RevisionSection from '../components/revisions/RevisionSection.jsx';
 import HullPlmLookup, { HullPlmSummary } from '../components/hull/HullPlmLookup.jsx';
 import NeedsFixBadge from '../components/ui/NeedsFixBadge.jsx';
 import ModelTraits, { defaultFile } from '../components/preview/ModelTraits.jsx';
+import WbOrigins from '../components/workbench/WbOrigins.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
 // 21 — 프로젝트(있을 때만 기록). 29 — 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
@@ -792,6 +793,12 @@ export default function EntryPage() {
               <Prop label="올린 사람">
                 {entry.uploaded_by ? <FilterLink field="uploaded_by" value={entry.uploaded_by}>{person(entry.uploaded_by)}</FilterLink> : person(null)}
               </Prop>
+              {/* 39 — WorkBench 해석 출처(서버가 켰을 때만 실린다) */}
+              {entry.wb_origins?.length > 0 && (
+                <Prop label="출처">
+                  <WbOrigins origins={entry.wb_origins} files={entry.files} onCopy={(t) => copy(t, `해석 번호 ${t}`)} />
+                </Prop>
+              )}
               <Prop label="확정자">
                 {entry.confirmed_by ? (
                   <span className="min-w-0 truncate">{person(entry.confirmed_by)}
