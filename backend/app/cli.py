@@ -526,11 +526,12 @@ def main(argv: list[str]) -> int:
             print(f"추출 작업 {enqueue_extract_all(db, force=args.force)}건을 넣었습니다.")
             return 0
         if args.cmd == "purge-trash":
-            from .ops.purge import purge_expired
+            from .ops.purge import purge_expired, purge_removed_files
 
             days = settings.trash_days if args.days is None else args.days
             n = purge_expired(db, get_storage(), days)
-            print(f"휴지통에서 {days}일 지난 Entry {n}건을 영구 삭제했습니다.")
+            k = purge_removed_files(db, get_storage(), days)
+            print(f"휴지통에서 {days}일 지난 Entry {n}건, 자료에서 뺀 파일 {k}개를 영구 삭제했습니다.")
             return 0
         if args.cmd == "enqueue-solve-check":
             from .solve.job import enqueue_solve_all

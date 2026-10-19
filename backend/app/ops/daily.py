@@ -17,7 +17,7 @@ from ..config import settings
 from ..storage.paths import StoragePaths
 from .backup import BackupError, prune_backups, run_backup
 from .metasync import resync_entry_meta
-from .purge import purge_expired
+from .purge import purge_expired, purge_removed_files
 from .registry import write_registry
 from .state import heartbeat, set_state
 
@@ -91,10 +91,12 @@ def run_daily(db: Session, storage: StoragePaths, now: datetime | None = None, *
         backup = {"ok": False, "file": None, "size": None, "at": now.isoformat(), "error": str(exc)[:500]}
     heartbeat(db)
     purged = purge_expired(db, storage, settings.trash_days, now)
+    purged_files = purge_removed_files(db, storage, settings.trash_days, now)   # 37 — 자료에서 뺀 파일
     heartbeat(db)
     set_state(db, "last_backup", backup)
     row = _lock_row(db)
     value = {**(row.value or {}), "attempt_at": now.isoformat(), "purged": purged,
+             "purged_files": purged_files,
              "registry": registry_ok, "registry_retry_at": None, "meta": meta}
     if backup["ok"]:
         # 백업이 된 날만 완료로 친다 — 실패하면 RETRY_MINUTES 뒤 다시 시도한다

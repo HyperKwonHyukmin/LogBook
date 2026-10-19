@@ -1,6 +1,6 @@
 # 37 — 자료 파일 개별 삭제 · 자료 번호 배지/복사
 
-작성 2026-10-19 · 상태: **구현 완료(커밋 전)** · 사용자 요청:
+작성 2026-10-19 · 상태: **완료 — 207bf3f(2026-10-19 푸시), 145 반영** · 사용자 요청:
 "항목의 수정에서 첨부파일도 개별로 삭제할 수 있는 기능이 필요해." /
 "개별 항목의 고유 번호(E000051)를 눈에 잘 띄게 디자인해 주고 (개별 페이지에서) 바로 복사 버튼을 만들어서 다른 사람에게 붙여넣기 용이하게."
 
@@ -23,7 +23,11 @@
 ### 운영 도구
 - `ops/verify`: `trash_rel` 이 있는 파일은 `95_Trash/<trash_rel>/<rel>` 에서 찾고, 그 폴더를 '주인 없는 휴지통 폴더'로 보지 않는다.
 - `ops/rebuild`: `E…_files_…` 폴더는 건너뛴다 — **뺀 파일은 DB 에만 기록돼 재구축하면 사라진다**(알려진 한계).
-- **남은 일**: 뺀 파일의 자동 영구 삭제(90일)는 아직 없다 — `ops/purge` 에 `removed_from_id` 파일 비우기를 더할 것. 원래 자료가 영구 삭제되면 뺀 파일은 되돌릴 곳이 없다.
+- 뺀 파일 자동 영구 삭제(2026-10-19 추가): `ops/purge.purge_removed_files` — 휴지통 폴더 이름의 시각(`_files_YYYYMMDD-HHMMSS`)으로
+  `LOGBOOK_TRASH_DAYS`(휴지통과 같은 90일)가 지난 폴더를 지우고 행을 지운다(새 열 없음). 매일 작업(`ops/daily`, 상태 값 `purged_files`)과
+  `python -m app.cli purge-trash` 가 부른다. 감사 `FILES_PURGE`(before: files·trash_rel, 변경 이력 '뺀 파일 영구 삭제').
+  원래 자료를 영구 삭제하면(`purge_entry`) 그 자료에서 뺀 파일도 함께 지운다(감사 `TRASH_PURGE` before `removed_files`).
+  되돌리기와 겹치지 않게 원래 자료 행을 잠그고 다시 고른다. 테스트 `test_file_remove_37.py` 2개 추가.
 
 ### 파일
 - 백엔드: `models.py`(File 2열), `database.py`, `entries/service.py`(`remove_files`·`restore_files`·`removed_files_of`, 상세에 `removed_files`), `routers/entries.py`(2 경로), `ops/verify.py`, `ops/rebuild.py`

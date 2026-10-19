@@ -4,6 +4,7 @@
 폴더 삭제가 실패하면 DB 는 건드리지 않는다(다음에 다시 시도할 수 있게)."""
 import logging
 import os
+import re
 import shutil
 from datetime import datetime, timedelta
 
@@ -44,8 +45,53 @@ def purge_entry(db: Session, storage: StoragePaths, entry: models.Entry, actor: 
         db.rollback()
         log.warning("휴지통 폴더 삭제 실패: %s — %s", entry.trash_rel, exc)
         raise HTTPException(status_code=503, detail="storage_error")
+    # 37 — 이 자료에서 뺀 파일도 함께 지운다(되돌릴 자료가 없어진다). 폴더 삭제가 실패해도 다음 자동 비우기가 다시 본다
+    removed = db.query(models.File).filter(models.File.removed_from_id == entry.id,
+                                           models.File.location == "trash").all()
+    removed_ids = [f.id for f in removed if _rmtree_trash(storage, f.trash_rel)]
     file_ids = [i for (i,) in db.query(models.File.id).filter_by(entry_id=entry.id)]
     before = {"title": entry.title, "files": len(file_ids), "trash_rel": entry.trash_rel}
+    if removed_ids:
+        before["removed_files"] = len(removed_ids)
+    relinked = _delete_file_rows(db, file_ids + removed_ids)
+    db.query(models.Job).filter(models.Job.type == "write_meta",
+                                models.Job.target_id == entry.id).delete(synchronize_session=False)
+    db.query(models.EntryHull).filter_by(entry_id=entry.id).delete(synchronize_session=False)
+    db.query(models.EntryTag).filter_by(entry_id=entry.id).delete(synchronize_session=False)
+    db.query(models.ModelRevision).filter_by(entry_id=entry.id).delete(synchronize_session=False)
+    _clear_dangling_references(db, entry.id)
+    entry_id = entry.entry_id
+    db.delete(entry)
+    db.flush()
+    audit.record(db, storage, actor=actor, action="TRASH_PURGE", target_type="entry", target_id=entry_id,
+                 before=before, ip=ip)
+    _rewrite_relinked(db, storage, relinked)
+
+
+def _rmtree_trash(storage: StoragePaths, rel: str | None) -> bool:
+    """95_Trash/<rel> 폴더를 지운다(없으면 성공). 실패하면 False — 호출자는 DB 행을 남겨 다음에 다시 시도한다."""
+    if not rel:
+        return True
+    try:
+        folder = long_join(storage.trash, rel)
+        if os.path.exists(folder):
+            shutil.rmtree(folder)
+        return True
+    except (OSError, ValueError) as exc:
+        log.warning("휴지통 폴더 삭제 실패: %s — %s", rel, exc)
+        return False
+
+
+def _rewrite_relinked(db: Session, storage: StoragePaths, relinked) -> None:
+    for pk in relinked:
+        other = db.get(models.Entry, pk)
+        if other is not None and other.status == "confirmed":
+            _write_meta_or_queue(db, storage, other)
+
+
+def _delete_file_rows(db: Session, file_ids: list[int]) -> set[int]:
+    """파일 행과 그에 딸린 행(본문·요약·검증·판·비교·내려받기·작업)을 지운다. 보고서 연결로 entry.json 을
+    다시 써야 할 다른 자료 pk 를 돌려준다."""
     # 21 — 보고서 정보·연결도 함께 지운다. 이 자료의 모델을 '보고서에 사용한 모델'로 잇던 다른 자료는 entry.json 을 다시 쓴다
     relinked = purge_report_files(db, file_ids)
     if file_ids:
@@ -69,21 +115,7 @@ def purge_entry(db: Session, storage: StoragePaths, entry: models.Entry, actor: 
         db.query(models.Job).filter(models.Job.type.in_(("extract_file", "convert_model", "solve_check")),
                                     models.Job.target_id.in_(file_ids)).delete(synchronize_session=False)
         db.query(models.File).filter(models.File.id.in_(file_ids)).delete(synchronize_session=False)
-    db.query(models.Job).filter(models.Job.type == "write_meta",
-                                models.Job.target_id == entry.id).delete(synchronize_session=False)
-    db.query(models.EntryHull).filter_by(entry_id=entry.id).delete(synchronize_session=False)
-    db.query(models.EntryTag).filter_by(entry_id=entry.id).delete(synchronize_session=False)
-    db.query(models.ModelRevision).filter_by(entry_id=entry.id).delete(synchronize_session=False)
-    _clear_dangling_references(db, entry.id)
-    entry_id = entry.entry_id
-    db.delete(entry)
-    db.flush()
-    audit.record(db, storage, actor=actor, action="TRASH_PURGE", target_type="entry", target_id=entry_id,
-                 before=before, ip=ip)
-    for pk in relinked:
-        other = db.get(models.Entry, pk)
-        if other is not None and other.status == "confirmed":
-            _write_meta_or_queue(db, storage, other)
+    return relinked
 
 
 def purge_expired(db: Session, storage: StoragePaths, days: int, now: datetime | None = None) -> int:
@@ -109,4 +141,56 @@ def purge_expired(db: Session, storage: StoragePaths, days: int, now: datetime |
         except Exception:
             db.rollback()
             log.exception("휴지통 자동 비우기 실패: %s", label)
+    return n
+
+
+_REMOVED_STAMP = re.compile(r"_files_(\d{8}-\d{6})$")
+
+
+def _removed_at(trash_rel: str) -> datetime | None:
+    """'E000051_files_20261019-101500' → 뺀 시각(remove_files 의 _stamp). 모양이 다르면 None(지우지 않음)."""
+    m = _REMOVED_STAMP.search(trash_rel or "")
+    if not m:
+        return None
+    try:
+        return datetime.strptime(m.group(1), "%Y%m%d-%H%M%S")
+    except ValueError:
+        return None
+
+
+def purge_removed_files(db: Session, storage: StoragePaths, days: int, now: datetime | None = None) -> int:
+    """37 — 자료에서 뺀 지 days 일이 지난 파일을 영구 삭제한다(휴지통 폴더 단위). 지운 파일 수를 돌려준다.
+
+    되돌리기(restore_files)와 겹치지 않게 원래 자료 행을 잠그고 파일을 다시 고른다. 폴더 하나가 실패해도 계속한다."""
+    limit = (now or datetime.now()) - timedelta(days=days)
+    rels = [r for (r,) in db.query(models.File.trash_rel).filter(
+        models.File.removed_from_id.isnot(None), models.File.location == "trash",
+        models.File.trash_rel.isnot(None)).distinct()]
+    n = 0
+    for rel in sorted(rels):
+        at = _removed_at(rel)
+        if at is None or at > limit:
+            continue
+        try:
+            owner = db.query(models.File.removed_from_id).filter(models.File.trash_rel == rel).first()
+            entry = db.get(models.Entry, owner[0], with_for_update=True, populate_existing=True) if owner else None
+            files = db.query(models.File).filter(models.File.trash_rel == rel, models.File.location == "trash",
+                                                 models.File.removed_from_id.isnot(None)).all()
+            if not files:
+                db.rollback()
+                continue
+            if not _rmtree_trash(storage, rel):
+                db.rollback()
+                continue
+            names = [f.rel_path for f in files]
+            relinked = _delete_file_rows(db, [f.id for f in files])
+            db.flush()
+            audit.record(db, storage, actor="system", action="FILES_PURGE", target_type="entry",
+                         target_id=entry.entry_id if entry is not None else rel.split("_files_")[0],
+                         before={"files": names, "trash_rel": rel})
+            _rewrite_relinked(db, storage, relinked)
+            n += len(files)
+        except Exception:
+            db.rollback()
+            log.exception("뺀 파일 자동 비우기 실패: %s", rel)
     return n

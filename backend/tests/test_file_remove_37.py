@@ -102,3 +102,50 @@ def test_api_remove_and_restore(client, db, storage, make_user, auth_headers, se
     assert hist[0]["action"] == "ENTRY_FILES_REMOVED"
     res = client.post(f"/api/entries/{e.entry_id}/files/restore", headers=h, json={"file_ids": [pdf["id"]]})
     assert res.status_code == 200 and len(res.json()["files"]) == 2 and res.json()["removed_files"] == []
+
+
+def _removed(db, storage, make_user, setup_entry_with_files):
+    u, e = _confirmed(db, storage, make_user, setup_entry_with_files)
+    pdf = db.query(models.File).filter_by(entry_id=e.id, name="r.pdf").one()
+    service.remove_files(db, storage, e, u, [pdf.id], e.version)
+    db.expire_all()
+    return u, db.get(models.Entry, e.id), db.get(models.File, pdf.id)
+
+
+def test_purge_removed_files_after_days(db, storage, make_user, setup_entry_with_files):
+    from datetime import timedelta
+
+    from app.ops.purge import purge_removed_files
+
+    u, e, f = _removed(db, storage, make_user, setup_entry_with_files)
+    fid, rel = f.id, f.trash_rel
+    # 아직 기간 안 — 그대로
+    assert purge_removed_files(db, storage, 90) == 0
+    assert (storage.trash / rel).is_dir()
+    # 91일 뒤 — 폴더·행이 지워지고 자료는 그대로
+    assert purge_removed_files(db, storage, 90, datetime.now() + timedelta(days=91)) == 1
+    db.expire_all()
+    assert db.get(models.File, fid) is None
+    assert not (storage.trash / rel).exists()
+    e = db.get(models.Entry, e.id)
+    assert e.status == "confirmed" and [x["name"] for x in service.entry_to_dict(db, e, viewer=u)["files"]] == ["a.bdf"]
+    assert service.entry_to_dict(db, e, viewer=u)["removed_files"] == []
+    log = db.query(models.AuditLog).filter_by(action="FILES_PURGE").one()
+    assert log.target_id == e.entry_id
+    r = verify(db, storage)
+    assert not r["missing"] and not r["orphan_trash"]
+
+
+def test_purge_entry_takes_removed_files(db, storage, make_user, setup_entry_with_files):
+    from app.ops.purge import purge_entry
+
+    u, e, f = _removed(db, storage, make_user, setup_entry_with_files)
+    fid, rel, pk = f.id, f.trash_rel, e.id
+    service.trash(db, storage, e, u)
+    db.expire_all()
+    purge_entry(db, storage, db.get(models.Entry, pk), "A100001")
+    db.expire_all()
+    assert db.get(models.Entry, pk) is None and db.get(models.File, fid) is None
+    assert not (storage.trash / rel).exists()
+    log = db.query(models.AuditLog).filter_by(action="TRASH_PURGE").one()
+    assert log.before["removed_files"] == 1

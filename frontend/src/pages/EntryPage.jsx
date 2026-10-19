@@ -49,7 +49,7 @@ const show = (v) => (v === true ? '예' : (Array.isArray(v) ? v.join(', ') : v) 
 const HISTORY_FILES_SHOWN = 5;
 const HISTORY_SHOWN = 5;
 // 이력에 파일 이름을 늘어놓는 동작(37 — 파일 삭제·되돌리기)
-const FILE_ACTIONS = new Set(['ENTRY_FILES_ADDED', 'ENTRY_FILES_REMOVED', 'ENTRY_FILES_RESTORED']);
+const FILE_ACTIONS = new Set(['ENTRY_FILES_ADDED', 'ENTRY_FILES_REMOVED', 'ENTRY_FILES_RESTORED', 'FILES_PURGE']);
 
 /** 감사 기록의 before/after → "제목: a → b" 줄들. */
 function changes(before, after) {
@@ -62,7 +62,8 @@ function changes(before, after) {
 
 /** 이력 한 줄의 자세한 내용 — 파일 추가는 파일 이름, 확정은 파일 수, 수정은 바뀐 칸. */
 function detailLines(r) {
-  const files = r.after?.files;
+  // 37 — 뺀 파일 영구 삭제는 지운 파일이 before 에 있다
+  const files = r.action === 'FILES_PURGE' ? r.before?.files : r.after?.files;
   if (FILE_ACTIONS.has(r.action) && Array.isArray(files)) {
     const more = files.length - HISTORY_FILES_SHOWN;
     return [files.slice(0, HISTORY_FILES_SHOWN).join(', ') + (more > 0 ? ` 외 ${more}개` : '')];

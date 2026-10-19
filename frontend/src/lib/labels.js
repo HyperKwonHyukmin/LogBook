@@ -8,6 +8,7 @@ export const ACTION_LABELS = {
   BATCH_RECEIVED: '자료 받음', BATCH_CLAIM: '배치 가져감',
   ENTRY_UPDATE: '정보 수정', ENTRY_CONFIRM: '확정', ENTRY_FILES_ADDED: '파일 추가',
   ENTRY_FILES_REMOVED: '파일 삭제', ENTRY_FILES_RESTORED: '파일 되돌리기',   // 37
+  FILES_PURGE: '뺀 파일 영구 삭제',
   ENTRY_TRASH: '휴지통으로', ENTRY_RESTORE: '복원', DRAFT_DISCARD: '초안 버림',
   TAG_ALIAS: '동의어 묶기', TAG_UNALIAS: '동의어 풀기', HULL_UPDATE: '호선 정보 수정', HULL_PLM: '선박 정보(PLM) 반영',
   TRASH_PURGE: '영구 삭제', JOB_RETRY: '작업 다시 시도',
