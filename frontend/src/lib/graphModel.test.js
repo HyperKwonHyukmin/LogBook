@@ -116,3 +116,34 @@ test('보고서 판 단계 문장', () => {
   expect(stepText({ changed: 0, added: 1, removed: 1, overlap: null })).toBe('쪽 +1 −1');
   expect(stepText({ changed: 0, added: 0, removed: 0, overlap: null })).toBe('바뀐 쪽 없음');
 });
+
+test('30 — 선종·선형 기준: 호선들의 값을 모으고, 값 없는 자료는 없음 묶음', () => {
+  const m = buildModel({
+    ...DATA,
+    hulls: { 3370: '174K LNG', 3508: '4500 CNTR', 3600: '180K LNG' },
+    hull_kinds: { 3370: 'LNG', 3508: 'CNTR', 3600: 'LNG' },
+    entries: [
+      ...DATA.entries,
+      { id: 'E000005', title: '계류 E', analysis_type: '계류', hulls: ['3600'], zones: [], free: [], revisions: [] },
+    ],
+  });
+  const [a, b, c, lone, e] = m.entries;
+  expect(a.of.kind.map((h) => h.label)).toEqual(['LNG', 'CNTR'])         // 두 호선 → 두 선종
+  expect(a.of.type.map((h) => h.label)).toEqual(['174K LNG', '4500 CNTR']);
+  expect(e.of.kind[0]).toBe(c.of.kind[0]);                               // 3600·3370 은 같은 LNG 점
+  expect(e.of.type[0]).not.toBe(c.of.type[0]);                           // 선형은 용량까지 달라 다른 점
+  expect(m.byId.get('kind:LNG').cnt).toBe(3);
+  expect(parentsOf(m, lone, 'kind')).toEqual([m.NONE.kind]);
+  expect(m.NONE.type.label).toBe('선형 없음');
+  // 기준 사이 관계: E000002(CNTR)·E000003(LNG) 형상 같음 → LNG ↔ CNTR
+  const agg = aggregate(m, 'kind');
+  expect(agg).toHaveLength(1);
+  expect(explainAgg(agg[0], 'kind')).toContain('두 선종에 함께 등록된 자료 1건');
+  expect(b.of.kind.map((h) => h.label)).toEqual(['CNTR']);
+});
+
+test('30 — 선종 정보가 없는 응답(옛 서버)도 깨지지 않는다', () => {
+  const m = buildModel(DATA);
+  expect(m.NONE.kind.cnt).toBe(4);
+  expect(pivotHubs(m, 'kind').map((h) => h.id)).toEqual(['kind:__none']);
+});

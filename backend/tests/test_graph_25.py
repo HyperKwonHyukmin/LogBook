@@ -111,3 +111,14 @@ def test_guest_sees_shared_only(world, client, auth_headers):
 
 def test_requires_login(client):
     assert client.get("/api/graph").status_code == 401
+
+
+def test_hull_kinds_from_plm_or_ship_type(world, client, auth_headers, db):
+    """30 — 선종: PLM 분해 값이 있으면 그것, 없으면 선종(선형) 글자를 같은 규칙으로 풀어서. 둘 다 없으면 None."""
+    h2 = db.get(models.Hull, "9002")
+    h2.ship_type, h2.ship_kind = "174K LNG", "LNG"
+    db.get(models.Hull, "9001").ship_type = "300K-VLCC"   # 사람이 적은 선종(PLM 조회 전)
+    db.commit()
+    g = _graph(client, auth_headers, "M100001")
+    assert g["hull_kinds"] == {"9001": "VLCC", "9002": "LNG", "9003": None}
+    assert g["hulls"]["9002"] == "174K LNG"
