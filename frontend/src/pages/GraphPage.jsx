@@ -11,16 +11,20 @@ import { RowsSkeleton } from '../components/ui/Skeleton.jsx';
 import { Segmented } from '../components/ui/Tabs.jsx';
 import { errorText } from '../lib/labels.js';
 import {
-  aggregate, aggText, buildModel, diffShort, GROUP, GROUP_KEYS, JOSA, membersOf, pivotHubs, primaryOf, searchNodes,
+  aggregate, aggText, buildModel, diffShort, GROUP, GROUP_KEYS, isReportOnly, JOSA, membersOf, pairsOf, pivotHubs,
+  primaryOf, searchNodes, stepText,
 } from '../lib/graphModel.js';
 
 const PIVOT_ITEMS = [{ id: 'hull', label: '호선' }, { id: 'zone', label: '구역' }];
 const COLOR_ITEMS = [{ id: 'none', label: '없음' }, { id: 'atype', label: '해석 종류' }, { id: 'ship', label: '선종' }];
+// 32 — 자료 사이 선의 층: 모델(형상만 같음·똑같은 BDF) · 문서(사용한 모델·보고서 다른 판·본문 비슷함)
+const LAYER_ITEMS = [{ id: 'all', label: '모두' }, { id: 'model', label: '모델' }, { id: 'doc', label: '문서' }];
 const reduced = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 /**
  * 관계 지도(25, `/graph`) — 확정 자료를 고른 기준(호선·구역) 둘레에 모으고, 기준 사이 관계를 굵은 곡선으로,
- * 자료 사이 모델 관계(형상만 같음·똑같은 BDF)를 선으로 보인다. 모든 선은 올리면 왜 이어졌는지 문장으로 설명한다.
+ * 자료 사이 모델 관계(형상만 같음·똑같은 BDF)와 문서 관계(32 — 사용한 모델·보고서 다른 판·본문 비슷함)를 선으로 보인다.
+ * 모든 선은 올리면 왜 이어졌는지 문장으로 설명한다. 보고서만 있는 자료는 속이 빈 점이다.
  * 그리기·배치·움직임은 components/graph/graphView.js, 묶기·설명 문장은 lib/graphModel.js.
  */
 export default function GraphPage() {
@@ -31,7 +35,7 @@ export default function GraphPage() {
   const [color, setColor] = useState('none');
   const [sel, setSel] = useState(null);
   const [hl, setHl] = useState(null);
-  const [opts, setOpts] = useState({ agg: true, secondary: true, alwaysPairs: false, rings: [] });
+  const [opts, setOpts] = useState({ agg: true, secondary: true, alwaysPairs: false, rings: [], layer: 'all' });
   const [pop, setPop] = useState(null);       // 'help' | 'show' | null
   const [view, setView] = useState(null);     // Stage 가 만든 캔버스 엔진(모델이 바뀌면 새로 만든다)
 
@@ -71,6 +75,7 @@ export default function GraphPage() {
         <h1 className="text-title font-semibold tracking-[-0.018em] text-n-900">관계 지도</h1>
         {counts}
         {model?.truncated && <span className="text-meta text-n-500">최근 확정 {model.entries.length}건만 그렸습니다.</span>}
+        <DocIndexNote index={model?.docIndex} layer={opts.layer} isAdmin={isAdmin} />
         {model?.unsigned > 0 && (
           <span className="ml-auto rounded-sm bg-wait-bg px-2 py-0.5 text-meta text-wait"
                 title={isAdmin ? 'app.cli enqueue-convert --missing-signature 로 서명을 채우면 관계에 들어갑니다.' : undefined}>
@@ -85,13 +90,33 @@ export default function GraphPage() {
       )}
       {model && model.entries.length > 0 && (
         <div className="grid min-h-0 flex-1 grid-cols-[224px_minmax(0,1fr)_288px] max-[1100px]:grid-cols-1 max-[1100px]:overflow-y-auto">
-          <FilterColumn model={model} pivot={pivot} onPivot={changePivot} color={color} onColor={setColor} onGo={goTo} />
+          <FilterColumn model={model} pivot={pivot} onPivot={changePivot} color={color} onColor={setColor} onGo={goTo}
+                        layer={opts.layer} onLayer={(v) => setOpts((o) => ({ ...o, layer: v }))} />
           <Stage model={model} view={view} setView={setView} pivot={pivot} hl={hl} setHl={setHl} onSelect={onSelect}
                  opts={opts} setOpts={setOpts} pop={pop} setPop={setPop} />
-          <DetailColumn model={model} pivot={pivot} sel={sel} color={color} onGo={goTo} />
+          <DetailColumn model={model} pivot={pivot} sel={sel} color={color} onGo={goTo} layer={opts.layer} />
         </div>
       )}
     </div>
+  );
+}
+
+/** 문서 관계가 덜 그려진 이유 — 본문 색인을 열 수 없거나, 색인 전 보고서가 있을 때. */
+function DocIndexNote({ index, layer, isAdmin }) {
+  if (!index || layer === 'model' || !index.reports) return null;
+  if (!index.available) {
+    return (
+      <span className="rounded-sm bg-wait-bg px-2 py-0.5 text-meta text-wait">
+        보고서 본문 색인을 열 수 없어 문서 관계는 ‘사용한 모델’과 파일 이름으로만 그렸습니다
+      </span>
+    );
+  }
+  const missing = index.reports - index.indexed;
+  if (missing <= 0) return null;
+  return (
+    <span className="text-meta text-n-500" title={isAdmin ? '보고서 색인 워커(Logbook Report Index)가 처리하면 본문 관계에 들어갑니다.' : undefined}>
+      본문 색인 전 보고서 {missing}개는 본문 관계에서 빠졌습니다
+    </span>
   );
 }
 
@@ -111,7 +136,7 @@ function Legend({ items }) {
   );
 }
 
-function FilterColumn({ model, pivot, onPivot, color, onColor, onGo }) {
+function FilterColumn({ model, pivot, onPivot, color, onColor, onGo, layer, onLayer }) {
   const [q, setQ] = useState('');
   const [hint, setHint] = useState('');
   const hits = useRef({ list: [], idx: 0 });
@@ -141,6 +166,15 @@ function FilterColumn({ model, pivot, onPivot, color, onColor, onGo }) {
       <section className="flex flex-col gap-2">
         <SecTitle>모으는 기준</SecTitle>
         <Segmented items={PIVOT_ITEMS} value={pivot} onChange={onPivot} label="모으는 기준" stretch className="w-full" />
+      </section>
+      <section className="flex flex-col gap-2">
+        <SecTitle>자료 사이 관계</SecTitle>
+        <Segmented items={LAYER_ITEMS} value={layer} onChange={onLayer} label="자료 사이 관계" stretch className="w-full" />
+        <p className="text-meta text-n-500">
+          {layer === 'model' ? 'BDF 내용 서명으로 이은 선만 봅니다.'
+            : layer === 'doc' ? '보고서로 이은 선만 봅니다. 모델이 없는 자료도 이어집니다.'
+              : '모델 선(남색)과 문서 선(청록)을 함께 봅니다.'}
+        </p>
       </section>
       <section className="flex flex-col gap-2">
         <SecTitle>자료 점 색</SecTitle>
@@ -186,7 +220,9 @@ function Stage({ model, view, setView, pivot, hl, setHl, onSelect, opts, setOpts
 
   const hlNode = hl && model.byId.get(hl);
   const g = GROUP[pivot];
-  const hasDup = model.pairs.some((p) => p.type === 'dup');
+  const shown = pairsOf(model, opts.layer);
+  const has = (t) => shown.some((p) => p.type === t);
+  const showModel = opts.layer !== 'doc', showDoc = opts.layer !== 'model';
   return (
     <div ref={stageRef} className="relative min-h-0 min-w-0 overflow-hidden bg-n-0 max-[1100px]:order-1 max-[1100px]:h-[64vh] max-[1100px]:min-h-[380px]">
       <canvas ref={canvasRef} tabIndex={0} className="absolute inset-0 block h-full w-full cursor-grab touch-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-ring"
@@ -216,8 +252,14 @@ function Stage({ model, view, setView, pivot, hl, setHl, onSelect, opts, setOpts
         {opts.agg && <KeyLine style={{ borderTop: '3px solid rgba(52,72,102,.55)' }}>{g} 사이 관계(굵기 = 건수)</KeyLine>}
         <KeyLine style={{ borderTop: '1.5px solid rgba(19,23,28,.35)' }}>{g} → 자료</KeyLine>
         {opts.secondary && <KeyLine style={{ borderTop: '1.5px solid rgba(19,23,28,.2)' }}>함께 등록</KeyLine>}
-        <KeyLine style={{ borderTop: `1.5px dashed ${K.accent}` }}>형상만 같음</KeyLine>
-        {hasDup && <KeyLine style={{ borderTop: `2px solid ${K.warn}` }}>똑같은 BDF</KeyLine>}
+        {showModel && <KeyLine style={{ borderTop: `1.5px dashed ${K.accent}` }}>형상만 같음</KeyLine>}
+        {showModel && has('dup') && <KeyLine style={{ borderTop: `2px solid ${K.warn}` }}>똑같은 BDF</KeyLine>}
+        {showDoc && has('uses') && <KeyLine style={{ borderTop: `1.5px solid ${K.doc}` }}>사용한 모델</KeyLine>}
+        {showDoc && has('rrev') && <KeyLine style={{ borderTop: `2.5px solid ${K.doc}` }}>보고서 다른 판</KeyLine>}
+        {showDoc && has('text') && <KeyLine style={{ borderTop: `1.5px dotted ${K.doc}` }}>본문 비슷함</KeyLine>}
+        {showDoc && model.entries.some(isReportOnly) && (
+          <span className="inline-flex items-center gap-1.5"><i aria-hidden="true" className="h-2 w-2 rounded-full border-[1.5px] border-n-500" />보고서만 있는 자료</span>
+        )}
         <span className="text-n-500">선에 올리면 설명</span>
       </div>
       <div ref={tipRef} hidden role="tooltip"
@@ -243,7 +285,11 @@ function HelpPop({ pivot }) {
         <p><b className="font-semibold text-n-900">함께 등록</b> — 자료 하나에 {g}{JOSA[pivot]} 둘 이상 달림(자매선 공통 검토 등).</p>
         <p><b className="font-semibold text-n-900">형상만 같음</b>(남색 점선) — 서로 다른 자료의 BDF가 형상은 같고 물성·재료·하중 중 일부가 다름. 한쪽 모델을 가져다 다시 푼 경우입니다.</p>
         <p><b className="font-semibold text-n-900">똑같은 BDF</b>(주황 실선) — 네 가지가 모두 같음. 업로드에서 막히는 경우라 강제 업로드 같은 예외에만 나타납니다.</p>
-        <p>판(R0·R1…)은 자료 안 파일끼리의 순서라 선으로 그리지 않고, 자료를 고르면 오른쪽에 나옵니다.</p>
+        <p><b className="font-semibold text-n-900">문서 관계</b>(청록) — 보고서로 이은 선입니다. 모델이 없는 자료(속이 빈 점)도 이어집니다.</p>
+        <p className="pl-3">실선 <b className="font-semibold text-n-900">사용한 모델</b> — 보고서에 ‘사용한 모델’로 연결한 BDF가 다른 자료에 있음.
+          굵은 실선 <b className="font-semibold text-n-900">보고서 다른 판</b> — 같은 보고서의 개정본이 다른 자료에 있음(이름 계열·본문 겹침).
+          점선 <b className="font-semibold text-n-900">본문 비슷함</b> — 본문 의미가 가까운 보고서(추천 수준).</p>
+        <p>모델 판(R0·R1…)과 보고서 판(Rev.A·Rev.B…)은 자료 안 파일끼리의 순서라 선으로 그리지 않고, 자료를 고르면 오른쪽에 나옵니다.</p>
       </div>
       <div className="flex flex-col gap-2">
         <h3 className="text-meta font-semibold text-n-600">조작</h3>
@@ -276,7 +322,7 @@ function ShowPop({ model, pivot, opts, setOpts, hl, setHl }) {
         <h3 className="text-meta font-semibold text-n-600">선</h3>
         <Check checked={opts.agg} onChange={(v) => set({ agg: v })}>{GROUP[pivot]} 사이 관계 곡선</Check>
         <Check checked={opts.secondary} onChange={(v) => set({ secondary: v })}>함께 등록된 자료의 둘째 {GROUP[pivot]} 선</Check>
-        <Check checked={opts.alwaysPairs} onChange={(v) => set({ alwaysPairs: v })}>형상만 같음 선 늘 보기</Check>
+        <Check checked={opts.alwaysPairs} onChange={(v) => set({ alwaysPairs: v })}>형상만 같음·사용한 모델·본문 비슷함 선 늘 보기</Check>
         <span className="pt-1 text-meta text-n-500">태그로 잇기(흐린 고리 점)</span>
         {others.map((g) => (
           <Check key={g} checked={opts.rings.includes(g)}
@@ -334,10 +380,10 @@ function HubChip({ h, onGo }) {
   );
 }
 
-function DetailColumn({ model, pivot, sel, color, onGo }) {
+function DetailColumn({ model, pivot, sel, color, onGo, layer }) {
   const n = sel && model.byId.get(sel);
   const dot = (e) => (color === 'ship' ? model.colors.ship.colorOf(e) : model.colors.atype.colorOf(e));
-  const aggs = useMemo(() => aggregate(model, pivot), [model, pivot]);
+  const aggs = useMemo(() => aggregate(model, pivot, layer), [model, pivot, layer]);
   let body;
   if (!n) {
     // '○○ 없음' 은 늘 맨 아래(건수가 많아도)
@@ -432,8 +478,10 @@ function DetailColumn({ model, pivot, sel, color, onGo }) {
       </>
     );
   } else {
-    const mine = (t) => model.pairs.filter((p) => p.type === t && (p.a === n || p.b === n)).map((p) => [p.a === n ? p.b : p.a, p]);
-    const geom = mine('geom'), dup = mine('dup');
+    const mine = (t) => pairsOf(model, layer).filter((p) => p.type === t && (p.a === n || p.b === n)).map((p) => [p.a === n ? p.b : p.a, p]);
+    const geom = mine('geom'), dup = mine('dup'), rrev = mine('rrev'), text = mine('text');
+    const uses = mine('uses'), usesOut = uses.filter(([, p]) => p.from === n), usesIn = uses.filter(([, p]) => p.from !== n);
+    const where = (o) => primaryOf(model, o, pivot).label;
     body = (
       <>
         <section className="flex flex-col gap-1">
@@ -442,7 +490,10 @@ function DetailColumn({ model, pivot, sel, color, onGo }) {
           <div className="font-mono text-meta text-n-500">{n.eid}</div>
         </section>
         <dl className="grid grid-cols-[64px_1fr] gap-x-2.5 gap-y-1.5 text-ui">
-          <dt className="text-n-500">파일</dt><dd>{n.raw.files}개</dd>
+          <dt className="text-n-500">파일</dt>
+          <dd>{n.raw.files}개{(n.raw.models > 0 || n.raw.reports > 0) && (
+            <span className="text-n-500"> · 모델 {n.raw.models || 0} · 보고서 {n.raw.reports || 0}</span>
+          )}</dd>
           <dt className="text-n-500">확정</dt><dd>{n.raw.confirmed_at || '—'}</dd>
         </dl>
         {GROUP_KEYS.map((g) => (n.of[g].length > 0 && (
@@ -465,6 +516,35 @@ function DetailColumn({ model, pivot, sel, color, onGo }) {
             <ul>{geom.map(([o, p]) => <EntryRow key={o.id} e={o} color={dot(o)} onGo={onGo} note={`${primaryOf(model, o, pivot).label} · ${diffShort(p.differs)}`} />)}</ul>
           </section>
         )}
+        {rrev.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <SecTitle>같은 보고서의 다른 판이 있는 자료</SecTitle>
+            <p className="text-meta text-n-500">같은 일의 개정본이면 한 자료로 모아 보고서 판으로 두는 것이 좋습니다.</p>
+            <ul>{rrev.map(([o, p]) => (
+              <EntryRow key={o.id} e={o} color={dot(o)} onGo={onGo}
+                        note={`${where(o)} · ${p.score != null ? `본문 ${Math.round(p.score * 100)}% 겹침` : '이름 계열 같음'}`} />
+            ))}</ul>
+          </section>
+        )}
+        {usesOut.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <SecTitle>이 자료 보고서가 사용한 모델</SecTitle>
+            <ul>{usesOut.map(([o, p]) => <EntryRow key={o.id} e={o} color={dot(o)} onGo={onGo} note={`${where(o)} · ${p.files?.[1] || ''}`} />)}</ul>
+          </section>
+        )}
+        {usesIn.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <SecTitle>이 자료의 모델을 사용한 보고서</SecTitle>
+            <ul>{usesIn.map(([o, p]) => <EntryRow key={o.id} e={o} color={dot(o)} onGo={onGo} note={`${where(o)} · ${p.files?.[0] || ''}`} />)}</ul>
+          </section>
+        )}
+        {text.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <SecTitle>본문이 비슷한 보고서가 있는 자료</SecTitle>
+            <p className="text-meta text-n-500">의미가 가까운 보고서를 추천합니다. 원문으로 확인해 주세요.</p>
+            <ul>{text.map(([o, p]) => <EntryRow key={o.id} e={o} color={dot(o)} onGo={onGo} note={`${where(o)} · 유사도 ${p.score?.toFixed(2) ?? '—'}`} />)}</ul>
+          </section>
+        )}
         <section className="flex flex-col gap-2">
           <SecTitle>모델 판</SecTitle>
           {n.raw.revisions?.length ? n.raw.revisions.map((s) => (
@@ -480,6 +560,26 @@ function DetailColumn({ model, pivot, sel, color, onGo }) {
               <span className="truncate text-meta text-n-500" title={s.name}>최신판 {s.name}</span>
             </div>
           )) : <p className="text-meta text-n-500">판이 둘 이상인 모델 계열이 없습니다.</p>}
+        </section>
+        <section className="flex flex-col gap-2">
+          <SecTitle>보고서 판</SecTitle>
+          {n.raw.report_revisions?.length ? n.raw.report_revisions.map((s) => (
+            <div key={s.items[0].file_id} className="flex flex-col gap-1">
+              <ol className="flex flex-col">
+                {s.items.map((it, i) => (
+                  <li key={it.file_id} className="flex flex-col gap-0.5 border-b border-n-100 py-1">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className={`shrink-0 rounded-xs border px-1.5 font-mono text-meta ${it.is_latest ? 'border-brand bg-brand text-n-0' : 'border-n-250 text-n-600'}`}>{it.display}</span>
+                      <span className="truncate text-meta text-n-800" title={it.name}>{it.name}</span>
+                    </span>
+                    {i > 0 && (
+                      <span className="pl-1 text-meta text-n-500">↳ 앞 판보다 {stepText(s.steps?.[i - 1]) || '본문 색인 전'}</span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )) : <p className="text-meta text-n-500">판이 둘 이상인 보고서 계열이 없습니다.</p>}
           <p className="text-meta text-n-500">판은 자료 안 파일끼리의 순서라 지도에 선으로 그리지 않습니다.</p>
         </section>
         <Link to={`/e/${n.eid}`} className="inline-flex h-9 items-center justify-center rounded-md bg-brand px-3 text-ui font-semibold text-n-0 hover:bg-brand-hover">자료 열기</Link>

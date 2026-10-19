@@ -106,13 +106,15 @@ def _clear_reachability_cache():
 @pytest.fixture(autouse=True)
 def _clear_report_index_caches():
     """22 — 임베딩 모델 확인(60초)·벡터 행렬 캐시가 테스트 사이로 새지 않게 비운다."""
-    from app.report_index import embeddings, store
+    from app.report_index import embeddings, features, store
 
     embeddings.clear_identity_cache()
     store.clear_vector_cache()
+    features.clear_cache()
     yield
     embeddings.clear_identity_cache()
     store.clear_vector_cache()
+    features.clear_cache()
 
 
 @pytest.fixture(autouse=True)

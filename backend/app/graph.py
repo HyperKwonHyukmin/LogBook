@@ -7,17 +7,25 @@
               네 서명이 모두 같으면 'dup'(똑같은 BDF — 17 이 업로드에서 막으므로 예외로만 생긴다),
               아니면 'geom'(형상만 같음)과 다른 범주(differing — property·material·load).
     판        model_revisions — 자료 안 파일끼리의 순서라 자료 사이 선이 아니다. 계열마다 판 수만 싣는다.
+    보고서 판  revisions.reports.entry_series(32) — 보고서 이름 규칙 + 본문 겹침. 모델 판처럼 자료 안 순서라 선이 아니다.
+    문서 관계(32, doc_pairs) — 모델이 없는 보고서 자료도 이어지게 한다. 한 자료 쌍에 하나(uses > rrev > text 우선).
+              uses  보고서에 사용한 모델(21 report_model_links)이 다른 자료에 있다(사용자가 명시로 연결 — 확실)
+              rrev  같은 보고서의 다른 판이 다른 자료에 있다(이름 계열 + 본문 겹침, 또는 본문 겹침만 CROSS_TEXT_MIN 이상)
+              text  본문이 비슷하다(22 색인 벡터의 보고서 평균 코사인 ≥ 임계값, 보고서마다 가까운 3개까지 — 추천 수준)
 
 권한(13·15): 보는 사람이 볼 수 있는 확정 Entry 만(visible_entries_filter). 숨은 자료와의 모델 관계도
 드러나지 않는다 — 쌍의 두 끝이 모두 보이는 자료일 때만 싣는다.
 """
+import os
 from collections import defaultdict
 
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from . import access, models
 from .bdf.signature import VERSION as SIG_VERSION, differing
+from .report_index import features as report_features
+from .revisions import reports as report_revs
 from .vocab import Vocab
 
 MAX_ENTRIES = 3000        # 최근 확정 순으로 이만큼 — 넘으면 truncated
@@ -25,15 +33,25 @@ MAX_GROUP = 60            # 같은 형상 묶음 하나에서 쌍을 만들 파�
 MAX_PAIRS = 6000
 TAG_KINDS = ("zone", "free")   # 29 — 프로젝트 기준은 없앴다
 _SIG = ("geometry", "property", "material", "load")
+TEXT_TOP = 3              # 보고서마다 '본문이 비슷함' 으로 잇는 가장 가까운 보고서 수
+_DOC_RANK = {"uses": 3, "rrev": 2, "text": 1}
+
+
+def text_threshold() -> float:
+    try:
+        return float(os.getenv("LOGBOOK_GRAPH_TEXT_SIM", "0.85"))
+    except ValueError:
+        return 0.85
 
 
 def _sig(row) -> dict:
     return {c: getattr(row, f"sig_{c}") for c in _SIG}
 
 
-def build_graph(db: Session, user) -> dict:
+def build_graph(db: Session, user, store=None) -> dict:
+    """store = 22 보고서 본문 색인(없거나 열 수 없으면 None — 문서 관계는 '사용한 모델'·이름 규칙만으로)."""
     E = models.Entry
-    rows = (db.query(E.id, E.entry_id, E.title, E.analysis_type, E.confirmed_at)
+    rows = (db.query(E.id, E.entry_id, E.title, E.analysis_type, E.confirmed_at, E.vault_rel)
             .filter(E.status == "confirmed", access.visible_entries_filter(user))
             .order_by(E.confirmed_at.desc(), E.id.desc())
             .limit(MAX_ENTRIES + 1).all())
@@ -41,7 +59,8 @@ def build_graph(db: Session, user) -> dict:
     rows = rows[:MAX_ENTRIES]
     pks = [r.id for r in rows]
     if not pks:
-        return {"entries": [], "hulls": {}, "pairs": [], "unsigned_models": 0, "truncated": False}
+        return {"entries": [], "hulls": {}, "pairs": [], "doc_pairs": [], "unsigned_models": 0, "truncated": False,
+                "doc_index": {"reports": 0, "indexed": 0, "vectors": 0, "available": store is not None}}
 
     hulls: dict[int, list[str]] = defaultdict(list)
     for eid, hull_no, primary in (db.query(models.EntryHull.entry_id, models.EntryHull.hull_no, models.EntryHull.is_primary)
@@ -64,8 +83,13 @@ def build_graph(db: Session, user) -> dict:
     atype = Vocab(db, "atype")
 
     F, S = models.File, models.ModelSummary
-    file_counts = dict(db.query(F.entry_id, func.count(F.id))
-                       .filter(F.entry_id.in_(pks), F.location != "trash").group_by(F.entry_id))
+    file_counts: dict[int, int] = defaultdict(int)
+    kind_counts: dict[int, dict[str, int]] = defaultdict(lambda: {"model": 0, "report": 0})
+    for eid, kind, n in (db.query(F.entry_id, F.kind, func.count(F.id))
+                         .filter(F.entry_id.in_(pks), F.location != "trash").group_by(F.entry_id, F.kind)):
+        file_counts[eid] += n
+        if kind in ("model", "report"):
+            kind_counts[eid][kind] = n
 
     # 판 — 계열(series_key)마다 판 수와 최신판 파일 이름. 판이 둘 이상인 계열만
     series: dict[tuple, dict] = {}
@@ -119,6 +143,8 @@ def build_graph(db: Session, user) -> dict:
                         or_(S.sig_geometry.is_(None), S.sig_version.is_(None), S.sig_version != SIG_VERSION))
                 .count())
 
+    doc_pairs, report_series, doc_index = _documents(db, store, rows, pks)
+
     code = {r.id: r.entry_id for r in rows}
     out_entries = []
     for r in rows:
@@ -129,10 +155,73 @@ def build_graph(db: Session, user) -> dict:
             "confirmed_at": r.confirmed_at.strftime("%Y-%m") if r.confirmed_at else None,
             "hulls": hulls.get(r.id, []), "zones": t["zone"], "free": t["free"],
             "files": file_counts.get(r.id, 0), "revisions": revisions.get(r.id, []),
+            "models": kind_counts[r.id]["model"] if r.id in kind_counts else 0,
+            "reports": kind_counts[r.id]["report"] if r.id in kind_counts else 0,
+            "report_revisions": report_series.get(r.id, []),
         })
     out_pairs = [{"a": code[a], "b": code[b], "type": p["type"], "differs": p["differs"],
                   "files": p["files"], "count": p["count"]}
                  for (a, b), p in sorted(pairs.items())]
     used = {h for hs in hulls.values() for h in hs}
+    out_doc = [{**p, "a": code[a], "b": code[b], **({"from": code[p["from"]]} if p.get("from") else {})}
+               for (a, b), p in sorted(doc_pairs.items())]
     return {"entries": out_entries, "hulls": {h: ships.get(h) for h in sorted(used)},
-            "pairs": out_pairs, "unsigned_models": unsigned, "truncated": truncated}
+            "pairs": out_pairs, "doc_pairs": out_doc, "unsigned_models": unsigned, "truncated": truncated,
+            "doc_index": doc_index}
+
+
+def _documents(db: Session, store, rows, pks) -> tuple[dict, dict, dict]:
+    """문서 관계(32) — (자료 쌍 → 관계, 자료 pk → 보고서 판 계열, 색인 현황)."""
+    F = models.File
+    files = report_revs.report_files(db, pks)
+    entries = {r.id: r for r in rows}
+    feats = report_revs.current_features(store, files, entries)
+    series = {}
+    for pk, fs in files.items():
+        ss = report_revs.entry_series(fs, feats)
+        if ss:
+            series[pk] = [{"count": len(s["items"]), "name": s["items"][-1]["name"], "items": s["items"],
+                           "steps": s["steps"]} for s in ss]
+    pairs: dict[tuple[int, int], dict] = {}
+
+    def put(a, b, kind, files_, score=None, origin=None):
+        if a == b:
+            return
+        key = (a, b) if a < b else (b, a)
+        p = pairs.get(key)
+        if p is None:
+            if len(pairs) >= MAX_PAIRS:
+                return
+            p = pairs[key] = {"type": kind, "files": files_, "score": score, "count": 0,
+                              "kinds": {"uses": 0, "rrev": 0, "text": 0}}
+            if origin:
+                p["from"] = origin
+        p["count"] += 1
+        p["kinds"][kind] += 1
+        if _DOC_RANK[kind] > _DOC_RANK[p["type"]]:
+            p.update(type=kind, files=files_, score=score)
+            p.pop("from", None)
+            if origin:
+                p["from"] = origin
+
+    # uses — 보고서(자료 a)가 사용한 모델이 다른 자료 b 에 있다. 두 끝이 모두 보이는 확정 자료일 때만
+    R, M = models.ReportModelLink, aliased(F)
+    for rep_entry, rep_name, mod_entry, mod_name in (
+            db.query(F.entry_id, F.name, M.entry_id, M.name)
+            .join(R, R.report_file_id == F.id).join(M, M.id == R.model_file_id)
+            .filter(F.entry_id.in_(pks), M.entry_id.in_(pks), F.location != "trash", M.location != "trash")
+            .order_by(R.id)):
+        put(rep_entry, mod_entry, "uses", [rep_name, mod_name], origin=rep_entry)
+    for (a, b), p in report_revs.cross_pairs(files, feats).items():
+        for _ in range(p["count"]):
+            put(a, b, "rrev", p["files"], p["score"])
+    by_file = {f.id: f for fs in files.values() for f in fs}
+    for key, score in report_features.similar_pairs(feats, text_threshold(), TEXT_TOP).items():
+        x, y = (by_file[i] for i in sorted(key))
+        if x.entry_id != y.entry_id:
+            a, b = (x, y) if x.entry_id < y.entry_id else (y, x)
+            put(a.entry_id, b.entry_id, "text", [a.name, b.name], round(score, 3))
+    total = sum(len(fs) for fs in files.values())
+    index = {"reports": total, "indexed": len(feats), "vectors": sum(1 for f in feats.values() if f.vector is not None),
+             "available": store is not None}
+    return pairs, series, index

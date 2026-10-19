@@ -1,4 +1,7 @@
-import { aggregate, buildModel, diffShort, explainAgg, explainPair, isMember, parentsOf, pivotHubs, searchNodes } from './graphModel.js';
+import {
+  aggregate, aggText, buildModel, diffShort, explainAgg, explainPair, isLoudPair, isMember, isReportOnly, pairsOf, parentsOf,
+  pivotHubs, searchNodes, stepText,
+} from './graphModel.js';
 
 const DATA = {
   hulls: { 3370: '컨테이너선', 3508: '컨테이너선' },
@@ -59,4 +62,57 @@ test('찾기 — 지금 기준 먼저', () => {
   expect(searchNodes(m, '33', 'hull')[0].id).toBe('hull:3370');
   expect(searchNodes(m, 'e000002', 'hull').map((n) => n.eid)).toEqual(['E000002']);
   expect(searchNodes(m, '  ', 'hull')).toEqual([]);
+});
+
+// ── 32 문서 관계 ──
+const DOCS = {
+  hulls: {},
+  entries: [
+    { id: 'E000011', title: '모델', hulls: ['3370'], zones: [], free: [], revisions: [], models: 1, reports: 0 },
+    { id: 'E000012', title: '보고서', hulls: ['3508'], zones: [], free: [], revisions: [], models: 0, reports: 2 },
+    { id: 'E000013', title: '보고서 2차', hulls: ['3508'], zones: [], free: [], revisions: [], models: 0, reports: 1 },
+  ],
+  pairs: [],
+  doc_pairs: [
+    { a: 'E000011', b: 'E000012', type: 'uses', from: 'E000012', files: ['r.pdf', 'm.bdf'], score: null, count: 1,
+      kinds: { uses: 1, rrev: 0, text: 0 } },
+    { a: 'E000012', b: 'E000013', type: 'rrev', files: ['r_r1.pdf', 'r_r2.pdf'], score: 0.82, count: 1,
+      kinds: { uses: 0, rrev: 1, text: 0 } },
+    { a: 'E000011', b: 'E000013', type: 'text', files: ['a.pdf', 'b.pdf'], score: 0.912, count: 1,
+      kinds: { uses: 0, rrev: 0, text: 1 } },
+  ],
+  doc_index: { reports: 3, indexed: 2, vectors: 2, available: true },
+};
+
+test('문서 층 — 층별 선, 보고서만 있는 자료, 기준 사이 집계', () => {
+  const m = buildModel(DOCS);
+  expect(pairsOf(m, 'model')).toHaveLength(0);
+  expect(pairsOf(m, 'doc')).toHaveLength(3);
+  expect(pairsOf(m, 'all')).toHaveLength(3);
+  expect(m.docPairs[0].from).toBe(m.entries[1]);
+  expect(isReportOnly(m.entries[0])).toBe(false);
+  expect(isReportOnly(m.entries[1])).toBe(true);
+  expect(isLoudPair(m.docPairs[1])).toBe(true);
+  expect(isLoudPair(m.docPairs[2])).toBe(false);
+  const [a] = aggregate(m, 'hull', 'doc');
+  expect(a).toMatchObject({ uses: 1, text: 1, rrev: 0, c: 2 });   // rrev 는 같은 호선(3508) 안이라 세지 않는다
+  expect(aggregate(m, 'hull', 'model')).toEqual([]);
+  expect(aggText(a)).toBe('사용한 모델 1 · 본문 비슷함 1');
+  expect(m.docIndex.indexed).toBe(2);
+});
+
+test('문서 선 설명 문장', () => {
+  const m = buildModel(DOCS);
+  const [uses, rrev, text] = m.docPairs;
+  expect(explainPair(m, uses, 'hull')).toBe('E000012(3508)의 보고서가 E000011(3370)의 모델을 사용했습니다.\nr.pdf → m.bdf');
+  expect(explainPair(m, rrev, 'hull')).toMatch(/같은 보고서의 다른 판이 있습니다 — 본문이 82% 겹칩니다[\s\S]*한 자료로 모아/);
+  expect(explainPair(m, { ...rrev, score: null }, 'hull')).toMatch(/이름이 같은 계열입니다\(본문 색인 전\)/);
+  expect(explainPair(m, text, 'hull')).toMatch(/본문 내용이 비슷합니다\(의미 유사도 0\.91\)/);
+});
+
+test('보고서 판 단계 문장', () => {
+  expect(stepText(null)).toBeNull();
+  expect(stepText({ changed: 3, added: 2, removed: 0, overlap: 0.82 })).toBe('쪽 3곳 바뀜 · 쪽 +2 · 본문 82% 같음');
+  expect(stepText({ changed: 0, added: 1, removed: 1, overlap: null })).toBe('쪽 +1 −1');
+  expect(stepText({ changed: 0, added: 0, removed: 0, overlap: null })).toBe('바뀐 쪽 없음');
 });

@@ -17,17 +17,24 @@ import { drag as d3drag } from 'd3-drag';
 import 'd3-transition';
 import { easeCubicInOut } from 'd3-ease';
 import {
-  aggregate, explainAgg, explainPair, hubTip, isMember, membersOf, parentsOf, pivotHubs, primaryOf,
+  aggregate, aggText, explainAgg, explainPair, hubTip, isLoudPair, isMember, isReportOnly, membersOf, pairsOf, parentsOf,
+  pivotHubs, primaryOf,
 } from '../../lib/graphModel.js';
 
 const FONT = '"Pretendard Variable", Pretendard, "Noto Sans KR", "Segoe UI", sans-serif';
 const MONO = '"JetBrains Mono", Consolas, monospace';
 // 지도 색: 중립 + 강조 하나(브랜드 남색). 범주색은 '점 색'을 켰을 때 자료 점에만 쓴다. 주황은 '똑같은 BDF' 경고 하나.
+// 32 — 문서 층 선(사용한 모델·보고서 다른 판·본문 비슷함)은 청록 하나로 모델 층(남색)과 나눈다.
 const K = {
   bg: '#FFFFFF', edge: 'rgba(19,23,28,0.15)', edgeCross: 'rgba(19,23,28,0.12)', edgeRing: 'rgba(19,23,28,0.07)',
   agg: 'rgba(52,72,102,0.36)', hot: 'rgba(0,37,84,0.72)', accent: '#002554', warn: '#C2620E', ring: '#2E6FD8',
   glow: '46,111,216', leaf: '#7D8794', hub: '#002554', hubNone: '#A3A9B1', tag: '#5B6573', label: '#24282E',
-  labelSub: '#4E5359', halo: 'rgba(255,255,255,0.94)',
+  labelSub: '#4E5359', halo: 'rgba(255,255,255,0.94)', doc: '#1F7A68',
+};
+// 선 모양 — [색 열쇠, 굵기, 점선]
+const PAIR_STYLE = {
+  geom: ['accent', 1.5, [5, 4]], dup: ['warn', 1.8, []],
+  uses: ['doc', 1.5, []], rrev: ['doc', 1.9, []], text: ['doc', 1.3, [1.5, 3.5]],
 };
 export const GRAPH_COLORS = K;
 
@@ -60,7 +67,7 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
   const REDUCED = reducedMotion;
   let model = null;
   const S = { pivot: 'hull', color: 'none', hl: null, sel: null, hover: null, hoverLink: null,
-    secondary: true, agg: true, rings: new Set(), alwaysPairs: false, userZoom: false };
+    secondary: true, agg: true, rings: new Set(), alwaysPairs: false, userZoom: false, layer: 'all' };
   let W = 0, H = 0, dpr = 1, T = zoomIdentity;
   let gHubs = [], gLinks = [], gRings = [], gAgg = [];
   let drawnAgg = [], drawnPairs = [], labelBoxes = [];
@@ -72,6 +79,7 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
   const parents = (e) => parentsOf(model, e, S.pivot);
   const primary = (e) => primaryOf(model, e, S.pivot);
   const members = (h) => membersOf(model, h);
+  const P = () => pairsOf(model, S.layer);
 
   // 기준 점끼리만 서로 떨어뜨린다 — 다른 기준이 자료를 밀지 않아 둘레가 온전한 원이 된다
   function hubSpacing(alpha) {
@@ -92,7 +100,7 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
     gRings = [...model.hubs.values()].filter((h) => h.g !== S.pivot && S.rings.has(h.g) && h.cnt > 0);
     gLinks = [];
     for (const e of model.entries) parents(e).forEach((p, i) => gLinks.push({ source: e, target: p, main: i === 0 }));
-    gAgg = aggregate(model, S.pivot);
+    gAgg = aggregate(model, S.pivot, S.layer);
     for (const h of gHubs) {
       if (h.x == null || h._pivot !== S.pivot) {
         const ms = members(h).filter((e) => e.x != null);
@@ -127,7 +135,7 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
         }
         if (n.g === S.pivot) {
           gAgg.forEach((a) => { if (a.a === n) put(a.b.id, 1); if (a.b === n) put(a.a.id, 1); });
-          for (const p of model.pairs) {
+          for (const p of P()) {
             const ia = D.get(p.a.id) === 1, ib = D.get(p.b.id) === 1;
             if (ia && !D.has(p.b.id)) { put(p.b.id, 2); put(primary(p.b).id, 2); }
             if (ib && !D.has(p.a.id)) { put(p.a.id, 2); put(primary(p.a).id, 2); }
@@ -135,7 +143,7 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
         }
       } else {
         parents(n).forEach((p) => put(p.id, 1)); gRings.forEach((r) => { if (isMember(n, r)) put(r.id, 1); });
-        for (const p of model.pairs) {
+        for (const p of P()) {
           const o = p.a === n ? p.b : p.b === n ? p.a : null;
           if (o) { put(o.id, 1); put(primary(o).id, 2); }
         }
@@ -252,17 +260,18 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
       ctx.stroke();
     }
 
-    // 3) 형상만 같음(남색 점선): 초점과 닿을 때·올렸을 때·'늘 보기'. 똑같은 BDF(주황 실선): 예외라 늘 보인다
-    for (const p of model.pairs) {
+    // 3) 자료 사이 선: 초점과 닿을 때·올렸을 때·'늘 보기'. 똑같은 BDF(주황)·보고서 다른 판(청록 실선)은 정리 신호라 늘 보인다
+    for (const p of P()) {
       const touch = fid && L && lit(p.a.id) && lit(p.b.id) && (dep(p.a.id) <= 1 || dep(p.b.id) <= 1);
       const over = S.hoverLink === p;
-      if (!touch && !over && !S.alwaysPairs && p.type !== 'dup') continue;
+      if (!touch && !over && !S.alwaysPairs && !isLoudPair(p)) continue;
+      const [ck, lw, dash] = PAIR_STYLE[p.type] || PAIR_STYLE.geom;
       const [s, e] = !L || (dep(p.a.id) ?? 9) <= (dep(p.b.id) ?? 9) ? [p.a, p.b] : [p.b, p.a];
       const f = touch && !over ? (Math.min(dep(p.a.id), dep(p.b.id)) === 0 ? st1 : st2) : 1;
       ctx.globalAlpha = over ? 1 : touch ? 0.95 * Math.max(A.dim, 0.001) : (L ? dimA * 0.9 : 0.9);
-      ctx.strokeStyle = p.type === 'dup' ? K.warn : K.accent;
-      ctx.lineWidth = lineW(p.type === 'dup' ? 1.8 : 1.5, k) + (over ? 1.2 : 0);
-      ctx.setLineDash(p.type === 'geom' ? [5, 4] : []);
+      ctx.strokeStyle = K[ck];
+      ctx.lineWidth = lineW(lw, k) + (over ? 1.2 : 0);
+      ctx.setLineDash(dash);
       const x1 = sx(s.x), y1 = sy(s.y), x2 = x1 + (sx(e.x) - x1) * f, y2 = y1 + (sy(e.y) - y1) * f;
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.setLineDash([]);
       if (f >= 1) drawnPairs.push({ p, x1, y1, x2, y2 });
@@ -279,20 +288,23 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
       }
     }
 
-    // 5) 자료 점(색별로 묶고, 초점 이웃은 살짝 커진다)
+    // 5) 자료 점(색별로 묶고, 초점 이웃은 살짝 커진다). 보고서만 있는 자료는 속이 빈 점(32)
     const grow = 1 + 0.32 * pe * A.dim;
     const groups = new Map();
     for (const e of model.entries) {
-      const on = lit(e.id), key = `${leafColor(e)}|${on ? (L && dep(e.id) <= 1 ? '2' : '1') : '0'}`;
+      const on = lit(e.id);
+      const key = `${leafColor(e)}|${on ? (L && dep(e.id) <= 1 ? '2' : '1') : '0'}|${isReportOnly(e) ? 'o' : 'f'}`;
       (groups.get(key) || groups.set(key, []).get(key)).push(e);
     }
     for (const [key, list] of groups) {
-      const [c, lv] = key.split('|');
-      ctx.globalAlpha = lv === '0' ? dimA : 1; ctx.fillStyle = c;
+      const [c, lv, shape] = key.split('|');
+      ctx.globalAlpha = lv === '0' ? dimA : 1;
       const r = lv === '2' ? lr * grow : lr;
       ctx.beginPath();
       for (const e of list) { ctx.moveTo(sx(e.x) + r, sy(e.y)); ctx.arc(sx(e.x), sy(e.y), r, 0, Math.PI * 2); }
-      ctx.fill();
+      if (shape === 'o') {
+        ctx.fillStyle = K.bg; ctx.fill(); ctx.lineWidth = Math.max(1, r * 0.45); ctx.strokeStyle = c; ctx.stroke();
+      } else { ctx.fillStyle = c; ctx.fill(); }
     }
     ctx.globalAlpha = 1;
     for (const n of [...model.entries, ...gHubs]) if (n.pinned) {
@@ -338,8 +350,7 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
     }
     if (fid && aggHot.length && model.byId.get(fid)?.hub) for (const [a, g] of aggHot) {
       ctx.globalAlpha = A.dim * st2;
-      const t = [a.span && `함께 등록 ${a.span}`, a.geom && `형상만 같음 ${a.geom}`, a.dup && `똑같은 BDF ${a.dup}`].filter(Boolean).join(' · ');
-      label(t, g.mx, g.my - 7, `500 11.5px ${FONT}`, K.accent, true);
+      label(aggText(a), g.mx, g.my - 7, `500 11.5px ${FONT}`, K.accent, true);
     }
     const hubA = Math.max(0, Math.min(1, (k - 0.5) / 0.15));
     for (const h of [...gHubs].sort((a, b) => b.cnt - a.cnt)) {
@@ -494,7 +505,7 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
   function neighbors(n) {
     if (!n) return [...gHubs].sort((a, b) => b.cnt - a.cnt);
     if (n.hub) return members(n).sort((a, b) => (b.raw.confirmed_at || '').localeCompare(a.raw.confirmed_at || ''));
-    return [...parents(n), ...model.pairs.filter((p) => p.a === n || p.b === n).map((p) => (p.a === n ? p.b : p.a))];
+    return [...parents(n), ...P().filter((p) => p.a === n || p.b === n).map((p) => (p.a === n ? p.b : p.a))];
   }
   let navAnchor = null, navIdx = -1;
   listen(canvas, 'keydown', (e) => {
@@ -531,8 +542,10 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
       if (REDUCED) { settle(); fit(0); } else { sim.alpha(0.7).restart(); clearTimeout(settleTimer); settleTimer = setTimeout(() => fit(), 900); }
     },
     setColor(c) { S.color = c; requestFrame(); },
-    setOptions({ agg, secondary, alwaysPairs, rings }) {
-      const rebuild = (rings && [...rings].sort().join() !== [...S.rings].sort().join()) || (secondary !== undefined && secondary !== S.secondary);
+    setOptions({ agg, secondary, alwaysPairs, rings, layer }) {
+      const rebuild = (rings && [...rings].sort().join() !== [...S.rings].sort().join()) || (secondary !== undefined && secondary !== S.secondary)
+        || (layer !== undefined && layer !== S.layer);
+      if (layer !== undefined) S.layer = layer;
       if (agg !== undefined) S.agg = agg;
       if (secondary !== undefined) S.secondary = secondary;
       if (alwaysPairs !== undefined) S.alwaysPairs = alwaysPairs;

@@ -45,4 +45,10 @@
 LogBook `tests/test_grants_levels_31.py`(부서·사번 가운데 검색, 여러 명 허락·중복·전부 아니면 없음·권한, 등급 API, 일괄 LV1),
 `test_access_15` 빈 검색어 = 전체. 프런트 `AccessPanel.test.jsx`·`EntryPage.access.test.jsx` 를 새 고르기 흐름으로.
 WorkBench `tests/test_logbook_link.py` levels 2건, `utils/logbookLink.test.js` `logbookLevelOf`, `electron/response-security.test.js` subFrame.
-⚠ 모달 iframe 의 실제 자동 로그인은 Electron 실행으로 확인해야 한다(개발 PC 에서 LogBook 9095 를 띄우고 대시보드 단추).
+## 상태 (2026-10-19)
+
+- 완료·배포: LogBook `654f158`, WorkBench `b9e5436`(모달·등급 열) + `bf31846`(1.6.14). 145 에서 `level-guest --apply` 적용됨(LV2 0명 확인).
+- 모달 iframe 실사용 확인됨. 한때 LogBook 이 스타일 없이(흰 칸 + 'Hi-TESS LogBook' 글자, 표 깨짐) 보였으나 다시 열어 보니 정상 —
+  Chromium·Electron 26/40·CSP 유무로는 재현되지 않았다. 다시 나오면 [새 창으로 열기]도 깨지는지 보고, 같으면
+  WorkBench 앱 캐시(`%APPDATA%\HiTESS WorkBench\Cache`)를 의심한다.
+- 결정: **등급 변경은 LogBook 사용자 관리에서만**. WorkBench 사용자 관리 'LogBook' 열은 보기 전용으로 둔다(서버 간 변경 API 는 만들지 않음).
