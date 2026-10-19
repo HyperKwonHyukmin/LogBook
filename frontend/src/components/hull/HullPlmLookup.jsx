@@ -38,6 +38,19 @@ export default function HullPlmLookup({ hulls, disabled = false }) {
   );
 }
 
+/** 30 — 자료 화면 속성 칸: 저장된 PLM 선박 정보를 호선마다 한 줄씩(조회 안 한 호선은 줄이 없다). */
+export function HullPlmSummary({ hulls }) {
+  const rows = (hulls || []).filter((h) => h.plm);
+  if (!rows.length) return null;
+  return (
+    <ul aria-label="PLM 선박 정보" className="mt-1 flex flex-col gap-0.5 text-meta">
+      {rows.map((h) => (h.plm.status === 'found'
+        ? <PlmRow key={h.hull_no} hullNo={h.hull_no} r={h} />
+        : <li key={h.hull_no} className="text-n-500"><span className="mr-1.5 font-mono text-n-800">{h.hull_no}</span>PLM 에 없음</li>))}
+    </ul>
+  );
+}
+
 function PlmRow({ hullNo, r }) {
   if (r.error) {
     return <li className="text-n-600"><span className="mr-1.5 font-mono text-n-800">{hullNo}</span>{r.error}</li>;

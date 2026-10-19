@@ -33,7 +33,7 @@ import { useUnsavedGuard } from '../lib/useUnsavedGuard.js';
 import AccessPanel, { AccessBadge } from '../components/access/AccessPanel.jsx';
 import { canWriteLevel } from '../lib/levels.js';
 import RevisionSection from '../components/revisions/RevisionSection.jsx';
-import HullPlmLookup from '../components/hull/HullPlmLookup.jsx';
+import HullPlmLookup, { HullPlmSummary } from '../components/hull/HullPlmLookup.jsx';
 import NeedsFixBadge from '../components/ui/NeedsFixBadge.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
@@ -637,6 +637,7 @@ export default function EntryPage() {
                 {entry.no_hull && entry.hulls.length === 0 && (
                   <span className="text-meta text-n-600">공용(호선 없음)</span>
                 )}
+                <HullPlmSummary hulls={entry.hulls} />
               </Prop>
               <Prop label="구역">
                 <VocabInput compact disabled multiple kind="zone" label="구역" values={entry.zones} onChange={() => {}}

@@ -107,8 +107,9 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
     같은 BDF·합치기 제안)를 숨기고, 공개 범위를 바꿀 수 있으면 열람 허락 목록을 싣는다(13).
     viewer 가 None 이면 내부용(entry.json·감사 스냅숏) — 숨기지 않는다. API 응답에는 반드시 viewer 를 준다."""
     hulls = hulls_of(db, entry)
-    ship = {h.hull_no: h.ship_type for h in
-            db.query(models.Hull).filter(models.Hull.hull_no.in_([x.hull_no for x in hulls]))} if hulls else {}
+    hull_rows = {h.hull_no: h for h in
+                 db.query(models.Hull).filter(models.Hull.hull_no.in_([x.hull_no for x in hulls]))} if hulls else {}
+    ship = {no: h.ship_type for no, h in hull_rows.items()}
     files = db.query(models.File).filter_by(entry_id=entry.id).order_by(models.File.rel_path).all()
     dup_ids = [f.duplicate_of_id for f in files if f.duplicate_of_id]
     dup_rows = (db.query(models.File.id, models.Entry.id, models.Entry.entry_id)
@@ -161,6 +162,11 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
         # 초안 제목이 초안 그대로(사람이 고치지 않음)면 값을 바꿀 때 제목이 따라 바뀐다(update_entry)
         d["title_is_auto"] = entry.status == "draft" and ctx.is_auto(entry)
     if viewer is not None:
+        from ..hull_info import plm_of   # 순환 import 방지(hull_info 가 이 모듈을 읽는다)
+
+        # 30 — 속성 칸 호선 아래 PLM 선박 정보(조회 안 했으면 None). entry.json(viewer None)에는 넣지 않는다
+        for h in d["hulls"]:
+            h["plm"] = plm_of(hull_rows.get(h["hull_no"]))
         if not merge_into:
             d["merge_into_id"] = None
         d["can_edit"] = access.can_edit_entry(viewer, entry)

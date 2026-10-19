@@ -293,3 +293,22 @@ def test_plm_check_shows_tns_entry_and_lookup(tmp_path, monkeypatch, plm):
     out = "\n".join(plm_ship.diagnose("3370"))
     assert "secret" not in out
     assert "mode=thin" in out and "10.0.0.9" in out and "조회 성공: 3370 → 174K-LNG" in out
+
+
+# ---- 자료 화면 속성 칸 — 호선 아래 PLM 정보 ----
+
+def test_entry_detail_carries_hull_plm(client, db, storage, make_user, make_entry_file, auth_headers, plm):
+    from app.entries.files import write_entry_files
+    import json
+
+    make_user("A100001")
+    e, _ = make_entry_file(title="x", hulls=("3370", "3371"), name="a.pdf")
+    h = auth_headers("A100001")
+    client.post("/api/hulls/3370/plm", headers=h)
+    d = client.get(f"/api/entries/{e.entry_id}", headers=h).json()
+    by = {x["hull_no"]: x for x in d["hulls"]}
+    assert by["3370"]["ship_type"] == "174K LNG" and by["3370"]["plm"]["main_engine"] == "G70ME-C10.5-GA-EGRBP"
+    assert by["3371"]["plm"] is None                       # 아직 조회하지 않은 호선
+    write_entry_files(db, storage, db.get(models.Entry, e.id))
+    meta = json.loads((storage.vault / e.vault_rel / "entry.json").read_text(encoding="utf-8"))
+    assert all("plm" not in x for x in meta["hulls"])      # 재구축 원천에는 싣지 않는다
