@@ -25,5 +25,11 @@ WorkBench 관리자가 All Projects 에서 해석 1건을 LogBook 으로 보낼 
 - 프런트: `components/workbench/WbOrigins.jsx`, `pages/EntryPage.jsx`, `lib/labels.js`
 - 테스트: `backend/tests/test_wb_origin_39.py`, `frontend/src/components/workbench/WbOrigins.test.jsx`
 
+## 후속 (2026-10-19, 145 첫 확인에서)
+- WB 에서 보낸 자료의 제목 초안에 작업 폴더 이름이 그대로 들어감(`공용 · 기타 · 강도 평가 · 기타 · 20261019 153131 A542933 GroupModuleUnit`).
+  → 구별자에서 날짜(8자리, 날짜 꼴만)·그 바로 뒤 시각(6자리)·사번(영문 1 + 숫자 6) 조각을 뺀다(`naming.distinct_part`). 해석 일시·해석자는 출처 칸에 있다.
+  새 제목 초안에만 적용 — 이미 확정한 자료 제목은 그대로.
+- 같은 BDF 를 다시 보내면 17 규칙(완전 동일 BDF 차단)으로 막힌다 — 정상. 여권 확인은 LogBook 에 없는 BDF 로.
+
 ## 다음(Core 순서 ③~⑥)
 ③ 145 배포(키 꺼짐) → WB 보내기 한 번이 지금과 같은지 · ④ WorkBench B1(`LOGBOOK_SEND_PASSPORT`) · ⑤ 두 키 켜고 관리자 해석 1건 · ⑥ Core 02 L6 갱신.

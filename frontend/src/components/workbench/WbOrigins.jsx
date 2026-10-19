@@ -19,7 +19,8 @@ export default function WbOrigins({ origins, files, onCopy }) {
               <Copy size={12} aria-hidden="true" />
             </button>
           </span>
-          <span className="block truncate" title={o.project || undefined}>
+          {/* 속성 칸이 좁다 — 해석자 사번이 잘리지 않게 자르지 않고 줄을 바꾼다 */}
+          <span className="block break-words" title={o.project || undefined}>
             {[o.program, o.owner && `해석 ${o.owner}`, o.created_at && formatDateTime(o.created_at).slice(0, 10)].filter(Boolean).join(' · ')}
           </span>
           {o.matched?.length > 0 && (

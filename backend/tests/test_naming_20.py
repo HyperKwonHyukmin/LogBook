@@ -23,6 +23,10 @@ from app.storage.paths import to_long
     ("2026_3496_선수", ["3496"], [], "2026 선수"),               # 고르지 않은 값은 지우지 않는다
     ("3497_검토", ["3496"], [], "3497 검토"),                    # 다른 호선 번호는 구별자로 남긴다
     ("", ["3496"], [], ""),
+    # 39 후속 — WorkBench 작업 폴더 이름의 날짜·시각·사번은 뺀다(출처 칸에 따로 있다)
+    ("20261019_153131_A542933_GroupModuleUnit", [], [], "GroupModuleUnit"),
+    ("3496_20261019_M04", ["3496"], [], "M04"),
+    ("M04_123456_20261399", [], [], "M04 123456 20261399"),       # 날짜 뒤가 아닌 6자리·날짜가 아닌 8자리는 남긴다
 ])
 def test_distinct_part(source, hulls, phrases, expected):
     assert naming.distinct_part(source, hulls=hulls, phrases=phrases) == expected

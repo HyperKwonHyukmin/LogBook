@@ -26,6 +26,12 @@ _HULL_TOKEN = re.compile(r"^(?:H|HN|No\.?)?([0-9]{4})(?:호선|호)?$", re.IGNOR
 NOISE = frozenset({"final", "fin", "최종", "최종본", "copy", "복사본", "사본", "backup", "bak",
                    "tmp", "temp", "new"})
 WORD = re.compile(r"[0-9A-Za-z가-힣]+")
+# 39 후속 — 작업 폴더 이름의 날짜·시각·사번 조각(WorkBench 작업 폴더 `YYYYMMDD_HHMMSS_사번_프로그램`).
+# 날짜는 8자리이면서 실제 날짜 꼴일 때만, 시각(6자리)은 날짜 바로 뒤에 올 때만 뺀다(모델 번호 같은 숫자를 지우지 않게).
+# 해석 일시·해석자는 WorkBench 출처(39)에 따로 남는다.
+_DATE = re.compile(r"^(19|20)[0-9]{2}(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])$")
+_TIME = re.compile(r"^([01][0-9]|2[0-3])[0-5][0-9][0-5][0-9]$")
+_EMPLOYEE = re.compile(r"^[A-Za-z][0-9]{6}$")
 
 
 def key(value) -> str:
@@ -73,8 +79,14 @@ def distinct_part(source: str | None, *, hulls=(), phrases=()) -> str:
     keys = _phrase_keys(phrases)
     out: list[str] = []
     i = 0
+    after_date = False
     while i < len(toks):
         t = toks[i]
+        if _DATE.match(t) or (after_date and _TIME.match(t)) or _EMPLOYEE.match(t):
+            after_date = bool(_DATE.match(t))
+            i += 1
+            continue
+        after_date = False
         m = _HULL_TOKEN.match(t)
         if m and m.group(1) in hull_set:
             i += 1
