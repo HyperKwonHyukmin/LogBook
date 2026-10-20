@@ -96,7 +96,7 @@ export default function GraphPage() {
           <FilterColumn model={model} pivot={pivot} onPivot={changePivot} color={color} onColor={setColor} onGo={goTo}
                         layer={opts.layer} onLayer={(v) => setOpts((o) => ({ ...o, layer: v }))} />
           <Stage model={model} view={view} setView={setView} pivot={pivot} hl={hl} setHl={setHl} onSelect={onSelect}
-                 opts={opts} setOpts={setOpts} pop={pop} setPop={setPop} />
+                 opts={opts} setOpts={setOpts} pop={pop} setPop={setPop} focused={!!sel || !!hl} />
           <DetailColumn model={model} pivot={pivot} sel={sel} onGo={goTo} layer={opts.layer} />
         </div>
       )}
@@ -197,7 +197,7 @@ function FilterColumn({ model, pivot, onPivot, color, onColor, onGo, layer, onLa
 const toolClass = 'inline-flex h-7 items-center gap-1.5 rounded-md border border-n-250 bg-n-0 px-2.5 text-meta font-medium text-n-700 shadow-xs '
   + 'transition-colors duration-150 hover:border-n-300 hover:bg-n-50 aria-expanded:border-brand aria-expanded:text-brand';
 
-function Stage({ model, view, setView, pivot, hl, setHl, onSelect, opts, setOpts, pop, setPop }) {
+function Stage({ model, view, setView, pivot, hl, setHl, onSelect, opts, setOpts, pop, setPop, focused }) {
   const canvasRef = useRef(null), stageRef = useRef(null), tipRef = useRef(null);
   const cb = useRef({});
   cb.current = { onSelect, onHighlight: (id) => { setHl(id); if (id) onSelect(null); } };
@@ -226,6 +226,8 @@ function Stage({ model, view, setView, pivot, hl, setHl, onSelect, opts, setOpts
   const shown = pairsOf(model, opts.layer);
   const has = (t) => shown.some((p) => p.type === t);
   const showModel = opts.layer !== 'doc', showDoc = opts.layer !== 'model';
+  // 2026-10-20 — 범례는 지금 그려진 선만. 형상만 같음·사용한 모델·본문 비슷함·함께 등록은 점을 고르거나 '늘 보기'일 때만 그린다
+  const quiet = focused || opts.alwaysPairs;
   return (
     <div ref={stageRef} className="relative min-h-0 min-w-0 overflow-hidden bg-n-0 max-[1100px]:order-1 max-[1100px]:h-[64vh] max-[1100px]:min-h-[380px]">
       <canvas ref={canvasRef} tabIndex={0} className="absolute inset-0 block h-full w-full cursor-grab touch-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-ring"
@@ -254,16 +256,16 @@ function Stage({ model, view, setView, pivot, hl, setHl, onSelect, opts, setOpts
       <div className="absolute bottom-3 left-3.5 flex flex-wrap gap-x-3.5 gap-y-1 rounded-md bg-n-0/90 px-2 py-0.5 text-meta text-n-600 max-[1100px]:hidden">
         {opts.agg && <KeyLine style={{ borderTop: '3px solid rgba(52,72,102,.55)' }}>{g} 사이 관계(굵기 = 건수)</KeyLine>}
         <KeyLine style={{ borderTop: '1.5px solid rgba(19,23,28,.35)' }}>{g} → 자료</KeyLine>
-        {opts.secondary && <KeyLine style={{ borderTop: '1.5px solid rgba(19,23,28,.2)' }}>함께 등록</KeyLine>}
-        {showModel && <KeyLine style={{ borderTop: `1.5px dashed ${K.accent}` }}>형상만 같음</KeyLine>}
+        {quiet && opts.secondary && <KeyLine style={{ borderTop: '1.5px solid rgba(19,23,28,.2)' }}>함께 등록</KeyLine>}
+        {quiet && showModel && <KeyLine style={{ borderTop: `1.5px dashed ${K.accent}` }}>형상만 같음</KeyLine>}
         {showModel && has('dup') && <KeyLine style={{ borderTop: `2px solid ${K.warn}` }}>똑같은 BDF</KeyLine>}
-        {showDoc && has('uses') && <KeyLine style={{ borderTop: `1.5px solid ${K.doc}` }}>사용한 모델</KeyLine>}
+        {quiet && showDoc && has('uses') && <KeyLine style={{ borderTop: `1.5px solid ${K.doc}` }}>사용한 모델</KeyLine>}
         {showDoc && has('rrev') && <KeyLine style={{ borderTop: `2.5px solid ${K.doc}` }}>보고서 다른 판</KeyLine>}
-        {showDoc && has('text') && <KeyLine style={{ borderTop: `1.5px dotted ${K.doc}` }}>본문 비슷함</KeyLine>}
+        {quiet && showDoc && has('text') && <KeyLine style={{ borderTop: `1.5px dotted ${K.doc}` }}>본문 비슷함</KeyLine>}
         {showDoc && model.entries.some(isReportOnly) && (
           <span className="inline-flex items-center gap-1.5"><i aria-hidden="true" className="h-2 w-2 rounded-full border-[1.5px] border-n-500" />보고서만 있는 자료</span>
         )}
-        <span className="text-n-500">선에 올리면 설명</span>
+        <span className="text-n-500">{quiet ? '선에 올리면 설명' : '점을 고르면 약한 관계와 나머지 선이 보입니다'}</span>
       </div>
       <div ref={tipRef} hidden role="tooltip"
            className="pointer-events-none absolute z-10 max-w-[320px] whitespace-pre-line rounded-sm bg-n-900 px-2.5 py-1.5 text-meta text-n-0 shadow-md" />

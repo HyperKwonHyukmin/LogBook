@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "demo": "node demo/build.mjs"
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.3.0",

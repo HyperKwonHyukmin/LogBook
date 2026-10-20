@@ -27,7 +27,7 @@ const MONO = '"JetBrains Mono", Consolas, monospace';
 // 32 — 문서 층 선(사용한 모델·보고서 다른 판·본문 비슷함)은 청록 하나로 모델 층(남색)과 나눈다.
 const K = {
   bg: '#FFFFFF', edge: 'rgba(19,23,28,0.15)', edgeCross: 'rgba(19,23,28,0.12)', edgeRing: 'rgba(19,23,28,0.07)',
-  agg: 'rgba(52,72,102,0.36)', hot: 'rgba(0,37,84,0.72)', accent: '#002554', warn: '#C2620E', ring: '#2E6FD8',
+  agg: 'rgba(52,72,102,0.3)', hot: 'rgba(0,37,84,0.72)', accent: '#002554', warn: '#C2620E', ring: '#2E6FD8',
   glow: '46,111,216', leaf: '#7D8794', hub: '#002554', hubNone: '#A3A9B1', tag: '#5B6573', label: '#24282E',
   labelSub: '#4E5359', halo: 'rgba(255,255,255,0.94)', doc: '#1F7A68',
 };
@@ -54,7 +54,11 @@ const leafRad = (k) => LEAF_R * zs(k, 0.85);
 const hubRad = (h, k) => Math.min(hubR(h) * zs(k, 0.7), 30);
 const ringRad = (r, k) => (3 + Math.sqrt(r.cnt) * 1.1) * zs(k, 0.8);
 const lineW = (w, k) => w * Math.max(1, Math.sqrt(k) * 0.9);
-const aggWidth = (a, k) => (1.1 + 1.35 * Math.sqrt(a.c)) * Math.max(1, Math.sqrt(k) * 0.7);
+const aggWidth = (a, k) => (0.8 + 1.35 * Math.sqrt(a.c)) * Math.max(1, Math.sqrt(k) * 0.7);
+/** 2026-10-20 — 기본으로 그리는 기준 사이 곡선의 가짓수 상한(기준 점 수 × 이 값). 넘으면 건수 문턱을 올린다. */
+const AGG_PER_HUB = 1.5;
+const AGG_FLOOR = 12;
+const NONE_AT = 260;   // '○○ 없음' 점이 끌려가는 자리(지도 좌표) — 무리 가장자리 바로 밖
 const shortTitle = (t) => (t.length > 22 ? `${t.slice(0, 21)}…` : t);
 const segDist = (px, py, x1, y1, x2, y2) => {
   const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy || 1;
@@ -69,7 +73,7 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
   const S = { pivot: 'hull', color: 'none', hl: null, sel: null, hover: null, hoverLink: null,
     secondary: true, agg: true, rings: new Set(), alwaysPairs: false, userZoom: false, layer: 'all' };
   let W = 0, H = 0, dpr = 1, T = zoomIdentity;
-  let gHubs = [], gLinks = [], gRings = [], gAgg = [];
+  let gHubs = [], gLinks = [], gRings = [], gAgg = [], aggMin = 2;
   let drawnAgg = [], drawnPairs = [], labelBoxes = [];
   let L = null, focusKey = null, raf = 0, hoverTimer = 0, settleTimer = 0, destroyed = false;
   const A = { dim: 0, dimFrom: 0, dimTo: 0, dimT0: 0, dimDur: 320, p: 1, pT0: 0 };
@@ -80,6 +84,15 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
   const primary = (e) => primaryOf(model, e, S.pivot);
   const members = (h) => membersOf(model, h);
   const P = () => pairsOf(model, S.layer);
+  // 늘 그리는 '강한' 관계 — 건수가 문턱 이상이고 '○○ 없음' 점이 끼지 않은 것. 나머지는 점을 고르면 보인다(실타래 방지)
+  const strong = (a) => a.c >= aggMin && !a.a.none && !a.b.none;
+  function pickAggMin() {
+    const cs = gAgg.filter((a) => !a.a.none && !a.b.none).map((a) => a.c);
+    const cap = Math.max(AGG_FLOOR, Math.round(gHubs.length * AGG_PER_HUB));
+    let t = 2;
+    while (cs.filter((c) => c >= t).length > cap) t += 1;
+    return t;
+  }
 
   // 기준 점끼리만 서로 떨어뜨린다 — 다른 기준이 자료를 밀지 않아 둘레가 온전한 원이 된다
   function hubSpacing(alpha) {
@@ -101,6 +114,7 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
     gLinks = [];
     for (const e of model.entries) parents(e).forEach((p, i) => gLinks.push({ source: e, target: p, main: i === 0 }));
     gAgg = aggregate(model, S.pivot, S.layer);
+    aggMin = pickAggMin();
     for (const h of gHubs) {
       if (h.x == null || h._pivot !== S.pivot) {
         const ms = members(h).filter((e) => e.x != null);
@@ -115,10 +129,12 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
       .force('leaf', forceManyBody().strength((d) => (d.hub ? 0 : -24)).distanceMax(60))
       .force('collide', forceCollide((d) => (d.hub ? hubR(d) + 5 : LEAF_R + 2)).iterations(2))
       .force('hubs', hubSpacing)
-      .force('related', forceLink(gAgg.map((a) => ({ source: a.a, target: a.b, c: a.c })))
+      // 배치도 강한 관계만 당긴다 — 약한 관계까지 당기면 모든 기준 점이 가운데로 엉킨다
+      .force('related', forceLink(gAgg.filter(strong).map((a) => ({ source: a.a, target: a.b, c: a.c })))
         .distance((l) => clusterR(l.source) + clusterR(l.target) + 60).strength((l) => 0.03 + 0.015 * Math.min(l.c, 6)))
-      .force('x', forceX(0).strength((d) => (d.hub ? 0.06 : 0)))
-      .force('y', forceY(0).strength((d) => (d.hub ? 0.06 : 0)));
+      // '○○ 없음' 점은 진짜 기준 값이 아니라 가장자리(오른쪽 아래)로 보낸다
+      .force('x', forceX((d) => (d.none ? NONE_AT : 0)).strength((d) => (d.hub ? (d.none ? 0.16 : 0.06) : 0)))
+      .force('y', forceY((d) => (d.none ? NONE_AT * 0.6 : 0)).strength((d) => (d.hub ? (d.none ? 0.16 : 0.06) : 0)));
   }
   function settle(n = 320) { sim.alpha(1); for (let i = 0; i < n; i++) sim.tick(); sim.alpha(0); sim.stop(); requestFrame(); }
   function placeRings() { for (const r of gRings) { const ms = members(r); r.x = mean(ms, (e) => e.x); r.y = mean(ms, (e) => e.y); } }
@@ -218,10 +234,11 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
     const lr = leafRad(k);
     ctx.lineCap = 'round';
 
-    // 1) 기준 사이 관계: 굵기 = 건수인 곡선(늘 보인다)
+    // 1) 기준 사이 관계: 굵기 = 건수인 곡선 — 강한 관계는 늘, 약한 관계는 초점에 닿을 때만
     const aggHot = []; drawnAgg = []; drawnPairs = [];
     if (S.agg) for (const a of gAgg) {
       const hot = L && lit(a.a.id) && lit(a.b.id) && (dep(a.a.id) === 0 || dep(a.b.id) === 0 || !fid);
+      if (!strong(a) && !hot && S.hoverLink !== a) continue;
       const g = aggGeom(a), w = aggWidth(a, k), over = S.hoverLink === a;
       ctx.globalAlpha = L && !hot && !over ? dimA : 1; ctx.strokeStyle = over ? K.hot : K.agg; ctx.lineWidth = over ? w + 1.5 : w;
       ctx.beginPath(); ctx.moveTo(g.x1, g.y1); ctx.quadraticCurveTo(g.cx, g.cy, g.x2, g.y2); ctx.stroke();
@@ -244,7 +261,8 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
         hotSeg.push({ s, e, stage: Math.min(da, db) === 0 ? 1 : 2 });
       }
     };
-    for (const l of gLinks) { if (!l.main && !S.secondary) continue; consider(l.source, l.target, l.main ? base : cross); }
+    // 함께 등록된 둘째 기준 선은 초점이 있을 때(또는 '늘 보기')만 — 평소에 그리면 지도를 가로지르는 실이 된다(2026-10-20)
+    for (const l of gLinks) { if (!l.main && (!S.secondary || (!L && !S.alwaysPairs))) continue; consider(l.source, l.target, l.main ? base : cross); }
     for (const r of gRings) for (const e of members(r)) consider(e, r, ringL);
     ctx.globalAlpha = L ? dimA : 1;
     lineBatch(base, K.edge, lineW(0.6, k)); lineBatch(cross, K.edgeCross, lineW(0.6, k)); lineBatch(ringL, K.edgeRing, lineW(0.6, k));
