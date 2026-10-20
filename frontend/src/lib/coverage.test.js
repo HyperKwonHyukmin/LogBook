@@ -72,3 +72,42 @@ test('열 머리 두 줄 표기', () => {
   expect(headerLines('SidePassage')).toEqual(['SidePassage']);
   expect(headerLines('정반')).toEqual(['정반']);
 });
+
+/* ── 44 — 행 기준(선종 · 크기급) × 열 기준(대상) ── */
+const DATA44 = {
+  hulls: { 9001: '174K LNG', 9002: '174K LNG', 9003: '300K VLCC', 9004: null },
+  hull_kinds: { 9001: 'LNG', 9002: 'LNG', 9003: 'VLCC', 9004: null },
+  hull_sizes: { 9001: '174K급 LNG', 9002: '174K급 LNG', 9003: '300K급 VLCC', 9004: null },
+  zones: ['선수부'], targets: ['계류 의장품', 'Unit'],
+  entries: [
+    E('a', { rows: ['h:9001'], zones: ['선수부'], target: '계류 의장품' }),
+    E('b', { rows: ['h:9002'], zones: [], target: '계류 의장품', reports: 0 }),
+    E('c', { rows: ['h:9003'], zones: [], target: 'Unit' }),
+    E('d', { rows: ['h:9004', 'h:9001'], zones: [], target: null }),
+    E('e', { rows: ['c:공용'], zones: [], target: 'Unit' }),
+  ],
+};
+
+test('44 — 선종 행 × 대상 열: 호선마다의 선종으로 묶고, 대상 없음 열을 둔다', () => {
+  const g = buildGrid(DATA44, { rows: 'kind', cols: 'target' });
+  expect(g.rows.map((r) => r.key)).toEqual(['k:LNG', 'k:VLCC', 'k:__none', 'c:공용']);   // 호선 많은 선종 먼저, 값 없음 · 공용은 뒤
+  expect(g.rows[0]).toMatchObject({ label: 'LNG', sub: '호선 2척' });
+  expect(g.rows[2].label).toBe('선종 없음');
+  expect(g.cols.map((c) => c.key)).toEqual(['계류 의장품', 'Unit', '대상 없음']);
+  expect(g.cells.get(cellKey('k:LNG', '계류 의장품')).entries.map((e) => e.id)).toEqual(['a', 'b']);   // 두 척이 한 칸
+  // 호선 둘(9004 · 9001)인 자료는 선종 없음 · LNG 두 행에
+  expect(g.keysOf(DATA44.entries[3])).toEqual(['k:__none', 'k:LNG']);
+  expect(g.cells.get(cellKey('k:LNG', '대상 없음')).entries.map((e) => e.id)).toEqual(['d']);
+  expect(g.rowLabel).toBe('선종');
+  expect(g.colLabel).toBe('대상');
+});
+
+test('44 — 크기급 행, 칸만 목록, 기본은 호선 × 구역', () => {
+  const g = buildGrid(DATA44, { rows: 'size', cols: 'target' });
+  expect(g.rows.map((r) => r.label)).toEqual(['174K급 LNG', '300K급 VLCC', '크기급 없음', '공용']);
+  const scoped = listRows(DATA44, { rowKey: 's:174K급 LNG', col: g.cols[0] }, g.keysOf);
+  expect(scoped.no_report.map((e) => e.id)).toEqual(['b']);
+  const d = buildGrid(DATA44);
+  expect(d.axes).toEqual({ rows: 'hull', cols: 'zone' });
+  expect(d.rows[0].key).toBe('h:9001');
+});

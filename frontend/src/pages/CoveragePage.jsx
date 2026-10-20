@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Grid2x2Check, X } from 'lucide-react';
 import { api } from '../api/client.js';
 import Button from '../components/ui/Button.jsx';
@@ -11,10 +11,17 @@ import { Segmented, Tabs } from '../components/ui/Tabs.jsx';
 import { errorText } from '../lib/labels.js';
 import { titleWithoutHull } from '../lib/similar.js';
 import {
-  buildGrid, cellKey, cellSentence, headerLines, LIST_TABS, listRows, rowsOf, sortRows, STATE_INFO, STATES, todoCells,
+  buildGrid, cellKey, cellSentence, COL_AXES, DEFAULT_AXES, headerLines, LIST_TABS, listRows, ROW_AXES, sortRows, STATE_INFO, STATES,
+  todoCells,
 } from '../lib/coverage.js';
 
-const SORTS = [{ id: 'hull', label: '호선 번호' }, { id: 'recent', label: '최근 확정' }, { id: 'gaps', label: '빈 구역 많은 순' }];
+// 44 — 행 순서: 기본은 행 기준의 자연 순서(호선 번호 · 호선 많은 선종 먼저)
+const sortsFor = (grid) => [
+  { id: 'hull', label: grid.axes.rows === 'hull' ? '호선 번호' : '호선 많은 순' },
+  { id: 'recent', label: '최근 확정' },
+  { id: 'gaps', label: `빈 ${grid.colLabel} 많은 순` },
+];
+const axisOf = (list, v, d) => (list.some((a) => a.id === v) ? v : d);
 const LIST_LIMIT = 12;
 
 function RowChip({ row }) {
@@ -55,10 +62,13 @@ function EntryLine({ e }) {
 }
 
 /**
- * 갖춤 현황(26, `/coverage`) — 확정 자료를 호선(·공용) × 구역 칸에 놓고, 칸마다 무엇을 갖췄는지 보인다.
+ * 갖춤 현황(26, `/coverage`) — 확정 자료를 행 × 열 칸에 놓고, 칸마다 무엇을 갖췄는지 보인다.
+ * 44 — 행 기준(호선 · 선종 · 크기급) × 열 기준(구역 · 대상)을 고른다(주소 ?rows=kind&cols=target, 기본 호선 × 구역).
  * 칸 상태·목록은 lib/coverage.js(순수 함수). 42 — 해석 종류 거르기는 없앴다.
  */
 export default function CoveragePage() {
+  const [params, setParams] = useSearchParams();
+  const axes = { rows: axisOf(ROW_AXES, params.get('rows'), DEFAULT_AXES.rows), cols: axisOf(COL_AXES, params.get('cols'), DEFAULT_AXES.cols) };
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [sort, setSort] = useState('hull');
@@ -78,13 +88,13 @@ export default function CoveragePage() {
     return () => { alive = false; };
   }, []);
 
-  const grid = useMemo(() => (data ? buildGrid(data) : null), [data]);
+  const grid = useMemo(() => (data ? buildGrid(data, axes) : null), [data, axes.rows, axes.cols]); // eslint-disable-line react-hooks/exhaustive-deps
   const rows = useMemo(() => (grid ? sortRows(grid, data, sort) : []), [grid, data, sort]);
   const selRow = grid && sel ? grid.rows.find((r) => r.key === sel.rowKey) : null;
   const selCol = grid && sel ? grid.cols.find((c) => c.key === sel.colKey) : null;
   const selCell = selRow && selCol ? grid.cells.get(cellKey(selRow.key, selCol.key)) : null;
-  const lists = useMemo(() => (data ? listRows(data, scoped && selRow && selCol ? { rowKey: selRow.key, col: selCol } : null) : null),
-    [data, scoped, selRow, selCol]);
+  const lists = useMemo(() => (data ? listRows(data, scoped && selRow && selCol ? { rowKey: selRow.key, col: selCol } : null, grid?.keysOf) : null),
+    [data, grid, scoped, selRow, selCol]);
   const todos = useMemo(() => (grid ? todoCells(grid) : []), [grid]);
 
   if (error) return <div className="px-6 py-6"><ErrorNote>{error}</ErrorNote></div>;
@@ -98,6 +108,14 @@ export default function CoveragePage() {
   }
 
   const pick = (rowKey, colKey) => { setSel({ rowKey, colKey }); setShowAll(false); setTip(null); };
+  // 기준을 바꾸면 고른 칸 · 칸 거르기 · 방향키 위치를 푼다(범례 상태 거르기는 그대로)
+  const setAxis = (key, v) => {
+    const next = new URLSearchParams(params);
+    if (v === DEFAULT_AXES[key]) next.delete(key); else next.set(key, v);
+    setParams(next, { replace: true });
+    setSel(null); setScoped(false); setCursor(null); setTip(null);
+  };
+  const { rowLabel, colLabel } = grid;
   const showTip = (el, r, c, cell) => {
     const b = el.getBoundingClientRect();
     setTip({ x: b.right + 8, y: b.bottom + 6, s: cellSentence(r, c, cell) });
@@ -117,18 +135,26 @@ export default function CoveragePage() {
       <header className="mb-4 flex flex-wrap items-end gap-x-4 gap-y-2 border-b border-n-200 pb-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-title font-semibold tracking-[-0.018em] text-n-900">갖춤 현황</h1>
-          <p className="mt-1 text-ui text-n-600">호선과 구역마다 확정 자료가 무엇을 갖췄는지 봅니다. 칸에 올리거나 포커스하면 이유가 나오고, 누르면 오른쪽에 그 칸의 자료가 열립니다.</p>
+          <p className="mt-1 text-ui text-n-600">{rowLabel} × {colLabel} 칸마다 확정 자료가 무엇을 갖췄는지 봅니다. 칸에 올리거나 포커스하면 이유가 나오고, 누르면 오른쪽에 그 칸의 자료가 열립니다.</p>
         </div>
         <span className="text-ui text-n-600 tabular-nums">
-          자료 <b className="font-semibold text-n-900">{data.entries.length}</b> · 행 <b className="font-semibold text-n-900">{grid.rows.length}</b> · 구역 <b className="font-semibold text-n-900">{grid.cols.length}</b>
+          자료 <b className="font-semibold text-n-900">{data.entries.length}</b> · {rowLabel} <b className="font-semibold text-n-900">{grid.rows.length}</b> · {colLabel} <b className="font-semibold text-n-900">{grid.cols.length}</b>
           {data.truncated && ' · 최근 확정 자료만 셌습니다'}
         </span>
       </header>
 
       <div className="mb-3 flex flex-wrap items-end gap-x-6 gap-y-3">
         <div className="flex flex-col gap-1">
+          <span className="text-meta font-medium text-n-600">행 기준</span>
+          <Segmented label="행 기준" items={ROW_AXES} value={axes.rows} onChange={(v) => setAxis('rows', v)} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-meta font-medium text-n-600">열 기준</span>
+          <Segmented label="열 기준" items={COL_AXES} value={axes.cols} onChange={(v) => setAxis('cols', v)} />
+        </div>
+        <div className="flex flex-col gap-1">
           <span className="text-meta font-medium text-n-600">행 순서</span>
-          <Segmented label="행 순서" items={SORTS} value={sort} onChange={setSort} />
+          <Segmented label="행 순서" items={sortsFor(grid)} value={sort} onChange={setSort} />
         </div>
       </div>
 
@@ -146,11 +172,11 @@ export default function CoveragePage() {
       <div className="grid items-start gap-5 min-[1180px]:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0">
           <div ref={gridRef} className={`max-h-[min(640px,calc(100vh-290px))] min-h-[320px] overflow-auto rounded-lg border border-n-200 ${focus ? 'cov-dim' : ''}`}>
-            <table role="grid" aria-label="호선별 구역 자료 현황" className="border-separate border-spacing-0 text-ui">
+            <table role="grid" aria-label={`${rowLabel}별 ${colLabel} 자료 현황`} className="border-separate border-spacing-0 text-ui">
               <thead>
                 <tr>
                   <th scope="col" className="sticky left-0 top-0 z-30 min-w-[138px] border-b border-r border-n-200 bg-n-50 px-2.5 pb-2 text-left align-bottom text-meta font-medium text-n-600">
-                    호선<br /><span className="font-normal">채운 구역</span>
+                    {rowLabel}<br /><span className="font-normal">채운 {colLabel}</span>
                   </th>
                   {grid.cols.map((c) => (
                     <th key={c.key} scope="col" title={c.label}
@@ -160,7 +186,7 @@ export default function CoveragePage() {
                       <span className="mx-[7px] mt-1.5 block h-[3px] overflow-hidden rounded-full bg-n-150" aria-hidden="true">
                         <span className="block h-full bg-n-400" style={{ width: `${(grid.colFilled.get(c.key) / grid.rows.length) * 100}%` }} />
                       </span>
-                      <span className="mt-0.5 block font-mono text-meta text-n-600" title="이 구역에 자료가 있는 행 수">{grid.colFilled.get(c.key)}</span>
+                      <span className="mt-0.5 block font-mono text-meta text-n-600" title={`이 ${colLabel}에 자료가 있는 행 수`}>{grid.colFilled.get(c.key)}</span>
                     </th>
                   ))}
                 </tr>
@@ -172,7 +198,7 @@ export default function CoveragePage() {
                       <div className="flex h-[34px] items-center gap-2">
                         <RowChip row={r} />
                         <span className="truncate text-meta text-n-600">{r.sub}</span>
-                        <span className="ml-auto font-mono text-meta text-n-600" title="자료가 있는 구역 수">{grid.rowFilled.get(r.key)}/{grid.cols.length}</span>
+                        <span className="ml-auto font-mono text-meta text-n-600" title={`자료가 있는 ${colLabel} 수`}>{grid.rowFilled.get(r.key)}/{grid.cols.length}</span>
                       </div>
                     </th>
                     {grid.cols.map((c, ci) => {
@@ -230,7 +256,7 @@ export default function CoveragePage() {
                 <table className="w-full border-collapse text-ui">
                   <thead>
                     <tr className="h-9 bg-n-50 text-left text-meta font-medium text-n-600">
-                      {['자료', '호선', '구역', '파일 · 검증', '올린 사람', '확정'].map((h) => (
+                      {['자료', rowLabel, colLabel, '파일 · 검증', '올린 사람', '확정'].map((h) => (
                         <th key={h} className="whitespace-nowrap border-b border-n-200 px-2.5 font-medium">{h}</th>
                       ))}
                     </tr>
@@ -242,11 +268,12 @@ export default function CoveragePage() {
                           <Link to={`/e/${e.id}`} className="font-medium text-n-900 hover:text-brand hover:underline underline-offset-2">{e.title}</Link>
                           <div className="font-mono text-meta text-n-600">{e.id}</div>
                         </td>
-                        <td className="px-2.5 py-2"><span className="flex flex-wrap gap-1">{rowsOf(e).slice(0, 3).map((k) => {
+                        <td className="px-2.5 py-2"><span className="flex flex-wrap gap-1">{grid.keysOf(e).slice(0, 3).map((k) => {
                           const r = grid.rows.find((x) => x.key === k);
                           return r ? <RowChip key={k} row={r} /> : null;
                         })}</span></td>
-                        <td className="whitespace-nowrap px-2.5 py-2 text-n-700">{(e.zones[0] || '구역 없음')}{e.zones.length > 1 ? ` 외 ${e.zones.length - 1}` : ''}</td>
+                        <td className="whitespace-nowrap px-2.5 py-2 text-n-700">{axes.cols === 'target' ? (e.target || '대상 없음')
+                          : <>{(e.zones[0] || '구역 없음')}{e.zones.length > 1 ? ` 외 ${e.zones.length - 1}` : ''}</>}</td>
                         <td className="whitespace-nowrap px-2.5 py-2"><span className="mr-2 text-n-700">{fileText(e)}</span><SolveText solve={e.solve} /></td>
                         <td className="whitespace-nowrap px-2.5 py-2 text-n-700" title={e.uploaded_by || undefined}>{e.uploader_name || e.uploaded_by || '—'}</td>
                         <td className="whitespace-nowrap px-2.5 py-2 font-mono text-meta text-n-600">{e.confirmed_at || '—'}</td>
@@ -318,18 +345,18 @@ export default function CoveragePage() {
   );
 }
 
-/** 빈 칸 — 같은 선종 다른 호선의 같은 구역, 같은 행의 다른 구역 자료를 참고로. */
+/** 빈 칸 — 다른 행의 같은 열(호선 행이면 같은 선종 호선만), 같은 행의 다른 열 자료를 참고로. */
 function NearBy({ data, grid, row, col }) {
-  const ship = row.kind === 'hull' ? row.sub : null;
-  const sameCol = data.entries.filter((e) => e.zones.includes(col.key)
-    && !rowsOf(e).includes(row.key)
-    && (!ship || rowsOf(e).some((k) => grid.rows.find((r) => r.key === k)?.sub === ship))).slice(0, 4);
-  const sameRow = data.entries.filter((e) => rowsOf(e).includes(row.key)).slice(0, 4);
+  const ship = row.kind === 'hull' ? row.sub : null;   // 44 — 선종 · 크기급 행은 이미 묶음이라 같은 선종 거르기를 쓰지 않는다
+  const sameCol = data.entries.filter((e) => col.test(e)
+    && !grid.keysOf(e).includes(row.key)
+    && (!ship || grid.keysOf(e).some((k) => grid.rows.find((r) => r.key === k)?.sub === ship))).slice(0, 4);
+  const sameRow = data.entries.filter((e) => grid.keysOf(e).includes(row.key)).slice(0, 4);
   return (
     <>
       <h3 className="text-ui font-semibold text-n-800">참고할 자료 · {ship ? `같은 선종(${ship}) ` : ''}다른 행의 {col.label}</h3>
       {sameCol.length ? sameCol.map((e) => <EntryLine key={e.id} e={e} />) : <p className="py-2 text-meta text-n-600">없습니다.</p>}
-      <h3 className="mt-4 text-ui font-semibold text-n-800">참고할 자료 · {row.label}의 다른 구역</h3>
+      <h3 className="mt-4 text-ui font-semibold text-n-800">참고할 자료 · {row.label}의 다른 {grid.colLabel}</h3>
       {sameRow.length ? sameRow.map((e) => <EntryLine key={e.id} e={e} />) : <p className="py-2 text-meta text-n-600">이 행에는 아직 자료가 없습니다.</p>}
     </>
   );

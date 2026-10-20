@@ -1,4 +1,6 @@
-"""갖춤 현황(26) — 확정 자료를 호선(·공용) × 구역 칸으로 놓고, 칸마다 무엇을 갖췄는지 볼 재료 한 벌.
+"""갖춤 현황(26) — 확정 자료를 행 × 열 칸으로 놓고, 칸마다 무엇을 갖췄는지 볼 재료 한 벌.
+44 — 행 기준은 호선 · 선종 · 크기급, 열 기준은 구역 · 대상(프런트가 고른다). 서버는 재료(자료마다 호선 · 구역 · 대상,
+호선마다 선종 · 크기급)만 준다.
 
 관계 지도(25)처럼 따로 저장하지 않고 화면을 열 때 이미 있는 값으로 묶는다. 칸 상태는 프런트(lib/coverage.js)가
 자료 목록에서 계산한다(42 — 해석 종류 거르기는 없앴다).
@@ -6,6 +8,7 @@
 자료 하나에 싣는 사실
     rows        자료가 놓일 행 — 호선(entry_hulls, 주 호선 먼저) · 공용(no_hull)
     zones       구역(entry_tags kind=zone, 분류 목록의 대표 값 — 동의어가 갈라지지 않게)
+    target      대상(38, 자료당 하나, 대표 값) — 44 열 기준 '대상'
     models      BDF 파일 수(휴지통 제외)
     reports     문서(kind=report) 파일 수
     doc_linked  문서가 없더라도 다른 자료의 문서가 이 자료의 모델을 '보고서에 사용한 모델'로 연결함(21)
@@ -24,6 +27,7 @@ from sqlalchemy.orm import Session
 from . import access, models
 from .bdf.signature import VERSION as SIG_VERSION
 from .entries import quality
+from .plm_ship import ship_facets
 from .vocab import Vocab
 
 MAX_ENTRIES = 3000        # 최근 확정 순으로 이만큼 — 넘으면 truncated(관계 지도와 같은 상한)
@@ -44,7 +48,7 @@ def build_coverage(db: Session, user) -> dict:
     truncated = len(rows) > MAX_ENTRIES
     rows = rows[:MAX_ENTRIES]
     if not rows:
-        return {"entries": [], "hulls": {}, "zones": [], "truncated": False}
+        return {"entries": [], "hulls": {}, "hull_kinds": {}, "hull_sizes": {}, "zones": [], "targets": [], "truncated": False}
     pks = [e.id for e in rows]
     visible = set(pks)
 
@@ -53,10 +57,10 @@ def build_coverage(db: Session, user) -> dict:
                    .filter(models.EntryHull.entry_id.in_(pks))
                    .order_by(models.EntryHull.is_primary.desc(), models.EntryHull.hull_no)):
         hulls[eid].append(h)
-    ships = dict(db.query(models.Hull.hull_no, models.Hull.ship_type)
-                 .filter(models.Hull.hull_no.in_({h for hs in hulls.values() for h in hs} or {""})))
+    # 44 — 행 기준(호선 · 선종 · 크기급)에 쓰는 선종 · 크기급(관계 지도와 같은 규칙)
+    ships, ship_kinds, ship_sizes = ship_facets(db, {h for hs in hulls.values() for h in hs})
 
-    vocabs = {"zone": Vocab(db, "zone"), "target": Vocab(db, "target")}   # 대상은 필수 분류(40)에만 쓴다
+    vocabs = {"zone": Vocab(db, "zone"), "target": Vocab(db, "target")}   # 44 — 대상도 열 기준
     tags: dict[int, dict[str, list[str]]] = defaultdict(lambda: {"zone": [], "target": []})
     for eid, tag in (db.query(models.EntryTag.entry_id, models.Tag)
                      .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
@@ -110,6 +114,7 @@ def build_coverage(db: Session, user) -> dict:
 
     names = _names(db, {e.uploaded_by for e in rows})
     zone_count: dict[str, int] = defaultdict(int)
+    target_count: dict[str, int] = defaultdict(int)
     out = []
     for e in rows:
         t = tags.get(e.id) or {"zone": [], "target": []}
@@ -119,11 +124,13 @@ def build_coverage(db: Session, user) -> dict:
             row_keys.append(f"c:{COMMON_ROW}")
         for z in t["zone"]:
             zone_count[z] += 1
+        for z in t["target"][:1]:
+            target_count[z] += 1
         missing = quality.missing_fields(has_bdf=n_models > 0, hulls=hulls.get(e.id, []), no_hull=bool(e.no_hull),
                                          zones=t["zone"], target=(t["target"] or [None])[0])
         out.append({
             "id": e.entry_id, "title": e.title,
-            "rows": row_keys, "zones": t["zone"],
+            "rows": row_keys, "zones": t["zone"], "target": (t["target"] or [None])[0],
             "models": n_models, "reports": kinds.get(e.id, {}).get("report", 0),
             "doc_linked": e.id in doc_linked, "model_linked": e.id in model_linked,
             "solve": solve_of(e.id) if n_models else None,
@@ -133,4 +140,7 @@ def build_coverage(db: Session, user) -> dict:
         })
     used = sorted({h for hs in hulls.values() for h in hs})
     zones = sorted(zone_count, key=lambda z: (-zone_count[z], z))
-    return {"entries": out, "hulls": {h: ships.get(h) for h in used}, "zones": zones, "truncated": truncated}
+    targets = sorted(target_count, key=lambda z: (-target_count[z], z))
+    return {"entries": out, "hulls": {h: ships.get(h) for h in used},
+            "hull_kinds": {h: ship_kinds.get(h) for h in used}, "hull_sizes": {h: ship_sizes.get(h) for h in used},
+            "zones": zones, "targets": targets, "truncated": truncated}

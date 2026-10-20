@@ -306,6 +306,25 @@ def lookup(value) -> ShipLookup:
 
 # ---- 작업 ----
 
+def ship_facets(db: Session, hull_nos) -> tuple[dict, dict, dict]:
+    """호선 → (선종 칸 글자, 선종, 크기급). 관계 지도(35)와 갖춤 현황(44)이 같은 규칙을 쓴다.
+    PLM 분해 값(ship_kind · ship_capacity)이 없으면 선종 칸 글자('300K-VLCC')를 같은 규칙으로 풀고,
+    크기급은 용량과 선종이 둘 다 있을 때만('174K급 LNG') — 용량만으로는 묶지 않는다(단위가 선종마다 다름)."""
+    ships: dict[str, Optional[str]] = {}
+    kinds: dict[str, Optional[str]] = {}
+    sizes: dict[str, Optional[str]] = {}
+    for no, ship_type, ship_kind, capacity in (
+            db.query(models.Hull.hull_no, models.Hull.ship_type, models.Hull.ship_kind, models.Hull.ship_capacity)
+            .filter(models.Hull.hull_no.in_(set(hull_nos) or {""}))):
+        ships[no] = ship_type
+        parsed = parse_ship_type(ship_type) if ship_type and not (ship_kind and capacity) else {}
+        kind = ship_kind or parsed.get("shipKind")
+        cap = capacity or parsed.get("capacity")
+        kinds[no] = kind
+        sizes[no] = f"{cap}급 {kind}" if cap and kind else None
+    return ships, kinds, sizes
+
+
 def register_hulls(db: Session, hull_nos) -> Optional[models.Job]:
     """43 — 정리 대기(초안)에 호선이 붙자마자 호선 행을 만들고 PLM 일괄 조회 작업을 넣는다(설정돼 있을 때만).
     확정을 기다리지 않아 정리 대기 카드에서 선종 · 선형을 보고 맞는 호선인지 확인할 수 있다.

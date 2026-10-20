@@ -48,3 +48,16 @@ test('자료가 없으면 빈 상태', async () => {
   renderPage({ ...DATA, entries: [] });
   expect(await screen.findByText('확정한 자료가 아직 없습니다')).toBeInTheDocument();
 });
+
+test('44 — 행 기준 · 열 기준을 고르면 격자가 바뀌고 주소에 남는다', async () => {
+  const data = { ...DATA, hull_kinds: { 9001: 'LNG', 9002: 'LNG' }, hull_sizes: { 9001: '174K급 LNG', 9002: null }, targets: ['Unit'],
+    entries: DATA.entries.map((e, i) => ({ ...e, target: i === 0 ? 'Unit' : null })) };
+  renderPage(data);
+  await screen.findByRole('grid', { name: '호선별 구역 자료 현황' });
+  await userEvent.click(screen.getByRole('radio', { name: '선종' }));
+  await userEvent.click(screen.getByRole('radio', { name: '대상' }));
+  const grid = screen.getByRole('grid', { name: '선종별 대상 자료 현황' });
+  expect(within(grid).getByRole('button', { name: 'LNG · Unit: 갖춤, 자료 1건' })).toBeInTheDocument();
+  expect(within(grid).getByRole('button', { name: /^LNG · 대상 없음: / })).toBeInTheDocument();
+  expect(within(grid).getByText('채운 대상')).toBeInTheDocument();
+});

@@ -105,8 +105,10 @@ function coverage() {
     }
   }
   const zoneCount = new Map();
+  const targetCount = new Map();
   const entries = ENTRIES.map((e) => {
     e.zones.forEach((z) => zoneCount.set(z, (zoneCount.get(z) || 0) + 1));
+    if (e.target) targetCount.set(e.target, (targetCount.get(e.target) || 0) + 1);
     const ms = models(e);
     const states = ms.map((m) => m.solve).filter(Boolean);
     const solve = !ms.length ? null : states.includes('pass') ? 'pass'
@@ -114,7 +116,7 @@ function coverage() {
     return {
       id: e.id, title: e.title,
       rows: [...e.hulls.map((h) => `h:${h}`), ...(e.no_hull ? ['c:공용'] : [])],
-      zones: e.zones, models: ms.length, reports: reports(e).length,
+      zones: e.zones, target: e.target || null, models: ms.length, reports: reports(e).length,
       doc_linked: linkedModels.has(e.pk), model_linked: linkedDocs.has(e.pk), solve,
       needs_fix: ms.length > 0 && !e.hulls.length && !e.no_hull, unsigned: false,
       uploaded_by: e.uploaded_by, uploader_name: PEOPLE_NAMES[e.uploaded_by] || null, confirmed_at: e.confirmed_at,
@@ -124,7 +126,10 @@ function coverage() {
   return {
     entries,
     hulls: Object.fromEntries(hulls.map((h) => [h, HULL_BY_NO[h]?.ship_type ?? null])),
+    hull_kinds: Object.fromEntries(hulls.map((h) => [h, HULL_BY_NO[h]?.kind ?? null])),
+    hull_sizes: Object.fromEntries(hulls.map((h) => [h, HULL_BY_NO[h]?.size ?? null])),
     zones: [...zoneCount.keys()].sort((a, b) => zoneCount.get(b) - zoneCount.get(a) || a.localeCompare(b)),
+    targets: [...targetCount.keys()].sort((a, b) => targetCount.get(b) - targetCount.get(a) || a.localeCompare(b)),   // 44
     truncated: false,
   };
 }

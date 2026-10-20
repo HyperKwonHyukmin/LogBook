@@ -17,7 +17,7 @@ import { drag as d3drag } from 'd3-drag';
 import 'd3-transition';
 import { easeCubicInOut } from 'd3-ease';
 import {
-  aggregate, aggText, explainAgg, explainPair, hubTip, isLoudPair, isMember, isReportOnly, membersOf, pairsOf, parentsOf,
+  aggregate, explainAgg, explainPair, hubTip, isLoudPair, isMember, isReportOnly, membersOf, pairsOf, parentsOf,
   pivotHubs, primaryOf,
 } from '../../lib/graphModel.js';
 
@@ -365,16 +365,18 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
           n.hub ? hubFont(n, 12.5) : `600 12.5px ${FONT}`, K.label, true);
       }
     }
-    if (fid && aggHot.length && model.byId.get(fid)?.hub) for (const [a, g] of aggHot) {
-      ctx.globalAlpha = A.dim * st2;
-      label(aggText(a), g.mx, g.my - 7, `500 11.5px ${FONT}`, K.accent, true);
-    }
     const hubA = Math.max(0, Math.min(1, (k - 0.5) / 0.15));
     for (const h of [...gHubs].sort((a, b) => b.cnt - a.cnt)) {
       if (h.id === fid) continue;
       ctx.globalAlpha = hubA * (lit(h.id) ? 1 : dimA);
       if (ctx.globalAlpha < 0.03) continue;
       label(h.label, sx(h.x), sy(h.y) + hubRad(h, k) + 4, hubFont(h, 12), h.none ? K.labelSub : K.label);
+    }
+    // 초점 기준 점의 관계 곡선 위 — 건수만(이유는 오른쪽 '이어진 ○○' 목록과 곡선 설명에). 기준 점 이름표 다음에,
+    // 건수 큰 것부터 놓고 겹치면 버린다(2026-10-20 — 이유 문장을 다 쓰면 서로 겹쳐 읽을 수 없었다)
+    if (fid && aggHot.length && model.byId.get(fid)?.hub) for (const [a, g] of [...aggHot].sort((x, y) => y[0].c - x[0].c)) {
+      ctx.globalAlpha = A.dim * st2;
+      label(`${a.c}건`, g.mx, g.my - 7, `600 11.5px ${FONT}`, K.accent, false);
     }
     for (const r of gRings) {
       if (r.id === fid || !(L && lit(r.id) && A.dim > 0.4)) continue;

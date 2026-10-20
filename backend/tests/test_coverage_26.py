@@ -104,3 +104,22 @@ def test_link_to_hidden_model_not_counted(world, client, auth_headers, db):
 
 def test_requires_login(client):
     assert client.get("/api/coverage").status_code == 401
+
+
+def test_target_and_ship_facets_44(world, client, auth_headers, db):
+    """44 — 열 기준 '대상'(자료당 하나, 대표 값) · 행 기준 선종 · 크기급(관계 지도와 같은 규칙)."""
+    full = db.query(models.Entry).filter_by(entry_id=world["full"]).one()
+    unit = _tag(db, full, "target", "Unit")
+    fail = db.query(models.Entry).filter_by(entry_id=world["fail"]).one()
+    _tag(db, fail, "target", "유닛", alias_of=unit)   # 동의어 → 대표 값
+    h2 = db.get(models.Hull, "9002")
+    h2.ship_kind, h2.ship_capacity = "LNG", "174K"
+    db.commit()
+    g = _get(client, auth_headers, "M100001")
+    by = {e["id"]: e for e in g["entries"]}
+    assert by[world["full"]]["target"] == "Unit" and by[world["fail"]]["target"] == "Unit"
+    assert by[world["doc"]]["target"] is None
+    assert g["targets"] == ["Unit"]
+    assert g["hull_kinds"]["9002"] == "LNG" and g["hull_sizes"]["9002"] == "174K급 LNG"
+    # 선종 칸 글자 'LNGC' 는 '용량-선종' 꼴이 아니라 풀지 않는다(관계 지도와 같은 규칙) — 선종 · 크기급 없음 행으로
+    assert g["hull_kinds"]["9001"] is None and g["hull_sizes"]["9001"] is None

@@ -1,17 +1,18 @@
 # LogBook 설명회 시연 자료
 
-## 소개 발표자료(HTML 덱) — 2026-10-20 기준 v11
+## 소개 발표자료(HTML 덱) — 2026-10-20 기준 v12
 
-- 위치: `C:\Coding\ClaudeCode\Huashu_Design\huashu-design\Results\LogBook-Deck-v11.html` / `.pdf` (19쪽, v1~v10도 같은 폴더). huashu-design 장부(帳簿) 문법 디자인.
+- 위치: `C:\Coding\ClaudeCode\Huashu_Design\huashu-design\Results\LogBook-Deck-v12.html` / `.pdf` (20쪽, v1~v11도 같은 폴더). huashu-design 장부(帳簿) 문법 디자인.
+- 16쪽(Ⅴ 확장 첫 쪽) WorkBench와 LogBook — 함께도, 따로도(v12): ① LogBook → WorkBench(모델을 골라 GMU 권상 · Truss 입력으로, 같은 사번) · ② WorkBench → LogBook(수행한 해석을 보관, 출처 함께) + 아래 'LogBook 혼자서도' 띠(올리기 07 · 찾기 08·10 · 확인 09 · 활용 13~15 · 문서 10쪽). 처음엔 6쪽(Ⅱ)에 넣었으나 기능을 보기 전이라 옮겼다. **쪽 사이 원칙**: 앞 쪽에서 설명한 것에만 기대고, 같은 이야기는 한 쪽에서만 — WorkBench 주고받기는 16쪽, 5쪽은 역할 소개('주고받기 → 16쪽'), 6쪽 목표 칸은 '다시 가져다 쓰기(선례 15 · WorkBench 16쪽)', 17쪽은 가족 · Core · 계획. 12쪽 '따로 입력할 것 없음 → 07쪽 분류'. 13 · 14 · 15쪽 캡처는 통합 데모(예시 388건)로 교체(`LogBook-assets/*-v12.*`, 찍는 스크립트는 세션 임시 — 다시 찍을 땐 데모를 열어 같은 화면).
 - 7쪽 올리기 아래 「자료 올리기 시, 유의 사항」 띠(v11): 호선 · 구역 · 대상 · 태그 · 설명을 최대한 자세히 → 관계 지도 등에서 자료 사이 맥락이 됨. 같은 이유로 WorkBench Model Builder 등도 호선을 받아 PLM 에서 선종 등을 찾도록 바꿨다는 사실 한 줄. 3단계 설명에도 '대상'을 넣었다(캡처 설명 ②는 화면에 대상 칸이 없어 그대로). 자리를 내려고 활동 로그 그림은 위 4줄만 보이게 잘랐다(`height:102px`).
 - 구성: 표지 → 序 이름(왜 LogBook인가) → Ⅰ 필요성 → Ⅱ LogBook(정의 · 세 가지 지식자산 · 4대 목표) → Ⅲ 사용성(올리기 · 찾기 · 확인 · 문서 · 신뢰) → Ⅳ 활용(관계 지도 · 갖춤 현황 · 선례 찾기) → Ⅴ 확장(Hi-TESS 그림 · 모델링 AI) → 跋 맺으며(개발 소회, v10) → 마무리.
 - 18쪽 跋 맺으며: 2026.05 WorkBench → 2026.10 LogBook 을 만들며 느낀 것. 'AI가 일을 줄인다'의 두 뜻(기술 장벽에서 해방 · 아무도 안 한 일을 시작할 여지), WorkBench 를 본뜬 자동화가 여러 곳에서 시작될 때 우리는 지식자산 플랫폼으로. 다른 팀을 낮추지 않도록 '모방'이라고 쓰지 않는다. 跋 은 序 처럼 색인 탭에서 뺀다(`PARTS` 의 `side`).
 - 정한 메시지: WorkBench = 구조해석 **자동화** 플랫폼, LogBook = 구조해석 **지식자산** 플랫폼. 지식자산 = 해석 모델 · 연구 내용(현업 경험 · 기술개발) · 보고서.
 - 이름 쪽은 ① 유래(칩 로그 · 노트 · 항해일지 = 역사적 사실)와 ② 고른 이유(항해 기록을 보듯 연구를 돌아본다) · ③ 더한 방향(Record → Connect → Insight = 우리의 해석)을 칸으로 가른다. 이름 본뜻을 '통찰'까지 부풀리지 않는다.
 - 16쪽 Hi-TESS 그림 바닥 띠 = **Hi-TESS Core**(공통 규약, v9). 표현은 '규약으로 연결을 정리 · 강화, 첫 결과 = 해석 출처 연결'까지 — Core 는 아직 실행 코드가 없으니 '통합 완료'·'Core 가 운영'이라고 쓰지 않는다(hitess-core 00 §4).
-- 용어: '지식자산'(지적자산 X), '후속선'(자매선 X), '연구실의 자산'(팀의 자산 X), 9쪽 확인은 '웹 브라우저에서 3D로'.
-- 고치는 법: 새 버전은 최신본을 복사해 만든다(이전 버전 보존). v11 빌드 원본은 `Results\LogBook-deck-src11uild11.py`(v10 → v11, 7쪽 부탁 띠) · `view11.js`(넘침 점검). v10 빌드 원본은 `Results\LogBook-deck-src\v10\build10.py`(v9 → v10, 18쪽 跋 추가). v9 빌드 원본은 `Results\LogBook-deck-src\v9\`(`build9.py` = v8 → v9 16쪽 치환, `view9.js`), 그 전 v8 은 `…\v8\` — `build8.py`(v7 → v8 문자열 치환, 치환마다 일치 횟수 assert) · `name.html` · `assets.html`(새 쪽) · `view8.js`(쪽마다 `.sb` 넘침 점검, `node view8.js <접두어> <쪽 번호…>`).
-  PDF: huashu-design 폴더에서 `node scripts/export_single_absolute_deck_pdf.mjs --html Results/LogBook-Deck-v11.html --out Results/LogBook-Deck-v11.pdf`.
+- 용어: '지식자산'(지적자산 X), '후속선'(자매선 X), '연구실의 자산'(팀의 자산 X). 2026-10-20 — 본문에 'BDF' 를 쓰지 않는다(다른 형식도 들어올 수 있음 → '해석 모델'·'모델'), '크롬' 대신 '웹 브라우저'(줄바꿈 안 되게 `웹&nbsp;브라우저`). 2쪽 '이름의 본뜻은 기록 — ③은 LogBook이 더한 방향' 문구는 지웠다. 캡처 그림 속 글자는 화면 그대로.
+- 고치는 법: 새 버전은 최신본을 복사해 만든다(이전 버전 보존). v12 빌드 원본은 `Results\LogBook-deck-src12uild12.py`(v11 → v12, 6쪽 신설 · 뒤 쪽 번호 · 기록 번호 · `PARTS[].at` 밀기) · `view12.js`. v11 빌드 원본은 `Results\LogBook-deck-src11uild11.py`(v10 → v11, 7쪽 부탁 띠) · `view11.js`(넘침 점검). v10 빌드 원본은 `Results\LogBook-deck-src\v10\build10.py`(v9 → v10, 18쪽 跋 추가). v9 빌드 원본은 `Results\LogBook-deck-src\v9\`(`build9.py` = v8 → v9 16쪽 치환, `view9.js`), 그 전 v8 은 `…\v8\` — `build8.py`(v7 → v8 문자열 치환, 치환마다 일치 횟수 assert) · `name.html` · `assets.html`(새 쪽) · `view8.js`(쪽마다 `.sb` 넘침 점검, `node view8.js <접두어> <쪽 번호…>`).
+  PDF: huashu-design 폴더에서 `node scripts/export_single_absolute_deck_pdf.mjs --html Results/LogBook-Deck-v12.html --out Results/LogBook-Deck-v12.pdf`.
 - 쪽을 넣거나 빼면 본문의 「→ NN쪽」 참조, `data-entry` 기록 번호, 스크립트의 `PARTS[].at`을 함께 고친다.
 
 ## 통합 데모 (설명회용) — 2026-10-20 다시 만듦
@@ -24,7 +25,7 @@
   7000 PCTC · FPSO · FSRU · B/C) · 자료 388건 · 파일 853개(BDF 489). 구역 7 · 대상 13(Unit · Truss 포함), 표준 설계를 자매선이
   다시 쓴 모델(형상만 같음), 똑같은 BDF 예외 몇 쌍, 모델 판 · 보고서 판, 여러 호선 모델을 묶은 종합 검토서(보고서만 있는 자료 — 사용한 모델 선),
   같은 선종 · 같은 대상 보고서의 본문 유사. 운영 데이터가 아니다.
-- 첫 화면은 관계 지도(`#/graph`). 왼쪽 메뉴로 갖춤 현황(`#/coverage`) · 선례 찾기(`#/similar?file=…` — 174K LNG 계류 의장품 표준 설계가 기준) ·
+- 첫 화면은 관계 지도(`#/graph`). 왼쪽 메뉴로 갖춤 현황(`#/coverage`, 44 — `?rows=kind&cols=target` 처럼 행 · 열 기준을 고를 수 있다) · 선례 찾기(`#/similar?file=…` — 174K LNG 계류 의장품 표준 설계가 기준) ·
   **문서**(`#/reports?q=볼라드 사용률&retrieval=hybrid`, 2026-10-20 추가)로 옮긴다.
 - 문서 화면(22): 예시 보고서 359개(PPTX 강도 평가 · DOCX 지침 · 종합 검토서)의 슬라이드 · 문단 본문을 검색하고, 위치 발췌 · 강조 · 의미 추천 ·
   미리보기(슬라이드 · 문단)가 실제 화면 그대로 돈다. **'이 문서 근거로 요약'은 LLM 이 없어 발췌문을 엮은 미리 만든 예시 답변**이고, 답 첫 줄에

@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session, aliased
 
 from . import access, models
 from .bdf.signature import VERSION as SIG_VERSION, differing
-from .plm_ship import parse_ship_type
+from .plm_ship import ship_facets
 from .report_index import features as report_features
 from .revisions import reports as report_revs
 from .vocab import Vocab
@@ -71,19 +71,8 @@ def build_graph(db: Session, user, store=None) -> dict:
                                   .filter(models.EntryHull.entry_id.in_(pks))
                                   .order_by(models.EntryHull.is_primary.desc(), models.EntryHull.hull_no)):
         hulls[eid].append(hull_no)
-    # 30 — 선종·크기급: PLM 분해 값(ship_kind·ship_capacity), 없으면 선종 칸 글자('300K-VLCC')를 같은 규칙으로 풀어서
-    ships: dict[str, str | None] = {}
-    kinds: dict[str, str | None] = {}
-    sizes: dict[str, str | None] = {}
-    for no, ship_type, ship_kind, capacity in (
-            db.query(models.Hull.hull_no, models.Hull.ship_type, models.Hull.ship_kind, models.Hull.ship_capacity)
-            .filter(models.Hull.hull_no.in_({h for hs in hulls.values() for h in hs} or {""}))):
-        ships[no] = ship_type
-        parsed = parse_ship_type(ship_type) if ship_type and not (ship_kind and capacity) else {}
-        kind = ship_kind or parsed.get("shipKind")
-        cap = capacity or parsed.get("capacity")
-        kinds[no] = kind
-        sizes[no] = f"{cap}급 {kind}" if cap and kind else None
+    # 30 — 선종·크기급: PLM 분해 값, 없으면 선종 칸 글자를 같은 규칙으로(plm_ship.ship_facets — 갖춤 현황 44 와 같은 규칙)
+    ships, kinds, sizes = ship_facets(db, {h for hs in hulls.values() for h in hs})
 
     # 태그는 대표 값으로(동의어를 하나로)
     vocabs = {k: Vocab(db, k) for k in TAG_KINDS}
