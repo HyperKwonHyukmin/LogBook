@@ -119,5 +119,8 @@ LogBook `LOGBOOK_WB_ORIGIN_SHOW=1`(화면·검색), WorkBench `LOGBOOK_SEND_PASS
 ## 운영 참고 (145)
 
 - **uvicorn 실행 계정 권한**: 145 에서 `uvicorn app.main:app` 을 실행하는 Windows 계정은 `999_LogBook` UNC 경로(`\\storage.hpc.hd.com\a476854\00_PROJECT\AA_300_CF44\999_LogBook`)에 **쓰기 권한**이 있어야 한다. 없으면 폴더 구조 생성(`ensure_layout`)·업로드·감사 로그 JSONL 기록이 조용히 실패한다(DB 기록은 남지만 파일 기록은 경고 로그만 남고 사라짐 — `app/audit.py` 참고).
+- **서버 관리자 [API] 로그의 `ConnectionResetError: [WinError 10054]`**(`_ProactorBasePipeTransport._call_connection_lost`)는 무해하다(2026-10-19 확인).
+  응답이 끝난 뒤 브라우저·WorkBench 가 먼저 연결을 끊었을 때(탭 닫기·새로고침·화면 이동) Windows Python asyncio 가 정리 단계에서 남기는 기록이다.
+  사용자 오류 화면·서버 재시작과 겹치거나 계속 쏟아질 때만 본다. 걸러 내려면 `app/main.py` 에 이 한 종류만 넘기는 예외 처리기(아직 안 넣음).
 - **`logbook_test` 는 개발 PC 전용**이다. 145 운영 서버에는 만들 필요가 없다(위 SQL 참고, `create_db.py` 도 145 에서는 실행하지 않는다). 테스트는 개발 PC 에서만 돌린다.
 - **145 는 Server Manager**(`Logbook_Server.bat`)가 API·Worker·보고서 색인 워커를 띄운다(41). 자동 시작은 로그온 때만이라, 145 를 재부팅하면 그 계정으로 한 번 로그온해야 한다. 작업 스케줄러 방식과 함께 쓰지 않는다 — `ops/README.md` 6절.

@@ -1,14 +1,16 @@
 # LogBook 설명회 시연 자료
 
-## 소개 발표자료(HTML 덱) — 2026-10-19 기준 v8
+## 소개 발표자료(HTML 덱) — 2026-10-20 기준 v10
 
-- 위치: `C:\Coding\ClaudeCode\Huashu_Design\huashu-design\Results\LogBook-Deck-v8.html` / `.pdf` (18쪽, v1~v7도 같은 폴더). huashu-design 장부(帳簿) 문법 디자인.
-- 구성: 표지 → 序 이름(왜 LogBook인가) → Ⅰ 필요성 → Ⅱ LogBook(정의 · 세 가지 지식자산 · 4대 목표) → Ⅲ 사용성(올리기 · 찾기 · 확인 · 문서 · 신뢰) → Ⅳ 활용(관계 지도 · 갖춤 현황 · 선례 찾기) → Ⅴ 확장(Hi-TESS 그림 · 모델링 AI) → 마무리.
+- 위치: `C:\Coding\ClaudeCode\Huashu_Design\huashu-design\Results\LogBook-Deck-v10.html` (19쪽, v1~v9도 같은 폴더, v10 PDF 는 아직 안 뽑음). huashu-design 장부(帳簿) 문법 디자인.
+- 구성: 표지 → 序 이름(왜 LogBook인가) → Ⅰ 필요성 → Ⅱ LogBook(정의 · 세 가지 지식자산 · 4대 목표) → Ⅲ 사용성(올리기 · 찾기 · 확인 · 문서 · 신뢰) → Ⅳ 활용(관계 지도 · 갖춤 현황 · 선례 찾기) → Ⅴ 확장(Hi-TESS 그림 · 모델링 AI) → 跋 맺으며(개발 소회, v10) → 마무리.
+- 18쪽 跋 맺으며: 2026.05 WorkBench → 2026.10 LogBook 을 만들며 느낀 것. 'AI가 일을 줄인다'의 두 뜻(기술 장벽에서 해방 · 아무도 안 한 일을 시작할 여지), WorkBench 를 본뜬 자동화가 여러 곳에서 시작될 때 우리는 지식자산 플랫폼으로. 다른 팀을 낮추지 않도록 '모방'이라고 쓰지 않는다. 跋 은 序 처럼 색인 탭에서 뺀다(`PARTS` 의 `side`).
 - 정한 메시지: WorkBench = 구조해석 **자동화** 플랫폼, LogBook = 구조해석 **지식자산** 플랫폼. 지식자산 = 해석 모델 · 연구 내용(현업 경험 · 기술개발) · 보고서.
 - 이름 쪽은 ① 유래(칩 로그 · 노트 · 항해일지 = 역사적 사실)와 ② 고른 이유(항해 기록을 보듯 연구를 돌아본다) · ③ 더한 방향(Record → Connect → Insight = 우리의 해석)을 칸으로 가른다. 이름 본뜻을 '통찰'까지 부풀리지 않는다.
+- 16쪽 Hi-TESS 그림 바닥 띠 = **Hi-TESS Core**(공통 규약, v9). 표현은 '규약으로 연결을 정리 · 강화, 첫 결과 = 해석 출처 연결'까지 — Core 는 아직 실행 코드가 없으니 '통합 완료'·'Core 가 운영'이라고 쓰지 않는다(hitess-core 00 §4).
 - 용어: '지식자산'(지적자산 X), '후속선'(자매선 X), '연구실의 자산'(팀의 자산 X), 9쪽 확인은 '웹 브라우저에서 3D로'.
-- 고치는 법: 새 버전은 최신본을 복사해 만든다(이전 버전 보존). v8 빌드 원본은 `Results\LogBook-deck-src\v8\` — `build8.py`(v7 → v8 문자열 치환, 치환마다 일치 횟수 assert) · `name.html` · `assets.html`(새 쪽) · `view8.js`(쪽마다 `.sb` 넘침 점검, `node view8.js <접두어> <쪽 번호…>`).
-  PDF: huashu-design 폴더에서 `node scripts/export_single_absolute_deck_pdf.mjs --html Results/LogBook-Deck-v8.html --out Results/LogBook-Deck-v8.pdf`.
+- 고치는 법: 새 버전은 최신본을 복사해 만든다(이전 버전 보존). v10 빌드 원본은 `Results\LogBook-deck-src\v10\build10.py`(v9 → v10, 18쪽 跋 추가). v9 빌드 원본은 `Results\LogBook-deck-src\v9\`(`build9.py` = v8 → v9 16쪽 치환, `view9.js`), 그 전 v8 은 `…\v8\` — `build8.py`(v7 → v8 문자열 치환, 치환마다 일치 횟수 assert) · `name.html` · `assets.html`(새 쪽) · `view8.js`(쪽마다 `.sb` 넘침 점검, `node view8.js <접두어> <쪽 번호…>`).
+  PDF: huashu-design 폴더에서 `node scripts/export_single_absolute_deck_pdf.mjs --html Results/LogBook-Deck-v10.html --out Results/LogBook-Deck-v10.pdf`.
 - 쪽을 넣거나 빼면 본문의 「→ NN쪽」 참조, `data-entry` 기록 번호, 스크립트의 `PARTS[].at`을 함께 고친다.
 
 ## 통합 데모 (설명회용)

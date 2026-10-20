@@ -18,7 +18,9 @@ Hi-TESS LogBook(구조해석 자료 창고). 무엇·어떻게 쓰는지는 `REA
 - 스키마를 바꾸는 테스트에는 `@pytest.mark.fresh_schema`(README '개발 PC' 끝).
 - 계획 문서는 `docs/plans/YYYY-MM-DD-logbook-NN-<주제>.md`, 번호는 `docs/plans/README.md` 표에 올린다. 다른 계획이 미리 잡아 둔 번호(예: 32 가 33·34 예약)는 건너뛴다.
 - 개발 PC 는 사내 PLM 에 닿지 않는다 — PLM 실제 조회는 145 에서 확인한다(README '사내 PLM 선박 정보 (30)').
+- **로그인은 사번만(비밀번호 없음)으로 둔다** — WorkBench 도 사번만이라 LogBook 만 막아도 `/sso` 로 우회되고, 직접 주소 접속도 열어 둔다(2026-10-20 결정). 본인 확인을 붙이려면 Hi-TESS 전체(`hitess-core`)에서 다룬다.
 
 ## 배포 (145)
 개발 PC 에서 커밋·푸시 → 145 Server Manager ⟳ Update(git pull · requirements 바뀌면 pip install · 재시작).
+145 는 Server Manager 한 창이 API·Worker·보고서 색인 워커를 띄운다(작업 스케줄러 없음, 41). `server_manager.py`·`serverguard/` 를 바꾼 업데이트는 Update 뒤 **창을 X 로 닫고 다시 열도록** 알린다(Update 는 창 메모리의 옛 코드로 다시 띄운다).
 `backend\.env` 는 git 밖이라 Update 로 바뀌지 않는다 — 새 설정 키가 생기면 145 `.env` 에 손으로 넣도록 알린다. 처음 설치·설정은 README '145 서버'.
