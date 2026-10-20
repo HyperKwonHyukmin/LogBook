@@ -1,7 +1,7 @@
 """20 — 자료 필수 분류·제목 초안·비슷한 제목(DB 를 읽는 쪽). 순수 규칙은 naming.py.
 
-필수 분류: BDF(kind=model 파일)가 있는 자료는 호선(또는 '호선 없음(공용)')·구역 또는 대상(40)을 채워야 한다.
-40 — 위치 개념이 없는 모델(Unit·Truss·전선 모델)은 대상만 있어도 된다. 42 — 해석 종류는 없앴다(필수 칸 아님).
+필수 분류: BDF(kind=model 파일)가 있는 자료는 호선(또는 '호선 없음(공용)')을 채워야 한다.
+43 — 구역·대상은 선택 칸이다(40 의 '구역 또는 대상' 필수는 없앴다). 42 — 해석 종류는 없앴다.
 43 — 빈 칸이 있어도 확정은 막지 않는다(나중에 고치는 편이 쉬울 수 있다). BDF 없는 자료(보고서만 등)는 권하기만 한다.
 확정된 자료의 빈 칸은 숨기거나 상태를 바꾸지 않고 '보완 필요'(needs_fix)로만 표시한다 —
 관리 화면 '자료 정비'·CLI naming-cleanup 이 고칠 목록을 보여 준다.
@@ -12,7 +12,7 @@ from .. import access, models, vocab
 from . import naming
 
 # 확정을 막는 빠진 칸 이름(오류 응답 missing 과 화면이 같은 이름을 쓴다)
-REQUIRED = ("hull", "zone_or_target")
+REQUIRED = ("hull",)   # 43 — 구역·대상은 선택
 SIMILAR_MIN = 0.6     # 비슷한 제목 경고(호선 번호를 뺀 낱말 겹침)
 SIMILAR_LIMIT = 5
 
@@ -29,9 +29,7 @@ def missing_fields(*, has_bdf: bool, hulls, no_hull: bool, zones, target) -> lis
     out = []
     if not list(hulls or []) and not no_hull:
         out.append("hull")
-    if not list(zones or []) and not (target or "").strip():
-        out.append("zone_or_target")
-    return out
+    return out   # 43 — 구역·대상은 선택(zones·target 은 호출 모양을 유지하려고 받기만 한다)
 
 
 def missing_required(db: Session, entry: models.Entry) -> list[str]:

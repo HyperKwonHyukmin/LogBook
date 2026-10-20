@@ -86,7 +86,7 @@ test('42 — 지우기: 확인 창에 쓰는 자료 수를 보이고, 확인하�
   await userEvent.click(screen.getByRole('button', { name: '선미부 지우기' }));
   let dialog = screen.getByRole('alertdialog');
   expect(dialog).toHaveTextContent('이 값을 쓰는 자료 2건에서 함께 빠집니다');
-  expect(dialog).toHaveTextContent('보완 필요');
+  expect(dialog).not.toHaveTextContent('보완 필요');   // 43 — 구역·대상은 선택 칸
   expect(dialog).toHaveTextContent('동의어 1개도 함께 지웁니다');
   await userEvent.click(within(dialog).getByRole('button', { name: '취소' }));
   expect(calls(fetch)).not.toContain('DELETE /api/vocab/terms/2');

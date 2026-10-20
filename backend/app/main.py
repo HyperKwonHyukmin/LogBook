@@ -30,8 +30,28 @@ log = logging.getLogger("logbook")
 _USE_DEFAULT = object()
 
 
+def _quiet_connection_reset(loop) -> None:
+    """Windows asyncio(Proactor)가 브라우저가 먼저 끊은 연결을 정리하며 남기는 WinError 10054 기록만 넘긴다.
+    응답은 이미 끝난 뒤라 무해한데, 화면 폴링·새로고침마다 [API] 로그를 덮는다(README '145 서버'). 다른 예외는 그대로."""
+    previous = loop.get_exception_handler()
+
+    def handler(lp, context):
+        exc = context.get("exception")
+        if isinstance(exc, ConnectionResetError) and "_call_connection_lost" in str(context.get("handle", "")):
+            return
+        if previous is not None:
+            previous(lp, context)
+        else:
+            lp.default_exception_handler(context)
+
+    loop.set_exception_handler(handler)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
+
+    _quiet_connection_reset(asyncio.get_running_loop())
     added = init_schema()
     if added:
         log.info("기존 표에 열을 더했습니다: %s", ", ".join(added))

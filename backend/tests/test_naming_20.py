@@ -66,8 +66,8 @@ def test_confirm_bdf_without_hull_zone_leaves_needs_fix(db, storage, make_user, 
     e = db.get(models.Entry, e.id)
     assert e.status == "confirmed"
     d = service.entry_to_dict(db, e, viewer=u)
-    assert d["required_missing"] == ["hull", "zone_or_target"]   # 42 — 해석 종류 없음
-    assert d["needs_fix"] == ["hull", "zone_or_target"]
+    assert d["required_missing"] == ["hull"]   # 43 — 구역·대상은 선택, 42 — 해석 종류 없음
+    assert d["needs_fix"] == ["hull"]
 
 
 def test_confirm_shared_model_without_hull(db, storage, make_user, setup_entry_with_files):
@@ -96,15 +96,15 @@ def test_confirm_without_bdf_only_needs_title(db, storage, make_user, setup_entr
 def test_confirm_api_missing_fields_not_blocking(client, auth_headers, db, make_user, setup_entry_with_files):
     make_user("A100001")
     _b, e = setup_entry_with_files()
-    service.set_zones(db, e, [])
+    db.query(models.EntryHull).filter_by(entry_id=e.id).delete()
     db.commit()
     h = auth_headers("A100001")
     d = client.get(f"/api/entries/{e.entry_id}", headers=h).json()
-    assert d["required_missing"] == ["zone_or_target"]
+    assert d["required_missing"] == ["hull"]   # 43 — 구역·대상은 선택
     r = client.post(f"/api/entries/{e.entry_id}/confirm", headers=h)
     assert r.status_code == 200   # 43 — 막지 않는다
     d = client.get(f"/api/entries/{e.entry_id}", headers=h).json()
-    assert d["status"] == "confirmed" and d["needs_fix"] == ["zone_or_target"]
+    assert d["status"] == "confirmed" and d["needs_fix"] == ["hull"]
 
 
 def test_confirm_target_without_zone(db, storage, make_user, setup_entry_with_files):
@@ -258,15 +258,15 @@ def _confirmed_bdf(make_entry_file, db, *, title, hulls=("3496",), zones=(), nam
 def test_cleanup_missing_list_and_permissions(client, auth_headers, db, make_user, make_entry_file):
     make_user("A100001", level=2)
     make_user("C300001", level=3)
-    bad = _confirmed_bdf(make_entry_file, db, title="빠짐", zones=())
+    bad = _confirmed_bdf(make_entry_file, db, title="빠짐", hulls=())   # 43 — 빠질 수 있는 필수 칸은 호선뿐
     _confirmed_bdf(make_entry_file, db, title="다 있음", zones=("선수부",))
     make_entry_file(title="보고서만", name="r.pdf", kind="report")
     assert client.get("/api/admin/cleanup/missing", headers=auth_headers("A100001")).status_code == 403
     r = client.get("/api/admin/cleanup/missing", headers=auth_headers("C300001")).json()
     assert r["total"] == 1 and r["items"][0]["entry_id"] == bad.entry_id
-    assert r["items"][0]["missing"] == ["zone_or_target"]
-    assert r["counts"] == {"hull": 0, "zone_or_target": 1}
-    assert client.get("/api/admin/cleanup/missing?missing=hull", headers=auth_headers("C300001")).json()["total"] == 0
+    assert r["items"][0]["missing"] == ["hull"]
+    assert r["counts"] == {"hull": 1}
+    assert client.get("/api/admin/cleanup/missing?missing=hull", headers=auth_headers("C300001")).json()["total"] == 1
     # 상태는 그대로(숨기거나 바꾸지 않는다)
     db.expire_all()
     assert db.get(models.Entry, bad.id).status == "confirmed"
@@ -276,7 +276,7 @@ def test_cleanup_title_preview_apply_and_revert(client, auth_headers, db, make_u
     make_user("C300001", level=3)
     ok = _confirmed_bdf(make_entry_file, db, title="옛 제목", zones=("선수부",), name="3496_선수부_M04_final/a.bdf")
     ok.title_source = "3496_선수부_M04_final"
-    bad = _confirmed_bdf(make_entry_file, db, title="빠진 자료", zones=())
+    bad = _confirmed_bdf(make_entry_file, db, title="빠진 자료", hulls=(), zones=("선수부",))
     done = _confirmed_bdf(make_entry_file, db, title="3496 · 선수부", zones=("선수부",), name="b.bdf")
     done.title_source = "3496"
     db.commit()
@@ -284,7 +284,7 @@ def test_cleanup_title_preview_apply_and_revert(client, auth_headers, db, make_u
     prev = client.get("/api/admin/cleanup/titles", headers=h).json()
     by = {p["entry_id"]: p for p in prev["items"]}
     assert by[ok.entry_id]["status"] == "ready" and by[ok.entry_id]["new_title"] == "3496 · 선수부 · M04"
-    assert by[bad.entry_id]["status"] == "blocked" and "구역" in by[bad.entry_id]["reason"]
+    assert by[bad.entry_id]["status"] == "blocked" and "호선" in by[bad.entry_id]["reason"]
     assert done.entry_id not in by                              # 이미 형식대로
     assert prev["counts"] == {"ready": 1, "blocked": 1}
 
@@ -342,7 +342,7 @@ def test_cleanup_revert_requires_admin(client, auth_headers, make_user):
 
 def test_cli_naming_cleanup_dry_run_then_apply(db, storage, make_entry_file):
     e = _confirmed_bdf(make_entry_file, db, title="옛", zones=("선수부",), name="3496_M05/a.bdf")
-    bad = _confirmed_bdf(make_entry_file, db, title="빠짐", zones=())
+    bad = _confirmed_bdf(make_entry_file, db, title="빠짐", hulls=(), zones=("선수부",))
     out = io.StringIO()
     r = cli.naming_cleanup(db, storage, apply=False, out=out)
     text = out.getvalue()
@@ -372,13 +372,13 @@ def test_cli_main_naming_cleanup_parses(monkeypatch):
 def test_search_needs_fix_only_for_editor(client, auth_headers, db, make_user, make_entry_file):
     make_user("A100001", level=2)
     make_user("A100002", level=2)
-    e = _confirmed_bdf(make_entry_file, db, title="빠짐", zones=())
+    e = _confirmed_bdf(make_entry_file, db, title="빠짐", hulls=())
     mine = client.get("/api/search", headers=auth_headers("A100001")).json()["items"]
     other = client.get("/api/search", headers=auth_headers("A100002")).json()["items"]
-    assert [i["needs_fix"] for i in mine if i["entry_id"] == e.entry_id] == [["zone_or_target"]]
+    assert [i["needs_fix"] for i in mine if i["entry_id"] == e.entry_id] == [["hull"]]
     assert [i["needs_fix"] for i in other if i["entry_id"] == e.entry_id] == [[]]
     d = client.get(f"/api/entries/{e.entry_id}", headers=auth_headers("A100001")).json()
-    assert d["needs_fix"] == ["zone_or_target"]
+    assert d["needs_fix"] == ["hull"]
 
 
 def test_search_group_shared_separate_from_none(client, auth_headers, db, make_user, make_entry_file):

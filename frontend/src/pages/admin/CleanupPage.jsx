@@ -312,7 +312,7 @@ export default function CleanupPage() {
   return (
     <Page>
       <PageHeader title="자료 정비"
-                  description="BDF 자료의 필수 분류(호선, 구역 또는 대상)가 빠진 확정 자료를 찾고, 제목을 새 형식(호선 · 구역 · 대상 · 구별자)으로 맞춥니다. 확정 자료를 숨기거나 상태를 바꾸지 않습니다." />
+                  description="BDF 자료의 필수 분류(호선 또는 공용)가 빠진 확정 자료를 찾고, 제목을 새 형식(호선 · 구역 · 대상 · 구별자)으로 맞춥니다. 확정 자료를 숨기거나 상태를 바꾸지 않습니다." />
       <Tabs label="정비 보기" items={VIEWS} value={view} onChange={setView} className="mb-4" />
       {view === 'missing' && <MissingView />}
       {view === 'titles' && <TitlesView onApplied={() => setStamp((n) => n + 1)} />}

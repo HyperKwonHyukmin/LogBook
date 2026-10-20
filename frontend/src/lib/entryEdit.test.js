@@ -38,14 +38,12 @@ test('20 — 호선 없음(공용)은 참/거짓 칸으로 바뀐 칸·본문에
   expect(editErrors({ ...base, no_hull: true, hulls: ['9001'] })).toHaveProperty('hulls');
 });
 
-test('20 — 확정 필수 분류(BDF 자료만, 서버 규칙과 같다)', () => {
+test('20 — 필수 분류(BDF 자료만, 서버 규칙과 같다) — 43 부터 호선(또는 공용)만, 구역·대상은 선택', () => {
   const v = editValues({ ...E, hulls: [], zones: [] });
-  expect(missingRequired(v, true)).toEqual(['hull', 'zone_or_target']);
-  expect(missingRequired({ ...v, no_hull: true }, true)).toEqual(['zone_or_target']);
-  // 40 — 구역이 없어도 대상이 있으면 된다. 42 — 해석 종류는 필수가 아니다
-  expect(missingRequired({ ...v, no_hull: true, target: 'Unit' }, true)).toEqual([]);
+  expect(missingRequired(v, true)).toEqual(['hull']);
+  expect(missingRequired({ ...v, no_hull: true }, true)).toEqual([]);
   // 29 — 프로젝트는 없앴다: 예전 값이 있어도 호선 대신 인정하지 않는다
-  expect(missingRequired({ ...v, project: '크레인 연구' }, true)).toEqual(['hull', 'zone_or_target']);
+  expect(missingRequired({ ...v, project: '크레인 연구' }, true)).toEqual(['hull']);
   expect(missingRequired(v, false)).toEqual([]);
   expect(hasBdf({ files: [{ kind: 'report' }, { kind: 'model', location: 'trash' }] })).toBe(false);
   expect(hasBdf({ files: [{ kind: 'model', location: 'vault' }] })).toBe(true);

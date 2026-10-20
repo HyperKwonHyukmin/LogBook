@@ -50,10 +50,10 @@ test('초안 확인할 것 — 제목은 확정을 막는다, (BDF 없는 자료
   expect(draftChecks({ title: '검토', hulls: [{ hull_no: '3496' }] }, { files: [] })).toEqual([]);
 });
 
-test('43 — BDF 자료의 빈 호선·구역·대상은 확정을 막지 않고 보완 필요를 알린다(42 — 해석 종류는 없다)', () => {
+test('43 — BDF 자료의 빈 호선은 확정을 막지 않고 보완 필요를 알린다, 구역·대상은 선택(42 — 해석 종류는 없다)', () => {
   const entry = { files: [{ kind: 'model' }] };
   const c = draftChecks({ title: '검토', hulls: [], zones: [], analysis_type: '' }, entry);
-  expect(c.map((x) => [x.id, !!x.blocking])).toEqual([['hull', false], ['zone', false]]);
+  expect(c.map((x) => [x.id, !!x.blocking])).toEqual([['hull', false]]);
   expect(c[0].text).toContain('보완 필요');
   const shared = draftChecks({ title: '검토', hulls: [], no_hull: true, zones: ['선수부'] }, entry);
   expect(shared).toEqual([]);

@@ -79,7 +79,7 @@ def test_rows_zones_and_facts(world, client, auth_headers):
     assert fail["solve"] == "fail" and fail["reports"] == 0
     assert doc["models"] == 0 and doc["solve"] is None
     assert doc["model_linked"] is True and full["doc_linked"] is True   # 자료 사이 보고서 ↔ 모델 연결
-    assert common["needs_fix"] is True and common["unsigned"] is True
+    assert common["needs_fix"] is False and common["unsigned"] is True   # 43 — 공용이면 구역이 없어도 보완 필요 아님
     assert full["needs_fix"] is False and full["uploader_name"] == "일반"
     assert g["hulls"] == {"9001": "LNGC", "9002": None}
     assert g["zones"][0] == "정반"                                   # 자료 많은 구역 먼저

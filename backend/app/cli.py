@@ -50,7 +50,7 @@ DB 백업(mysqldump → 80_Backup, 05):
 한 자료 안 BDF 판 묶음(14)을 모든 자료에 대해 다시 맞추고, 계열 인접 판 비교를 대기열에 넣기(배포 뒤 1회):
     .venv\\Scripts\\python.exe -m app.cli revisions-refresh [--no-diffs]
 
-기존 자료 정비(20) — 필수 분류(호선·구역 또는 대상)가 빠진 확정 BDF 자료 목록과 제목을 새 형식으로 바꿀 목록을
+기존 자료 정비(20) — 필수 분류(호선 또는 공용, 43 — 구역·대상은 선택)가 빠진 확정 BDF 자료 목록과 제목을 새 형식으로 바꿀 목록을
 보여 준다(기본은 보기만). --apply 면 바꿀 수 있는 제목을 모두 바꾼다(감사 ENTRY_RETITLE — 관리 화면 '자료 정비'에서
 행별로 되돌릴 수 있다). ⚠ 적용 전에 backup 으로 DB 를 백업할 것:
     .venv\\Scripts\\python.exe -m app.cli naming-cleanup [--apply] [--limit N]

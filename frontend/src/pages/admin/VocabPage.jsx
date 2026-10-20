@@ -155,7 +155,7 @@ export default function VocabPage() {
     const ok = await confirm({
       title: `${name} ‘${t.value}’ 를 지울까요?`,
       body: (t.count
-        ? `이 값을 쓰는 자료 ${t.count}건에서 함께 빠집니다. 필수 분류(구역 또는 대상)가 비는 BDF 자료는 ‘보완 필요’가 됩니다. `
+        ? `이 값을 쓰는 자료 ${t.count}건에서 함께 빠집니다. `
         : '이 값을 쓰는 자료는 없습니다. ')
         + (t.synonyms.length ? `동의어 ${t.synonyms.length}개도 함께 지웁니다. ` : '') + '되돌릴 수 없습니다.',
       confirmLabel: '지우기',

@@ -285,12 +285,12 @@ test('판 묶음이 없으면 흐름 줄도 없다', () => {
 
 /* ── 20 — 필수 분류·공용 호선·제목 형식·비슷한 제목 ── */
 
-test('43 — BDF 자료에 구역·대상이 없어도 확정 단추는 열리고, 보완 필요를 권장으로 알린다(42 — 해석 종류 칸은 없다)', () => {
+test('43 — 구역·대상은 선택 칸: 비어도 확정 단추가 열리고 알리지도 않는다(42 — 해석 종류 칸은 없다)', () => {
   mockFetch({});
   render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={() => {}} />);
   const btn = screen.getByRole('button', { name: '확정' });
   expect(btn).toBeEnabled();
-  expect(screen.getByLabelText('확인할 것')).toHaveTextContent("구역·대상 없음: 확정은 되지만 '보완 필요'로 남습니다");
+  expect(screen.getByLabelText('확인할 것')).not.toHaveTextContent('구역·대상');
   expect(screen.getByLabelText('확인할 것')).not.toHaveTextContent('확정 전에 필요');
   expect(screen.getByLabelText('확인할 것')).not.toHaveTextContent('해석 종류');
   expect(screen.queryByLabelText('해석 종류')).toBeNull();
@@ -349,20 +349,25 @@ test('같은 호선의 같은·비슷한 제목 — 경고와 자료 링크, [�
 
 /* ── 43 — 정리 대기에서 3D 보기 · 자동 조회된 PLM 선박 정보 ── */
 
-test('43 — 변환이 끝난 BDF 는 [3D 보기]로 카드 안에 미리보기를 펼친다', async () => {
+test('43 — 변환이 끝난 첫 BDF 는 미리보기를 펼친 채로 보이고, [접기]로 접는다', async () => {
   const entry = { ...READY, files: [{ ...READY.files[0], model: { state: 'done' } }, READY.files[1]] };
   mockFetch({ 'GET /api/files/1/model': { state: 'done', key: 'k1', counts: {}, warnings: [], missing: [], solve: null } });
   render(<DraftCard entry={entry} siblings={[]} canEdit onChanged={() => {}} />);
+  expect(screen.getByRole('region', { name: 'a.bdf 미리보기' })).toBeInTheDocument();
+  const btn = screen.getByRole('button', { name: 'a.bdf 3D 보기' });
+  expect(btn).toHaveTextContent('접기');
+  await userEvent.click(btn);
+  expect(screen.queryByRole('region', { name: 'a.bdf 미리보기' })).toBeNull();
   await userEvent.click(screen.getByRole('button', { name: 'a.bdf 3D 보기' }));
   expect(screen.getByRole('region', { name: 'a.bdf 미리보기' })).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: 'a.bdf 3D 보기' }));
-  expect(screen.queryByRole('region', { name: 'a.bdf 미리보기' })).toBeNull();
 });
 
-test('43 — 변환 전 BDF 에는 [3D 보기]가 없다', () => {
+test('43 — 변환 중인 BDF 는 단추 대신 곧 펼쳐진다는 안내', () => {
   mockFetch({});
-  render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={() => {}} />);
+  const entry = { ...READY, files: [{ ...READY.files[0], model: { state: 'queued' } }, READY.files[1]] };
+  render(<DraftCard entry={entry} siblings={[]} canEdit onChanged={() => {}} />);
   expect(screen.queryByRole('button', { name: 'a.bdf 3D 보기' })).toBeNull();
+  expect(screen.getByText('3D 변환이 끝나면 여기에 모델 미리보기가 펼쳐집니다.')).toBeInTheDocument();
 });
 
 test('43 — 서버가 자동 조회해 둔 PLM 정보를 호선 칸 아래에 보인다', () => {

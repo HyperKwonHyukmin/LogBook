@@ -71,8 +71,7 @@ export function sameEditable(a, b) {
 export function missingRequired(values, hasBdf) {
   if (!hasBdf) return [];
   const out = [];
-  if (!(values?.hulls || []).length && !values?.no_hull) out.push('hull');
-  if (!(values?.zones || []).length && !String(values?.target ?? '').trim()) out.push('zone_or_target');   // 40
+  if (!(values?.hulls || []).length && !values?.no_hull) out.push('hull');   // 43 — 구역·대상은 선택
   return out;
 }
 

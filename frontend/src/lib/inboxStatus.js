@@ -109,7 +109,7 @@ export function hasPendingConvert(batch) {
 /**
  * 초안에서 사람이 확인할 것 — 확정을 막는 것(blocking)과 권하는 것.
  * form: 화면에서 고치는 중인 값(제목·호선·호선 없음(공용)·구역·대상), entry: 서버 값(파일).
- * 43 — 호선·구역·대상은 확정을 막지 않는다(나중에 고치는 편이 쉬울 수 있다). BDF 자료가 비어 있으면 확정 뒤
+ * 43 — 호선은 확정을 막지 않고(구역·대상은 선택 칸)(나중에 고치는 편이 쉬울 수 있다). BDF 자료가 비어 있으면 확정 뒤
  * '보완 필요'로 남는다고 알리고, BDF 없는 자료(보고서만 등)는 호선을 권하기만 한다. 확정을 막는 것은 제목뿐. 42 — 해석 종류는 없앴다.
  * 기존 자료에 파일을 더하는 초안(merge_into)은 그 자료의 분류를 따르므로 보지 않는다.
  * @returns {Array<{ id, text, blocking?: boolean }>}
@@ -121,10 +121,8 @@ export function draftChecks(form, entry) {
   const bdf = !entry.merge_into && files.some((f) => f.kind === 'model' && f.location !== 'trash');
   const noHull = !(form.hulls || []).length && !form.no_hull;
   if (bdf) {
+    // 43 — 구역·대상은 선택 칸이라 알리지 않는다
     if (noHull) out.push({ id: 'hull', text: "호선 없음: 확정은 되지만 '보완 필요'로 남습니다" });
-    if (!(form.zones || []).length && !String(form.target || '').trim()) {
-      out.push({ id: 'zone', text: "구역·대상 없음: 확정은 되지만 '보완 필요'로 남습니다" });
-    }
   } else if (!entry.merge_into) {
     if (noHull) out.push({ id: 'hull', text: '호선 없음: 호선으로 찾을 수 있게 넣어 주세요' });
   }

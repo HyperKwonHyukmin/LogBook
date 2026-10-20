@@ -46,7 +46,8 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
   const [values, setValues] = useState(() => editValues(entry)); // 고치는 값
   const [base, setBase] = useState(() => editValues(entry));     // 마지막으로 맞춘 서버 값(바뀐 칸을 가린다)
   const [selected, setSelected] = useState([]);
-  const [previewId, setPreviewId] = useState(null); // 43 — 3D 로 펼쳐 본 BDF(한 번에 하나)
+  // 43 — 3D 미리보기: null = 자동(변환이 끝난 첫 BDF 를 펼친 채로), 'none' = 사람이 접음, 숫자 = 고른 BDF
+  const [previewChoice, setPreviewChoice] = useState(null);
   const [error, setError] = useState('');
   const [dup, setDup] = useState(null); // 17 — 확정 409 duplicate_model 의 대상 목록(오류가 아니라 안내로 보인다)
   const canForce = isAdminLevel(useContext(AuthContext)?.user);
@@ -186,7 +187,11 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
   const moveFile = (fileId, to) => act(() => api(`/files/${fileId}/move`, { method: 'POST', body: { to_entry_id: to } }), '옮기지');
 
   const disabled = !canEdit || busy || attaching; // 버튼용
-  const previewFile = entry.files.find((f) => f.id === previewId && modelConvertState(f) === 'done') || null;
+  const readyModels = entry.files.filter((f) => modelConvertState(f) === 'done');
+  const previewFile = previewChoice === 'none' ? null
+    : readyModels.find((f) => f.id === previewChoice) || readyModels[0] || null;
+  // BDF 는 있는데 아직 3D 변환 전(대기·변환 중) — 끝나면 정리 대기가 다시 불러 미리보기가 저절로 열린다
+  const convertingModels = !readyModels.length && entry.files.some((f) => ['queued', 'running'].includes(modelConvertState(f)));
   const fieldDisabled = !canEdit; // 입력 칸은 저장 중에도 막지 않는다(포커스가 빠지지 않게)
   const form = { ...values, hulls: values.hulls.map((h) => ({ hull_no: h })) };
   const checks = canEdit ? draftChecks(form, entry) : [];
@@ -331,7 +336,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
             <span className="font-normal text-n-500">추정 근거: {entry.hull_evidence.map((h) => `${h.hull_no} (${(h.reasons || []).join(', ')})`).join(' · ')}</span>
           )}
         </div>
-        <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600"><span>구역{mark('zones')}</span>
+        <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600"><span>구역 <span className="font-normal text-n-500">(선택)</span>{mark('zones')}</span>
           <VocabInput multiple kind="zone" label="구역" values={values.zones} disabled={fieldDisabled} onChange={set('zones')} />
         </div>
         {/* 38 — 대상 구조물(선택). 고르면 초안 제목의 구역 뒤에 붙는다 */}
@@ -461,11 +466,11 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
               {/* 12 — 내용 서명으로 찾은 동일 BDF(주의)·같은 형상(정보) */}
               <SameModelChips model={f.model} />
               <ConvertBadge f={f} />
-              {/* 43 — 분류를 고르기 전에 모델을 3D 로 본다(변환이 끝난 BDF) */}
+              {/* 43 — 분류를 고르기 전에 모델을 3D 로 본다. 첫 BDF 는 펼친 채로, 다른 BDF 는 눌러서 바꾼다 */}
               {modelConvertState(f) === 'done' && (
-                <Button variant="ghost" size="sm" aria-expanded={previewId === f.id} aria-label={`${f.name} 3D 보기`}
-                        onClick={() => setPreviewId((cur) => (cur === f.id ? null : f.id))}>
-                  <Rotate3d size={13} aria-hidden="true" />{previewId === f.id ? '접기' : '3D 보기'}
+                <Button variant="ghost" size="sm" aria-expanded={previewFile?.id === f.id} aria-label={`${f.name} 3D 보기`}
+                        onClick={() => setPreviewChoice(previewFile?.id === f.id ? 'none' : f.id)}>
+                  <Rotate3d size={13} aria-hidden="true" />{previewFile?.id === f.id ? '접기' : '3D 보기'}
                 </Button>
               )}
               {f.drm_encrypted && (
@@ -482,6 +487,11 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
             </li>
           ))}
         </ul>
+        {convertingModels && (
+          <p className="flex items-center gap-1.5 border-t border-n-200 px-4 py-2.5 text-meta text-n-600">
+            <Spinner size={12} className="text-n-400" />3D 변환이 끝나면 여기에 모델 미리보기가 펼쳐집니다.
+          </p>
+        )}
         {previewFile && (
           <section aria-label={`${previewFile.name} 미리보기`} className="border-t border-n-200 px-4 py-3">
             <ModelPreview key={previewFile.id} file={previewFile} hull={values.hulls[0] || ''} />

@@ -544,7 +544,7 @@ def delete_term(db: Session, storage: StoragePaths, actor: str, term: models.Tag
     """42 — 용어를 동의어 묶음째 목록에서 지우고, 그 값(용어·동의어)을 단 자료에서도 뺀다.
 
     확정 자료는 감사 ENTRY_UPDATE·version +1·entry.json, 정리 대기·휴지통 자료는 값만 뺀다(40 move_term 과 같은 규칙).
-    값이 빠져 필수 분류(구역 또는 대상)가 비는 BDF 자료는 '보완 필요'가 된다(자료 정비에 뜬다).
+    43 — 구역·대상은 선택 칸이라 값이 빠져도 '보완 필요'가 되지 않는다.
     (동의어 하나만 떼는 것은 remove_synonym — 그쪽은 자료 값을 건드리지 않는다.)"""
     from .entries import service  # 순환 import 방지
 

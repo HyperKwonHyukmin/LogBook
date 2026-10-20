@@ -60,7 +60,7 @@ def test_patch_ignores_analysis_type_and_entry_json_drops_it(client, auth_header
 
 def test_required_and_title_without_analysis_type(db, storage, make_user, make_entry_file):
     e = _world(db, storage, make_user, make_entry_file)
-    assert quality.REQUIRED == ("hull", "zone_or_target")
+    assert quality.REQUIRED == ("hull",)   # 43 — 구역·대상은 선택
     assert quality.missing_required(db, e) == []
     assert quality.TitleContext(db).draft(e, source="3496_선수부_강도평가_M04") == "3496 · 선수부 · 강도평가 M04"
     assert naming.compose_title(hulls=["3496"], zones=["선수부"], target="블록") == "3496 · 선수부 · 블록"
