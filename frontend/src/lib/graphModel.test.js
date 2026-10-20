@@ -160,3 +160,12 @@ test('35 — 같은 용량이라도 선종이 다르면 다른 크기급', () =>
   });
   expect(pivotHubs(m, 'size').filter((h) => !h.none).map((h) => h.label).sort()).toEqual(['174K급 B/C', '174K급 LNG']);
 });
+
+test('44 — 대상 기준: 대상 점과 대상 없음 묶음, 기준 순서는 호선 · 대상 · 선종 · 구역 · 크기급', async () => {
+  const { PIVOTS } = await import('./graphModel.js');
+  expect(PIVOTS).toEqual(['hull', 'target', 'kind', 'zone', 'size']);
+  const m = buildModel({ ...DATA, entries: DATA.entries.map((e, i) => ({ ...e, targets: i < 2 ? ['Unit'] : [] })) });
+  expect(m.byId.get('target:Unit')).toMatchObject({ cnt: 2, label: 'Unit' });
+  expect(m.NONE.target).toMatchObject({ cnt: 2, label: '대상 없음' });
+  expect(pivotHubs(m, 'target').map((h) => h.id)).toEqual(['target:Unit', 'target:__none']);
+});

@@ -35,7 +35,7 @@ from .vocab import Vocab
 MAX_ENTRIES = 3000        # 최근 확정 순으로 이만큼 — 넘으면 truncated
 MAX_GROUP = 60            # 같은 형상 묶음 하나에서 쌍을 만들 파일 수 상한(쌍 수가 제곱으로 늘지 않게)
 MAX_PAIRS = 6000
-TAG_KINDS = ("zone", "free")   # 29 — 프로젝트 기준은 없앴다
+TAG_KINDS = ("zone", "target", "free")   # 29 — 프로젝트 기준은 없앴다 · 44 — 대상(38) 기준
 _SIG = ("geometry", "property", "material", "load")
 TEXT_TOP = 3              # 보고서마다 '본문이 비슷함' 으로 잇는 가장 가까운 보고서 수
 _DOC_RANK = {"uses": 3, "rrev": 2, "text": 1}
@@ -166,7 +166,7 @@ def build_graph(db: Session, user, store=None) -> dict:
         out_entries.append({
             "id": r.entry_id, "title": r.title,
             "confirmed_at": r.confirmed_at.strftime("%Y-%m") if r.confirmed_at else None,
-            "hulls": hulls.get(r.id, []), "zones": t["zone"], "free": t["free"],
+            "hulls": hulls.get(r.id, []), "zones": t["zone"], "targets": t["target"], "free": t["free"],
             "files": file_counts.get(r.id, 0), "revisions": revisions.get(r.id, []),
             "models": kind_counts[r.id]["model"] if r.id in kind_counts else 0,
             "reports": kind_counts[r.id]["report"] if r.id in kind_counts else 0,

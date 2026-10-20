@@ -126,3 +126,12 @@ def test_hull_kinds_from_plm_or_ship_type(world, client, auth_headers, db):
     assert g["hull_kinds"] == {"9001": "VLCC", "9002": "LNG", "9003": None}
     assert g["hull_sizes"] == {"9001": "300K급 VLCC", "9002": "174K급 LNG", "9003": None}
     assert g["hulls"]["9002"] == "174K LNG"
+
+
+def test_entries_carry_target(world, client, auth_headers, db):
+    """44 — 대상(38)도 기준으로 쓰도록 자료마다 대표 값으로 싣는다(없으면 빈 목록)."""
+    a = db.query(models.Entry).filter_by(entry_id=world["a"]).one()
+    _tag(db, a, "target", "Unit")
+    db.commit()
+    by = {e["id"]: e for e in _graph(client, auth_headers, "M100001")["entries"]}
+    assert by[world["a"]]["targets"] == ["Unit"] and by[world["b"]]["targets"] == []

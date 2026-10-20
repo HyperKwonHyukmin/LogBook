@@ -15,8 +15,9 @@ import {
   primaryOf, searchNodes, stepText,
 } from '../lib/graphModel.js';
 
-const PIVOT_ITEMS = [{ id: 'hull', label: '호선' }, { id: 'zone', label: '구역' }, { id: 'kind', label: '선종' },
-  { id: 'size', label: '크기급' }];
+// 44 — 대상 기준 추가, 순서 = 호선 · 대상 · 선종 · 구역 · 크기급
+const PIVOT_ITEMS = [{ id: 'hull', label: '호선' }, { id: 'target', label: '대상' }, { id: 'kind', label: '선종' },
+  { id: 'zone', label: '구역' }, { id: 'size', label: '크기급' }];
 // 42 — 해석 종류 색은 없앴다
 const COLOR_ITEMS = [{ id: 'none', label: '없음' }, { id: 'ship', label: '선종' }];
 // 32 — 자료 사이 선의 층: 모델(형상만 같음·똑같은 BDF) · 문서(사용한 모델·보고서 다른 판·본문 비슷함)

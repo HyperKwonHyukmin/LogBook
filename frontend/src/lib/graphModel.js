@@ -11,11 +11,12 @@
  */
 // 29 — 프로젝트 기준은 없앴다. 35 — 선종(LNG·VLCC)·크기급(174K급 LNG = 용량 + 선종)은 자료의 호선들에서 모은다.
 // 용량만으로는 묶지 않는다 — 단위가 선종마다 다르다(LNG m³ · VLCC/B·C DWT · CNTR TEU). 같은 174K 라도 선종이 다르면 다른 크기급.
-export const GROUP = { hull: '호선', zone: '구역', kind: '선종', size: '크기급', free: '자유 태그' };
-export const JOSA = { hull: '이', zone: '이', kind: '이', size: '이', free: '가' };
-export const PIVOTS = ['hull', 'zone', 'kind', 'size'];
-export const GROUP_KEYS = ['hull', 'zone', 'kind', 'size', 'free'];
-const FIELD = { hull: 'hulls', zone: 'zones', free: 'free' };
+// 44 — 대상(38) 기준 추가, 순서 = 호선 · 대상 · 선종 · 구역 · 크기급
+export const GROUP = { hull: '호선', target: '대상', kind: '선종', zone: '구역', size: '크기급', free: '자유 태그' };
+export const JOSA = { hull: '이', target: '이', kind: '이', zone: '이', size: '이', free: '가' };
+export const PIVOTS = ['hull', 'target', 'kind', 'zone', 'size'];
+export const GROUP_KEYS = ['hull', 'target', 'kind', 'zone', 'size', 'free'];
+const FIELD = { hull: 'hulls', target: 'targets', zone: 'zones', free: 'free' };
 /** 자료의 기준 값 — 선종·크기급은 호선마다의 값을 겹치지 않게 모은다(호선 순서 = 주 호선 먼저). */
 function valuesOf(e, g, kinds, sizes) {
   if (g === 'kind' || g === 'size') {
