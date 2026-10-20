@@ -54,18 +54,20 @@ def test_source_from_files():
 
 # ---- 확정 필수값 ----
 
-def test_confirm_bdf_requires_hull_zone(db, storage, make_user, setup_entry_with_files):
+def test_confirm_bdf_without_hull_zone_leaves_needs_fix(db, storage, make_user, setup_entry_with_files):
+    """43 — 호선·구역·대상이 비어도 확정하고, 빈 칸은 '보완 필요'(needs_fix)로 남는다(20 의 확정 막기 없앰)."""
     u = make_user("A100001")
     _b, e = setup_entry_with_files()
     service.set_zones(db, e, [])
     db.query(models.EntryHull).filter_by(entry_id=e.id).delete()
     db.commit()
-    with pytest.raises(HTTPException) as ei:
-        service.confirm(db, storage, e, u)
-    assert ei.value.status_code == 409
-    assert ei.value.detail == {"code": "required_fields", "missing": ["hull", "zone_or_target"]}   # 42 — 해석 종류 없음
-    db.rollback()
-    assert db.get(models.Entry, e.id).status == "draft"
+    service.confirm(db, storage, e, u)
+    db.expire_all()
+    e = db.get(models.Entry, e.id)
+    assert e.status == "confirmed"
+    d = service.entry_to_dict(db, e, viewer=u)
+    assert d["required_missing"] == ["hull", "zone_or_target"]   # 42 — 해석 종류 없음
+    assert d["needs_fix"] == ["hull", "zone_or_target"]
 
 
 def test_confirm_shared_model_without_hull(db, storage, make_user, setup_entry_with_files):
@@ -91,7 +93,7 @@ def test_confirm_without_bdf_only_needs_title(db, storage, make_user, setup_entr
     assert db.get(models.Entry, e.id).status == "confirmed"
 
 
-def test_confirm_api_required_fields_shape(client, auth_headers, db, make_user, setup_entry_with_files):
+def test_confirm_api_missing_fields_not_blocking(client, auth_headers, db, make_user, setup_entry_with_files):
     make_user("A100001")
     _b, e = setup_entry_with_files()
     service.set_zones(db, e, [])
@@ -100,8 +102,9 @@ def test_confirm_api_required_fields_shape(client, auth_headers, db, make_user, 
     d = client.get(f"/api/entries/{e.entry_id}", headers=h).json()
     assert d["required_missing"] == ["zone_or_target"]
     r = client.post(f"/api/entries/{e.entry_id}/confirm", headers=h)
-    assert r.status_code == 409
-    assert r.json()["detail"] == {"code": "required_fields", "missing": ["zone_or_target"]}
+    assert r.status_code == 200   # 43 — 막지 않는다
+    d = client.get(f"/api/entries/{e.entry_id}", headers=h).json()
+    assert d["status"] == "confirmed" and d["needs_fix"] == ["zone_or_target"]
 
 
 def test_confirm_target_without_zone(db, storage, make_user, setup_entry_with_files):

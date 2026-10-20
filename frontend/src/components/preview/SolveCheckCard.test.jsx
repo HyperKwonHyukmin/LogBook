@@ -28,6 +28,9 @@ afterEach(() => { vi.useRealTimers(); });
 test('미검증 — 자세한 행을 묻지 않고 해석 검증 단추와 원본 불변 안내', () => {
   const fetch = renderCard({}, { initial: { state: null, error_types: [], stale: false } });
   expect(screen.getByText('미검증')).toBeInTheDocument();
+  // 실제 Nastran 해석이 돈다는 것을 제목·안내로 알린다
+  expect(screen.getByText('Nastran 해석 검증')).toBeInTheDocument();
+  expect(screen.getByText(/서버에서 실제 Nastran 해석을 한 번 돌려/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '해석 검증' })).toBeEnabled();
   expect(screen.getByText('원본 파일은 바뀌지 않습니다. 해석용 사본으로만 확인합니다.')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '자세히' })).toBeNull();

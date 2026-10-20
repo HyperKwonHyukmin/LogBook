@@ -306,6 +306,21 @@ def lookup(value) -> ShipLookup:
 
 # ---- 작업 ----
 
+def register_hulls(db: Session, hull_nos) -> Optional[models.Job]:
+    """43 — 정리 대기(초안)에 호선이 붙자마자 호선 행을 만들고 PLM 일괄 조회 작업을 넣는다(설정돼 있을 때만).
+    확정을 기다리지 않아 정리 대기 카드에서 선종 · 선형을 보고 맞는 호선인지 확인할 수 있다.
+    호선 목록은 확정 자료로만 세므로(hull_info.list_hulls) 초안에만 있는 호선이 목록에 끼지는 않는다."""
+    nos = sorted({h for h in (hull_nos or []) if h})
+    if not nos:
+        return None
+    have = {h for (h,) in db.query(models.Hull.hull_no).filter(models.Hull.hull_no.in_(nos))}
+    for no in nos:
+        if no not in have:
+            db.add(models.Hull(hull_no=no))
+    db.flush()
+    return enqueue_fill(db)
+
+
 def enqueue_fill(db: Session) -> Optional[models.Job]:
     """확정 때 — PLM 이 설정돼 있고 아직 조회하지 않은 호선이 있으면 일괄 조회 작업을 하나 넣는다(이미 대기 중이면 넣지 않는다)."""
     if not is_configured():

@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Copy, GripVertical, Layers, Lock, Paperclip, Save, Scissors, Trash2, Wand2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Copy, GripVertical, Layers, Lock, Paperclip, Rotate3d, Save, Scissors, Trash2, Wand2 } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import ChipInput from '../ui/ChipInput.jsx';
 import VocabInput from '../ui/VocabInput.jsx';
@@ -17,7 +17,8 @@ import { accessOf, isAdminLevel } from '../../lib/levels.js';
 import { AuthContext } from '../../auth/AuthContext.jsx';
 import { DuplicateTargets } from './DuplicateBlocked.jsx';
 import DraftAttachments from './DraftAttachments.jsx';
-import HullPlmLookup from '../hull/HullPlmLookup.jsx';
+import HullPlmLookup, { HullPlmSummary } from '../hull/HullPlmLookup.jsx';
+import ModelPreview from '../preview/ModelPreview.jsx';
 import { DROP_ZONE_ATTR, isOsFileDrag, useOsFileDragActive } from './UploadZone.jsx';
 
 const DRAG_TYPE = 'application/x-logbook-file';
@@ -45,6 +46,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
   const [values, setValues] = useState(() => editValues(entry)); // 고치는 값
   const [base, setBase] = useState(() => editValues(entry));     // 마지막으로 맞춘 서버 값(바뀐 칸을 가린다)
   const [selected, setSelected] = useState([]);
+  const [previewId, setPreviewId] = useState(null); // 43 — 3D 로 펼쳐 본 BDF(한 번에 하나)
   const [error, setError] = useState('');
   const [dup, setDup] = useState(null); // 17 — 확정 409 duplicate_model 의 대상 목록(오류가 아니라 안내로 보인다)
   const canForce = isAdminLevel(useContext(AuthContext)?.user);
@@ -184,10 +186,11 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
   const moveFile = (fileId, to) => act(() => api(`/files/${fileId}/move`, { method: 'POST', body: { to_entry_id: to } }), '옮기지');
 
   const disabled = !canEdit || busy || attaching; // 버튼용
+  const previewFile = entry.files.find((f) => f.id === previewId && modelConvertState(f) === 'done') || null;
   const fieldDisabled = !canEdit; // 입력 칸은 저장 중에도 막지 않는다(포커스가 빠지지 않게)
   const form = { ...values, hulls: values.hulls.map((h) => ({ hull_no: h })) };
   const checks = canEdit ? draftChecks(form, entry) : [];
-  // 20 — 확정을 막는 것(제목·BDF 자료의 필수 분류)이 있으면 확정 단추를 잠그고 이유를 보인다
+  // 20 — 확정을 막는 것이 있으면 확정 단추를 잠그고 이유를 보인다(43 — 이제 제목뿐, 빈 분류는 권장)
   const blocking = checks.filter((c) => c.blocking);
   const confirmBlocked = blocking.length > 0;
   const advisory = checks.filter((c) => !c.blocking);
@@ -321,6 +324,8 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
               호선 없음(공용){mark('no_hull')}
             </label>
           ) : values.no_hull && <span className="font-normal text-n-600">공용(호선 없음)</span>}
+          {/* 43 — 업로드·호선 저장 때 서버가 PLM 을 자동 조회해 둔 정보(저장된 호선만). 새로 친 호선은 [선박 정보 검색] */}
+          <HullPlmSummary hulls={(entry.hulls || []).filter((h) => values.hulls.includes(h.hull_no))} />
           {canEdit && <HullPlmLookup hulls={values.hulls} disabled={fieldDisabled} />}
           {entry.hull_evidence?.length > 0 && (
             <span className="font-normal text-n-500">추정 근거: {entry.hull_evidence.map((h) => `${h.hull_no} (${(h.reasons || []).join(', ')})`).join(' · ')}</span>
@@ -456,6 +461,13 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
               {/* 12 — 내용 서명으로 찾은 동일 BDF(주의)·같은 형상(정보) */}
               <SameModelChips model={f.model} />
               <ConvertBadge f={f} />
+              {/* 43 — 분류를 고르기 전에 모델을 3D 로 본다(변환이 끝난 BDF) */}
+              {modelConvertState(f) === 'done' && (
+                <Button variant="ghost" size="sm" aria-expanded={previewId === f.id} aria-label={`${f.name} 3D 보기`}
+                        onClick={() => setPreviewId((cur) => (cur === f.id ? null : f.id))}>
+                  <Rotate3d size={13} aria-hidden="true" />{previewId === f.id ? '접기' : '3D 보기'}
+                </Button>
+              )}
               {f.drm_encrypted && (
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-xs bg-err-bg px-1.5 text-micro font-medium text-err"><AlertTriangle size={11} aria-hidden="true" />암호화됨</span>
               )}
@@ -470,6 +482,11 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
             </li>
           ))}
         </ul>
+        {previewFile && (
+          <section aria-label={`${previewFile.name} 미리보기`} className="border-t border-n-200 px-4 py-3">
+            <ModelPreview key={previewFile.id} file={previewFile} hull={values.hulls[0] || ''} />
+          </section>
+        )}
         {canEdit && <DraftAttachments ref={attachRef} entry={entry} disabled={!canEdit || busy}
           onChanged={onChanged} onBusyChange={setAttachmentBusy} />}
       </div>

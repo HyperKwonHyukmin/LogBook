@@ -157,6 +157,7 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
 
     known = {h for (h,) in db.query(models.Hull.hull_no)}
     created = 0
+    draft_hulls: set[str] = set()   # 43 — 초안에 붙은 호선은 확정을 기다리지 않고 PLM 조회
     for p in propose(infos, known):
         # 20 — 호선을 알면 제목 초안을 형식(`3496 · 구별자`)으로, 모르면 예전처럼 폴더/파일 이름. 구역·대상은
         # 사람이 정리 대기에서 고르고, 그때 (사람이 제목을 고치지 않았으면) 제목도 따라 바뀐다
@@ -172,12 +173,17 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
         entry.entry_id = f"E{entry.id:06d}"
         if p.best_hull:
             db.add(models.EntryHull(entry_id=entry.id, hull_no=p.best_hull, is_primary=True))
+            draft_hulls.add(p.best_hull)
         if batch.target_entry_id is None:
             entry.suggested_entry_id = _find_similar(db, p.best_hull, entry.title)
         for key in p.file_keys:
             rows[key].entry_id = entry.id
         created += 1
 
+    if draft_hulls:
+        from .. import plm_ship   # 43 — 호선 행 + PLM 일괄 조회 작업(설정돼 있을 때만, 워커가 처리)
+
+        plm_ship.register_hulls(db, draft_hulls)
     # 보고서 본문 추출·BDF 변환은 워커가 따로 처리한다(배치 처리를 무겁게 만들지 않게).
     progress("queue", total, total, force=True)
     for f in rows.values():

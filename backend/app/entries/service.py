@@ -368,14 +368,13 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
             entry.title = new_title
     entry.version += 1
     db.flush()
-    if entry.status == "confirmed":
-        if "hulls" in patch:
-            # 30 — 확정 자료에 새로 넣은 호선도 호선 행을 만들고 PLM 자동 조회 대상에 올린다(설정돼 있을 때만)
-            _ensure_hulls(db, entry)
-            db.flush()
-            from .. import plm_ship
+    if "hulls" in patch:
+        # 30 — 새로 넣은 호선도 호선 행을 만들고 PLM 자동 조회 대상에 올린다(설정돼 있을 때만).
+        # 43 — 확정 자료뿐 아니라 정리 대기(초안)에서 호선을 고를 때도 바로 조회한다
+        from .. import plm_ship
 
-            plm_ship.enqueue_fill(db)
+        plm_ship.register_hulls(db, [h.hull_no for h in hulls_of(db, entry)])
+    if entry.status == "confirmed":
         after = snapshot(db, entry)
         audit.record(db, storage, actor=actor, action=action, target_type="entry",
                      target_id=entry.entry_id, before=before, after=after, ip=ip)
@@ -565,10 +564,8 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
 
     if not (entry.title or "").strip():
         raise HTTPException(status_code=422, detail="title_required")
-    # 20 — BDF 자료는 호선(또는 호선 없음(공용))·구역 또는 대상이 있어야 확정한다. 기존 자료에 합치기(위)는 보지 않는다
-    missing = quality.missing_required(db, entry)
-    if missing:
-        raise HTTPException(status_code=409, detail={"code": "required_fields", "missing": missing})
+    # 43 — 호선·구역·대상이 비어도 확정한다(나중에 고치는 편이 쉬울 수 있다). 빈 칸은 확정 뒤 '보완 필요'(needs_fix)로
+    # 자료 화면·자료 정비 목록에 남는다(20 의 확정 막기는 없앰)
     now = _now()
     entry.vault_rel = f"{now.year}/{entry.entry_id}"
     files_root = entry_dir(storage, entry) / "files"

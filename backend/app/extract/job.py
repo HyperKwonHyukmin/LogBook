@@ -107,6 +107,9 @@ def _apply_doc_hull(db: Session, f: models.File, hull_no: str) -> None:
     entry.hull_evidence = evidence  # 새 리스트를 대입해야 JSON 열 변경이 잡힌다
     if db.query(models.EntryHull).filter_by(entry_id=entry.id).count() == 0:
         db.add(models.EntryHull(entry_id=entry.id, hull_no=hull_no, is_primary=True))
+        from .. import plm_ship   # 43 — 보고서 본문에서 찾은 호선도 정리 대기 단계에서 PLM 조회
+
+        plm_ship.register_hulls(db, [hull_no])
 
 
 def run_extract(db: Session, storage: StoragePaths, f: models.File) -> None:
