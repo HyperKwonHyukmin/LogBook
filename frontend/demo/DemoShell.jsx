@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Grid2x2Check, Info, ScanSearch, Waypoints } from 'lucide-react';
+import { ArrowLeft, FileText, Grid2x2Check, Info, ScanSearch, Waypoints } from 'lucide-react';
 import Logo from '../src/components/ui/Logo.jsx';
 import { ToastProvider } from '../src/components/ui/Toast.jsx';
 import { CompareBasketProvider } from '../src/components/compare/CompareBasket.jsx';
@@ -14,6 +14,8 @@ const NAV = [
   { to: '/coverage', label: '갖춤 현황', icon: Grid2x2Check, note: '무엇이 비어 있나' },
   // 첫 기준 = 같은 설계가 여러 척에 있는 예(주소의 file) — 화면에서 다른 BDF 로 바꿀 수 있다
   { to: `/similar?file=${DEMO_SIMILAR_FILE}`, label: '선례 찾기', icon: ScanSearch, note: '무엇을 다시 쓰나' },
+  // 22 — 보고서 본문 검색 · 위치 발췌 · 근거 요약(예시 답변). 첫 화면은 '볼라드 사용률' 검색 결과
+  { to: `/reports?q=${encodeURIComponent('볼라드 사용률')}&retrieval=hybrid`, label: '문서', icon: FileText, note: '보고서 본문 검색 · 근거 요약' },
 ];
 
 const linkClass = ({ isActive }) =>
@@ -32,7 +34,7 @@ export default function DemoShell() {
             <div className="flex w-[196px] shrink-0 items-center pl-1"><Logo tone="navy" /></div>
             <span className="rounded-sm bg-navy-700 px-2 py-0.5 text-meta font-medium text-on-navy">설명회 데모</span>
             <span className="truncate text-meta text-on-navy-muted">
-              예시 데이터 — 호선 {DEMO_STATS.hulls}척 · 자료 {n(DEMO_STATS.entries)}건 · 파일 {n(DEMO_STATS.files)}개(BDF {n(DEMO_STATS.models)})가 쌓였을 때
+              예시 데이터 — 호선 {DEMO_STATS.hulls}척 · 자료 {n(DEMO_STATS.entries)}건 · 파일 {n(DEMO_STATS.files)}개(BDF {n(DEMO_STATS.models)} · 문서 {n(DEMO_STATS.reports)})가 쌓였을 때
             </span>
           </header>
           <div className="flex min-h-0 flex-1">

@@ -6,6 +6,7 @@ import { tokenStore } from '../src/api/client.js';
 import GraphPage from '../src/pages/GraphPage.jsx';
 import CoveragePage from '../src/pages/CoveragePage.jsx';
 import SimilarPage from '../src/pages/SimilarPage.jsx';
+import ReportsPage from '../src/pages/ReportsPage.jsx';
 import DemoShell, { DemoMissing } from './DemoShell.jsx';
 import { installMockApi } from './mockApi.js';
 import '../src/index.css';
@@ -22,6 +23,7 @@ const router = createHashRouter([{
     { path: 'graph', element: <GraphPage /> },
     { path: 'coverage', element: <CoveragePage /> },
     { path: 'similar', element: <SimilarPage /> },
+    { path: 'reports', element: <ReportsPage /> },
     { path: '*', element: <DemoMissing /> },
   ],
 }]);

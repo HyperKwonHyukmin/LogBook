@@ -273,6 +273,194 @@ function thumbSvg(f) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="100%" height="100%" fill="#0E1A2B"/>${lines.join('')}</svg>`;
 }
 
+
+/* ── 문서 화면(21·22) — 본문 검색 · 위치 발췌 · 미리보기 · 근거 요약 ──
+ * backend report_index/search.py 의 규칙을 줄여 옮겼다: 검색어(모든 단어 · 하나 이상 · 문구), 제목·자료 정보 + 본문 조각,
+ * 쪽·슬라이드 위치 발췌(강조 위치), 의미 추천(같은 대상의 다른 보고서를 관련 후보로). 근거 요약은 LLM 대신 미리 만든 예시.
+ */
+const REPORTS = FILES.filter((f) => f.kind === 'report');
+const NONE_TYPE = '__none__';
+// 의미 추천에서 '가까운' 대상 — 같은 국부 강도 문제를 다루는 구조물끼리
+const NEAR = { '계류 의장품': ['권상 러그', '장비 받침'], '권상 러그': ['계류 의장품', '블록'], '래싱 브리지': ['해치 커버'],
+  '해치 커버': ['래싱 브리지'], '레이더 마스트': ['연돌'], '연돌': ['레이더 마스트'], '크레인 받침': ['장비 받침'],
+  '장비 받침': ['크레인 받침'], 'Unit': ['Truss'], 'Truss': ['Unit'], '블록': ['권상 러그'] };
+const DOC_TYPES = ['해석 보고서', '연구 보고서', '시험 보고서', '기술 검토', '지침', '발표자료', '회의자료', '계산서', '기타'];
+const DOC_GROUPS = [
+  { key: 'report', label: '보고서', values: ['해석 보고서', '연구 보고서', '시험 보고서', '기술 검토', '지침'] },
+  { key: 'presentation', label: '발표자료', values: ['발표자료', '회의자료'] },
+  { key: 'other', label: '기타', values: ['계산서', '기타', NONE_TYPE] },
+];
+const norm = (t) => String(t || '').normalize('NFKC').toLowerCase();
+const docTypeOf = (f) => (f.docType ? [f.docType, false] : /\.pptx?$/i.test(f.name) ? ['발표자료', true] : [null, false]);
+const scopeOf = (e) => (e.hulls.length ? 'hull' : e.no_hull ? 'reference' : 'unclassified');
+const relatedModels = (f) => {
+  const out = new Map();
+  for (const m of f.uses || []) {
+    if (m) out.set(m.id, { file_id: m.id, name: m.name, relation: m.entry === f.entry ? 'same_entry' : 'explicit', entry_id: m.entry.id });
+  }
+  for (const m of models(f.entry)) if (!out.has(m.id)) out.set(m.id, { file_id: m.id, name: m.name, relation: 'same_entry', entry_id: f.entry.id });
+  return [...out.values()];
+};
+const metaText = (f) => norm([f.name, f.entry.title, docTypeOf(f)[0], ...f.entry.hulls, ...(f.entry.free || [])].join(' '));
+function queryTerms(q, mode) {
+  const t = norm(q).trim();
+  if (!t) return [];
+  if (mode === 'phrase') return [t];
+  return [...t.matchAll(/"([^"\n]+)"|([^\s"]+)/g)].map((m) => m[1] || m[2]);
+}
+/** 발췌 — 첫 일치 앞뒤로 자르고, 일치한 낱말 위치를 준다(화면 highlightParts 와 같은 셈, 한글은 코드 포인트 = 글자). */
+function snippetOf(text, terms) {
+  const chars = Array.from(text);
+  const low = norm(text);
+  let first = -1;
+  for (const t of terms) {
+    const i = low.indexOf(t);
+    if (i >= 0 && (first < 0 || i < first)) first = i;
+  }
+  const start = Math.max(0, first < 0 ? 0 : first - 40);
+  const piece = chars.slice(start, start + 150).join('');
+  const lp = norm(piece);
+  const marks = [];
+  for (const t of terms) {
+    let i = lp.indexOf(t);
+    while (i >= 0) { marks.push([i, i + t.length]); i = lp.indexOf(t, i + t.length); }
+  }
+  marks.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const m of marks) {
+    const last = merged[merged.length - 1];
+    if (last && m[0] <= last[1]) last[1] = Math.max(last[1], m[1]); else merged.push([...m]);
+  }
+  const lead = start > 0 ? 1 : 0;
+  return { text: (lead ? '…' : '') + piece + (start + 150 < chars.length ? '…' : ''),
+    highlights: merged.map(([a, b]) => [a + lead, b + lead]) };
+}
+function reportItem(f) {
+  const [type, auto] = docTypeOf(f);
+  return { file_id: f.id, name: f.name, entry_id: f.entry.id, entry_title: f.entry.title, hulls: f.entry.hulls,
+    no_hull: f.entry.no_hull, scope: scopeOf(f.entry), document_type: type, document_type_auto: auto,
+    model_count: relatedModels(f).length, posted_at: `${f.created || f.entry.confirmed_at}T09:00:00`,
+    snippets: [], index_state: null, match_type: null, score: 0, can_edit: false };
+}
+function listReports(p) {
+  const q = p.get('q') || '';
+  const mode = p.get('mode') || 'and';
+  const hybrid = p.get('retrieval') === 'hybrid';
+  const terms = queryTerms(q, mode);
+  const sort = p.get('sort') || (terms.length ? 'relevance' : 'recent');
+  const limit = Number(p.get('limit') || 50);
+  const offset = Number(p.get('offset') || 0);
+  const want = { scope: p.getAll('scope').filter(Boolean), document_type: p.getAll('document_type').filter(Boolean),
+    model: p.getAll('model').filter(Boolean) };
+  let rows = REPORTS.map((f) => ({ f, item: reportItem(f) }));
+  if (terms.length) {
+    const hit = [];
+    for (const r of rows) {
+      const meta = metaText(r.f);
+      const chunks = r.f.chunks || [];
+      const has = (t) => meta.includes(t) || chunks.some((c) => norm(c.text).includes(t));
+      const n = terms.filter(has).length;
+      if (mode === 'or' ? n === 0 : n < terms.length) continue;
+      const found = chunks.filter((c) => terms.some((t) => norm(c.text).includes(t)));
+      Object.assign(r.item, { match_type: 'keyword', score: n + found.length * 0.1,
+        snippets: found.slice(0, 3).map((c) => ({ file_id: r.f.id, name: r.f.name, locator: c.locator, ...snippetOf(c.text, terms) })) });
+      hit.push(r);
+    }
+    let semantic = [];
+    if (hybrid) {
+      // 의미 추천 — 키워드에 안 걸렸지만 같은·가까운 대상을 다룬 보고서(실제는 벡터 유사도 임계값 이상)
+      const targets = new Set(hit.slice(0, 20).flatMap((r) => [r.f.entry.target, ...(NEAR[r.f.entry.target] || [])]).filter(Boolean));
+      const got = new Set(hit.map((r) => r.f.id));
+      semantic = rows.filter((r) => !got.has(r.f.id) && targets.has(r.f.entry.target)).slice(0, 10).map((r, i) => {
+        const c = (r.f.chunks || [])[0];
+        Object.assign(r.item, { match_type: 'semantic', score: 0.82 - i * 0.02,
+          snippets: c ? [{ file_id: r.f.id, name: r.f.name, locator: c.locator, ...snippetOf(c.text, []) }] : [] });
+        return r;
+      });
+    }
+    rows = [...hit, ...semantic];
+  }
+  const facetOf = (r) => ({ scope: r.item.scope, document_type: r.item.document_type || NONE_TYPE, model: r.item.model_count ? 'yes' : 'no' });
+  const passes = (r, skip) => Object.entries(want).every(([k, vs]) => k === skip || !vs.length || vs.includes(facetOf(r)[k]));
+  const passed = rows.filter((r) => passes(r));
+  if (sort === 'title') passed.sort((a, b) => a.item.name.localeCompare(b.item.name));
+  else if (sort === 'recent') passed.sort((a, b) => b.item.posted_at.localeCompare(a.item.posted_at));
+  else passed.sort((a, b) => (a.item.match_type !== 'keyword') - (b.item.match_type !== 'keyword') || b.item.score - a.item.score);
+  const count = (key) => {
+    const c = {};
+    for (const r of rows.filter((x) => passes(x, key))) { const v = facetOf(r)[key]; c[v] = (c[v] || 0) + 1; }
+    return c;
+  };
+  const types = count('document_type');
+  const out = {
+    total: passed.length, items: passed.slice(offset, offset + limit).map((r) => r.item),
+    scopes: count('scope'),
+    document_types: Object.fromEntries(Object.entries(types).map(([k, v]) => [k === NONE_TYPE ? '' : k, v])),
+    applied: Object.fromEntries(Object.entries(want).filter(([, v]) => v.length)),
+    index_available: true, document_type_options: DOC_TYPES, document_type_groups: DOC_GROUPS,
+  };
+  if (terms.length) {
+    Object.assign(out, { keyword_total: passed.filter((r) => r.item.match_type === 'keyword').length,
+      semantic_total: passed.filter((r) => r.item.match_type === 'semantic').length, semantic_available: true,
+      semantic_error: null, semantic_limit: 10, semantic_exhaustive: false });
+  }
+  return out;
+}
+function reportCatalog(fileId) {
+  const f = FILE_BY_ID.get(fileId);
+  if (!f || f.kind !== 'report') return [404, { detail: 'report_not_found' }];
+  const [type, auto] = docTypeOf(f);
+  return [200, { file_id: f.id, entry_id: f.entry.id, entry_title: f.entry.title, scope: scopeOf(f.entry), hulls: f.entry.hulls,
+    document_type: type, document_type_auto: auto, can_edit: false, version: 1, related_models: relatedModels(f) }];
+}
+function fileOut(f) {
+  const slides = /\.pptx?$/i.test(f.name);
+  return { id: f.id, name: f.name, rel_path: `files/${f.name}`, kind: f.kind, size: 180000 + (f.id % 97) * 41000,
+    location: 'vault', drm_encrypted: false,
+    extract: f.kind === 'report' ? { state: 'done', error: null, summary: {
+      title: f.name.replace(/\.\w+$/, ''), author: f.author, created: f.created,
+      count: (f.chunks || []).filter((c) => !c.locator.startsWith('notes')).length, unit: slides ? 'slide' : 'paragraph',
+      slide_titles: f.titles || [] } } : null };
+}
+function entryOut(id) {
+  const e = ENTRIES.find((x) => x.id === id);
+  if (!e) return [404, { detail: 'entry_not_found' }];
+  return [200, { entry_id: e.id, title: e.title, status: 'confirmed', hulls: e.hulls.map((h) => ({ hull_no: h })),
+    vault_unc: `\\\\storage.hpc.hd.com\\999_LogBook\\vault\\${(e.confirmed_at || '2026').slice(0, 4)}\\${e.id}`,
+    files: e.files.map(fileOut) }];
+}
+function fileText(fileId) {
+  const f = FILE_BY_ID.get(fileId);
+  if (!f) return [404, { detail: 'file_not_found' }];
+  return [200, { state: 'done', error: null, summary: fileOut(f).extract?.summary || null, chunks: f.chunks || [] }];
+}
+/**
+ * 근거 요약 — 데모에는 LLM 이 없어 그 보고서의 발췌문을 엮어 미리 만든 예시 답변을 준다.
+ * 실제(/api/reports/answer)는 사내 Ollama 가 같은 발췌문만 근거로 답하고, 답 속 [S1] 번호가 준 발췌문인지 확인한다.
+ */
+function reportAnswer(body) {
+  const f = FILE_BY_ID.get((body?.file_ids || [])[0]);
+  if (!f || !(f.chunks || []).length) return [422, { detail: 'no_indexed_sources' }];
+  const cs = f.chunks.filter((c) => !c.locator.startsWith('notes')).map((c, i) => ({ id: `S${i + 1}`, file_id: f.id, name: f.name,
+    entry_id: f.entry.id, locator: c.locator, text: c.text }));
+  const lastLine = (c) => (c?.text || '').split('\n').slice(-1)[0];
+  const body1 = (c) => lastLine(c).replace(/^[^:]{1,12}: ?/, '').replace(/\.$/, '');
+  const by = (re) => cs.find((c) => re.test(c.text)) || cs[cs.length - 1];
+  const purpose = cs[0];
+  const result = by(/해석 결과|판정|공통 결과/);
+  const end = by(/결론|권고/);
+  const answer = [
+    '[설명회 데모] 미리 만든 예시 답변입니다. 실제 LogBook 은 사내 LLM 이 아래 발췌문만 근거로 답을 만듭니다.',
+    '',
+    `목적: ${body1(purpose)}. [${purpose.id}]`,
+    `주요 결과: ${body1(result)}. [${result.id}]`,
+    `결론·제한사항: ${body1(end)}. [${end.id}]`,
+  ].join('\n');
+  const used = new Set([purpose.id, result.id, end.id]);
+  return [200, { answer, citations: cs.filter((c) => used.has(c.id)), truncated: false,
+    scope_note: '색인된 보고서의 선택된 발췌문을 근거로 생성한 답변입니다.' }];
+}
+
 const ME = { employee_id: 'A476854', name: '설명회 데모', department: '구조시스템연구실', level: 2, wb_admin: false, status: 'active' };
 
 let cache = null;
@@ -281,7 +469,9 @@ const cached = () => {
   return cache;
 };
 
-function route(method, url) {
+const bodyOf = (init) => { try { return JSON.parse(init?.body || 'null'); } catch { return null; } };
+
+function route(method, url, init) {
   const u = new URL(url, 'http://demo.local');
   const path = u.pathname.replace(/^\/api/, '');
   const p = u.searchParams;
@@ -292,6 +482,19 @@ function route(method, url) {
   if (path === '/similar/bdf' && method === 'POST') return similarToUpload(p.get('name') || 'model.bdf', p.get('zone'));
   if (path === '/search') return [200, searchModels(p)];
   if (path === '/vocab') return [200, vocab(p.get('kind'))];
+  if (path === '/reports' && method === 'GET') return [200, listReports(p)];
+  if (path === '/reports/index-status') {
+    const n = REPORTS.length;
+    return [200, { total: n, ready: n, pending: 0, failed: 0, partial: 0, stale: 0, missing: 0,
+      last_updated: '2026-10-20T06:00:00+00:00', embedding_available: true, embedding_ready: n, index_available: true }];
+  }
+  if (path === '/reports/answer' && method === 'POST') return reportAnswer(bodyOf(init));
+  const cat = path.match(/^\/reports\/(\d+)\/catalog$/);
+  if (cat && method === 'GET') return reportCatalog(Number(cat[1]));
+  const ent = path.match(/^\/entries\/([^/]+)$/);
+  if (ent && method === 'GET') return entryOut(decodeURIComponent(ent[1]));
+  const txt = path.match(/^\/files\/(\d+)\/text$/);
+  if (txt) return fileText(Number(txt[1]));
   const thumb = path.match(/^\/files\/(\d+)\/thumb\.png$/);
   if (thumb) return [200, new Blob([thumbSvg(FILE_BY_ID.get(Number(thumb[1])))], { type: 'image/svg+xml' })];
   return [404, { detail: 'demo_not_available' }];
@@ -303,7 +506,7 @@ export function installMockApi() {
   window.fetch = async (input, init = {}) => {
     const url = typeof input === 'string' ? input : input.url;
     if (!url.startsWith('/api')) return real(input, init);
-    const [status, body] = route((init.method || 'GET').toUpperCase(), url);
+    const [status, body] = route((init.method || 'GET').toUpperCase(), url, init);
     await new Promise((r) => setTimeout(r, 60));   // 실제처럼 잠깐 기다린다(스켈레톤이 한 번 보인다)
     if (body instanceof Blob) return new Response(body, { status, headers: { 'Content-Type': body.type } });
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -317,4 +520,5 @@ export const DEMO_STATS = {
   entries: ENTRIES.length,
   files: FILES.length,
   models: MODEL_FILES.length,
+  reports: FILES.filter((f) => f.kind === 'report').length,
 };
