@@ -35,8 +35,9 @@ export function Tabs({ items, value, onChange, label, controls, className = '' }
 /**
  * 세그먼트(값 전환) — 선택은 흰 바탕 + 그림자. 파란 채움은 쓰지 않는다.
  * role: 'radiogroup'(기본) | 'tablist'
+ * dense: 좁은 칸에 항목이 많을 때 안쪽 여백을 줄인다(관계 지도 모으는 기준 5개 — 224px 칸).
  */
-export function Segmented({ items, value, onChange, label, role = 'radiogroup', size = 'sm', className = '', disabled = false, stretch = false }) {
+export function Segmented({ items, value, onChange, label, role = 'radiogroup', size = 'sm', className = '', disabled = false, stretch = false, dense = false }) {
   const itemRole = role === 'tablist' ? 'tab' : 'radio';
   const refs = useRef([]);
   function onKeyDown(e, idx) {
@@ -57,7 +58,7 @@ export function Segmented({ items, value, onChange, label, role = 'radiogroup', 
           <button key={t.id} ref={(el) => { refs.current[idx] = el; }} type="button" role={itemRole} id={t.tabId}
                   aria-controls={t.controls} tabIndex={on ? 0 : -1} disabled={disabled} {...sel}
                   onClick={() => onChange(t.id)} onKeyDown={(e) => onKeyDown(e, idx)}
-                  className={`${ih} ${stretch ? 'flex-1' : ''} whitespace-nowrap rounded-[4px] px-2.5 font-medium transition-[background-color,color,box-shadow] duration-150 ease-out
+                  className={`${ih} ${stretch ? 'flex-1' : ''} ${dense ? 'min-w-0 px-0.5' : 'px-2.5'} whitespace-nowrap rounded-[4px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out
                     disabled:cursor-not-allowed disabled:text-n-500
                     ${on ? 'bg-n-0 text-n-900 shadow-sm' : 'text-n-600 hover:text-n-900 active:bg-n-150'}`}>
             {t.label}

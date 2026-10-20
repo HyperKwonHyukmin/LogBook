@@ -168,7 +168,7 @@ function FilterColumn({ model, pivot, onPivot, color, onColor, onGo, layer, onLa
                                          max-[1100px]:order-2 max-[1100px]:border-r-0 max-[1100px]:border-t">
       <section className="flex flex-col gap-2">
         <SecTitle>모으는 기준</SecTitle>
-        <Segmented items={PIVOT_ITEMS} value={pivot} onChange={onPivot} label="모으는 기준" stretch className="w-full" />
+        <Segmented items={PIVOT_ITEMS} value={pivot} onChange={onPivot} label="모으는 기준" stretch dense className="w-full" />
       </section>
       <section className="flex flex-col gap-2">
         <SecTitle>자료 사이 관계</SecTitle>
