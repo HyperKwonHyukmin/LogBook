@@ -80,8 +80,8 @@ class BackgroundChild:
         self.proc = None
         self.log = events.DailyLogWriter(LOG_DIR, subdir=subdir)
         self.policy = RestartPolicy()
-        self.dot = None
-        self.label = None
+        self.dot: tk.Label | None = None
+        self.label: tk.Label | None = None
 
     def running(self):
         return self.proc is not None and self.proc.poll() is None
@@ -352,10 +352,33 @@ class LogbookManager:
         self._schedule_api_restart()
 
     # ── Worker·Index 시작/스트리밍/종료 ────────────────────────────────
+    def _kill_strays(self, child):
+        """이 backend 의 같은 명령으로 떠 있는데 이 창이 품지 않은 프로세스(창이 강제로 꺼지며 남긴 고아)를 끝낸다.
+
+        API 의 _kill_port 와 같은 자리. 남겨 두면 Index 는 잠금에 막혀 못 뜨고, Worker 는 옛 코드로 작업을 계속 처리한다(41).
+        venv python.exe 는 실제 python 을 자식으로 띄우므로 찾은 프로세스의 자손까지 끝낸다."""
+        needle = " ".join(child.cmd[1:]).lower()
+        base = str(BASE_DIR).lower()
+        own = {os.getpid()} | {p.pid for p in psutil.Process().children(recursive=True)}
+        for proc in psutil.process_iter(["pid", "cmdline"]):
+            try:
+                cmdline = " ".join(proc.info["cmdline"] or []).lower()
+                if proc.pid in own or needle not in cmdline or base not in cmdline:
+                    continue
+                victims = [proc] + proc.children(recursive=True)
+                for victim in victims:
+                    victim.kill()
+                psutil.wait_procs(victims, timeout=5)
+                self._log(f"  남아 있던 {child.name} 프로세스 종료: PID {proc.pid}", "warning")
+                events.append_event(LOG_DIR, "L1", f"{child.key}_stray_killed", {"pid": proc.pid})
+            except psutil.Error:
+                continue
+
     def _start_child(self, child):
         if child.running():
             return True
         self._log(f"{child.name} 시작 중...", "info")
+        self._kill_strays(child)
         try:
             child.proc = subprocess.Popen(
                 child.cmd, cwd=str(BASE_DIR),

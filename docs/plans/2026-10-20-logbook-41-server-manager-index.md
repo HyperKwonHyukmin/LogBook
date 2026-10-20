@@ -36,6 +36,18 @@
 - 145(사용자): **이번 한 번은 Update 뒤 Server Manager 창을 닫고 `Logbook_Server.bat` 로 다시 연다** — 떠 있는 Manager 는 옛 코드라
   Update 가 API·Worker 만 다시 띄운다. 다시 연 창에 Index 점이 초록인지, 몇 분 뒤 `.venv\Scripts\python.exe -m app.report_index.worker --status` 의 `documents` 가 늘어나는지.
 
+## 후속 — 고아 Worker·Index 정리(2026-10-20)
+
+145 첫 반영 때 Index 가 "다른 보고서 색인 워커가 이미 실행 중"(WorkerLock)으로 못 떴다. 잠금을 쥔 것은 08:56:23 에 뜬 색인 워커였고,
+그 부모(옛 Server Manager, PID 33972)는 이미 없었다 — 창이 `_on_close` 없이 꺼지며 자식을 고아로 남겼다(콘솔 창 닫기·강제 종료로 추정).
+API 는 `_kill_port` 로 옛 프로세스를 치우지만 Worker·Index 에는 그런 정리가 없었다.
+
+- `_kill_strays(child)`: Worker·Index 를 띄우기 직전, **명령줄에 이 backend 경로와 같은 명령(`-m app.worker` / `-m app.report_index.worker --loop`)이 든
+  python 중 이 창의 자손이 아닌 것**을 자손까지 끝낸다(venv `python.exe` 는 실제 python 을 자식으로 띄운다). 사건 `worker_stray_killed`·`index_stray_killed`.
+  `--once`·`--status` 처럼 손으로 돌리는 명령은 명령줄이 달라 건드리지 않는다.
+- 검증(개발 PC): 부모가 끝난 고아 한 쌍(실행기 + 실제 python)을 창 시작 때 끝내고, 창이 띄운 Worker 와 무관한 python 은 남는 것 확인.
+- Update 는 창 메모리의 옛 코드로 다시 띄우므로, Server Manager 자체가 바뀐 업데이트는 창을 다시 열어야 한다(`ops/README.md` 9절).
+
 ## 145 첫 색인 참고
 
 - 처음에는 보고서 전부를 추출한다(기본 5분마다 25개). 빨리 채우려면 `.env` 에 `LOGBOOK_REPORT_BATCH_SIZE=200`·`LOGBOOK_REPORT_INTERVAL=60` 을 넣고 Update(또는 Stop/Start All), 끝나면 지운다(`ops/README.md` 13-2).

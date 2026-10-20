@@ -152,6 +152,11 @@ Start-ScheduledTask -TaskName 'Logbook Report Index'
 **Server Manager(145)**: 창의 **[⟳ Update]** 한 번이면 된다(6절). 로그 창에서 `[2/4] git pull` 의 After 해시와
 `[3/4]` 의 pip 결과를 본다 — pip 가 실패해도 재시작은 진행되니 오류 줄이 보이면 아래 명령으로 다시 설치하고 Update 를 한 번 더 누른다.
 
+- **`backend\server_manager.py`·`backend\serverguard\` 가 바뀐 업데이트는 Update 뒤 창을 닫고 `Logbook_Server.bat` 로 다시 연다.**
+  Update 는 창이 이미 메모리에 올린 옛 코드로 프로세스를 다시 띄우기 때문이다.
+- 창은 **창의 닫기(X)로** 닫는다. `.bat` 콘솔 창을 닫거나 작업 관리자로 끝내면 Worker·Index 가 고아로 남는다.
+  다음에 창을 열 때 같은 명령의 남은 프로세스를 찾아 끝내지만(41, 로그 '남아 있던 … 프로세스 종료'), 그 사이에는 옛 Worker 가 작업을 계속 처리한다.
+
 ```powershell
 cd C:\Coding\Logbook
 backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
