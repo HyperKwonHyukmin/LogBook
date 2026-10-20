@@ -38,7 +38,7 @@ export const pairsOf = (model, layer = 'all') => (layer === 'model' ? model.pair
 /** 모델 없이 보고서만 있는 자료 — 지도에서 속이 빈 점. */
 export const isReportOnly = (e) => !e.raw.models && e.raw.reports > 0;
 
-// 자료 점 색(해석 종류·선종) — 많은 값 8개만 색을 주고 나머지는 회색
+// 자료 점 색(선종, 42 — 해석 종류는 없앴다) — 많은 값 8개만 색을 주고 나머지는 회색
 export const PALETTE = ['#4B78C2', '#2F8A74', '#BE6A3E', '#8065B5', '#AE5279', '#8A7A2E', '#3E8FA8', '#9A5B3C'];
 export const OTHER_COLOR = '#9AA1AB';
 
@@ -69,7 +69,7 @@ export function buildModel(data) {
     return h;
   };
   const entries = (data?.entries || []).map((e) => {
-    const n = { id: `e:${e.id}`, eid: e.id, label: e.title || e.id, raw: e, atype: e.analysis_type || null,
+    const n = { id: `e:${e.id}`, eid: e.id, label: e.title || e.id, raw: e,
       ship: e.hulls?.[0] ? ships[e.hulls[0]] || null : null, of: {} };
     for (const g of GROUP_KEYS) {
       n.of[g] = valuesOf(e, g, kinds, sizes).map((v) => hub(g, v));
@@ -89,7 +89,7 @@ export function buildModel(data) {
   const byId = new Map([...hubs.values(), ...Object.values(NONE), ...entries].map((n) => [n.id, n]));
   return {
     entries, hubs, NONE, pairs, docPairs, byId,
-    colors: { atype: palette(entries, 'atype'), ship: palette(entries, 'ship') },
+    colors: { ship: palette(entries, 'ship') },
     unsigned: data?.unsigned_models || 0, truncated: !!data?.truncated,
     docIndex: data?.doc_index || null,
   };

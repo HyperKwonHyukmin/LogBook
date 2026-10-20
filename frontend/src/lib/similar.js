@@ -29,7 +29,7 @@ export function mixText(mix) {
   return `보 ${Math.round(beam * 100)}% · 쉘 ${Math.round(shell * 100)}%`;
 }
 
-/** 같은 점·다른 점(각각 최대 3개). base·other = API 의 특징(dims·elems·mix·sections·zone(s)·atype). */
+/** 같은 점·다른 점(각각 최대 3개). base·other = API 의 특징(dims·elems·mix·sections·zone(s)). */
 export function compareLines(base, other, score) {
   const same = [];
   const diff = [];
@@ -48,7 +48,6 @@ export function compareLines(base, other, score) {
   const onlyOther = (other.sections || []).filter((s) => !(base.sections || []).includes(s));
   if (onlyOther.length) diff.push(`단면 ${onlyOther.length}개 다름${onlyOther.length <= 2 ? ` (${onlyOther.join(', ')})` : ''}`);
   if (base.zone && !(other.zones || []).includes(base.zone)) diff.push(`구역 ${(other.zones || []).join(', ') || '없음'}`);
-  if (base.atype && other.atype && base.atype !== other.atype) diff.push(`해석 ${other.atype}`);
   return { same: same.slice(0, 3), diff: diff.slice(0, 3) };
 }
 
@@ -71,7 +70,7 @@ export function orderResults(results, mode) {
 /** 고른 BDF 가 업로드 상한을 넘는가(서버도 같은 상한으로 막는다). */
 export const MAX_UPLOAD_BYTES = 32 * 1024 * 1024;
 
-/** 제목 머리의 호선(이름 규칙 20: '호선 · 구역 · 해석 종류 · 구별자')이 옆 호선 칩과 같으면 뺀다. */
+/** 제목 머리의 호선(이름 규칙 20·42: '호선 · 구역 · 대상 · 구별자')이 옆 호선 칩과 같으면 뺀다. */
 export function titleWithoutHull(title, hulls) {
   const [head, ...rest] = String(title || '').split(' · ');
   return rest.length && (hulls || []).includes(head) ? rest.join(' · ') : title;

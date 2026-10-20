@@ -21,7 +21,7 @@ export const ACTION_LABELS = {
   USER_ROLE: '등급 변경', MASTER_TRANSFER: 'Master 이양',
   // 15 — WorkBench 사용자 첫 로그인·LogBook 등급
   USER_JOIN: '처음 들어옴(LV1)', USER_LEVEL: '등급 변경',
-  ENTRY_ACCESS: '공개 범위 변경', ENTRY_GRANT: '열람 허락', ENTRY_REVOKE: '열람 허락 회수',
+  ENTRY_ACCESS: '공개 범위 변경',
   // 14 — 판 정리
   ENTRY_REVISIONS: '판 정리',
   // 17 — 완전 동일 BDF
@@ -38,7 +38,8 @@ export const ACTION_LABELS = {
 /** 20 — 확정에 필요한 분류 칸(BDF 자료). 서버 required_missing·409 required_fields 의 missing 과 같은 이름. */
 // 'hull' = 호선·'호선 없음(공용)'이 모두 없음
 // 40 — 구역(위치)이 없는 모델(Unit·Truss·전선 모델)은 대상만 있어도 된다
-export const REQUIRED_LABELS = { hull: '호선(또는 공용)', zone_or_target: '구역 또는 대상', analysis_type: '해석 종류' };
+// 42 — 해석 종류는 없앴다
+export const REQUIRED_LABELS = { hull: '호선(또는 공용)', zone_or_target: '구역 또는 대상' };
 export const requiredText = (missing) => (missing || []).map((k) => REQUIRED_LABELS[k] || k).join(', ');
 
 /** 워커 작업 종류·상태(관리자 운영 화면). */
@@ -149,7 +150,7 @@ export const ERROR_LABELS = {
   too_many_values: '구역·태그는 각각 20개까지 정할 수 있습니다.',
   too_many_entries: '한 번에 확인할 수 있는 자료 수를 넘었습니다.',
   // 20 — 필수 분류·자료 정비
-  required_fields: 'BDF 자료는 호선(또는 공용)·구역 또는 대상·해석 종류가 있어야 확정할 수 있습니다.',
+  required_fields: 'BDF 자료는 호선(또는 공용)과 구역 또는 대상이 있어야 확정할 수 있습니다.',
   no_hull_with_hulls: "'호선 없음(공용)' 과 호선을 함께 넣을 수 없습니다.",
   nothing_to_revert: '되돌릴 제목 정비 기록이 없습니다.',
   title_changed_since: '정비 뒤에 제목이 다시 바뀌어 되돌리지 않았습니다.',
@@ -166,7 +167,7 @@ export const ERROR_LABELS = {
 export function errorText(err, fallback = '요청을 처리하지 못했습니다.') {
   const code = typeof err?.detail === 'string' ? err.detail : err?.detail?.code;
   if (code === 'required_fields' && err.detail?.missing?.length) {
-    return `BDF 자료는 호선(또는 공용)·구역 또는 대상·해석 종류가 있어야 확정할 수 있습니다 — 빠진 칸: ${requiredText(err.detail.missing)}`;
+    return `BDF 자료는 호선(또는 공용)과 구역 또는 대상이 있어야 확정할 수 있습니다 — 빠진 칸: ${requiredText(err.detail.missing)}`;
   }
   return ERROR_LABELS[code] || fallback;
 }
@@ -180,8 +181,8 @@ export function formatBytes(n) {
   return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`;
 }
 
-// 15 — '해석 연도'(year)는 해석 시기와 함께 없앴다
-export const FACET_LABELS = { hull: '호선', ship_type: '선종', analysis_type: '해석 종류', zone: '구역', target: '대상',
+// 15 — '해석 연도'(year)는 해석 시기와 함께 없앴다 · 42 — 해석 종류도 없앴다
+export const FACET_LABELS = { hull: '호선', ship_type: '선종', zone: '구역', target: '대상',
   tag: '태그', uploaded_by: '올린 사람', kind: '파일 종류' };
 
 export const EXTRACT_LABELS = {
@@ -205,7 +206,7 @@ export const MODEL_STATE_LABELS = {
 };
 
 export const MATCH_LABELS = { entry_id: 'Entry 번호', hull: '호선', title: '제목', tag: '태그',
-  analysis_type: '해석 종류', target: '대상', description: '설명', file: '파일명', body: '본문',
+  target: '대상', description: '설명', file: '파일명', body: '본문',
   wb_origin: 'WorkBench 해석',   // 39 — 'WB #123' 검색
   document_type: '문서 분류' };   // 21
 

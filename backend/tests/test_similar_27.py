@@ -25,20 +25,20 @@ def test_sections_and_features():
 
 
 def test_score_shape_first_and_parts():
-    a = similar.features(FRAME, BOX_FRAME, FP_FRAME, "101", "g1") | {"zone": "정반", "atype": "Truss"}
+    a = similar.features(FRAME, BOX_FRAME, FP_FRAME, "101", "g1") | {"zone": "정반"}
     same_geom = similar.features(FRAME, {"min": [0, 0, 0], "max": [22000, 8000, 1500]}, FP_PLATE, "101", "g1") \
-        | {"zones": ["블록"], "atype": "권상"}
-    plate = similar.features(PLATE, BOX_PLATE, FP_PLATE, "101", "g2") | {"zones": ["블록"], "atype": "권상"}
+        | {"zones": ["블록"]}
+    plate = similar.features(PLATE, BOX_PLATE, FP_PLATE, "101", "g2") | {"zones": ["블록"]}
     s1, s2 = similar.score(a, same_geom), similar.score(a, plate)
     assert s1["shape"] and s1["total"] >= .9 > s2["total"]
     assert set(s2["raw"]) == {"size", "scale", "mix", "sec", "tag"} and s2["raw"]["tag"] == 0
     assert similar.score(a, a | {"zones": ["정반"], "sig": None})["raw"]["tag"] == 1
 
 
-def _model(db, make_entry_file, *, hull, title, counts, bbox, fp, sig, zone=None, atype="Truss", access="normal",
+def _model(db, make_entry_file, *, hull, title, counts, bbox, fp, sig, zone=None, access="normal",
            solve=None, by="M100001"):
     e, f = make_entry_file(title=title, hulls=(hull,), name=f"{title}.bdf", kind="model", uploaded_by=by,
-                           analysis_type=atype, confirmed_at=datetime(2026, 9, 1))
+                           confirmed_at=datetime(2026, 9, 1))
     e.access = access
     db.add(models.ModelSummary(file_id=f.id, state="done", key=f"{f.id:04d}" + "k" * 60, counts=counts, bbox=bbox,
                                fingerprint=fp, sol="101", sig_version=SIG_VERSION, sig_geometry=sig))
@@ -64,7 +64,7 @@ def world(db, make_user, make_entry_file):
     s2 = _model(db, make_entry_file, hull="9003", title="같은 설계 2", counts=FRAME, bbox=BOX_FRAME, fp=FP_FRAME,
                 sig=g, zone="정반", solve="pass")
     plate = _model(db, make_entry_file, hull="9004", title="판", counts=PLATE, bbox=BOX_PLATE, fp=FP_PLATE,
-                   sig="b" * 64, zone="블록", atype="권상")
+                   sig="b" * 64, zone="블록")
     hidden = _model(db, make_entry_file, hull="9004", title="숨은 같은 설계", counts=FRAME, bbox=BOX_FRAME,
                     fp=FP_FRAME, sig=g, access="blocked", by="U100001")   # 남이 올린 블록 자료
     return {k: v for k, v in dict(base=base, s1=s1, s2=s2, plate=plate, hidden=hidden).items()}
@@ -75,7 +75,7 @@ def test_similar_to_file_groups_same_design(world, client, auth_headers):
     r = client.get(f"/api/similar?file_id={fid}", headers=auth_headers("M100001"))
     assert r.status_code == 200, r.text
     d = r.json()
-    assert d["base"]["zone"] == "정반" and d["base"]["atype"] == "Truss" and d["base"]["has_signature"]
+    assert d["base"]["zone"] == "정반" and "atype" not in d["base"] and d["base"]["has_signature"]   # 42
     first = d["results"][0]
     assert first["score"]["shape"] and first["member_total"] == 2          # 같은 설계 둘이 한 줄, 숨은 자료는 빠짐
     assert first["lead"]["title"] == "같은 설계 2"                          # 대표 = 검증 통과
@@ -86,7 +86,7 @@ def test_similar_to_file_groups_same_design(world, client, auth_headers):
 
 def test_zone_override_and_hidden_base(world, client, auth_headers):
     h = auth_headers("M100001")
-    r = client.get(f"/api/similar?file_id={world['base'][1].id}&zone=블록&analysis_type=권상", headers=h).json()
+    r = client.get(f"/api/similar?file_id={world['base'][1].id}&zone=블록&analysis_type=권상", headers=h).json()   # 42 — 옛 analysis_type 은 무시
     plate = next(x for x in r["results"] if x["lead"]["title"] == "판")
     assert plate["score"]["raw"]["tag"] == 1
     assert client.get(f"/api/similar?file_id={world['hidden'][1].id}", headers=h).status_code == 404

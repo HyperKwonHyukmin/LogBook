@@ -76,7 +76,6 @@ def test_all_terms_must_match(db, corpus):
 
 
 def test_filename_match(db, corpus):
-    # "mooring" 만 찾으면 해석 종류 Mooring(50)이 파일명(30)보다 높아 matched 가 analysis_type 이 된다
     res = _q(db, "mooring.pptx")
     assert _ids(res) == [corpus["e1"].entry_id] and res["items"][0]["matched"] == ["file"]
 
@@ -107,7 +106,7 @@ def test_filters_and_disjunctive_facets(db, corpus):
     assert _ids(res) == [corpus["e1"].entry_id]
     hull_counts = {f["value"]: f["count"] for f in res["facets"]["hull"]}
     assert hull_counts == {"9999": 1, "9998": 1}  # 자기 필터는 빼고 센다
-    assert res["facets"]["analysis_type"] == [{"value": "Mooring", "count": 1}]
+    assert "analysis_type" not in res["facets"]   # 42 — 해석 종류는 없앴다
     kinds = {f["value"]: f["count"] for f in res["facets"]["kind"]}
     assert kinds == {"report": 1, "model": 1}
 
@@ -118,7 +117,8 @@ def test_other_filters(db, corpus):
     assert _ids(_q(db, filters={"year": "2019"})) == [corpus["e2"].entry_id, corpus["e1"].entry_id]
     assert _ids(_q(db, filters={"uploaded_by": "A100002"})) == [corpus["e2"].entry_id]
     assert _ids(_q(db, filters={"kind": "model"})) == [corpus["e1"].entry_id]
-    assert _ids(_q(db, filters={"analysis_type": "Strength"})) == [corpus["e2"].entry_id]
+    # 42 — 해석 종류 필터는 없앴다 — 보내도 거르지 않는다(옛 열 값이 있어도)
+    assert _ids(_q(db, filters={"analysis_type": "Strength"})) == [corpus["e2"].entry_id, corpus["e1"].entry_id]
 
 
 def test_analysis_period_is_not_used(db, corpus, make_entry_file):
@@ -162,10 +162,10 @@ def test_file_unit(db, corpus):
 
 def test_item_shape(db, corpus):
     item = _q(db, "9999")["items"][0]
-    for key in ("entry_id", "title", "status", "analysis_type", "posted_at", "hulls", "zones", "tags",
+    for key in ("entry_id", "title", "status", "posted_at", "hulls", "zones", "tags",
                 "uploaded_by", "confirmed_at", "file_count", "kinds", "score", "matched", "snippets"):
         assert key in item
-    assert "analysis_period" not in item
+    assert "analysis_period" not in item and "analysis_type" not in item   # 15·42
     assert item["file_count"] == 2 and sorted(item["kinds"]) == ["model", "report"]
 
 

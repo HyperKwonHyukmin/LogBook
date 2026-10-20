@@ -14,22 +14,23 @@ router = APIRouter(prefix="/api", tags=["search"])
 @router.get("/search")
 def search(q: str = "", unit: str = Query(default="entry", pattern="^(entry|file)$"),
            hull: list[str] | None = Query(default=None), ship_type: list[str] | None = Query(default=None),
-           analysis_type: list[str] | None = Query(default=None), zone: list[str] | None = Query(default=None),
+           zone: list[str] | None = Query(default=None),
            uploaded_by: list[str] | None = Query(default=None), kind: list[str] | None = Query(default=None),
            tag: list[str] | None = Query(default=None), target: list[str] | None = Query(default=None),
            drafts: bool = False, fav: bool = False,
            sort: str | None = Query(default=None, pattern="^(relevance|period|recent|favorited|hull|title)$"),
            limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0),
-           group: str | None = Query(default=None, pattern="^(hull|zone|target|uploaded_by|analysis_type|tag)$"),
+           group: str | None = Query(default=None, pattern="^(hull|zone|target|uploaded_by|tag)$"),
            group_value: str | None = Query(default=None, max_length=200),
            group_sort: str = Query(default="count", pattern="^(count|name)$"),
            group_rows: int = Query(default=5, ge=1, le=50),
            group_limit: int = Query(default=30, ge=1, le=200), group_offset: int = Query(default=0, ge=0),
            db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
     # 15 — 옛 주소의 year=(해석 연도)는 받지 않는다(무시). sort=period 는 최신순으로 받는다
+    # 42 — 옛 주소의 analysis_type=(해석 종류)도 받지 않는다(무시). group=analysis_type 은 422
     # 19 — 칸마다 값 여러 개는 같은 이름을 되풀이한다(?hull=3496&hull=3497 — 같은 칸 안은 OR, 칸끼리는 AND).
     # 값에 쉼표가 들어갈 수 있어(태그·구역) 쉼표로 나누지 않는다. 옛 단일값 주소(?zone=X)는 그대로 값 하나다
-    filters = {"hull": hull, "ship_type": ship_type, "analysis_type": analysis_type, "zone": zone,
+    filters = {"hull": hull, "ship_type": ship_type, "zone": zone,
                "uploaded_by": uploaded_by, "kind": kind, "tag": tag, "target": target}
     filters = {k: vs for k, vs in ((k, filter_values(v)) for k, v in filters.items()) if vs}
     query = SearchQuery(q=q.strip()[:200], unit=unit, filters=filters,

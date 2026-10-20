@@ -18,7 +18,7 @@ function writeCollapsed(v) {
 const Label = ({ children }) => <span className="shrink-0 text-meta font-medium text-n-600">{children}</span>;
 
 /**
- * 값 막대 묶음(해석 종류·호선) — '값 ▬▬ 12'. 누르면 그 값을 필터에 더하고 다시 누르면 뺀다(19 — 한 칸 여러 값).
+ * 값 막대 묶음(호선) — '값 ▬▬ 12'. 누르면 그 값을 필터에 더하고 다시 누르면 뺀다(19 — 한 칸 여러 값).
  * 한 색(옅은 남색)이고, 지금 걸린 값만 브랜드 남색으로 강조한다.
  */
 function ValueBars({ field, items, more, selected, onFilter, mono = false }) {
@@ -96,7 +96,6 @@ export default function ResultSummary({ summary, filters = {}, onFilter }) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   if (!summary || summary.total < 2) return null;
   function toggle() { setCollapsed((c) => { writeCollapsed(!c); return !c; }); }
-  const moreA = Math.max(0, (summary.analysis_type_values || 0) - Math.min(SHOW_VALUES, summary.analysis_type?.length || 0));
   const moreH = Math.max(0, (summary.hull_values || 0) - Math.min(SHOW_VALUES, summary.hull?.length || 0));
   return (
     <section aria-label="결과 요약" className="border-b border-n-200 bg-n-25 px-5 py-1.5">
@@ -107,9 +106,6 @@ export default function ResultSummary({ summary, filters = {}, onFilter }) {
       </button>
       {!collapsed && (
         <div id="result-summary-body" className="flex flex-col gap-1 pb-1 pt-0.5">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-1">
-            <ValueBars field="analysis_type" items={summary.analysis_type} more={moreA} selected={filterValues(filters, 'analysis_type')} onFilter={onFilter} />
-          </div>
           <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-1">
             <ValueBars field="hull" items={summary.hull} more={moreH} selected={filterValues(filters, 'hull')} onFilter={onFilter} mono />
             <SizeSummary size={summary.model_size} />

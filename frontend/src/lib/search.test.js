@@ -39,11 +39,16 @@ test('태그 필터·정렬도 주소에 담는다(08)', () => {
   expect(writeSearch(s).toString()).toBe('tag=%EA%B3%84%EB%A5%98&sort=recent');
   expect(readSearch(new URLSearchParams('sort=bogus')).sort).toBe('');
   expect(readSearch(new URLSearchParams('sort=period')).sort).toBe('');
+  // 42 — 옛 주소의 해석 종류 필터·묶기는 읽지 않는다(서버로 보내지 않는다)
+  const old = readSearch(new URLSearchParams('analysis_type=FE%20%ED%95%B4%EC%84%9D&group=analysis_type'));
+  expect(old.filters).toEqual({});
+  expect(old.group).toBe('');
 });
 
 test('속성 값 하나로 거른 검색 주소(09)', () => {
   expect(filterHref('zone', '선미부')).toBe('/?zone=%EC%84%A0%EB%AF%B8%EB%B6%80');
-  expect(filterHref('analysis_type', 'FE 해석')).toBe('/?analysis_type=FE+%ED%95%B4%EC%84%9D');
+  expect(filterHref('analysis_type', 'FE 해석')).toBe('/');   // 42 — 해석 종류 필터는 없앴다
+  expect(filterHref('target', 'Unit')).toBe('/?target=Unit');
   expect(filterHref('hull', '9002')).toBe('/?hull=9002');
   expect(filterHref('bogus', 'x')).toBe('/');
   expect(filterHref('zone', '')).toBe('/');

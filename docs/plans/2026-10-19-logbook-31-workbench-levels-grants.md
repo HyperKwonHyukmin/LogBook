@@ -15,7 +15,7 @@
 |---|---|
 | `wb_users.list_active` | 검색이 앞부분 일치 → **이름·사번·부서 어디든 포함** |
 | `GET /api/users/lookup` | 검색어가 없으면 활성 가입자 전체(최대 500), 응답에 부서·직급 |
-| `POST /api/entries/{id}/grants` `{employee_ids}` | 여러 명 한 번에(최대 200). 모두 먼저 확인 — 한 명이라도 없거나(404) 비활성(422)이면 아무도 더하지 않는다. 이미 있는 사람은 건너뛴다. 감사 ENTRY_GRANT 는 사람마다, registry 는 한 번. 단건 `PUT` 은 그대로 둔다 |
+| `POST /api/entries/{id}/grants` `{employee_ids}` | 여러 명 한 번에(최대 200). 모두 먼저 확인 — 한 명이라도 없거나(404) 비활성(422)이면 아무도 더하지 않는다. 이미 있는 사람은 건너뛴다. 감사 기록 없음(2026-10-20 — 허락·회수는 이력에 남기지 않기로, README '등급 정리'), registry 는 한 번. 단건 `PUT` 은 그대로 둔다 |
 | `grants_of` | 허락 목록에 부서 |
 | `GET /api/integration/levels` | (공유 비밀키) 저장 등급 `{levels: {사번: {level, last_login}}, labels}` — WorkBench 사용자 관리 화면용 |
 | `roles.reset_to_guest` · CLI `level-guest [--apply]` | 관리자가 아닌 LV2 를 모두 LV1 로. WorkBench 관리자(wb_admin)·LV3 지정자는 그대로. 사람마다 감사 USER_LEVEL(행위자 system) |

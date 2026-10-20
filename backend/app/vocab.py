@@ -1,9 +1,9 @@
-"""해석 종류·구역·대상 구조물 통제 어휘(08 — SharePoint 관리 용어·M-Files 값 목록에 해당).
+"""구역·대상 구조물 통제 어휘(08 — SharePoint 관리 용어·M-Files 값 목록에 해당).
 
 새 체계를 따로 만들지 않고 태그 동의어(tags.py)를 넓힌다.
 - 용어 = `listed=1` 인 대표 태그(alias_of 없음). 동의어 = 용어를 alias_of 로 가리키는 태그(한 단계).
-- 구역(zone) 은 기존처럼 entry_tags 로 Entry 와 잇는다. 해석 종류(atype) 태그는 사전 역할만 하고,
-  Entry 의 값은 entries.analysis_type 문자열이 갖는다.
+- 구역(zone) 은 기존처럼 entry_tags 로 Entry 와 잇는다.
+- 42 — 해석 종류(atype)는 없앴다. `tags.kind='atype'` 행·`entries.analysis_type` 열이 남아 있어도 읽지 않는다.
 - 38 — 대상 구조물(target) 은 구역처럼 entry_tags 로 잇되 자료당 하나(선택 칸)다. 태그로 잇는 종류 = TAG_KINDS.
 - 정규화(canon): 같은 값의 태그 → 그 대표 / 공백·대소문자만 다른 표기 → 용어 / 그 밖은 원래 값.
 - 못 맞춘 값은 지우거나 바꾸지 않는다 — '목록 밖 값'으로 남아 관리자가 합치거나 용어로 올린다."""
@@ -19,15 +19,14 @@ from .storage.paths import StoragePaths
 log = logging.getLogger(__name__)
 
 # 40 — 구역 = 배 안의 위치(여럿), 대상 = 해석한 구조물·모델 단위(하나). 두 축이라 같은 값을 두지 않는다
-KINDS = ("atype", "zone", "target")
-TAG_KINDS = ("zone", "target")   # entry_tags 로 Entry 와 잇는 종류(atype 은 entries.analysis_type 문자열)
-FIELD = {"atype": "analysis_type", "zone": "zones", "target": "target"}   # Entry 이력(감사)의 칸 이름
+KINDS = ("zone", "target")
+TAG_KINDS = KINDS   # entry_tags 로 Entry 와 잇는 종류
+FIELD = {"zone": "zones", "target": "target"}   # Entry 이력(감사)의 칸 이름
 OTHER = "기타"
 LIVE = ("draft", "confirmed")
-MAX_LEN = {"atype": 50, "zone": 100, "target": 100}                  # entries.analysis_type = String(50)
+MAX_LEN = {"zone": 100, "target": 100}
 
 DEFAULTS = {
-    "atype": ["강도 평가", "FE 해석", "진동 해석", "피로 평가", "좌굴 평가", "권상 해석", "계류 해석", "운송 해석", OTHER],
     "zone": ["선수부", "선미부", "화물창", "기관실", "거주구", "상갑판", "이중저", OTHER],
     # 38 — 대상 구조물(제목 네 번째 칸). 첫 목록은 자주 보는 의장·구조물 — 관리자가 '분류 목록'에서 고친다
     "target": ["전선 모델", "블록", "계류 의장품", "크레인 받침", "래싱 브리지", "해치 커버", "레이더 마스트",
@@ -35,16 +34,6 @@ DEFAULTS = {
 }
 # 기본 동의어 — 이미 다른 용어 묶음에 든 값은 건드리지 않는다
 DEFAULT_SYNONYMS = {
-    "atype": {
-        "강도 평가": ["강도 해석", "구조 강도 평가"],
-        "FE 해석": ["FEM 해석", "FEM", "FEA", "유한요소 해석"],
-        "진동 해석": ["진동 평가"],
-        "피로 평가": ["피로 해석"],
-        "좌굴 평가": ["좌굴 해석"],
-        "권상 해석": ["권상 평가", "Lifting"],
-        "계류 해석": ["계류 평가", "Mooring"],
-        "운송 해석": ["해상 운송 해석", "운송 평가"],
-    },
     "zone": {
         "선수부": ["FWD", "Fore", "선수"],
         "선미부": ["AFT", "선미"],
@@ -285,13 +274,6 @@ def value_counts(db: Session, kind: str, user=None) -> Counter:
 
     E = models.Entry
     vis = access.visible_entries_filter(user) if user is not None else E.id.isnot(None)
-    if kind == "atype":
-        rows = (db.query(E.analysis_type, E.id).filter(E.status.in_(LIVE), E.analysis_type.isnot(None), vis))
-        c = Counter()
-        for value, _id in rows:
-            if value and value.strip():
-                c[value] += 1
-        return c
     rows = (db.query(models.Tag.value, models.EntryTag.entry_id)
             .join(models.EntryTag, models.EntryTag.tag_id == models.Tag.id)
             .join(E, E.id == models.EntryTag.entry_id)
@@ -355,12 +337,6 @@ def _plan(db: Session, kind: str, v: Vocab, only: models.Tag | None = None) -> l
     """바꿀 Entry 목록 — (Entry, 이전 값, 새 값). 용어로 맞춰지는 값만 바꾼다."""
     E = models.Entry
     plan = []
-    if kind == "atype":
-        for e in (db.query(E).filter(E.status.in_(LIVE), E.analysis_type.isnot(None)).order_by(E.id)):
-            t = v.target(e.analysis_type)
-            if t is not None and (only is None or t.id == only.id) and e.analysis_type != t.value:
-                plan.append((e, e.analysis_type, t.value))
-        return plan
     by_entry: dict[int, list[models.Tag]] = defaultdict(list)
     for eid, tag in (db.query(models.EntryTag.entry_id, models.Tag)
                      .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
@@ -388,16 +364,13 @@ def _apply(db: Session, storage: StoragePaths, actor: str, kind: str, plan: list
 
     done = []
     for e, before, after in plan:
-        if kind == "atype":
-            e.analysis_type = after
-        else:
-            service.set_tags(db, e, kind, after)
+        service.set_tags(db, e, kind, after)
         e.version += 1
         db.flush()
         if e.status == "confirmed":
-            b, a = (before, after) if kind == "atype" else (field_value(kind, before), field_value(kind, after))
             audit.record(db, storage, actor=actor, action="ENTRY_UPDATE", target_type="entry", target_id=e.entry_id,
-                         before={FIELD[kind]: b}, after={FIELD[kind]: a}, ip=ip)
+                         before={FIELD[kind]: field_value(kind, before)}, after={FIELD[kind]: field_value(kind, after)},
+                         ip=ip)
             service._write_meta_or_queue(db, storage, e)
         else:
             db.commit()
@@ -470,11 +443,8 @@ def update_term(db: Session, storage: StoragePaths, actor: str, term: models.Tag
                  target_id=f"{kind}:{term.value}"[:40], before=before,
                  after={"value": term.value, "active": bool(term.active)}, ip=ip)
     if renamed_from is not None:
-        if kind == "atype":
-            _apply(db, storage, actor, kind, _plan(db, kind, Vocab(db, kind), only=term), ip)
-        else:
-            # 구역·대상은 Entry 가 태그 행을 가리켜 화면 값은 이미 바뀌었다 — 이력과 entry.json 만 맞춘다
-            _touch_tag_entries(db, storage, actor, term, renamed_from, ip)
+        # Entry 가 태그 행을 가리켜 화면 값은 이미 바뀌었다 — 이력과 entry.json 만 맞춘다
+        _touch_tag_entries(db, storage, actor, term, renamed_from, ip)
     _write_registry(db, storage)
     return term
 
@@ -538,8 +508,7 @@ def merge_value(db: Session, storage: StoragePaths, actor: str, kind: str, value
             raise _err(409, "vocab_is_term")
         _attach_group(db, r, term)
     else:
-        used = kind == "atype" and db.query(models.Entry.id).filter(models.Entry.analysis_type == v).first()
-        if not used and not create:
+        if not create:
             raise _err(404, "value_not_found")
         if v.casefold() != term.value.casefold():
             _new_tag(db, kind, v, alias_of=term)
@@ -561,7 +530,7 @@ def remove_synonym(db: Session, storage: StoragePaths, actor: str, tag: models.T
     term = db.get(models.Tag, tag.alias_of_id)
     value, kind = tag.value, tag.kind
     in_use = db.query(models.EntryTag.entry_id).filter(models.EntryTag.tag_id == tag.id).first()
-    if kind == "atype" or not in_use:
+    if not in_use:
         db.delete(tag)   # Entry 가 가리키지 않는 사전 행 — 지워도 잃는 것이 없다
     else:
         tag.alias_of_id = None
@@ -569,6 +538,50 @@ def remove_synonym(db: Session, storage: StoragePaths, actor: str, tag: models.T
     audit.record(db, storage, actor=actor, action="VOCAB_SYNONYM_REMOVE", target_type="vocab",
                  target_id=f"{kind}:{term.value}"[:40], before={"synonym": value}, ip=ip)
     _write_registry(db, storage)
+
+
+def delete_term(db: Session, storage: StoragePaths, actor: str, term: models.Tag, ip: str | None = None) -> dict:
+    """42 — 용어를 동의어 묶음째 목록에서 지우고, 그 값(용어·동의어)을 단 자료에서도 뺀다.
+
+    확정 자료는 감사 ENTRY_UPDATE·version +1·entry.json, 정리 대기·휴지통 자료는 값만 뺀다(40 move_term 과 같은 규칙).
+    값이 빠져 필수 분류(구역 또는 대상)가 비는 BDF 자료는 '보완 필요'가 된다(자료 정비에 뜬다).
+    (동의어 하나만 떼는 것은 remove_synonym — 그쪽은 자료 값을 건드리지 않는다.)"""
+    from .entries import service  # 순환 import 방지
+
+    term = _term(db, term)
+    kind = term.kind
+    group = _children(db, term) + [term]   # 동의어 먼저 — 대표를 지울 때 가리키는 행이 남지 않게
+    ids = [g.id for g in group]
+    names = {g.value.casefold() for g in group}
+    E = models.Entry
+    entries = (db.query(E).join(models.EntryTag, models.EntryTag.entry_id == E.id)
+               .filter(models.EntryTag.tag_id.in_(ids)).distinct().order_by(E.id).all())
+    done = []
+    for e in entries:
+        before = service.tags_of(db, e, kind)
+        after = [z for z in before if z.casefold() not in names]
+        db.query(models.EntryTag).filter(models.EntryTag.entry_id == e.id, models.EntryTag.tag_id.in_(ids))             .delete(synchronize_session=False)
+        e.version += 1
+        db.flush()
+        if e.status == "confirmed":
+            audit.record(db, storage, actor=actor, action="ENTRY_UPDATE", target_type="entry", target_id=e.entry_id,
+                         before={FIELD[kind]: field_value(kind, before)}, after={FIELD[kind]: field_value(kind, after)},
+                         ip=ip)
+            service._write_meta_or_queue(db, storage, e)
+        else:
+            db.commit()
+        done.append(e.entry_id)
+    value, synonyms = term.value, [g.value for g in group if g.id != term.id]
+    for g in group:
+        db.delete(g)
+        db.flush()
+    _renumber(Vocab(db, kind).terms)
+    db.flush()
+    audit.record(db, storage, actor=actor, action="VOCAB_TERM_DELETE", target_type="vocab",
+                 target_id=f"{kind}:{value}"[:40],
+                 before={"kind": kind, "value": value, "synonyms": synonyms, "entries": done}, ip=ip)
+    _write_registry(db, storage)
+    return {"value": value, "entries": done}
 
 
 # ---- 종류 옮기기(40 — 구역에 들어간 구조물 값을 대상으로) ----

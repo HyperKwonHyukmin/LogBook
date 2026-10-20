@@ -1,4 +1,4 @@
-"""분류 목록 API(08) — 해석 종류·구역·대상 구조물(38) 통제 어휘. 목록 읽기는 누구나, 바꾸기는 관리자만(모두 기록)."""
+"""분류 목록 API(08) — 구역·대상 구조물(38) 통제 어휘(42 — 해석 종류는 없앴다). 목록 읽기는 누구나, 바꾸기는 관리자만(모두 기록)."""
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -9,11 +9,11 @@ from ..dependencies import client_ip, get_storage, require_admin, require_auth
 from ..storage.paths import StoragePaths
 
 router = APIRouter(prefix="/api/vocab", tags=["vocab"])
-KIND = Query(pattern="^(atype|zone|target)$")
+KIND = Query(pattern="^(zone|target)$")
 
 
 class TermBody(BaseModel):
-    kind: str = Field(pattern="^(atype|zone|target)$")
+    kind: str = Field(pattern="^(zone|target)$")
     value: str = Field(min_length=1, max_length=100)
 
 
@@ -23,7 +23,7 @@ class TermPatch(BaseModel):
 
 
 class OrderBody(BaseModel):
-    kind: str = Field(pattern="^(atype|zone|target)$")
+    kind: str = Field(pattern="^(zone|target)$")
     ids: list[int]
 
 
@@ -95,3 +95,10 @@ def remove_synonym(tag_id: int, request: Request, db: Session = Depends(get_db),
                    storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_admin)):
     vocab.remove_synonym(db, storage, user.employee_id, db.get(models.Tag, tag_id), client_ip(request))
     return {"ok": True}
+
+
+@router.delete("/terms/{tag_id}")
+def delete_term(tag_id: int, request: Request, db: Session = Depends(get_db),
+                storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_admin)):
+    """42 — 용어를 동의어째 지우고 그 값을 단 자료에서도 뺀다. {"value", "entries": [자료 번호…]}"""
+    return vocab.delete_term(db, storage, user.employee_id, _tag(db, tag_id), client_ip(request))

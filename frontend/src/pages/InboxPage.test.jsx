@@ -125,7 +125,7 @@ test('가져가기에 실패하면 새로 부른 뒤에도 사유가 남는다',
 
 test('초안 카드에 저장하지 않은 변경이 있으면 탭을 바꿀 때 묻는다(11)', async () => {
   renderPage({ 'GET /api/batches?scope=mine': MINE, 'GET /api/batches?scope=unclaimed': UNCLAIMED,
-               'GET /api/vocab?kind=atype': { kind: 'atype', other: '기타', terms: [] },
+               'GET /api/vocab?kind=target': { kind: 'target', other: '기타', terms: [] },
                'GET /api/vocab?kind=zone': { kind: 'zone', other: '기타', terms: [] } });
   const card = await screen.findByRole('article', { name: /E000010/ });
   await userEvent.type(within(card).getByLabelText('설명'), '메모');

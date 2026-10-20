@@ -284,7 +284,7 @@ export default function SearchPage() {
               미확정 포함
             </label>
           )}
-          {/* 11 — 보기 기준: 결과를 호선·구역·해석 종류·올린 사람 값으로 묶는다(문서 보기에서만) */}
+          {/* 11 — 보기 기준: 결과를 호선·구역·대상·올린 사람 값으로 묶는다(문서 보기에서만) */}
           <label className="ml-auto flex items-center gap-1.5 whitespace-nowrap text-meta text-n-600"
                  title={state.unit === 'file' ? '파일 보기에서는 묶지 않습니다' : '결과를 속성 값으로 묶어 봅니다'}>
             보기

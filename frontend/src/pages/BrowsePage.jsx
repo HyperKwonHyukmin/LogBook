@@ -12,11 +12,11 @@ import { isMonoValue, matchesFilter, valueLabel } from '../components/search/Fac
 import { FACET_LABELS, errorText } from '../lib/labels.js';
 import { writeSearch } from '../lib/search.js';
 
-/** 분류 화면의 속성 순서(09) — 검색 필터 차원 전부. */
-export const BROWSE_KEYS = ['zone', 'analysis_type', 'target', 'hull', 'ship_type', 'tag', 'kind', 'uploaded_by'];
+/** 분류 화면의 속성 순서(09) — 검색 필터 차원 전부. 42 — 해석 종류는 없앴다. */
+export const BROWSE_KEYS = ['zone', 'target', 'hull', 'ship_type', 'tag', 'kind', 'uploaded_by'];
 const DEFAULT_KEY = 'zone';
 const SORTS = [{ id: 'count', label: '건수순' }, { id: 'name', label: '이름순' }];
-const VOCAB_KEYS = new Set(['zone', 'analysis_type', 'target']);
+const VOCAB_KEYS = new Set(['zone', 'target']);
 const COLS = 'grid grid-cols-[minmax(0,1fr)_minmax(80px,200px)_56px] items-center gap-4';
 
 /** 값 하나로 거른 검색 주소 — '미확정 포함'으로 셌으면 검색도 같은 조건으로 연다. */
@@ -64,8 +64,8 @@ function ValueRow({ field, f, max, drafts }) {
 }
 
 /**
- * 분류(09) — 속성(호선·선종·구역·해석 종류·파일 종류·태그·올린 사람)마다 모든 값과 자료 수.
- * 값을 누르면 그 값으로 거른 검색으로 간다. 구역·해석 종류는 대표 값으로 세고(동의어는 함께 보인다),
+ * 분류(09) — 속성(호선·선종·구역·대상·파일 종류·태그·올린 사람)마다 모든 값과 자료 수.
+ * 값을 누르면 그 값으로 거른 검색으로 간다. 구역·대상은 대표 값으로 세고(동의어는 함께 보인다),
  * 관리(용어·동의어)는 관리자의 '분류 목록', 자유 태그 동의어는 '태그 동의어' 화면에서 한다.
  */
 export default function BrowsePage() {
@@ -114,7 +114,7 @@ export default function BrowsePage() {
   return (
     <Page>
       <PageHeader title="분류"
-                  description="속성마다 어떤 값이 몇 건 있는지 봅니다. 값을 누르면 그 값으로 거른 검색이 열립니다. 구역·해석 종류·태그는 동의어를 대표 값으로 묶어 셉니다." />
+                  description="속성마다 어떤 값이 몇 건 있는지 봅니다. 값을 누르면 그 값으로 거른 검색이 열립니다. 구역·대상·태그는 동의어를 대표 값으로 묶어 셉니다." />
       <Tabs label="속성" items={tabs} value={field} controls="browse-panel" onChange={(k) => { update({ by: k === DEFAULT_KEY ? null : k }); setFilter(''); }}
             className="mb-4 overflow-x-auto" />
       <div className="mb-3 flex flex-wrap items-center gap-3">

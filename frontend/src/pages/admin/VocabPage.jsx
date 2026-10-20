@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Merge, Plus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Merge, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../../api/client.js';
 import Button, { buttonClass } from '../../components/ui/Button.jsx';
+import { useConfirm } from '../../components/ui/ConfirmDialog.jsx';
 import { inputClass, selectClass } from '../../components/ui/Field.jsx';
 import InlineText from '../../components/ui/InlineText.jsx';
 import { ErrorNote, OkNote, Page, PageHeader, SectionTitle } from '../../components/ui/Page.jsx';
@@ -10,7 +11,7 @@ import { Segmented } from '../../components/ui/Tabs.jsx';
 import { errorText } from '../../lib/labels.js';
 import { VOCAB_KINDS, invalidateVocab } from '../../lib/vocab.js';
 
-const TERM_COLS = 'grid grid-cols-[56px_minmax(140px,220px)_minmax(0,1fr)_56px_96px] items-center gap-3';
+const TERM_COLS = 'grid grid-cols-[56px_minmax(140px,220px)_minmax(0,1fr)_56px_150px] items-center gap-3';
 const OUT_COLS = 'grid grid-cols-[minmax(0,1fr)_56px_minmax(260px,auto)] items-center gap-3';
 const KIND_NAME = Object.fromEntries(VOCAB_KINDS.map((k) => [k.id, k.label]));
 
@@ -41,7 +42,7 @@ function SynonymAdd({ term, onAdd, busy }) {
   );
 }
 
-function TermRow({ term, index, last, busy, onMove, onRename, onToggle, onAddSynonym, onRemoveSynonym }) {
+function TermRow({ term, index, last, busy, onMove, onRename, onToggle, onDelete, onAddSynonym, onRemoveSynonym }) {
   return (
     <li className={`${TERM_COLS} min-h-11 border-b border-n-200 px-3 py-1.5 text-ui last:border-0 ${term.active ? '' : 'bg-n-25'}`}>
       <span className="flex gap-0.5">
@@ -67,10 +68,15 @@ function TermRow({ term, index, last, busy, onMove, onRename, onToggle, onAddSyn
         <SynonymAdd term={term} onAdd={onAddSynonym} busy={busy} />
       </span>
       <span className="text-right font-mono text-meta text-n-600" title="쓰인 Entry 수(동의어 포함)">{term.count}</span>
-      <span className="flex justify-end">
+      <span className="flex justify-end gap-0.5">
         <Button size="sm" variant="ghost" disabled={busy} onClick={() => onToggle(term)}
                 aria-label={`${term.value} ${term.active ? '사용 중지' : '다시 사용'}`}>
           {term.active ? '사용 중지' : '다시 사용'}
+        </Button>
+        {/* 42 — 지우면 그 값(동의어 포함)을 단 자료에서도 함께 뺀다 */}
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDelete(term)} aria-label={`${term.value} 지우기`}
+                className="text-err hover:text-err">
+          <Trash2 size={14} aria-hidden="true" />지우기
         </Button>
       </span>
     </li>
@@ -98,9 +104,12 @@ function OutsideRow({ row, terms, busy, onMerge, onPromote }) {
   );
 }
 
-/** 분류 목록(관리자, 08·40) — 해석 종류·구역·대상의 용어·동의어·순서·사용 여부, 목록 밖 값 합치기. 모든 변경은 기록된다. */
+/**
+ * 분류 목록(관리자, 08·40) — 구역·대상의 용어·동의어·순서·사용 여부, 목록 밖 값 합치기. 모든 변경은 기록된다.
+ * 42 — 해석 종류는 없앴다. 이름 바꾸기·지우기는 그 용어를 쓰는 자료 전부에 함께 반영된다(서버).
+ */
 export default function VocabPage() {
-  const [kind, setKind] = useState('atype');
+  const [kind, setKind] = useState(VOCAB_KINDS[0].id);
   const [terms, setTerms] = useState(null);
   const [outside, setOutside] = useState(null);
   const [error, setError] = useState('');
@@ -108,6 +117,8 @@ export default function VocabPage() {
   const [busy, setBusy] = useState(false);
   const [newTerm, setNewTerm] = useState('');
   const reqRef = useRef(0);
+  const [confirm, dialog] = useConfirm();
+  const name = KIND_NAME[kind];
 
   const load = useCallback(() => {
     const id = ++reqRef.current; // 탭을 빨리 바꿔도 마지막 탭 것만 쓴다
@@ -138,7 +149,21 @@ export default function VocabPage() {
   const addTerm = () => newTerm.trim() && act(() => api('/vocab/terms', { method: 'POST', body: { kind, value: newTerm.trim() } }),
     (t) => { setNewTerm(''); return `‘${t.value}’ 를 목록에 추가했습니다.`; });
   const rename = (t, value) => act(() => api(`/vocab/terms/${t.id}`, { method: 'PATCH', body: { value } }),
-    () => `‘${t.value}’ 를 ‘${value}’ 로 바꿨습니다. 옛 이름은 동의어로 남습니다.`);
+    () => `‘${t.value}’ 를 ‘${value}’ 로 바꿨습니다.${t.count ? ` 쓰는 자료 ${t.count}건에 함께 반영했습니다.` : ''} 옛 이름은 동의어로 남습니다.`);
+  /** 42 — 용어 지우기: 목록에서 빼고 그 값(동의어 포함)을 단 자료에서도 뺀다. 되돌릴 수 없어 확인을 받는다. */
+  async function remove(t) {
+    const ok = await confirm({
+      title: `${name} ‘${t.value}’ 를 지울까요?`,
+      body: (t.count
+        ? `이 값을 쓰는 자료 ${t.count}건에서 함께 빠집니다. 필수 분류(구역 또는 대상)가 비는 BDF 자료는 ‘보완 필요’가 됩니다. `
+        : '이 값을 쓰는 자료는 없습니다. ')
+        + (t.synonyms.length ? `동의어 ${t.synonyms.length}개도 함께 지웁니다. ` : '') + '되돌릴 수 없습니다.',
+      confirmLabel: '지우기',
+    });
+    if (!ok) return false;
+    return act(() => api(`/vocab/terms/${t.id}`, { method: 'DELETE' }),
+      (r) => `‘${t.value}’ 를 목록에서 지웠습니다.${r?.entries?.length ? ` 자료 ${r.entries.length}건에서 값을 뺐습니다.` : ''}`);
+  }
   const toggle = (t) => act(() => api(`/vocab/terms/${t.id}`, { method: 'PATCH', body: { active: !t.active } }),
     () => (t.active ? `‘${t.value}’ 는 이제 입력 목록에 보이지 않습니다. 이미 쓴 값과 검색은 그대로입니다.` : `‘${t.value}’ 를 다시 씁니다.`));
   function move(i, d) {
@@ -154,11 +179,10 @@ export default function VocabPage() {
   const promote = (row) => act(() => api('/vocab/terms', { method: 'POST', body: { kind, value: row.value } }),
     () => `‘${row.value}’ 를 목록에 추가했습니다.`);
 
-  const name = KIND_NAME[kind];
   return (
     <Page>
       <PageHeader title="분류 목록"
-                  description="해석 종류·구역·대상은 이 목록에서만 고릅니다. 구역 = 배 안의 위치(선수부·기관실), 대상 = 해석한 구조물·모델 단위(전선 모델·블록·Unit) — 같은 값을 두 목록에 두지 않습니다. 동의어로 입력해도 대표 용어로 저장되고, 검색·필터에서 함께 찾습니다." />
+                  description="구역·대상은 이 목록에서만 고릅니다. 구역 = 배 안의 위치(선수부·기관실), 대상 = 해석한 구조물·모델 단위(전선 모델·블록·Unit) — 같은 값을 두 목록에 두지 않습니다. 동의어로 입력해도 대표 용어로 저장되고, 검색·필터에서 함께 찾습니다." />
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Segmented role="tablist" label="분류 종류" items={VOCAB_KINDS} value={kind}
                    onChange={(k) => { if (k !== kind) setKind(k); }} />
@@ -185,12 +209,12 @@ export default function VocabPage() {
             <ul>
               {terms.map((t, i) => (
                 <TermRow key={t.id} term={t} index={i} last={i === terms.length - 1} busy={busy} onMove={move}
-                         onRename={rename} onToggle={toggle} onAddSynonym={addSynonym} onRemoveSynonym={removeSynonym} />
+                         onRename={rename} onToggle={toggle} onDelete={remove} onAddSynonym={addSynonym} onRemoveSynonym={removeSynonym} />
               ))}
             </ul>
           )}
         </div>
-        <p className="mt-2 text-meta text-n-500">‘기타’ 는 늘 끝에 둡니다. 사용 중지한 용어는 입력 목록에서만 빠지고, 이미 쓴 값과 검색은 그대로입니다.</p>
+        <p className="mt-2 text-meta text-n-500">‘기타’ 는 늘 끝에 둡니다. 이름을 바꾸면 그 용어를 쓰는 자료 전부에 함께 반영됩니다(옛 이름은 동의어로 남음). 지우면 그 값을 쓰는 자료에서도 빠집니다. 사용 중지한 용어는 입력 목록에서만 빠지고, 이미 쓴 값과 검색은 그대로입니다.</p>
       </section>
 
       <section aria-label="목록 밖 값" className="mt-8 max-w-[960px]">
@@ -213,6 +237,7 @@ export default function VocabPage() {
           )}
         </div>
       </section>
+      {dialog}
     </Page>
   );
 }

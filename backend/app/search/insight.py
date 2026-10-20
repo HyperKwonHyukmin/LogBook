@@ -4,7 +4,7 @@
   INCLUDE 전용 파일(state=include)은 뺀다. 요소 수·종류 묶음·노드·크기·SOL·해석 검증(06)을 싣는다.
 - 대표 보고서 = 보고서 종류 중 PDF > PPTX > DOCX > 그 밖, 같은 형식이면 큰 파일. 추출 요약 카드의
   제목·쪽수(슬라이드·시트)·작성자.
-- 요약 띠 = 검색에 맞은 Entry 전체(쪽이 아니라)의 해석 종류·호선·해석 연도 분포와 해석 검증·모델 규모.
+- 요약 띠 = 검색에 맞은 Entry 전체(쪽이 아니라)의 호선 분포와 해석 검증·모델 규모(42 — 해석 종류 분포는 뺐다).
 
 모두 Entry id 묶음 단위로 한 번에 읽는다(행마다 묻지 않는다). lbm 은 읽지 않는다 — 연결 그룹 수는
 해석 검증이 이미 세어 둔 값(solve_checks.groups)만 쓴다."""
@@ -122,12 +122,10 @@ def _top(counter: Counter, n: int = SUMMARY_TOP) -> list[dict]:
 
 def summarize(rows: list[dict], reps: dict[int, dict]) -> dict:
     """검색에 맞은 Entry 전체의 요약(요약 띠). rows = 필터를 통과한 행(mysql_backend._rows 모양)."""
-    atype, hull = Counter(), Counter()
+    hull = Counter()
     solve = Counter()
     sizes: list[int] = []
     for r in rows:
-        if r["analysis_type"]:
-            atype[r["analysis_type"]] += 1
         hull.update(r["hulls"])
         rep = reps.get(r["id"])
         if rep is None:
@@ -140,7 +138,6 @@ def summarize(rows: list[dict], reps: dict[int, dict]) -> dict:
         buckets.append({"min": lo, "max": hi, "count": sum(1 for s in sizes if s >= lo and (hi is None or s < hi))})
     return {
         "total": len(rows),
-        "analysis_type": _top(atype), "analysis_type_values": len(atype),
         "hull": _top(hull), "hull_values": len(hull),
         "solve": {k: solve.get(k, 0) for k in ("pass", "fail", "error", "stale", "pending", "none", "no_model")},
         "model_size": {"min": min(sizes) if sizes else None, "max": max(sizes) if sizes else None,

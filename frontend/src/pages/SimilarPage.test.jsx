@@ -7,11 +7,11 @@ import SimilarPage from './SimilarPage.jsx';
 vi.mock('../components/viewer/ModelThumb.jsx', () => ({ default: () => <span data-testid="thumb" /> }));
 
 const item = (id, o) => ({ file_id: id, file_name: `m${id}.bdf`, model_key: 'k', entry_id: `E00000${id}`, title: `선례 ${id}`,
-  atype: 'Truss', zones: ['정반'], hulls: ['9002'], reports: 1, solve: 'pass', uploaded_by: 'M1', uploader_name: '김해석',
+  zones: ['정반'], hulls: ['9002'], reports: 1, solve: 'pass', uploaded_by: 'M1', uploader_name: '김해석',
   confirmed_at: '2026-08', dims: [22, 8, 1.5], elems: 900, mix: [0.95, 0, 0.05, 0], sections: ['L 100x100x10'], sol: '101', ...o });
 const score = (total, shape = false) => ({ total, shape, raw: { size: 0.9, scale: 0.8, mix: 0.95, sec: 0.5, tag: 1 }, same_sections: ['L 100x100x10'] });
 const DATA = {
-  base: { name: 'base.bdf', file_id: 1, model_key: 'k', entry_id: 'E000001', zone: '정반', atype: 'Truss', dims: [22, 8, 1.5],
+  base: { name: 'base.bdf', file_id: 1, model_key: 'k', entry_id: 'E000001', zone: '정반', dims: [22, 8, 1.5],
     elems: 900, mix: [0.95, 0, 0.05, 0], sections: ['L 100x100x10'], sol: '101', has_signature: true, missing_includes: null },
   candidates: 3,
   results: [
@@ -21,8 +21,7 @@ const DATA = {
 };
 
 function renderPage(path = '/similar?file=1', map = {}) {
-  mockApi({ 'GET /api/similar?file_id=1': DATA, 'GET /api/vocab?kind=zone': { terms: [{ value: '정반' }, { value: '블록' }] },
-    'GET /api/vocab?kind=atype': { terms: [{ value: 'Truss' }] }, ...map });
+  mockApi({ 'GET /api/similar?file_id=1': DATA, 'GET /api/vocab?kind=zone': { terms: [{ value: '정반' }, { value: '블록' }] }, ...map });
   render(<MemoryRouter initialEntries={[path]}><SimilarPage /></MemoryRouter>);
 }
 
@@ -38,6 +37,10 @@ test('같은 설계를 한 줄로 묶고 같은 점·다른 점을 보인다', a
   expect(within(list).getByText(/이 선례는 해석 검증에 실패했습니다/)).toBeInTheDocument();
   const detail = screen.getByRole('complementary', { name: '선례 상세' });
   expect(within(detail).getByRole('link', { name: '나란히 비교' })).toHaveAttribute('href', '/compare?ids=1,2');
+  // 42 — 기준을 좁히는 칸은 구역뿐(해석 종류는 없앴다)
+  expect(screen.getByRole('combobox', { name: '구역' })).toBeInTheDocument();
+  expect(screen.queryByRole('combobox', { name: '해석 종류' })).toBeNull();
+  expect(detail).not.toHaveTextContent('해석 종류');
 });
 
 const SEARCH = (items) => ({ total: items.length, items });

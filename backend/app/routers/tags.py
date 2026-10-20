@@ -23,7 +23,7 @@ def _tag(db: Session, tag_id: int) -> models.Tag:
 
 
 def _guard_vocab(user: models.User, tag: models.Tag) -> None:
-    """구역·해석 종류는 통제 어휘(08) — 동의어 묶기·풀기는 LV3 만(분류 목록 화면). 자유 태그 동의어는 공용 데이터라
+    """구역·대상은 통제 어휘(08) — 동의어 묶기·풀기는 LV3 만(분류 목록 화면). 자유 태그 동의어는 공용 데이터라
     LV2 이상(15)."""
     access.require_shared_writer(user)
     if tag.kind != "free" and not access.is_admin(user):

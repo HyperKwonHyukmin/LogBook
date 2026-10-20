@@ -6,14 +6,14 @@ import SearchPage from './SearchPage.jsx';
 import { GROUP_STORE_KEY } from '../lib/searchGroup.js';
 import { resetPrefs } from '../lib/prefs.js';
 
-const row = (id, title, extra = {}) => ({ entry_id: id, title, status: 'confirmed', analysis_type: null, posted_at: '2026-10-01T09:00:00',
+const row = (id, title, extra = {}) => ({ entry_id: id, title, status: 'confirmed', posted_at: '2026-10-01T09:00:00',
   hulls: ['9001'], ship_types: [], zones: [], tags: [], uploaded_by: 'A100001', confirmed_at: null, file_count: 1,
   kinds: ['report'], kind_counts: { model: 0, report: 1, drawing: 0, result: 0, other: 0 }, score: 0, matched: [], snippets: [],
   favorite: false, ...extra });
 const A = row('E000001', '선미 응력 검토', { zones: ['선미부', '기관실'] });
 const B = row('E000002', '선미 진동 검토', { zones: ['선미부'] });
 const C = row('E000003', '구역 없는 자료');
-const FACETS = { hull: [], ship_type: [], analysis_type: [], zone: [], uploaded_by: [], kind: [], tag: [] };
+const FACETS = { hull: [], ship_type: [], zone: [], uploaded_by: [], kind: [], tag: [] };
 const GROUPED = {
   unit: 'entry', total: 3, items: [], facets: FACETS, hull_suggestion: null, terms: [], group: 'zone', group_total: 3,
   group_offset: 0, group_sort: 'count', multi_valued: 1,

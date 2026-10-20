@@ -8,10 +8,10 @@ import CleanupPage from './CleanupPage.jsx';
 // 20 — 관리자 '자료 정비': 빠진 필수 분류 목록 · 제목 형식 미리보기→적용 · 바꾼 기록 되돌리기
 
 const MISSING = {
-  total: 1, all: 1, counts: { hull: 0, zone_or_target: 1, analysis_type: 1 },
+  total: 1, all: 1, counts: { hull: 0, zone_or_target: 1 },
   uploaders: [{ employee_id: 'A100001', name: '홍길동', count: 1 }],
-  items: [{ entry_id: 'E000005', title: '옛 모델', version: 2, missing: ['zone_or_target', 'analysis_type'], hulls: ['3496'],
-            no_hull: false, zones: [], analysis_type: null, uploaded_by: 'A100001', uploader_name: '홍길동', confirmed_at: null }],
+  items: [{ entry_id: 'E000005', title: '옛 모델', version: 2, missing: ['zone_or_target'], hulls: ['3496'],
+            no_hull: false, zones: [], uploaded_by: 'A100001', uploader_name: '홍길동', confirmed_at: null }],
 };
 const TITLES = {
   total: 2, counts: { ready: 2, blocked: 1 },
@@ -36,7 +36,9 @@ function renderPage(map = {}) {
 test('빠진 필수 분류 — 무엇이 빠졌는지·올린 사람·자료 링크, 빠진 칸으로 거르기', async () => {
   const fetch = renderPage({ 'GET /api/admin/cleanup/missing?limit=100&missing=zone_or_target': MISSING });
   const row = (await screen.findByRole('link', { name: 'E000005' })).closest('tr');
-  expect(row).toHaveTextContent('구역 또는 대상, 해석 종류');
+  expect(row).toHaveTextContent('구역 또는 대상');
+  expect(row).not.toHaveTextContent('해석 종류');   // 42 — 해석 종류는 필수 분류가 아니다
+  expect(screen.queryByRole('tab', { name: /해석 종류/ })).toBeNull();
   expect(row).toHaveTextContent('홍길동');
   expect(within(row).getByRole('link', { name: 'E000005' })).toHaveAttribute('href', '/e/E000005');
   await userEvent.click(screen.getByRole('tab', { name: /구역 또는 대상/ }));

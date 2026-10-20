@@ -10,10 +10,9 @@ from app.entries import naming, service
 
 
 def test_compose_title_puts_target_before_distinct():
-    t = naming.compose_title(hulls=["3496"], zones=["선수부"], analysis_type="강도 평가", target="계류 의장품",
-                             distinct="M04 rev3")
-    assert t == "3496 · 선수부 · 강도 평가 · 계류 의장품 · M04 rev3"
-    # 대상만으로는 형식 제목을 만들지 않는다(머리 세 칸이 없으면 예전 방식)
+    t = naming.compose_title(hulls=["3496"], zones=["선수부"], target="계류 의장품", distinct="M04 rev3")
+    assert t == "3496 · 선수부 · 계류 의장품 · M04 rev3"
+    # 대상만으로는 형식 제목을 만들지 않는다(머리 칸이 없으면 예전 방식)
     assert naming.compose_title(target="계류 의장품") == ""
 
 
@@ -29,11 +28,11 @@ def test_patch_target_normalizes_and_retitles_draft(db, storage, make_user, setu
     e.title_source = "3496_Mooring_Fitting_rev3"
     e.title = service.quality.TitleContext(db).draft(e)
     db.commit()
-    assert e.title == "3496 · 선수부 · 강도 평가 · Mooring Fitting rev3"
+    assert e.title == "3496 · 선수부 · Mooring Fitting rev3"
     e = service.update_entry(db, storage, e, u, {"version": e.version, "target": "Mooring Fitting"})
     d = service.entry_to_dict(db, e, viewer=u)
     assert d["target"] == "계류 의장품"                     # 동의어 → 용어
-    assert d["title"] == "3496 · 선수부 · 강도 평가 · 계류 의장품 · rev3"   # 사람이 안 고친 초안 제목은 따라간다
+    assert d["title"] == "3496 · 선수부 · 계류 의장품 · rev3"   # 사람이 안 고친 초안 제목은 따라간다
     e = service.update_entry(db, storage, e, u, {"version": e.version, "target": None})
     assert service.target_of(db, e) is None
 

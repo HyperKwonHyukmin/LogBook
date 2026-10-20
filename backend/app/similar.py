@@ -6,13 +6,13 @@
     구성      보 · 쉘 · 강체 · 질량 비율
     단면      fingerprint 의 단면 표기(PBEAML L 100x100x10 · PSHELL t12 …) 집합
     형상      sig_geometry 가 같으면 '같은 설계' — 점수와 상관없이 맨 위(0.9 + 0.1 × 나머지)
-    분류      같은 구역 · 같은 해석 종류(기준 쪽 값을 알 때만)
+    분류      같은 구역(기준 쪽 값을 알 때만, 42 — 해석 종류는 없앴다)
 
 점수는 항목별(raw 0~1)로 돌려준다 — 화면이 '같은 점 · 다른 점' 문장을 만든다(frontend lib/similar.js).
 같은 형상 서명은 한 줄로 묶는다(표준 설계를 여러 척이 다시 쓴 경우). 같은 자료 안 여러 BDF(판)는 가장 닮은 하나만.
 
 기준은 두 가지
-    file_id   LogBook 의 BDF(보는 사람이 볼 수 있어야 한다). 그 자료의 구역·해석 종류를 기본값으로 쓴다
+    file_id   LogBook 의 BDF(보는 사람이 볼 수 있어야 한다). 그 자료의 구역을 기본값으로 쓴다
     올린 BDF  저장하지 않고 이 프로세스 안에서 읽는다(features_from_bdf). INCLUDE 는 따라가지 않는다(본 파일만)
 
 권한(13·15): 비교 대상은 보는 사람이 볼 수 있는 확정 자료의 BDF 만.
@@ -121,8 +121,7 @@ def score(base: dict, other: dict, weights: dict | None = None) -> dict:
     mix = max(0.0, dot / norm) ** 3 if norm else 0.0
     A, B = set(base["sections"]), set(other["sections"])
     sec = len(A & B) / len(A | B) if (A | B) else 0.0
-    tag = (.6 if base.get("zone") and base["zone"] in other.get("zones", ()) else 0) \
-        + (.4 if base.get("atype") and base["atype"] == other.get("atype") else 0)
+    tag = 1.0 if base.get("zone") and base["zone"] in other.get("zones", ()) else 0.0   # 42 — 구역만
     raw = {"size": size, "scale": scale, "mix": mix, "sec": sec, "tag": tag}
     total_w = sum(w.values()) or 1
     weighted = sum(raw[k] * w[k] for k in raw) / total_w
@@ -135,7 +134,7 @@ def score(base: dict, other: dict, weights: dict | None = None) -> dict:
 
 def _candidates(db: Session, user, exclude_file: int | None) -> list[dict]:
     E, F, S = models.Entry, models.File, models.ModelSummary
-    q = (db.query(F.id, F.name, F.entry_id, E.entry_id.label("code"), E.title, E.analysis_type, E.uploaded_by,
+    q = (db.query(F.id, F.name, F.entry_id, E.entry_id.label("code"), E.title, E.uploaded_by,
                   E.confirmed_at, S.key, S.counts, S.bbox, S.fingerprint, S.sol, S.sig_geometry, S.sig_version)
          .join(E, E.id == F.entry_id).join(S, S.file_id == F.id)
          .filter(E.status == "confirmed", access.visible_entries_filter(user), F.kind == "model",
@@ -164,7 +163,6 @@ def _candidates(db: Session, user, exclude_file: int | None) -> list[dict]:
         reports[eid] += 1
     names = dict(db.query(models.User.employee_id, models.User.name)
                  .filter(models.User.employee_id.in_({r.uploaded_by for r in rows if r.uploaded_by} or {""})))
-    atype = Vocab(db, "atype")
     out = []
     for r in rows:
         f = features(r.counts, r.bbox, r.fingerprint, r.sol,
@@ -173,7 +171,6 @@ def _candidates(db: Session, user, exclude_file: int | None) -> list[dict]:
             continue
         out.append({**f, "file_id": r.id, "file_name": r.name, "model_key": r.key, "entry_pk": r.entry_id,
                     "entry_id": r.code, "title": r.title,
-                    "atype": atype.canon(r.analysis_type) if r.analysis_type else None,
                     "zones": zones.get(r.entry_id, []), "hulls": hulls.get(r.entry_id, []),
                     "reports": reports.get(r.entry_id, 0), "solve": solve.get(r.id),
                     "uploaded_by": r.uploaded_by, "uploader_name": names.get(r.uploaded_by or ""),
@@ -182,14 +179,14 @@ def _candidates(db: Session, user, exclude_file: int | None) -> list[dict]:
 
 
 def _public(c: dict) -> dict:
-    keys = ("file_id", "file_name", "model_key", "entry_id", "title", "atype", "zones", "hulls", "reports", "solve",
+    keys = ("file_id", "file_name", "model_key", "entry_id", "title", "zones", "hulls", "reports", "solve",
             "uploaded_by", "uploader_name", "confirmed_at", "dims", "elems", "mix", "sections", "sol")
     return {k: c[k] for k in keys}
 
 
 def find_similar(db: Session, user, base: dict, *, exclude_file: int | None = None,
                  weights: dict | None = None, limit: int = MAX_RESULTS) -> dict:
-    """base(features + zone·atype) 와 비슷한 선례. 같은 형상 서명은 한 줄(lead + members)."""
+    """base(features + zone) 와 비슷한 선례. 같은 형상 서명은 한 줄(lead + members)."""
     cands = _candidates(db, user, exclude_file)
     # 같은 자료 안 여러 BDF 는 가장 닮은 하나만
     best_in_entry: dict[int, tuple[dict, dict]] = {}
@@ -233,7 +230,6 @@ def base_from_file(db: Session, user, file_id: int) -> dict | None:
         z = (db.query(models.Tag).join(models.EntryTag, models.EntryTag.tag_id == models.Tag.id)
              .filter(models.EntryTag.entry_id == e.id, models.Tag.kind == "zone").order_by(models.Tag.value).first())
         zone = zv.root(z).value if z is not None else None
-    atype = Vocab(db, "atype").canon(e.analysis_type) if e is not None and e.analysis_type else None
     return {**feat, "name": f.name, "file_id": f.id, "model_key": s.key,
             "entry_id": e.entry_id if e is not None else None, "entry_title": e.title if e is not None else None,
-            "zone": zone, "atype": atype}
+            "zone": zone}

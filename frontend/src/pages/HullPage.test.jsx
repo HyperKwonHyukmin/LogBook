@@ -7,11 +7,10 @@ import HullsPage from './HullsPage.jsx';
 
 const HULL = { hull_no: '9999', ship_type: null, memo: null, drafts: 1,
   stats: { entries: 2, files: 3, kinds: { report: 2, model: 1 },
-           analysis_types: [{ value: 'Mooring', count: 1 }, { value: 'Strength', count: 1 }],
            zones: [{ value: '선수부', count: 1 }], people: [{ employee_id: 'A100002', name: '김해석', count: 1 }] },
   timeline: [
-    { month: '2026-09', entries: [{ entry_id: 'E000002', title: '갑판 강도', analysis_type: 'Strength', zones: [], uploaded_by: 'A100002', confirmed_at: '2026-09-05T00:00:00', kinds: ['report'] }] },
-    { month: '2026-08', entries: [{ entry_id: 'E000001', title: '계류 검토', analysis_type: 'Mooring', zones: ['선수부'], uploaded_by: 'A100001', confirmed_at: '2026-09-02T00:00:00', kinds: ['model', 'report'] }] },
+    { month: '2026-09', entries: [{ entry_id: 'E000002', title: '갑판 강도', zones: [], uploaded_by: 'A100002', confirmed_at: '2026-09-05T00:00:00', kinds: ['report'] }] },
+    { month: '2026-08', entries: [{ entry_id: 'E000001', title: '계류 검토', zones: ['선수부'], uploaded_by: 'A100001', confirmed_at: '2026-09-02T00:00:00', kinds: ['model', 'report'] }] },
   ] };
 
 function renderAt(url, map) {
@@ -33,6 +32,7 @@ test('호선 화면 — 통계·타임라인·분포', async () => {
   expect(months).toEqual(['2026년 9월', '2026년 8월']);
   expect(within(tl).getByRole('link', { name: '계류 검토' })).toHaveAttribute('href', '/e/E000001');
   expect(screen.getByRole('region', { name: '구역 분포' })).toHaveTextContent('선수부');
+  expect(screen.queryByText(/해석 종류/)).toBeNull();   // 42
   expect(screen.getByRole('region', { name: '참여자' })).toHaveTextContent('김해석');
 });
 

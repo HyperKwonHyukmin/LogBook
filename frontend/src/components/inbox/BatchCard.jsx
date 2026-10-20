@@ -117,7 +117,7 @@ function ProcessedDetail({ converts }) {
   return (
     <Explain summary="왜 기다리나요?">
       <ul className="flex list-disc flex-col gap-1 pl-4 text-n-700 marker:text-n-400">
-        <li>아래 초안은 서버가 폴더·파일 이름으로 <span className="font-medium">추정</span>한 것입니다. 호선·제목·해석 종류가 맞는지 사람이 확인해야 합니다.</li>
+        <li>아래 초안은 서버가 폴더·파일 이름으로 <span className="font-medium">추정</span>한 것입니다. 호선·제목·구역·대상이 맞는지 사람이 확인해야 합니다.</li>
         <li>맞으면 초안마다 <span className="font-medium">확정</span>을 누르세요. 파일이 보관소(<span className="font-mono">10_Vault</span>)로 옮겨지고 검색·호선 화면의 정식 자료가 됩니다.</li>
         <li>확정 전에도 검색에는 ‘미분류’로 보이지만, 확정하지 않으면 이 목록에 계속 남습니다.</li>
         {converts.length > 0 && (

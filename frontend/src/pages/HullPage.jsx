@@ -157,7 +157,6 @@ export default function HullPage() {
           <p className="tnum mt-2 flex flex-wrap items-center gap-x-2 text-ui text-n-600">
             {stat(s.entries, '자료')}<span aria-hidden="true" className="text-n-300">·</span>
             {stat(s.files, '파일')}<span aria-hidden="true" className="text-n-300">·</span>
-            {stat(s.analysis_types.length, '해석 종류')}<span aria-hidden="true" className="text-n-300">·</span>
             {stat(s.people.length, '참여자', '명')}
             {hull.drafts > 0 && (
               <>
@@ -196,7 +195,6 @@ export default function HullPage() {
                     <span className="flex min-w-0 items-center gap-2">
                       <Link to={`/e/${e.entry_id}`} onClick={(ev) => ev.stopPropagation()}
                             className="truncate font-semibold text-n-900 hover:underline">{e.title}</Link>
-                      {e.analysis_type && <span className="shrink-0 text-meta text-n-500">{e.analysis_type}</span>}
                       {/* 15 — 공유·블록 배지(볼 수 있는 사람에게만 실린다) */}
                       <AccessBadge item={e} compact />
                     </span>
@@ -213,7 +211,6 @@ export default function HullPage() {
         </ol>
         <aside className="flex min-w-0 flex-col gap-6">
           <Distribution title="구역 분포" rows={s.zones} hullNo={hull.hull_no} filterKey="zone" />
-          <Distribution title="해석 종류" rows={s.analysis_types} hullNo={hull.hull_no} filterKey="analysis_type" />
           <section aria-label="참여자">
             <SectionTitle className="mb-2">참여자</SectionTitle>
             {s.people.length === 0 && <p className="text-meta text-n-500">없음</p>}

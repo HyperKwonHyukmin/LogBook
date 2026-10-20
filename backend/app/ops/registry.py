@@ -41,11 +41,12 @@ def build_registry(db: Session) -> dict:
              for h in db.query(models.Hull).order_by(models.Hull.hull_no) if h.ship_type or h.memo or h.plm_status]
     roots = {t.id: t.value for t in db.query(models.Tag).filter(models.Tag.alias_of_id.is_(None))}
     tags = [{"kind": t.kind, "value": t.value, "alias_of": roots.get(t.alias_of_id)}
-            for t in db.query(models.Tag).filter(models.Tag.alias_of_id.isnot(None))
+            for t in db.query(models.Tag).filter(models.Tag.alias_of_id.isnot(None), models.Tag.kind != "atype")
             .order_by(models.Tag.kind, models.Tag.value)]
-    # 08 — 해석 종류·구역 목록 용어(순서·사용 여부). 동의어는 위 tags 에 함께 들어 있다
+    # 08 — 구역·대상 목록 용어(순서·사용 여부). 동의어는 위 tags 에 함께 들어 있다. 42 — 남은 atype 행은 쓰지 않는다
     vocab = [{"kind": t.kind, "value": t.value, "sort_order": t.sort_order, "active": bool(t.active)}
-             for t in db.query(models.Tag).filter(models.Tag.listed.is_(True), models.Tag.alias_of_id.is_(None))
+             for t in db.query(models.Tag).filter(models.Tag.listed.is_(True), models.Tag.alias_of_id.is_(None),
+                                                  models.Tag.kind != "atype")
              .order_by(models.Tag.kind, models.Tag.sort_order, models.Tag.value)]
     # 15 — 일반이 아닌 Entry(공유·블록 — 일반은 기본값이라 적지 않는다)와 열람 허락
     entry_access = [{"entry_id": eid, "access": acc}

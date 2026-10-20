@@ -8,7 +8,7 @@ import BrowsePage, { matchesFilter } from './BrowsePage.jsx';
 const FACETS = {
   zone: [{ value: '선미부', count: 3, listed: true, aliases: ['AFT', '선미'] }, { value: '기관실', count: 1, listed: true, aliases: ['ER'] },
     { value: '선수부', count: 0, listed: true, aliases: [] }, { value: '갑판실', count: 1, listed: false, aliases: [] }],
-  analysis_type: [{ value: 'FE 해석', count: 2, listed: true, aliases: ['FEM'] }],
+  analysis_type: [{ value: 'FE 해석', count: 2, listed: true, aliases: ['FEM'] }],   // 42 — 옛 응답에 있어도 탭을 만들지 않는다
   hull: [{ value: '9002', count: 2, label: '벌크선' }, { value: '9001', count: 1, label: null }],
   ship_type: [{ value: '벌크선', count: 2 }],
   tag: [{ value: '계류', count: 2, aliases: ['Mooring'] }],
@@ -37,6 +37,7 @@ function renderAt(url = '/browse', { admin = false, map = {} } = {}) {
 test('속성 탭마다 값과 건수를 건수순으로 보이고, 값을 누르면 그 필터로 검색한다', async () => {
   renderAt();
   const list = await screen.findByRole('list', { name: '구역 값' });
+  expect(screen.queryByRole('tab', { name: /해석 종류/ })).toBeNull();
   const rows = within(list).getAllByRole('listitem');
   expect(rows[0]).toHaveTextContent('선미부');
   expect(rows[0]).toHaveTextContent('동의어 AFT, 선미');

@@ -1,5 +1,6 @@
 """31 — 열람 허락 사용자 고르기(부서 검색·여러 명 한 번에) · WorkBench 에 등급 알려 주기 · 관리자 외 LV1 일괄 정리."""
 import dataclasses
+import json
 
 import pytest
 
@@ -51,7 +52,7 @@ def test_grant_many_and_list(entry, client, auth_headers, db):
     r = client.post(url, json={"employee_ids": ["N310002", "N310003"]}, headers=ho).json()
     assert r["added"] == ["N310003"] and len(r["grants"]) == 3
     db.expire_all()
-    assert db.query(models.AuditLog).filter_by(action="ENTRY_GRANT", target_id=entry.entry_id).count() == 3
+    assert db.query(models.AuditLog).filter_by(action="ENTRY_GRANT", target_id=entry.entry_id).count() == 0
 
 
 def test_grant_many_all_or_nothing(entry, client, auth_headers, db):
@@ -90,3 +91,37 @@ def test_reset_to_guest(people, db, storage):
     assert levels[OWNER] == levels[LV2] == 1 and levels[LV3] == 3 and levels[WBA] == 2
     assert db.query(models.AuditLog).filter_by(action="USER_LEVEL").count() == 2
     assert reset_to_guest(db, storage, apply=True) == []           # 여러 번 해도 같다
+
+
+def test_purge_grant_audit(entry, client, auth_headers, db, storage):
+    """2026-10-20 — 예전 열람 허락·회수 기록을 DB·감사 파일에서 지운다(재구축으로 돌아오지 않게). 다른 기록은 그대로."""
+    from app import audit
+
+    audit.record(db, storage, actor=OWNER, action="ENTRY_GRANT", target_type="entry",
+                 target_id=entry.entry_id, after={"employee_id": "N310001"})
+    audit.record(db, storage, actor=OWNER, action="ENTRY_REVOKE", target_type="entry",
+                 target_id=entry.entry_id, before={"employee_id": "N310001"})
+    audit.record(db, storage, actor=OWNER, action="ENTRY_UPDATE", target_type="entry",
+                 target_id=entry.entry_id, before={"title": "a"}, after={"title": "b"})
+    # 예전 기록이 남아 있어도 변경 이력에는 나오지 않는다
+    hist = client.get(f"/api/entries/{entry.entry_id}/history", headers=auth_headers(OWNER)).json()
+    assert [h["action"] for h in hist if h["action"].startswith("ENTRY_")] == ["ENTRY_UPDATE"]
+
+    def file_actions():
+        out = []
+        for p in storage.audit_dir.glob("*.jsonl"):
+            out += [json.loads(ln)["action"] for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        return out
+
+    rep = audit.purge_not_kept(db, storage)               # 보고만
+    assert rep["db"] == 2 and sum(rep["files"].values()) >= 2 and not rep["applied"]
+    assert db.query(models.AuditLog).filter(models.AuditLog.action.in_(audit.NOT_KEPT)).count() == 2
+    rep = audit.purge_not_kept(db, storage, apply=True)
+    assert rep["db"] == 2 and rep["applied"]
+    db.expire_all()
+    assert db.query(models.AuditLog).filter(models.AuditLog.action.in_(audit.NOT_KEPT)).count() == 0
+    assert db.query(models.AuditLog).filter_by(action="ENTRY_UPDATE", target_id=entry.entry_id).count() == 1
+    acts = file_actions()
+    assert "ENTRY_GRANT" not in acts and "ENTRY_REVOKE" not in acts and "ENTRY_UPDATE" in acts
+    assert not list(storage.audit_dir.glob("*.tmp"))
+    assert audit.purge_not_kept(db, storage, apply=True) == {"db": 0, "files": {}, "applied": True}

@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
         get_storage().ensure_layout()
     except OSError as exc:  # 공유 폴더가 끊겨도 기동은 한다(화면에 연결 끊김 표시)
         log.warning("저장소 폴더 준비 실패: %s", exc)
-    # 08 — 분류 목록(해석 종류·구역)이 비어 있으면 기본 목록을 넣는다(이미 있으면 아무것도 안 함)
+    # 08 — 분류 목록(구역·대상)이 비어 있으면 기본 목록을 넣는다(이미 있으면 아무것도 안 함)
     db = SessionLocal()
     try:
         safe_seed(db, get_storage())

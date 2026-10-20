@@ -32,12 +32,12 @@ const hullRule = (v) => /^\d{4}$/.test(v) || '호선은 숫자 4자리입니다.
  * 바뀐 칸 전부를 한 번의 PATCH 로 보낸다. 카드 자체가 고치는 양식이라 [변경하기] 단계는 두지 않는다.
  */
 // 15 — 해석 시기는 없앴다
-// 20 — '호선 없음(공용)'(no_hull). 29 — 프로젝트(21)는 없앴다
-const CARD_FIELDS = ['title', 'analysis_type', 'hulls', 'no_hull', 'zones', 'target', 'description'];
-const FIELD_LABELS = { title: '제목', analysis_type: '해석 종류', hulls: '호선', no_hull: '호선 없음(공용)', zones: '구역',
+// 20 — '호선 없음(공용)'(no_hull). 29 — 프로젝트(21)는 없앴다. 42 — 해석 종류는 없앴다
+const CARD_FIELDS = ['title', 'hulls', 'no_hull', 'zones', 'target', 'description'];
+const FIELD_LABELS = { title: '제목', hulls: '호선', no_hull: '호선 없음(공용)', zones: '구역',
   target: '대상', description: '설명' };
 // 20 — 바뀌면 (사람이 고치지 않은) 초안 제목이 따라 바뀌는 칸(서버 update_entry 의 TITLE_VALUE_FIELDS 와 같다)
-const TITLE_VALUE_FIELDS = ['hulls', 'no_hull', 'zones', 'analysis_type'];
+const TITLE_VALUE_FIELDS = ['hulls', 'no_hull', 'zones', 'target'];
 /** 서버 쪽 내용이 실제로 바뀌었을 때만 달라지는 열쇠 — 폴링으로 같은 내용의 새 객체가 와도 입력을 지우지 않는다. */
 const entryKey = (e) => `${e.entry_id}|${e.version}|${e.files.map((f) => f.id).join(',')}`;
 
@@ -296,9 +296,9 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
             <input aria-label="제목" className={inputClass()} value={values.title} disabled={fieldDisabled}
                    onChange={(e) => set('title')(e.target.value)} />
           </Labeled>
-          {/* 20 — 제목 형식: 호선 · 구역 · 해석 종류 · 구별자(원래 이름에서 호선·분류·잡음을 뺀 나머지) */}
+          {/* 20·42 — 제목 형식: 호선 · 구역 · 대상 · 구별자(원래 이름에서 호선·분류·잡음을 뺀 나머지) */}
           {canEdit && willFollow && (
-            <span className="text-meta text-n-500">저장하면 제목이 형식대로 바뀝니다(호선 · 구역 · 해석 종류).</span>
+            <span className="text-meta text-n-500">저장하면 제목이 형식대로 바뀝니다(호선 · 구역 · 대상).</span>
           )}
           {showRegen && (
             <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-n-500">
@@ -310,10 +310,6 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
               </Button>
             </span>
           )}
-        </div>
-        <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600"><span>해석 종류{mark('analysis_type')}</span>
-          <VocabInput kind="atype" label="해석 종류" value={values.analysis_type || null} disabled={fieldDisabled}
-                      onChange={(v) => set('analysis_type')(v || '')} />
         </div>
         <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600"><span>호선{mark('hulls')}</span>
           <ChipInput label="호선" kind="hull" mono values={values.hulls} validate={hullRule} disabled={fieldDisabled}
@@ -333,7 +329,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
         <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600"><span>구역{mark('zones')}</span>
           <VocabInput multiple kind="zone" label="구역" values={values.zones} disabled={fieldDisabled} onChange={set('zones')} />
         </div>
-        {/* 38 — 대상 구조물(선택). 고르면 초안 제목의 해석 종류 뒤에 붙는다 */}
+        {/* 38 — 대상 구조물(선택). 고르면 초안 제목의 구역 뒤에 붙는다 */}
         <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600"><span>대상 <span className="font-normal text-n-500">(선택)</span>{mark('target')}</span>
           <VocabInput kind="target" label="대상" value={values.target || null} disabled={fieldDisabled}
                       onChange={(v) => set('target')(v || '')} />

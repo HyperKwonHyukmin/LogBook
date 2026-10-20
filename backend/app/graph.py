@@ -55,7 +55,7 @@ def _sig(row) -> dict:
 def build_graph(db: Session, user, store=None) -> dict:
     """store = 22 보고서 본문 색인(없거나 열 수 없으면 None — 문서 관계는 '사용한 모델'·이름 규칙만으로)."""
     E = models.Entry
-    rows = (db.query(E.id, E.entry_id, E.title, E.analysis_type, E.confirmed_at, E.vault_rel)
+    rows = (db.query(E.id, E.entry_id, E.title, E.confirmed_at, E.vault_rel)
             .filter(E.status == "confirmed", access.visible_entries_filter(user))
             .order_by(E.confirmed_at.desc(), E.id.desc())
             .limit(MAX_ENTRIES + 1).all())
@@ -85,7 +85,7 @@ def build_graph(db: Session, user, store=None) -> dict:
         kinds[no] = kind
         sizes[no] = f"{cap}급 {kind}" if cap and kind else None
 
-    # 태그는 대표 값으로(동의어를 하나로). 해석 종류도 분류 목록의 대표 값으로
+    # 태그는 대표 값으로(동의어를 하나로)
     vocabs = {k: Vocab(db, k) for k in TAG_KINDS}
     tags: dict[int, dict[str, list[str]]] = defaultdict(lambda: {k: [] for k in TAG_KINDS})
     for eid, tag in (db.query(models.EntryTag.entry_id, models.Tag)
@@ -95,7 +95,6 @@ def build_graph(db: Session, user, store=None) -> dict:
         bucket = tags[eid][tag.kind]
         if v not in bucket:
             bucket.append(v)
-    atype = Vocab(db, "atype")
 
     F, S = models.File, models.ModelSummary
     file_counts: dict[int, int] = defaultdict(int)
@@ -166,7 +165,6 @@ def build_graph(db: Session, user, store=None) -> dict:
         t = tags.get(r.id) or {k: [] for k in TAG_KINDS}
         out_entries.append({
             "id": r.entry_id, "title": r.title,
-            "analysis_type": atype.canon(r.analysis_type) if r.analysis_type else None,
             "confirmed_at": r.confirmed_at.strftime("%Y-%m") if r.confirmed_at else None,
             "hulls": hulls.get(r.id, []), "zones": t["zone"], "free": t["free"],
             "files": file_counts.get(r.id, 0), "revisions": revisions.get(r.id, []),

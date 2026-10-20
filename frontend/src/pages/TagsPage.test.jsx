@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { calls, mockApi } from '../test/mockApi.js';
 import TagsPage from './TagsPage.jsx';
 
-// 08 — 구역·해석 종류는 '분류 목록'(관리자)으로 옮겨, 태그 화면은 자유 태그만 다룬다.
+// 08 — 구역·대상은 '분류 목록'(관리자)으로 옮겨, 태그 화면은 자유 태그만 다룬다.
 const TAGS = [
   { id: 1, kind: 'free', value: '계류', alias_of: null, count: 2 },
   { id: 2, kind: 'free', value: 'Mooring', alias_of: { id: 1, value: '계류' }, count: 1 },

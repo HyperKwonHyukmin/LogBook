@@ -9,7 +9,7 @@ HULLS[11].label = 'LNGC';
 const FACETS = {
   hull: HULLS,
   zone: [{ value: '선미부', count: 3, aliases: ['Aft Body'] }, { value: '선수부', count: 2 }],
-  tag: [], ship_type: [], analysis_type: [], uploaded_by: [], kind: [],
+  tag: [], ship_type: [], uploaded_by: [], kind: [],
 };
 
 function renderPanel(filters = {}, applied) {

@@ -41,11 +41,11 @@ def world(db, storage, make_entry_file):
     out["only"], _ = make_entry_file(status="confirmed", title="Unit 만")          # 구역 Unit → 대상 Unit
     out["mixed"], _ = make_entry_file(status="confirmed", title="위치도 있음")      # 구역 선수부+GMU(동의어)
     out["busy"], _ = make_entry_file(status="confirmed", title="대상이 이미 있음")  # 다른 대상 → 옮기지 않음
-    out["draft"], _ = make_entry_file(status="draft", title="초안", analysis_type="FE 해석")
+    out["draft"], _ = make_entry_file(status="draft", title="초안")
     _set(db, out["only"], zones=["Unit"])
     _set(db, out["mixed"], zones=["선수부", "GMU"])
     _set(db, out["busy"], zones=["Unit"], target="블록")
-    _set(db, out["draft"], zones=["Unit"])
+    _set(db, out["draft"], zones=["선수부", "Unit"])   # 제목이 '선수부 외 1' → '선수부 · Unit' 으로 바뀐다
     out["draft"].title = quality.TitleContext(db).draft(out["draft"])   # 사람이 고치지 않은 초안 제목
     db.commit()
     return out

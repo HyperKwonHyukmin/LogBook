@@ -62,7 +62,7 @@ function MissingView() {
   return (
     <section aria-label="빠진 필수 분류">
       <p className="mb-3 text-meta text-n-600">
-        BDF 가 있는 확정 자료 중 호선(또는 '호선 없음(공용)')·구역·해석 종류가 빠진 것입니다. 자료는 그대로 보이고,
+        BDF 가 있는 확정 자료 중 호선(또는 '호선 없음(공용)')이나 구역·대상이 빠진 것입니다. 자료는 그대로 보이고,
         올린 사람과 관리자에게만 ‘보완 필요’ 표시가 붙습니다. 번호를 눌러 자료 화면의 [변경하기]로 채워 주세요.
       </p>
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -94,7 +94,7 @@ function MissingView() {
                 <td className={td}><EntryCell id={it.entry_id} title={it.title} /></td>
                 <td className={`${td} font-medium text-wait`}>{requiredText(it.missing)}</td>
                 <td className={`${td} text-meta text-n-600`}>
-                  호선 {it.hulls.join(', ') || (it.no_hull ? '공용' : '—')} · 구역 {it.zones.join(', ') || '—'} · 대상 {it.target || '—'} · 해석 종류 {it.analysis_type || '—'}
+                  호선 {it.hulls.join(', ') || (it.no_hull ? '공용' : '—')} · 구역 {it.zones.join(', ') || '—'} · 대상 {it.target || '—'}
                 </td>
                 <td className={`${td} text-meta text-n-700`}>{who(it)}</td>
               </tr>
@@ -171,7 +171,7 @@ function TitlesView({ onApplied }) {
     <section aria-label="제목 형식">
       {dialog}
       <p className="mb-3 text-meta text-n-600">
-        제목 형식 = 호선 · 구역 · 해석 종류 · 구별자(원래 폴더/파일 이름에서 호선·분류·잡음(final·최종·copy 등)을 뺀 나머지).
+        제목 형식 = 호선 · 구역 · 대상 · 구별자(원래 폴더/파일 이름에서 호선·분류·잡음(final·최종·copy 등)을 뺀 나머지).
         원래 파일 이름은 그대로입니다. 필수 분류가 빠진 BDF 자료와 분류 값이 하나도 없는 자료는 바꾸지 않습니다.
       </p>
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -312,7 +312,7 @@ export default function CleanupPage() {
   return (
     <Page>
       <PageHeader title="자료 정비"
-                  description="BDF 자료의 필수 분류(호선·구역·해석 종류)가 빠진 확정 자료를 찾고, 제목을 새 형식(호선 · 구역 · 해석 종류 · 구별자)으로 맞춥니다. 확정 자료를 숨기거나 상태를 바꾸지 않습니다." />
+                  description="BDF 자료의 필수 분류(호선, 구역 또는 대상)가 빠진 확정 자료를 찾고, 제목을 새 형식(호선 · 구역 · 대상 · 구별자)으로 맞춥니다. 확정 자료를 숨기거나 상태를 바꾸지 않습니다." />
       <Tabs label="정비 보기" items={VIEWS} value={view} onChange={setView} className="mb-4" />
       {view === 'missing' && <MissingView />}
       {view === 'titles' && <TitlesView onApplied={() => setStamp((n) => n + 1)} />}

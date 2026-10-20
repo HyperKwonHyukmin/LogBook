@@ -6,6 +6,9 @@
 LogBook 등급 바꾸기(15 — 1 게스트 | 2 일반 | 3 관리자. WorkBench 활성 사용자만, WorkBench 관리자는 못 바꿈):
     .venv\\Scripts\\python.exe -m app.cli set-level A100001 2
 
+열람 허락·회수 감사 기록 지우기(2026-10-20 — 이제 남기지 않는다. DB 와 감사 파일 모두, --apply 없으면 건수만):
+    .venv\\Scripts\\python.exe -m app.cli audit-purge-grants [--apply]
+
 관리자가 아닌 LV2 를 모두 LV1(게스트)로 내리기(31 — 모델 자료가 안 보이게. --apply 없으면 대상만 보고):
     .venv\\Scripts\\python.exe -m app.cli level-guest [--apply]
 
@@ -36,7 +39,7 @@ DB 백업(mysqldump → 80_Backup, 05):
 팀원 배포용 바로가기(Logbook.url + 사용 안내문)를 공유 폴더 루트에 쓰기:
     .venv\\Scripts\\python.exe -m app.cli write-shortcut [--url URL]
 
-해석 종류·구역 값을 분류 목록 용어로 맞추기(08) — 먼저 보고서로 확인하고 적용한다:
+구역·대상 값을 분류 목록 용어로 맞추기(08) — 먼저 보고서로 확인하고 적용한다:
     .venv\\Scripts\\python.exe -m app.cli vocab-report
     .venv\\Scripts\\python.exe -m app.cli vocab-normalize --apply
     (다시 돌려도 바뀌는 것이 없다. 맞추지 못한 값은 그대로 두고 관리 화면 '목록 밖 값'에 남는다)
@@ -47,7 +50,7 @@ DB 백업(mysqldump → 80_Backup, 05):
 한 자료 안 BDF 판 묶음(14)을 모든 자료에 대해 다시 맞추고, 계열 인접 판 비교를 대기열에 넣기(배포 뒤 1회):
     .venv\\Scripts\\python.exe -m app.cli revisions-refresh [--no-diffs]
 
-기존 자료 정비(20) — 필수 분류(호선·구역·해석 종류)가 빠진 확정 BDF 자료 목록과 제목을 새 형식으로 바꿀 목록을
+기존 자료 정비(20) — 필수 분류(호선·구역 또는 대상)가 빠진 확정 BDF 자료 목록과 제목을 새 형식으로 바꿀 목록을
 보여 준다(기본은 보기만). --apply 면 바꿀 수 있는 제목을 모두 바꾼다(감사 ENTRY_RETITLE — 관리 화면 '자료 정비'에서
 행별로 되돌릴 수 있다). ⚠ 적용 전에 backup 으로 DB 를 백업할 것:
     .venv\\Scripts\\python.exe -m app.cli naming-cleanup [--apply] [--limit N]
@@ -248,7 +251,7 @@ def _cmd_rebuild(yes: bool, force: bool = False) -> int:
     return 0
 
 
-_VOCAB_NAMES = {"atype": "해석 종류", "zone": "구역", "target": "대상"}
+_VOCAB_NAMES = {"zone": "구역", "target": "대상"}
 
 
 def _print_vocab_report(rep: dict) -> None:
@@ -472,10 +475,12 @@ def main(argv: list[str]) -> int:
     sr.add_argument("level", type=int, choices=(1, 2, 3))
     lg = sub.add_parser("level-guest", help="31 — 관리자가 아닌 LV2 사용자를 모두 LV1(게스트)로 내린다(--apply 없으면 보고만)")
     lg.add_argument("--apply", action="store_true", help="실제로 바꾼다")
+    ap = sub.add_parser("audit-purge-grants", help="열람 허락·회수 감사 기록을 DB·감사 파일에서 지운다(--apply 없으면 건수만)")
+    ap.add_argument("--apply", action="store_true")
     rv = sub.add_parser("revisions-refresh", help="모든 자료의 BDF 판 묶음(14)을 다시 맞추고 인접 판 비교를 넣는다")
     rv.add_argument("--no-diffs", action="store_true", help="판 묶음만 맞추고 비교 작업은 넣지 않는다")
-    sub.add_parser("vocab-report", help="해석 종류·구역 값이 분류 목록 용어로 어떻게 맞춰질지 보고한다(쓰지 않음)")
-    n = sub.add_parser("vocab-normalize", help="해석 종류·구역 값을 분류 목록 용어로 맞춘다(--apply 없으면 보고만)")
+    sub.add_parser("vocab-report", help="구역·대상 값이 분류 목록 용어로 어떻게 맞춰질지 보고한다(쓰지 않음)")
+    n = sub.add_parser("vocab-normalize", help="구역·대상 값을 분류 목록 용어로 맞춘다(--apply 없으면 보고만)")
     n.add_argument("--apply", action="store_true", help="실제로 바꾼다(감사 로그·entry.json 갱신)")
     vm = sub.add_parser("vocab-move", help="40 — 분류 값을 다른 종류로 옮긴다(예: vocab-move zone Unit target, --apply 없으면 보고만)")
     vm.add_argument("kind_from", choices=("zone", "target"))
@@ -546,6 +551,15 @@ def main(argv: list[str]) -> int:
                 print(f"  {u.employee_id} {u.name} {u.department or ''}")
             verb = "LV1 로 내렸습니다" if args.apply else "LV1 로 내릴 대상입니다(--apply 로 실행)"
             print(f"{len(rows)}명 {verb}. WorkBench 관리자와 LV3 지정자는 그대로입니다.")
+            return 0
+        if args.cmd == "audit-purge-grants":
+            from .audit import purge_not_kept
+
+            rep = purge_not_kept(db, get_storage(), apply=args.apply)
+            verb = "지웠습니다" if rep["applied"] else "지울 대상입니다(--apply 로 실행)"
+            print(f"열람 허락·회수 기록: DB {rep['db']}건 {verb}.")
+            for name, n in rep["files"].items():
+                print(f"  감사 파일 {name}: {n}줄")
             return 0
         if args.cmd == "naming-cleanup":
             naming_cleanup(db, get_storage(), apply=args.apply, limit=max(1, args.limit))

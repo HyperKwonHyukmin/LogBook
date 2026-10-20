@@ -119,7 +119,7 @@ def _search_items(db, user, q, sort):
 
 
 def _details(db, items):
-    """색인 현재성 확인용 파일 정체(sha·경로·자료 pk·Vault 경로)와 메타데이터 검색 글(설명·해석 종류·태그)."""
+    """색인 현재성 확인용 파일 정체(sha·경로·자료 pk·Vault 경로)와 메타데이터 검색 글(설명·태그 — 42 해석 종류는 뺐다)."""
     ids = [it["file_id"] for it in items]
     ident, entry_of = {}, {}
     for i in range(0, len(ids), 1000):
@@ -133,9 +133,8 @@ def _details(db, items):
     extra, tags = {}, defaultdict(list)
     for i in range(0, len(pks), 1000):
         group = pks[i:i + 1000]
-        for pk, desc, analysis in (db.query(models.Entry.id, models.Entry.description, models.Entry.analysis_type)
-                                   .filter(models.Entry.id.in_(group))):
-            extra[pk] = (desc, analysis)
+        for pk, desc in db.query(models.Entry.id, models.Entry.description).filter(models.Entry.id.in_(group)):
+            extra[pk] = desc
         for pk, value in (db.query(models.EntryTag.entry_id, models.Tag.value)
                           .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
                           .filter(models.EntryTag.entry_id.in_(group))):
@@ -191,14 +190,14 @@ def list_reports(db, user, store, *, q="", mode="and", retrieval="keyword", filt
         current = fid in ident and is_current(doc, **ident[fid])
         if current and doc.get("state") in INDEXED:
             indexed.add(fid)
-        desc, analysis = extra.get(entry_of.get(fid), (None, None))
+        desc = extra.get(entry_of.get(fid))
         rows[fid] = {
             "item": {**it, "scope": report_catalog.scope_of(hulls=it["hulls"], no_hull=it.get("no_hull")),
                      "document_type": doc_type, "document_type_auto": doc_auto, "model_count": n, "snippets": [],
                      "index_state": index_state(doc, current) if index_available else None,
                      "match_type": None},
             "doc": doc,
-            "metadata": " ".join(str(v or "") for v in [it["name"], it.get("entry_title"), desc, analysis,
+            "metadata": " ".join(str(v or "") for v in [it["name"], it.get("entry_title"), desc,
                                                         doc_type, *it.get("hulls", []),
                                                         *tags.get(entry_of.get(fid), [])]),
             "facet": {"scope": None, "document_type": doc_type or NONE,

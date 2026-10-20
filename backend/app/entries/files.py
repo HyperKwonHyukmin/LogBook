@@ -206,7 +206,7 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry, b
     from .service import entry_to_dict
 
     d = entry_to_dict(db, entry)
-    meta = {k: d[k] for k in ("entry_id", "title", "analysis_type", "description",
+    meta = {k: d[k] for k in ("entry_id", "title", "description",   # 42 — 해석 종류는 쓰지 않는다
                               "hulls", "zones", "tags", "uploaded_by", "confirmed_by", "confirmed_at",
                               "version")}
     # 13·15 — 공개 단계(공유·일반·블록)는 재구축 원천이라 남긴다(열람 허락 명단은 registry.json 에만 — 이 폴더는 탐색기로 보인다)

@@ -109,6 +109,9 @@ SHOW GRANTS FOR '<logbook 계정>'@'<호스트>';
 `.venv\Scripts\python.exe -m app.cli level-guest` 로 대상을 보고 `level-guest --apply`. WorkBench 관리자는 자동 LV3, LogBook 에서 LV3 로
 지정한 사람도 그대로다. WorkBench 사용자 관리 표의 'LogBook' 열은 `/api/integration/levels`(공유 비밀키)를 읽어 보여 준다.
 
+자료의 변경 이력에는 자료 내용 변경만 남긴다. **열람 허락·회수는 기록하지 않는다**(2026-10-20 결정). 지금 누가 허락받았는지는 자료 화면의 허락 목록이 보여 준다.
+예전 기록은 `.venv\Scripts\python.exe -m app.cli audit-purge-grants` 로 건수를 보고 `--apply` 로 지운다. DB 와 공유 폴더 감사 파일(`90_System\audit\*.jsonl`) 둘 다 지우므로 재구축해도 돌아오지 않는다.
+
 ## WorkBench 해석 출처 (39, Hi-TESS Core 1단계)
 
 WorkBench 관리자가 All Projects 에서 해석 1건을 보내면 자료 화면 속성 칸 '출처'에 `WB #번호`·프로그램·해석자·일시와
@@ -124,6 +127,9 @@ WorkBench 보내기 규칙도 대상으로 정한다(기본: Truss = 대상 'Tru
 구역 목록에 잘못 들어간 구조물 값은 145 에서 보고서를 본 뒤 옮긴다:
 `.venv\Scripts\python.exe -m app.cli vocab-move zone Unit target` → 확인 후 같은 명령에 `--apply`.
 이미 다른 대상이 있는 자료는 옮기지 않고 보고만 한다(그 자료의 구역 값은 '목록 밖 값'으로 남으니 관리 › 분류 목록에서 정리).
+
+42 — **해석 종류는 없앴다**(필수 칸·제목·검색·분류 목록 모두. DB 열·옛 값은 남지만 읽지 않는다). 분류 목록에서 구역·대상 용어를 **지우면**
+그 값(동의어 포함)을 단 자료에서도 함께 빠진다(`DELETE /api/vocab/terms/{id}`, 확정 자료는 이력·entry.json). 이름 바꾸기는 전부터 자료 전부에 반영된다.
 
 ## 운영 참고 (145)
 

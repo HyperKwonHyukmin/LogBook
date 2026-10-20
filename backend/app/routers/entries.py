@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from .. import access, models
+from .. import access, audit, models
 from ..database import get_db
 from ..dependencies import client_ip, get_storage, require_auth
 from ..entries import service
@@ -17,9 +17,9 @@ router = APIRouter(prefix="/api", tags=["entries"])
 
 
 class EntryPatch(BaseModel):
+    # 42 — analysis_type 은 받지 않는다(옛 화면이 보내도 모르는 칸으로 무시)
     version: int
     title: str | None = Field(default=None, max_length=200)
-    analysis_type: str | None = Field(default=None, max_length=50)
     description: str | None = None
     hulls: list[str] | None = None
     zones: list[str] | None = None
@@ -28,7 +28,7 @@ class EntryPatch(BaseModel):
     merge_into_id: str | None = None
     access: str | None = Field(default=None, pattern="^(shared|normal|blocked)$")   # 15 — 초안에서만
     no_hull: bool | None = None       # 20 — '호선 없음(공용)'
-    title_auto: bool | None = None    # 20 — 제목을 형식대로 다시 만들기(호선·구역·해석 종류 + 구별자)
+    title_auto: bool | None = None    # 20 — 제목을 형식대로 다시 만들기(호선·구역·대상 + 구별자)
 
 
 class AccessBody(BaseModel):
@@ -85,39 +85,16 @@ def get_entry(entry_id: str, db: Session = Depends(get_db), storage: StoragePath
 
 @router.get("/entries/{entry_id}/history")
 def entry_history(entry_id: str, db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
-    """이 Entry 의 변경 이력(감사 로그) — 최근 것부터 200건."""
+    """이 Entry 의 변경 이력(감사 로그) — 최근 것부터 200건. 열람 허락·회수는 남기지 않는다(2026-10-20)."""
     e = _entry(db, entry_id, user)
-    q = db.query(models.AuditLog).filter_by(target_type="entry", target_id=e.entry_id)
-    if not access.can_edit_entry(user, e):
-        # 13 — 열람 허락 명단은 공개 범위를 바꿀 수 있는 사람(올린 사람·관리자 이상)에게만
-        q = q.filter(models.AuditLog.action.notin_(("ENTRY_GRANT", "ENTRY_REVOKE")))
-    rows = q.order_by(models.AuditLog.at.desc(), models.AuditLog.id.desc()).limit(200).all()
-
-    def subject(r):   # 열람 허락·회수의 대상 사번(13)
-        if r.action in ("ENTRY_GRANT", "ENTRY_REVOKE"):
-            return ((r.after or r.before) or {}).get("employee_id")
-        return None
-
-    ids = {r.employee_id for r in rows if r.employee_id} | {s for r in rows if (s := subject(r))}
+    rows = (db.query(models.AuditLog).filter_by(target_type="entry", target_id=e.entry_id)
+            .filter(models.AuditLog.action.notin_(audit.NOT_KEPT))
+            .order_by(models.AuditLog.at.desc(), models.AuditLog.id.desc()).limit(200).all())
+    ids = {r.employee_id for r in rows if r.employee_id}
     names = dict(db.query(models.User.employee_id, models.User.name)
                  .filter(models.User.employee_id.in_(ids or {""})))
-    # 15 — 허락 대상은 LogBook 에 들어온 적 없는 WorkBench 사용자일 수 있다 — 이름을 WorkBench 에서 보탠다
-    missing = {s for r in rows if (s := subject(r)) and s not in names}
-    if missing:
-        from .. import wb_users
-
-        try:
-            names |= {k: v.name for k, v in wb_users.fetch_many(db, missing).items()}
-        except wb_users.WbUnavailable:
-            pass
-    out = []
-    for r in rows:
-        d = {"at": r.at.isoformat(), "employee_id": r.employee_id, "name": names.get(r.employee_id),
-             "action": r.action, "before": r.before, "after": r.after}
-        if (s := subject(r)) is not None:
-            d["subject_name"] = names.get(s)     # 화면이 사번 대신 이름을 보이게
-        out.append(d)
-    return out
+    return [{"at": r.at.isoformat(), "employee_id": r.employee_id, "name": names.get(r.employee_id),
+             "action": r.action, "before": r.before, "after": r.after} for r in rows]
 
 
 @router.patch("/entries/{entry_id}")

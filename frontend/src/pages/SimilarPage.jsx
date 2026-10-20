@@ -49,34 +49,32 @@ export default function SimilarPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [zone, setZone] = useState(null);       // null = 기준 자료 값, '' = 모름
-  const [atype, setAtype] = useState(null);
   const [order, setOrder] = useState('like');
   const [selId, setSelId] = useState(null);
   const [open, setOpen] = useState(() => new Set());
   const [over, setOver] = useState(false);
   const [picking, setPicking] = useState(!fileId);   // LogBook 에서 고르기 칸(기준이 없으면 처음부터 연다)
-  const [vocab, setVocab] = useState({ zone: [], atype: [] });
-  const upload = useRef(null);                  // 마지막에 올린 파일(구역·해석 종류를 바꾸면 다시 보낸다)
+  const [vocab, setVocab] = useState({ zone: [] });
+  const upload = useRef(null);                  // 마지막에 올린 파일(구역을 바꾸면 다시 보낸다)
   const fileInput = useRef(null);
   const listRef = useRef(null);
 
   useEffect(() => {
-    Promise.all([loadVocab('zone'), loadVocab('atype')])
-      .then(([z, a]) => setVocab({ zone: z.map((t) => t.value), atype: a.map((t) => t.value) })).catch(() => {});
+    loadVocab('zone').then((z) => setVocab({ zone: z.map((t) => t.value) })).catch(() => {});
   }, []);
 
-  const query = (z, a) => [z != null ? `zone=${encodeURIComponent(z)}` : '', a != null ? `analysis_type=${encodeURIComponent(a)}` : '']
-    .filter(Boolean).join('&');
+  // 42 — 해석 종류는 없앴다(구역만 보낸다)
+  const query = (z) => (z != null ? `zone=${encodeURIComponent(z)}` : '');
 
-  async function run(z = zone, a = atype) {
+  async function run(z = zone) {
     setBusy(true); setError('');
     try {
       let d;
       if (upload.current) {
         const f = upload.current;
-        d = await apiBinary(`/similar/bdf?name=${encodeURIComponent(f.name)}${query(z, a) ? `&${query(z, a)}` : ''}`, f, { method: 'POST' });
+        d = await apiBinary(`/similar/bdf?name=${encodeURIComponent(f.name)}${query(z) ? `&${query(z)}` : ''}`, f, { method: 'POST' });
       } else if (fileId) {
-        d = await api(`/similar?file_id=${fileId}${query(z, a) ? `&${query(z, a)}` : ''}`);
+        d = await api(`/similar?file_id=${fileId}${query(z) ? `&${query(z)}` : ''}`);
       } else {
         d = null;
       }
@@ -91,24 +89,24 @@ export default function SimilarPage() {
   }
 
   useEffect(() => {
-    upload.current = null; setZone(null); setAtype(null);
-    run(null, null);
+    upload.current = null; setZone(null);
+    run(null);
   }, [fileId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function takeFile(f) {
     if (!f) return;
     if (f.size > MAX_UPLOAD_BYTES) { setError(errorText({ detail: 'bdf_too_large' })); return; }
-    upload.current = f; setZone(null); setAtype(null);
+    upload.current = f; setZone(null);
     setPicking(false);
     if (fileId) setParams({}, { replace: true });
-    run(null, null);
+    run(null);
   }
 
   function pickFromLogbook(id) {
     setPicking(false);
     if (String(id) === String(fileId) && !upload.current) return;
     upload.current = null;
-    if (String(id) === String(fileId)) { run(null, null); return; }
+    if (String(id) === String(fileId)) { run(null); return; }
     setParams({ file: String(id) });
   }
 
@@ -158,16 +156,11 @@ export default function SimilarPage() {
                 {base.missing_includes?.length > 0 && <span className="text-wait">INCLUDE {base.missing_includes.length}개는 읽지 않았습니다</span>}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <span className="text-meta text-n-600">구역·해석 종류를 고르면 더 정확해집니다</span>
+                <span className="text-meta text-n-600">구역을 고르면 더 정확해집니다</span>
                 <select aria-label="구역" className={selectClass} value={zone ?? base.zone ?? ''}
-                        onChange={(e) => { setZone(e.target.value); run(e.target.value, atype); }}>
+                        onChange={(e) => { setZone(e.target.value); run(e.target.value); }}>
                   <option value="">구역 모름</option>
                   {[...new Set([base.zone, ...vocab.zone].filter(Boolean))].map((z) => <option key={z}>{z}</option>)}
-                </select>
-                <select aria-label="해석 종류" className={selectClass} value={atype ?? base.atype ?? ''}
-                        onChange={(e) => { setAtype(e.target.value); run(zone, e.target.value); }}>
-                  <option value="">해석 종류 모름</option>
-                  {[...new Set([base.atype, ...vocab.atype].filter(Boolean))].map((a) => <option key={a}>{a}</option>)}
                 </select>
               </div>
             </>
@@ -222,7 +215,7 @@ export default function SimilarPage() {
             <div ref={listRef} role="listbox" aria-label="찾은 선례">
               {shown.map((r, i) => {
                 const L = r.lead;
-                const c = compareLines({ ...base, zone: zone ?? base.zone, atype: atype ?? base.atype }, L, r.score);
+                const c = compareLines({ ...base, zone: zone ?? base.zone }, L, r.score);
                 const grp = r.member_total > 1;
                 const isOpen = open.has(L.file_id);
                 const hulls = [...new Set(r.members.flatMap((m) => m.hulls))];
@@ -288,7 +281,7 @@ export default function SimilarPage() {
           </section>
 
           <aside aria-label="선례 상세" aria-live="polite" className="rounded-lg border border-n-200 p-4 min-[1180px]:sticky min-[1180px]:top-4">
-            {sel ? <Detail base={{ ...base, zone: zone ?? base.zone, atype: atype ?? base.atype }} item={sel.m} row={sel.r} /> : <p className="text-ui text-n-600">선례를 고르면 기준과 나란히 봅니다.</p>}
+            {sel ? <Detail base={{ ...base, zone: zone ?? base.zone }} item={sel.m} row={sel.r} /> : <p className="text-ui text-n-600">선례를 고르면 기준과 나란히 봅니다.</p>}
           </aside>
         </div>
       )}
@@ -304,7 +297,6 @@ function Detail({ base, item, row }) {
     ['요소', base.elems.toLocaleString('ko-KR'), item.elems.toLocaleString('ko-KR'), s ? s.raw.scale < 0.5 : false],
     ['구성', mixText(base.mix), mixText(item.mix), s ? s.raw.mix < 0.85 : false],
     ['구역', base.zone || '모름', item.zones.join(', ') || '없음', !!base.zone && !item.zones.includes(base.zone)],
-    ['해석 종류', base.atype || '모름', item.atype || '없음', !!base.atype && diff(base.atype, item.atype)],
     ['SOL', base.sol || '—', item.sol || '—', diff(base.sol, item.sol)],
   ];
   return (

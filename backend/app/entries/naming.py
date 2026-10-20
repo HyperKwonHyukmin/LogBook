@@ -1,10 +1,10 @@
 """20 — 자료 제목 형식(순수 함수, DB 와 무관).
 
-제목 초안 = `{호선} · {구역} · {해석 종류} · {대상} · {구별자}` — 값이 없는 칸은 건너뛴다.
-- 38 — 대상(대상 구조물, 통제 어휘·선택 칸)이 있으면 해석 종류 뒤에 온다. 구별자에서는 대상 표기도 뺀다.
+제목 초안 = `{호선} · {구역} · {대상} · {구별자}` — 값이 없는 칸은 건너뛴다(42 — 해석 종류 칸은 없앴다).
+- 38 — 대상(대상 구조물, 통제 어휘·선택 칸)이 있으면 구역 뒤에 온다. 구별자에서는 대상 표기도 뺀다.
 - 호선·구역이 여럿이면 첫 값 + ' 외 N'(예: `3496 외 1`). '호선 없음(공용)' 이면 호선 칸이 `공용`.
 - 21 — 호선이 없고 프로젝트가 있으면 호선 칸이 프로젝트 이름(`크레인 연구 · 기관실 · FE 해석`). 프로젝트가 '공용'보다 앞선다.
-- 구별자 = 원래 폴더/파일 이름(title_source)에서 이 자료의 호선 번호·구역·해석 종류에 해당하는 토큰과
+- 구별자 = 원래 폴더/파일 이름(title_source)에서 이 자료의 호선 번호·구역·대상에 해당하는 토큰과
   흔한 잡음(final·최종·copy 등)을 뺀 나머지(예: `3496_선수부_M04_rev3_final` → `M04 rev3`).
 - 세 값이 모두 없으면 예전 방식(파일/폴더 이름의 '_' 를 공백으로)을 그대로 쓴다(legacy_title).
 
@@ -70,7 +70,7 @@ def _phrase_keys(phrases) -> set[str]:
 
 
 def distinct_part(source: str | None, *, hulls=(), phrases=()) -> str:
-    """원래 이름에서 호선(hulls)·구역/해석 종류 표기(phrases — 용어와 동의어)·잡음을 뺀 나머지.
+    """원래 이름에서 호선(hulls)·구역/대상 표기(phrases — 용어와 동의어)·잡음을 뺀 나머지.
 
     표기는 토큰 1~3개를 이어 붙인 열쇠로 맞춘다(`Engine Room`·`강도_평가`). 2글자 이상 토큰이 어떤 표기의
     앞부분이면(`권상` ↔ `권상 해석`) 그것도 뺀다 — 이 자료가 고른 값의 표기만 보므로 엉뚱한 단어를 지우지 않는다."""
@@ -118,25 +118,24 @@ def _first_plus(values: list[str]) -> str:
     return vals[0] + (f" 외 {len(vals) - 1}" if len(vals) > 1 else "")
 
 
-def compose_title(*, hulls=(), no_hull: bool = False, zones=(), analysis_type: str | None = None,
-                  target: str | None = None, distinct: str = "") -> str:
-    """구조화 값으로 제목을 만든다. 호선(또는 공용)·구역·해석 종류가 모두 없으면 '' (부르는 쪽이 예전 방식으로).
-    38 — 대상(target)은 머리 세 칸 뒤·구별자 앞. 대상만 있고 머리 세 칸이 없으면 역시 ''."""
+def compose_title(*, hulls=(), no_hull: bool = False, zones=(), target: str | None = None, distinct: str = "") -> str:
+    """구조화 값으로 제목을 만든다. 호선(또는 공용)·구역이 모두 없으면 '' (부르는 쪽이 예전 방식으로).
+    38 — 대상(target)은 머리 칸 뒤·구별자 앞. 대상만 있고 머리 칸이 없으면 역시 ''."""
     hull_list = list(hulls or [])
     hull_part = _first_plus(hull_list) if hull_list else (SHARED_LABEL if no_hull else "")
-    head = [p for p in (hull_part, _first_plus(list(zones or [])), (analysis_type or "").strip()) if p]
+    head = [p for p in (hull_part, _first_plus(list(zones or []))) if p]
     if not head:
         return ""
     tail = [p for p in ((target or "").strip(), distinct) if p]
     return SEP.join(head + tail)[:TITLE_MAX]
 
 
-def title_draft(source: str | None, *, hulls=(), no_hull: bool = False, zones=(), analysis_type: str | None = None,
-                target: str | None = None, phrases=()) -> str:
-    """제목 초안 — 값이 하나라도 있으면 형식, 아니면 예전 방식(원래 이름). phrases(구역·해석 종류 표기)는
+def title_draft(source: str | None, *, hulls=(), no_hull: bool = False, zones=(), target: str | None = None,
+                phrases=()) -> str:
+    """제목 초안 — 값이 하나라도 있으면 형식, 아니면 예전 방식(원래 이름). phrases(구역·대상 표기)는
     구별자에서 뺀다(quality.TitleContext.draft 가 넣는다)."""
     distinct = distinct_part(source, hulls=hulls, phrases=phrases)
-    return compose_title(hulls=hulls, no_hull=no_hull, zones=zones, analysis_type=analysis_type, target=target,
+    return compose_title(hulls=hulls, no_hull=no_hull, zones=zones, target=target,
                          distinct=distinct) or legacy_title(source)
 
 

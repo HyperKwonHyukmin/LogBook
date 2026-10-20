@@ -4,7 +4,7 @@ Entry 수가 수만 건을 넘지 않는다는 전제로, 후보 Entry 의 필�
 파이썬에서 거르고 센다(필터 건수를 "자기 필터만 뺀" 방식으로 세기 쉽다). 규모가 커지면
 이 모듈만 Meilisearch 구현으로 바꾼다(base.SearchBackend).
 
-08: 해석 종류·구역은 통제 어휘의 대표 값으로 세고 거른다(vocab.Vocab.canon).
+08: 구역·대상은 통제 어휘의 대표 값으로 세고 거른다(vocab.Vocab.canon). 42 — 해석 종류는 없앴다.
 15: 해석 시기·해석 연도는 없앴다. 정렬은 관련도·최신순(올린 날짜 = 확정일, 초안은 등록일)·즐겨찾기한 순.
 19: 한 칸에 여러 값(같은 칸 안은 OR, 칸끼리는 AND) · 필터 건수 개수 제한을 크게(수백 호선) · 숫자 검색어의
     호선 앞부분 일치 · 호선순·제목순 정렬 · 태그별 묶기.
@@ -24,7 +24,6 @@ from ..revisions.series import counts as revision_counts
 from .. import models
 from ..tags import group_ids
 from ..vocab import Vocab
-from ..vocab import key as vocab_key
 from ..entries.quality import missing_fields
 from .base import FILTER_KEYS, GROUP_KEYS, GROUP_NONE, GROUP_SHARED, GROUP_SORTS, SORT_ALIASES, SORTS, SearchQuery, filter_values
 from . import insight
@@ -117,8 +116,8 @@ _MATCH = "MATCH(file_texts.text) AGAINST (:p IN BOOLEAN MODE)"
 
 
 def _vocabs(db: Session) -> dict:
-    """요청 하나 동안 쓰는 값 정규화 스냅숏 — 해석 종류·구역(통제 어휘)·자유 태그."""
-    return {"atype": Vocab(db, "atype"), "zone": Vocab(db, "zone"), "target": Vocab(db, "target"),
+    """요청 하나 동안 쓰는 값 정규화 스냅숏 — 구역·대상(통제 어휘)·자유 태그."""
+    return {"zone": Vocab(db, "zone"), "target": Vocab(db, "target"),
             "free": _FreeTags(db)}
 
 
@@ -126,7 +125,7 @@ class _Hits:
     """낱말 하나의 적중 — Entry pk → (점수, 맞은 곳), 파일 id → (점수, 맞은 곳).
 
     - entries: 파일 이름·본문 적중까지 포함한 Entry 적중(Entry 보기 순위용).
-    - meta: Entry 메타데이터(번호·호선·제목·태그·해석 종류·설명)에서만 온 적중. 파일 보기에서
+    - meta: Entry 메타데이터(번호·호선·제목·태그·설명)에서만 온 적중. 파일 보기에서
       파일이 물려받을 수 있는 것은 이것뿐이다 — 같은 Entry 의 다른 파일 적중을 물려받지 않게.
     - body_files: 본문이 맞은 파일 id → Entry pk. 발췌문 대상을 고를 때 DB 를 다시 묻지 않게."""
 
@@ -164,7 +163,7 @@ class MySqlSearch:
             sort = "relevance" if terms else "recent"
 
         vocab = _vocabs(db)
-        # 서버가 실제로 적용한 필터 — 해석 종류·구역·태그는 대표 값으로 바꿔 준다(zone=ER → 기관실).
+        # 서버가 실제로 적용한 필터 — 구역·대상·태그는 대표 값으로 바꿔 준다(zone=ER → 기관실).
         # 화면이 공유 URL 의 동의어 값으로도 필터 항목을 올바르게 강조할 수 있게 한다.
         # 19 — 값마다 대표 값으로 바꾸고, 같은 대표 값으로 모이는 값(ER·기관실)은 하나로 — {칸: [값, …]}
         filters = {k: list(dict.fromkeys(self._canon_filter(vocab, k, v) for v in vs)) for k, vs in raw.items()}
@@ -245,7 +244,7 @@ class MySqlSearch:
     def browse(self, db: Session, include_drafts: bool = False, user=None) -> dict:
         """분류 화면(09) — 속성마다 모든 값과 Entry 수(검색 필터 건수와 같은 셈법, 개수 제한 없음).
 
-        구역·해석 종류는 대표 값으로 세고, 아직 쓰인 적 없는 목록 용어도 0건으로 보탠다(무엇을 고를 수 있는지
+        구역·대상은 대표 값으로 세고, 아직 쓰인 적 없는 목록 용어도 0건으로 보탠다(무엇을 고를 수 있는지
         보이게). 값마다 동의어(aliases)를 실어 화면의 '값으로 거르기'가 동의어로도 찾게 한다."""
         statuses = ("confirmed", "draft") if include_drafts else ("confirmed",)
         vocab = _vocabs(db)
@@ -258,7 +257,7 @@ class MySqlSearch:
             for r in rows.values():
                 c.update(self._values(r, key))
             out[key] = [{"value": v, "count": n} for v, n in c.items()]
-        for key, kind in (("zone", "zone"), ("target", "target"), ("analysis_type", "atype")):
+        for key, kind in (("zone", "zone"), ("target", "target")):
             v = vocab[kind]
             seen = {f["value"] for f in out[key]}
             out[key] += [{"value": t.value, "count": 0} for t in v.terms
@@ -335,8 +334,6 @@ class MySqlSearch:
 
     @staticmethod
     def _canon_filter(vocab: dict, key: str, value: str) -> str:
-        if key == "analysis_type":
-            return vocab["atype"].canon(value) or value
         if key in ("zone", "target"):
             return vocab[key].canon(value) or value
         if key == "tag":
@@ -389,19 +386,11 @@ class MySqlSearch:
         for eid, title in db.query(E.id, E.title).filter(live, E.title.like(like, escape="\\")):
             h.entry(eid, S_TITLE_EXACT if title.lower() == term.lower() else S_TITLE, "title")
         tag_rows = db.query(models.Tag.id, models.Tag.kind).filter(models.Tag.value.like(like, escape="\\")).all()
-        tag_ids = [i for i, kind in tag_rows if kind not in ("atype", "project")]
+        tag_ids = [i for i, kind in tag_rows if kind not in ("atype", "project")]   # 29·42 — 없앤 종류의 남은 행
         if tag_ids:
             for (eid,) in (db.query(models.EntryTag.entry_id).join(E, E.id == models.EntryTag.entry_id)
                            .filter(live, models.EntryTag.tag_id.in_(group_ids(db, tag_ids)))):
                 h.entry(eid, S_TAG, "tag")
-        for (eid,) in db.query(E.id).filter(live, E.analysis_type.like(like, escape="\\")):
-            h.entry(eid, S_TYPE, "analysis_type")
-        # 해석 종류 사전(08) — 동의어(FEM)로 찾아도 그 용어(FE 해석)를 쓴 Entry 가 맞는다
-        atype_ids = [i for i, kind in tag_rows if kind == "atype"]
-        if atype_ids:
-            values = [v for (v,) in db.query(models.Tag.value).filter(models.Tag.id.in_(group_ids(db, atype_ids)))]
-            for (eid,) in db.query(E.id).filter(live, E.analysis_type.in_(values)):
-                h.entry(eid, S_TYPE, "analysis_type")
         if vocab is not None:
             self._property_hits(db, h, term, live, vocab)
         for (eid,) in db.query(E.id).filter(live, E.description.like(like, escape="\\")):
@@ -443,30 +432,20 @@ class MySqlSearch:
     def _property_hits(db: Session, h: _Hits, term: str, live, vocab: dict) -> None:
         """속성 값으로 찾기(09) — 본문에 그 낱말이 없어도 그 속성을 가진 Entry 가 맞는다.
 
-        - 구역·해석 종류: 표기 변형(공백·대소문자, '선미 부' = '선미부')까지 목록 용어로 맞춘다.
+        - 구역·대상: 표기 변형(공백·대소문자, '선미 부' = '선미부')까지 목록 용어로 맞춘다.
           LIKE 로 이미 맞은 값·동의어는 위에서 처리되고, 여기는 그 밖의 표기를 보탠다.
         - 선종: 호선 정보의 선종(LIKE) — 그 선종 호선을 가진 Entry.
         - 올린 사람: 이름·사번이 낱말과 정확히 같을 때만(한 글자 성으로 너무 많이 맞지 않게)."""
         E = models.Entry
-        for kind, where in (("zone", "zone"), ("target", "target"), ("atype", "analysis_type")):
+        for kind in ("zone", "target"):
             t = vocab[kind].target(term)
             if t is None:
                 continue
-            values = [t.value] + [s.value for s in vocab[kind].synonyms(t)]
-            if kind in ("zone", "target"):
-                # 묶인 동의어뿐 아니라 아직 묶이지 않은 표기 변형('선미 부')도 — 필터·건수와 같은 canon 기준
-                ids = [x.id for x in vocab[kind].by_id.values() if vocab[kind].canon(x.value) == t.value]
-                for (eid,) in (db.query(models.EntryTag.entry_id).join(E, E.id == models.EntryTag.entry_id)
-                               .filter(live, models.EntryTag.tag_id.in_(ids))):
-                    h.entry(eid, S_TAG, where)
-            else:
-                # entries.analysis_type 는 문자열 — 표기 변형 값까지 비교 열쇠로 맞춘다
-                keys = {vocab_key(v) for v in values}
-                used = [v for (v,) in db.query(E.analysis_type).filter(live, E.analysis_type.isnot(None)).distinct()
-                        if vocab_key(v) in keys]
-                if used:
-                    for (eid,) in db.query(E.id).filter(live, E.analysis_type.in_(used)):
-                        h.entry(eid, S_TYPE, where)
+            # 묶인 동의어뿐 아니라 아직 묶이지 않은 표기 변형('선미 부')도 — 필터·건수와 같은 canon 기준
+            ids = [x.id for x in vocab[kind].by_id.values() if vocab[kind].canon(x.value) == t.value]
+            for (eid,) in (db.query(models.EntryTag.entry_id).join(E, E.id == models.EntryTag.entry_id)
+                           .filter(live, models.EntryTag.tag_id.in_(ids))):
+                h.entry(eid, S_TAG, kind)
         like = _like(term)
         for (eid,) in (db.query(models.EntryHull.entry_id).join(E, E.id == models.EntryHull.entry_id)
                        .join(models.Hull, models.Hull.hull_no == models.EntryHull.hull_no)
@@ -484,11 +463,10 @@ class MySqlSearch:
             return {}
         rows: dict[int, dict] = {}
         id_list = list(ids)
-        atype = vocab["atype"]
         for e in db.query(models.Entry).filter(models.Entry.id.in_(id_list)):
             rows[e.id] = {"id": e.id, "entry": e, "hulls": [], "ship_types": set(), "zones": set(), "targets": set(), "tags": set(),
                           "kinds": set(), "kind_counts": Counter(), "file_count": 0,
-                          "analysis_type": atype.canon(e.analysis_type), "uploaded_by": e.uploaded_by,
+                          "uploaded_by": e.uploaded_by,
                           "no_hull": bool(e.no_hull),
                           "sort_at": e.confirmed_at or e.created_at}
         hull_rows = (db.query(models.EntryHull.entry_id, models.EntryHull.hull_no, models.Hull.ship_type)
@@ -540,7 +518,7 @@ class MySqlSearch:
             return sorted(r["kinds"])
         if key == "tag":
             return sorted(r["tags"])
-        v = r[key]   # analysis_type·uploaded_by — 값 하나
+        v = r[key]   # uploaded_by — 값 하나
         return [v] if v else []
 
     def _passes(self, r: dict, filters: dict, skip: str | None = None) -> bool:
@@ -556,7 +534,7 @@ class MySqlSearch:
     def _facets(self, db: Session, rows, filters: dict, vocab: dict | None = None) -> dict:
         """칸마다 값과 건수 — 자기 칸의 필터만 빼고 센다(같은 칸 안 다른 값을 더 고를 때의 건수).
 
-        19 — 칸 안 찾기용으로 구역·해석 종류·태그 값에는 동의어(aliases, 있을 때만), 호선에는 선종(label)을 싣는다.
+        19 — 칸 안 찾기용으로 구역·대상·태그 값에는 동의어(aliases, 있을 때만), 호선에는 선종(label)을 싣는다.
         상한(FACET_LIMIT)에 잘려도 고른 값은 늘 싣는다(화면에서 해제할 수 있게)."""
         rows = list(rows)
         out = {}
@@ -582,7 +560,7 @@ class MySqlSearch:
                 if ships.get(f["value"]):
                     f["label"] = ships[f["value"]]
         if vocab is not None:
-            for key, kind in (("zone", "zone"), ("target", "target"), ("analysis_type", "atype")):
+            for key, kind in (("zone", "zone"), ("target", "target")):
                 for f in out[key]:
                     t = vocab[kind].term(f["value"])
                     aliases = [x.value for x in vocab[kind].synonyms(t)] if t is not None else []
@@ -662,7 +640,7 @@ class MySqlSearch:
         for r in page:
             e = r["entry"]
             items.append({
-                "_pk": e.id, "entry_id": e.entry_id, "title": e.title, "status": e.status, "analysis_type": r["analysis_type"],
+                "_pk": e.id, "entry_id": e.entry_id, "title": e.title, "status": e.status,
                 # 15 — 결과 행의 날짜 = 올린 날짜(확정일, 초안은 등록일)
                 "posted_at": r["sort_at"].isoformat() if r["sort_at"] else None, "hulls": r["hulls"], "ship_types": sorted(r["ship_types"]),
                 "zones": sorted(r["zones"]), "target": min(r["targets"]) if r["targets"] else None,
@@ -684,8 +662,7 @@ class MySqlSearch:
                 "no_hull": r["no_hull"],
                 # 20 — '보완 필요'(확정 BDF 자료의 빠진 필수 칸) — 고칠 수 있는 사람(올린 사람·LV3)에게만
                 "needs_fix": (missing_fields(has_bdf=r["kind_counts"].get("model", 0) > 0, hulls=r["hulls"],
-                                             no_hull=r["no_hull"], zones=r["zones"], target=min(r["targets"]) if r["targets"] else None,
-                                             analysis_type=r["analysis_type"])
+                                             no_hull=r["no_hull"], zones=r["zones"], target=min(r["targets"]) if r["targets"] else None)
                               if e.status == "confirmed" and user is not None and access.can_edit_entry(user, e)
                               else []),
             })

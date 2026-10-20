@@ -5,8 +5,8 @@
 
 // 15 — 해석 시기(analysis_period)는 없앴다. 20 — '호선 없음(공용)'(no_hull, 참/거짓)
 // 29 — 프로젝트(21)는 없앴다
-// 38 — 대상 구조물(target, 하나·선택)
-export const EDIT_FIELDS = ['title', 'description', 'hulls', 'no_hull', 'zones', 'analysis_type', 'target', 'tags'];
+// 38 — 대상 구조물(target, 하나·선택). 42 — 해석 종류(analysis_type)는 없앴다
+export const EDIT_FIELDS = ['title', 'description', 'hulls', 'no_hull', 'zones', 'target', 'tags'];
 const LIST_FIELDS = new Set(['hulls', 'zones', 'tags']);
 const BOOL_FIELDS = new Set(['no_hull']);
 
@@ -18,7 +18,6 @@ export function editValues(entry) {
     hulls: (entry?.hulls || []).map((h) => (typeof h === 'string' ? h : h.hull_no)),
     no_hull: !!entry?.no_hull,
     zones: [...(entry?.zones || [])],
-    analysis_type: entry?.analysis_type || '',
     target: entry?.target || '',
     tags: [...(entry?.tags || [])],
   };
@@ -74,7 +73,6 @@ export function missingRequired(values, hasBdf) {
   const out = [];
   if (!(values?.hulls || []).length && !values?.no_hull) out.push('hull');
   if (!(values?.zones || []).length && !String(values?.target ?? '').trim()) out.push('zone_or_target');   // 40
-  if (!String(values?.analysis_type ?? '').trim()) out.push('analysis_type');
   return out;
 }
 

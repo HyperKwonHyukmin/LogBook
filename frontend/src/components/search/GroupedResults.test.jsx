@@ -5,7 +5,7 @@ import GroupedResults from './GroupedResults.jsx';
 
 // 20 — 호선별 묶기의 '공용'(호선 없음을 고른 자료) 묶음은 '호선 없음' 과 따로, 거르기 단추 없이 보인다.
 // 결과 행: 공용 표시, '보완 필요'(빠진 필수 분류) 작은 표시.
-const row = (id, title, extra = {}) => ({ entry_id: id, title, status: 'confirmed', analysis_type: null, posted_at: '2026-10-01T09:00:00',
+const row = (id, title, extra = {}) => ({ entry_id: id, title, status: 'confirmed', posted_at: '2026-10-01T09:00:00',
   hulls: [], ship_types: [], zones: [], tags: [], uploaded_by: 'A100001', confirmed_at: null, file_count: 1,
   kinds: ['model'], kind_counts: { model: 1, report: 0, drawing: 0, result: 0, other: 0 }, score: 0, matched: [], snippets: [],
   favorite: false, ...extra });

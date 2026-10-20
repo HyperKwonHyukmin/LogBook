@@ -147,16 +147,16 @@ def test_search_lists_and_counts_matrix(role, world, client, auth_headers):
         for hn in HULLS[k]:
             want_hulls[hn] = want_hulls.get(hn, 0) + 1
     assert hull_counts == want_hulls
-    assert {f["value"] for f in res["facets"]["analysis_type"]} == {f"종류{k}" for k in seen}
+    assert "analysis_type" not in res["facets"]   # 42 — 해석 종류는 없앴다
     # 배지 — 공유·블록은 단계 이름, 일반은 표시 없음(볼 수 있는 사람에게만 실린다)
     labels = {i["entry_id"]: i["label"] for i in res["items"]}
     for k in seen:
         assert labels[world["e"][k]] == {"shared": "공유", "normal": None, "blocked": "블록"}[ACCESS[k]]
     # 검색어 — 제목·본문·속성 적중 모두 거른다
-    for q in ("계류", "계류력", "종류bl"):
+    for q in ("계류", "계류력", "태그bl"):   # 42 — 속성 적중은 태그로(해석 종류는 없앴다)
         r = client.get("/api/search", params={"q": q}, headers=h).json()
         assert _kinds(world, _ids(r["items"])) <= seen, (role, q)
-    assert client.get("/api/search", params={"q": "종류bl"}, headers=h).json()["total"] == (1 if "bl" in seen else 0)
+    assert client.get("/api/search", params={"q": "태그bl"}, headers=h).json()["total"] == (1 if "bl" in seen else 0)
     # 파일 보기
     r = client.get("/api/search", params={"unit": "file"}, headers=h).json()
     assert _kinds(world, _ids(r["items"])) == seen and r["total"] == 2 * len(seen)
@@ -220,8 +220,7 @@ def test_same_model_and_side_lists_matrix(role, world, client, auth_headers, db)
     assert tags == {f"태그{k}": 1 for k in seen}
     sug = client.get("/api/suggest", params={"kind": "tag", "q": "태그"}, headers=h).json()
     assert set(sug) == {f"태그{k}" for k in seen}
-    sug = client.get("/api/suggest", params={"kind": "analysis_type", "q": "종류"}, headers=h).json()
-    assert set(sug) == {f"종류{k}" for k in seen}
+    assert client.get("/api/suggest", params={"kind": "analysis_type", "q": "종류"}, headers=h).status_code == 422
     sug = client.get("/api/suggest", params={"kind": "hull", "q": "9"}, headers=h).json()
     assert set(sug) == {hn for k in seen for hn in HULLS[k]}
     # 19 — 상단 검색창 자동완성(여러 종류 한 번에)도 같은 규칙
@@ -425,15 +424,11 @@ def test_grants_rules(world, client, auth_headers, db, wb):
     assert client.delete(f"/api/entries/{no}/grants/{USERS['lv1']}", headers=ho).status_code == 200
     assert client.get(f"/api/entries/{no}", headers=h1).status_code == 404
     assert client.delete(f"/api/entries/{no}/grants/{USERS['lv1']}", headers=ho).status_code == 404
+    # 허락·회수는 감사 기록을 남기지 않는다(2026-10-20) — 변경 이력에도 없다
     db.expire_all()
     actions = [a for (a,) in db.query(models.AuditLog.action).filter_by(target_id=no)]
-    assert "ENTRY_GRANT" in actions and "ENTRY_REVOKE" in actions
-    # 변경 이력 — 허락 대상 이름(LogBook 에 없는 사람은 WorkBench 이름)
+    assert "ENTRY_GRANT" not in actions and "ENTRY_REVOKE" not in actions
     hist = client.get(f"/api/entries/{no}/history", headers=ho).json()
-    names = {h["subject_name"] for h in hist if h["action"] in ("ENTRY_GRANT", "ENTRY_REVOKE")}
-    assert names == {"게스트 사용자", "처음사람"}
-    # 허락 기록은 단계·허락을 바꿀 수 없는 사람에게 보이지 않는다
-    hist = client.get(f"/api/entries/{no}/history", headers=hm).json()
     assert not [h for h in hist if h["action"] in ("ENTRY_GRANT", "ENTRY_REVOKE")]
 
 

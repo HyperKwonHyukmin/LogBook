@@ -1,7 +1,7 @@
 """갖춤 현황(26) — 확정 자료를 호선(·공용) × 구역 칸으로 놓고, 칸마다 무엇을 갖췄는지 볼 재료 한 벌.
 
 관계 지도(25)처럼 따로 저장하지 않고 화면을 열 때 이미 있는 값으로 묶는다. 칸 상태는 프런트(lib/coverage.js)가
-자료 목록에서 계산한다 — 해석 종류 거르기를 바꿀 때마다 다시 부르지 않게 하려는 것이다.
+자료 목록에서 계산한다(42 — 해석 종류 거르기는 없앴다).
 
 자료 하나에 싣는 사실
     rows        자료가 놓일 행 — 호선(entry_hulls, 주 호선 먼저) · 공용(no_hull)
@@ -11,7 +11,7 @@
     doc_linked  문서가 없더라도 다른 자료의 문서가 이 자료의 모델을 '보고서에 사용한 모델'로 연결함(21)
     model_linked  모델이 없더라도 이 자료의 문서가 다른 자료의 모델과 연결됨(21) — '모델 없음'으로 세지 않는다
     solve       해석 검증(06) 요약 — pass(하나라도 통과) | fail(검증한 모델이 모두 실패이고 검증 안 한 모델 없음) | none
-    needs_fix   필수 분류(호선·구역·해석 종류)가 빠진 BDF 자료(20)
+    needs_fix   필수 분류(호선·구역 또는 대상)가 빠진 BDF 자료(20·40)
     unsigned    서명이 없거나 옛 규칙 서명인 BDF 가 있음(12)
 
 권한(13·15): 보는 사람이 볼 수 있는 확정 자료만. 연결(doc_linked·model_linked)도 상대 자료가 보일 때만 센다.
@@ -64,7 +64,6 @@ def build_coverage(db: Session, user) -> dict:
         v = vocabs[tag.kind].root(tag).value
         if v not in tags[eid][tag.kind]:
             tags[eid][tag.kind].append(v)
-    atype = Vocab(db, "atype")
 
     # 파일 종류별 수(휴지통 제외)
     kinds: dict[int, dict[str, int]] = defaultdict(dict)
@@ -121,11 +120,9 @@ def build_coverage(db: Session, user) -> dict:
         for z in t["zone"]:
             zone_count[z] += 1
         missing = quality.missing_fields(has_bdf=n_models > 0, hulls=hulls.get(e.id, []), no_hull=bool(e.no_hull),
-                                         zones=t["zone"], target=(t["target"] or [None])[0],
-                                         analysis_type=e.analysis_type)
+                                         zones=t["zone"], target=(t["target"] or [None])[0])
         out.append({
             "id": e.entry_id, "title": e.title,
-            "analysis_type": atype.canon(e.analysis_type) if e.analysis_type else None,
             "rows": row_keys, "zones": t["zone"],
             "models": n_models, "reports": kinds.get(e.id, {}).get("report", 0),
             "doc_linked": e.id in doc_linked, "model_linked": e.id in model_linked,

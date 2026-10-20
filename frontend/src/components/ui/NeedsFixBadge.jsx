@@ -2,7 +2,7 @@ import { AlertTriangle } from 'lucide-react';
 import { requiredText } from '../../lib/labels.js';
 
 /**
- * 20 — '보완 필요' 작은 표시: 확정된 BDF 자료에 필수 분류(호선·구역·해석 종류)가 빠졌다.
+ * 20 — '보완 필요' 작은 표시: 확정된 BDF 자료에 필수 분류(호선, 구역 또는 대상)가 빠졌다.
  * 서버가 고칠 수 있는 사람(올린 사람·LV3)에게만 needs_fix 를 싣는다. 자료를 숨기거나 상태를 바꾸지 않는다.
  */
 export default function NeedsFixBadge({ missing, className = '' }) {

@@ -37,32 +37,30 @@ def _free(db, e, value, alias_of=None):
 
 
 def test_facets_use_canonical_terms(db, storage, make_entry_file):
-    a, _ = make_entry_file(title="가", analysis_type="FEM 해석")
-    b, _ = make_entry_file(title="나", analysis_type="FE 해석")
-    c, _ = make_entry_file(title="다", analysis_type="강도평가")
+    a, _ = make_entry_file(title="가")
+    b, _ = make_entry_file(title="나")
     _zone(db, a, "선미 부")
     _zone(db, b, "선미부")
     vocab.seed(db, storage)
     res = _q(db)
-    assert {f["value"]: f["count"] for f in res["facets"]["analysis_type"]} == {"FE 해석": 2, "강도 평가": 1}
     # 19 — 값에 동의어(aliases)가 실릴 수 있다 — 값·건수만 본다
     assert [(f["value"], f["count"]) for f in res["facets"]["zone"]] == [("선미부", 2)]
     items = {i["entry_id"]: i for i in res["items"]}
-    assert items[a.entry_id]["analysis_type"] == "FE 해석" and items[a.entry_id]["zones"] == ["선미부"]
+    assert items[a.entry_id]["zones"] == ["선미부"]
     # 용어로 거르면 동의어·표기 변형 값도, 동의어로 거르면 그 용어 전체가 걸린다
-    assert sorted(_ids(_q(db, filters={"analysis_type": "FE 해석"}))) == sorted([a.entry_id, b.entry_id])
-    r = _q(db, filters={"analysis_type": "FEM"})
-    assert sorted(_ids(r)) == sorted([a.entry_id, b.entry_id]) and r["applied_filters"]["analysis_type"] == ["FE 해석"]
-    assert _ids(_q(db, filters={"analysis_type": "강도 평가"})) == [c.entry_id]
     assert sorted(_ids(_q(db, filters={"zone": "선미부"}))) == sorted([a.entry_id, b.entry_id])
+    r = _q(db, filters={"zone": "AFT"})
+    assert sorted(_ids(r)) == sorted([a.entry_id, b.entry_id]) and r["applied_filters"]["zone"] == ["선미부"]
 
 
 def test_query_by_synonym_finds_term(db, storage, make_entry_file):
-    a, _ = make_entry_file(title="가", analysis_type="FE 해석")
-    make_entry_file(title="나", analysis_type="진동 해석")
+    a, _ = make_entry_file(title="가")
+    b, _ = make_entry_file(title="나", analysis_type="FE 해석")   # 42 — 옛 해석 종류 값은 찾지 않는다
     vocab.seed(db, storage)
-    res = _q(db, "FEM")
-    assert _ids(res) == [a.entry_id] and res["items"][0]["matched"] == ["analysis_type"]
+    _zone(db, a, "기관실")
+    res = _q(db, "Engine Room")
+    assert _ids(res) == [a.entry_id]
+    assert _ids(_q(db, "FE")) == []
 
 
 def test_tag_filter_and_facet(db, make_entry_file):

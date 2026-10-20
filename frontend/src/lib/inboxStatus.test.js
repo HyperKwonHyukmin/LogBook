@@ -42,23 +42,23 @@ test('BDF 변환 상태 — 작업이 도는 중이면 변환 중, 상태별 개
   expect(hasPendingConvert({ entries: [{ files: [bdf('done')] }] })).toBe(false);
 });
 
-test('초안 확인할 것 — 제목은 확정을 막는다, (BDF 없는 자료의) 호선·해석 종류·암호화·중복은 권고', () => {
+test('초안 확인할 것 — 제목은 확정을 막는다, (BDF 없는 자료의) 호선·암호화·중복은 권고(42 — 해석 종류는 없앴다)', () => {
   const entry = { files: [{ drm_encrypted: true }, { duplicate_of_entry: 'E000001' }] };
-  const c = draftChecks({ title: ' ', hulls: [], analysis_type: '' }, entry);
-  expect(c.map((x) => x.id)).toEqual(['title', 'hull', 'type', 'drm', 'dup']);
+  const c = draftChecks({ title: ' ', hulls: [] }, entry);
+  expect(c.map((x) => x.id)).toEqual(['title', 'hull', 'drm', 'dup']);
   expect(c.find((x) => x.id === 'title').blocking).toBe(true);
-  expect(draftChecks({ title: '검토', hulls: [{ hull_no: '3496' }], analysis_type: '강도' }, { files: [] })).toEqual([]);
+  expect(draftChecks({ title: '검토', hulls: [{ hull_no: '3496' }] }, { files: [] })).toEqual([]);
 });
 
-test('20 — BDF 자료는 호선(또는 공용)·구역·해석 종류가 확정을 막는다', () => {
+test('20 — BDF 자료는 호선(또는 공용)·구역 또는 대상이 확정을 막는다(42 — 해석 종류는 없다)', () => {
   const entry = { files: [{ kind: 'model' }] };
   const c = draftChecks({ title: '검토', hulls: [], zones: [], analysis_type: '' }, entry);
-  expect(c.map((x) => [x.id, !!x.blocking])).toEqual([['hull', true], ['zone', true], ['type', true]]);
-  const shared = draftChecks({ title: '검토', hulls: [], no_hull: true, zones: ['선수부'], analysis_type: '강도 평가' }, entry);
+  expect(c.map((x) => [x.id, !!x.blocking])).toEqual([['hull', true], ['zone', true]]);
+  const shared = draftChecks({ title: '검토', hulls: [], no_hull: true, zones: ['선수부'] }, entry);
   expect(shared).toEqual([]);
   // 기존 자료에 추가하는 초안은 그 자료의 분류를 따른다
-  expect(draftChecks({ title: '검토', hulls: [], zones: [], analysis_type: '' }, { ...entry, merge_into: { entry_id: 'E1' } })).toEqual([]);
+  expect(draftChecks({ title: '검토', hulls: [], zones: [] }, { ...entry, merge_into: { entry_id: 'E1' } })).toEqual([]);
   // 29 — 프로젝트는 없앴다: 예전 값이 있어도 호선 대신 인정하지 않는다
-  const project = draftChecks({ title: '검토', hulls: [], project: '크레인 연구', zones: ['선수부'], analysis_type: '강도 평가' }, entry);
+  const project = draftChecks({ title: '검토', hulls: [], project: '크레인 연구', zones: ['선수부'] }, entry);
   expect(project.filter((x) => x.blocking).map((x) => x.id)).toEqual(['hull']);
 });

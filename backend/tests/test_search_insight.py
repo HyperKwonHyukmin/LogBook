@@ -80,7 +80,7 @@ def test_summary_covers_whole_result_set(db, make_entry_file):
     res = _q(db, limit=1)                              # 요약은 쪽(1건)이 아니라 전체(4건)
     s = res["summary"]
     assert s["total"] == 4 and len(res["items"]) == 1
-    assert s["analysis_type"] == [{"value": "FE 해석", "count": 2}, {"value": "강도 평가", "count": 2}]
+    assert "analysis_type" not in s   # 42 — 해석 종류 분포는 없앴다
     assert s["hull"][0] == {"value": "9002", "count": 3}
     assert "years" not in s and "year_unknown" not in s     # 15 — 해석 시기 분포는 없앴다
     assert s["solve"] == {"pass": 1, "fail": 1, "error": 0, "stale": 1, "pending": 0, "none": 0, "no_model": 1}

@@ -279,7 +279,7 @@ test('결과 한 행 — 통제 값 줄·종류별 파일 수·태그 링크·�
   const row = (await screen.findAllByText('선미 구조 국부 강도'))[0].closest('[role="option"]');
   expect(within(row).getByRole('link', { name: '9002' })).toBeInTheDocument();
   expect(within(row).getByRole('link', { name: '선미부' })).toHaveAttribute('href', '/?zone=%EC%84%A0%EB%AF%B8%EB%B6%80');
-  expect(within(row).getByRole('link', { name: 'FE 해석' })).toHaveAttribute('href', '/?analysis_type=FE+%ED%95%B4%EC%84%9D');
+  expect(within(row).queryByRole('link', { name: 'FE 해석' })).toBeNull();   // 42 — 해석 종류는 없앴다(응답에 남아 있어도)
   expect(within(row).getByRole('link', { name: '벌크선' })).toHaveAttribute('href', '/?ship_type=%EB%B2%8C%ED%81%AC%EC%84%A0');
   expect(within(row).getByLabelText('파일 BDF 2, 문서 1, 도면 0, 결과 0')).toBeInTheDocument();
   expect(within(row).getByRole('link', { name: '#응력' })).toHaveAttribute('href', '/?tag=%EC%9D%91%EB%A0%A5');
@@ -287,6 +287,13 @@ test('결과 한 행 — 통제 값 줄·종류별 파일 수·태그 링크·�
   // 15 — 해석 시기는 보이지 않는다(응답에 남아 있어도)
   expect(screen.queryByText(/해석 시기/)).toBeNull();
   expect(screen.queryByText(/2025-01/)).toBeNull();
+});
+
+test('42 — 옛 주소의 해석 종류 필터·묶기는 서버로 보내지 않는다', async () => {
+  const fetch = mockApi({ 'GET /api/search?zone=%EC%84%A0%EB%AF%B8%EB%B6%80&limit=50&offset=0': { ...RES, terms: [], hull_suggestion: null, items: [ROW] } });
+  renderAt('/?analysis_type=FE+%ED%95%B4%EC%84%9D&zone=%EC%84%A0%EB%AF%B8%EB%B6%80&group=analysis_type');
+  expect(await screen.findByText('선미 구조 국부 강도')).toBeInTheDocument();
+  expect(calls(fetch).filter((c) => c.includes('/api/search')).every((c) => !c.includes('analysis_type'))).toBe(true);
 });
 
 test('호선 하나로 거른 검색이면 그 호선 칩은 행에서 뺀다', async () => {
@@ -342,14 +349,16 @@ test('미리보기 폭은 손잡이로 ←/→ 조절하고 기억하며, 두 �
   expect(localStorage.getItem('logbook.searchPreviewWidth.v1')).toBeNull();
 });
 
-test('미리보기 패널의 구역·해석 종류는 그 값으로 찾는 링크다(09)', async () => {
+test('미리보기 패널의 구역은 그 값으로 찾는 링크다(09), 해석 종류는 보이지 않는다(42)', async () => {
   mockApi({ 'GET /api/search?q=a&limit=50&offset=0': RES,
             'GET /api/entries/E000001': { ...ENTRY, zones: ['선미부'], analysis_type: 'FE 해석' },
             'GET /api/files/11/text': { state: null, summary: null, chunks: [] } });
   renderAt('/?q=a');
   await userEvent.click((await screen.findByText('계류 구조 검토')).closest('[role="option"]'));
   const panel = await screen.findByRole('complementary', { name: '미리보기' });
-  await userEvent.click(await within(panel).findByRole('link', { name: '선미부' }));
+  const zone = await within(panel).findByRole('link', { name: '선미부' });
+  expect(within(panel).queryByRole('link', { name: 'FE 해석' })).toBeNull();
+  await userEvent.click(zone);
   expect(screen.getByTestId('loc').textContent).toBe('/?zone=%EC%84%A0%EB%AF%B8%EB%B6%80');
 });
 
@@ -366,7 +375,7 @@ test('결과 행의 대표 모델·보고서 줄과 요약 띠(09) — 막대를
       items: [{ ...ROW, model, report: { file_id: 3, name: 'a.pdf', title: '선미 검토', unit: 'page', count: 24, author: null } },
         { ...ROW, entry_id: 'E000006', snippets: [{ file_id: 11, name: 'r.pdf', locator: 'page:2', text: '응력 결과', highlights: [] }],
           report: { file_id: 4, name: 'b.pdf', title: '숨는 보고서', unit: 'page', count: 3, author: null } }] },
-    'GET /api/search?analysis_type=FE+%ED%95%B4%EC%84%9D&limit=50&offset=0': { ...RES, hull_suggestion: null },
+    'GET /api/search?hull=9002&limit=50&offset=0': { ...RES, hull_suggestion: null },
   });
   renderAt('/');
   const rows = within(await screen.findByRole('listbox', { name: '검색 결과' })).getAllByRole('option');
@@ -376,8 +385,9 @@ test('결과 행의 대표 모델·보고서 줄과 요약 띠(09) — 막대를
   expect(within(rows[1]).queryByText('「숨는 보고서」')).toBeNull();
   expect(within(rows[1]).getByText('응력 결과')).toBeInTheDocument();
   const strip = screen.getByRole('region', { name: '결과 요약' });
-  await userEvent.click(within(strip).getByRole('button', { name: /FE 해석/ }));
-  expect(screen.getByTestId('loc').textContent).toBe('/?analysis_type=FE+%ED%95%B4%EC%84%9D');
+  expect(within(strip).queryByRole('button', { name: /FE 해석/ })).toBeNull();   // 42 — 해석 종류 분포는 없다
+  await userEvent.click(within(strip).getByRole('button', { name: /9002/ }));
+  expect(screen.getByTestId('loc').textContent).toBe('/?hull=9002');
 });
 
 // ---- 10 — 즐겨찾기 ----

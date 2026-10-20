@@ -18,6 +18,9 @@ from .storage.paths import StoragePaths, to_long
 
 log = logging.getLogger("logbook.audit")
 
+# 남기지 않기로 한 기록(2026-10-20) — 열람 허락·회수. 예전 기록은 purge_not_kept() 로 DB·파일에서 지운다
+NOT_KEPT = ("ENTRY_GRANT", "ENTRY_REVOKE")
+
 
 def record(
     db: Session,
@@ -82,3 +85,43 @@ def _append_jsonl(storage: StoragePaths, line: str, at: datetime) -> None:
             fh.write(line + "\n")
     except OSError as exc:
         log.warning("감사 로그 파일 기록 실패(DB 기록은 유지): %s", exc)
+
+
+def purge_not_kept(db: Session, storage: StoragePaths, *, apply: bool = False) -> dict:
+    """NOT_KEPT 기록을 DB(audit_log)와 감사 파일(*.jsonl)에서 지운다. apply=False 면 건수만 센다.
+
+    재구축(rebuild)이 jsonl 을 다시 읽으므로 파일에서도 빼야 돌아오지 않는다. 파일은 남길 줄만 임시 파일에 쓰고
+    바꿔 끼운다(읽을 수 없는 줄은 그대로 둔다). 돌려주는 값: {"db": 건수, "files": {파일명: 건수}, "applied": bool}."""
+    q = db.query(models.AuditLog).filter(models.AuditLog.action.in_(NOT_KEPT))
+    n_db = q.count()
+    files: dict[str, int] = {}
+    try:
+        names = sorted(n for n in os.listdir(to_long(storage.audit_dir)) if n.endswith(".jsonl"))
+    except OSError:
+        names = []
+    for name in names:
+        path = storage.audit_dir / name
+        with open(to_long(path), encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()
+        keep = [ln for ln in lines if not _not_kept_line(ln)]
+        if len(keep) == len(lines):
+            continue
+        files[name] = len(lines) - len(keep)
+        if apply:
+            tmp = storage.audit_dir / (name + ".tmp")
+            with open(to_long(tmp), "w", encoding="utf-8", newline="") as fh:
+                fh.writelines(keep)
+            os.replace(to_long(tmp), to_long(path))
+    if apply and n_db:
+        q.delete(synchronize_session=False)
+        db.commit()
+    return {"db": n_db, "files": files, "applied": apply}
+
+
+def _not_kept_line(line: str) -> bool:
+    if not any(a in line for a in NOT_KEPT):   # 빠른 거르기 — 대부분의 줄은 json 을 풀지 않는다
+        return False
+    try:
+        return json.loads(line).get("action") in NOT_KEPT
+    except (ValueError, AttributeError):
+        return False

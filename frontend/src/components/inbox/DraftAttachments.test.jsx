@@ -12,7 +12,7 @@ vi.mock('../ui/VocabInput.jsx', () => ({ default: ({ label }) => <span>{label}</
 vi.mock('../ui/ProjectInput.jsx', () => ({ default: () => <span>프로젝트</span> }));
 
 const entry = { entry_id: 'E000010', status: 'draft', title: '사용자가 검토한 제목', version: 3,
-  analysis_type: '강도 평가', zones: ['선수부'], hulls: [{ hull_no: '3496' }], tags: [],
+  zones: ['선수부'], hulls: [{ hull_no: '3496' }], tags: [],
   files: [{ id: 1, name: 'model.bdf', rel_path: 'model.bdf', kind: 'model', size: 20 }],
   pending_attachments: [] };
 

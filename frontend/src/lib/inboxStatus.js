@@ -108,9 +108,9 @@ export function hasPendingConvert(batch) {
 
 /**
  * 초안에서 사람이 확인할 것 — 확정을 막는 것(blocking)과 권하는 것.
- * form: 화면에서 고치는 중인 값(제목·호선·호선 없음(공용)·구역·해석 종류), entry: 서버 값(파일).
- * 20 — BDF 가 있는 자료는 호선(또는 '호선 없음(공용)')·구역·해석 종류가 확정을 막는다(서버 409 required_fields 와 같은 규칙).
- * BDF 없는 자료(보고서만 등)는 호선·해석 종류를 권하기만 한다.
+ * form: 화면에서 고치는 중인 값(제목·호선·호선 없음(공용)·구역·대상), entry: 서버 값(파일).
+ * 20 — BDF 가 있는 자료는 호선(또는 '호선 없음(공용)')·구역 또는 대상이 확정을 막는다(서버 409 required_fields 와 같은 규칙).
+ * BDF 없는 자료(보고서만 등)는 호선을 권하기만 한다. 42 — 해석 종류는 없앴다.
  * 기존 자료에 파일을 더하는 초안(merge_into)은 그 자료의 분류를 따르므로 보지 않는다.
  * @returns {Array<{ id, text, blocking?: boolean }>}
  */
@@ -125,10 +125,8 @@ export function draftChecks(form, entry) {
     if (!(form.zones || []).length && !String(form.target || '').trim()) {
       out.push({ id: 'zone', text: '구역·대상 없음: BDF 자료는 구역 또는 대상이 필요합니다', blocking: true });
     }
-    if (!(form.analysis_type || '').trim()) out.push({ id: 'type', text: '해석 종류 없음: BDF 자료는 해석 종류가 필요합니다', blocking: true });
   } else if (!entry.merge_into) {
     if (noHull) out.push({ id: 'hull', text: '호선 없음: 호선으로 찾을 수 있게 넣어 주세요' });
-    if (!(form.analysis_type || '').trim()) out.push({ id: 'type', text: '해석 종류 없음' });
   }
   const drm = files.filter((f) => f.drm_encrypted).length;
   if (drm) out.push({ id: 'drm', text: `암호화 파일 ${drm}개: 본문·3D 를 읽지 못합니다` });

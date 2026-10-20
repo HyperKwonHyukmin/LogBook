@@ -40,6 +40,7 @@ import WbOrigins from '../components/workbench/WbOrigins.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
 // 21 — 프로젝트(있을 때만 기록). 29 — 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
+// 42 — 해석 종류도 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
 const FIELD_LABELS = { title: '제목', analysis_type: '해석 종류', description: '설명',
   hulls: '호선', no_hull: '호선 없음(공용)', project: '프로젝트', zones: '구역', target: '대상', tags: '태그' };
 // 감사 기록에서 '참/값일 때만' 실리는 칸 — before 에만 있으면 지운 것이다
@@ -89,13 +90,8 @@ function detailLines(r) {
     return [`${r.after?.report}: 사용한 모델` + (added.length ? ` 연결 ${added.join(', ')}` : '')
       + (removed.length ? ` 해제 ${removed.join(', ')}` : '')];
   }
-  // 13·15 — 공개 범위 변경·열람 허락
+  // 13·15 — 공개 범위 변경(열람 허락·회수는 이력에 남기지 않는다, 2026-10-20)
   if (r.action === 'ENTRY_ACCESS') return [`${accessText(r.before)} → ${accessText(r.after)}`];
-  if (r.action === 'ENTRY_GRANT' || r.action === 'ENTRY_REVOKE') {
-    const who = (r.after || r.before)?.employee_id;
-    if (!who) return [];
-    return [r.subject_name ? `${r.subject_name} (${who})` : who];   // 서버가 대상 이름을 실어 준다
-  }
   return changes(r.before, r.after);
 }
 
@@ -359,7 +355,7 @@ function Prop({ label, changed = false, error, children }) {
   );
 }
 
-const FIELD_ORDER = ['title', 'description', 'hulls', 'no_hull', 'zones', 'analysis_type', 'target', 'tags'];
+const FIELD_ORDER = ['title', 'description', 'hulls', 'no_hull', 'zones', 'target', 'tags'];
 
 /** Entry 상세(설계 §6.1 `/e/{entryId}`) — 머리, 파일·미리보기, 속성 레일과 변경 이력. */
 export default function EntryPage() {
@@ -373,11 +369,10 @@ export default function EntryPage() {
   const [confirm, dialog] = useConfirm();
   const { entry, status, error, setError, commit, reload } = useEntry(entryId);
   const adder = useAddFilesWatch({ onMerged: () => { reload().catch(() => {}); } });
-  // 열람 허락 주기·회수는 Entry version 을 올리지 않는다 — 허락 명단도 이력 다시 읽기 기준에 넣는다(13)
-  // 14 — 판 정리도 version 을 올리지 않는다(이력 한 줄) — 저장 횟수(revSaved)를 기준에 넣는다
+  // 14 — 판 정리는 version 을 올리지 않는다(이력 한 줄) — 저장 횟수(revSaved)를 이력 다시 읽기 기준에 넣는다
   const [revSaved, setRevSaved] = useState(0);
   const [revEditing, setRevEditing] = useState(false);
-  const historyKey = `${entry?.version}|${(entry?.grants || []).map((g) => g.employee_id).join(',')}|${revSaved}`;
+  const historyKey = `${entry?.version}|${revSaved}`;
   const history = useHistory(entryId, historyKey);
   const [picked, setPicked] = useState(fileParam);
   const [adding, setAdding] = useState(false);
@@ -753,9 +748,6 @@ export default function EntryPage() {
               <Prop label="구역" changed={isChanged('zones')}>
                 <VocabInput multiple kind="zone" label="구역" values={draft.zones} onChange={set('zones')} />
               </Prop>
-              <Prop label="해석 종류" changed={isChanged('analysis_type')}>
-                <VocabInput kind="atype" label="해석 종류" value={draft.analysis_type || null} onChange={(v) => set('analysis_type')(v || '')} />
-              </Prop>
               <Prop label="대상" changed={isChanged('target')}>
                 <VocabInput kind="target" label="대상" value={draft.target || null} onChange={(v) => set('target')(v || '')} />
               </Prop>
@@ -779,10 +771,6 @@ export default function EntryPage() {
               <Prop label="구역">
                 <VocabInput compact disabled multiple kind="zone" label="구역" values={entry.zones} onChange={() => {}}
                             valueHref={(v) => filterHref('zone', v)} />
-              </Prop>
-              <Prop label="해석 종류">
-                <VocabInput compact disabled kind="atype" label="해석 종류" value={entry.analysis_type} onChange={() => {}}
-                            valueHref={(v) => filterHref('analysis_type', v)} />
               </Prop>
               <Prop label="대상">
                 {entry.target ? <FilterLink field="target" value={entry.target} /> : <span className="text-n-500">—</span>}

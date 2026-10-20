@@ -1,11 +1,11 @@
 import { changedFields, editErrors, editValues, hasBdf, missingRequired, patchBody, sameEditable } from './entryEdit.js';
 
 const E = { title: '제목', description: null, hulls: [{ hull_no: '9001' }, { hull_no: '9002' }], zones: ['선미부'],
-  analysis_type: 'FE 해석', analysis_period: '2025-11', tags: [], version: 3, files: [] };   // 해석 시기는 15 부터 쓰지 않는다
+  analysis_type: 'FE 해석', analysis_period: '2025-11', tags: [], version: 3, files: [] };   // 해석 시기(15)·해석 종류(42)는 쓰지 않는다
 
 test('서버 값 → 고칠 값', () => {
   expect(editValues(E)).toEqual({ title: '제목', description: '', hulls: ['9001', '9002'], no_hull: false, zones: ['선미부'],
-    analysis_type: 'FE 해석', target: '', tags: [] });
+    target: '', tags: [] });
 });
 
 test('바뀐 칸만 PATCH 본문에 — 빈 글자는 null, 앞뒤 공백 무시, 호선은 순서도 본다', () => {
@@ -39,13 +39,13 @@ test('20 — 호선 없음(공용)은 참/거짓 칸으로 바뀐 칸·본문에
 });
 
 test('20 — 확정 필수 분류(BDF 자료만, 서버 규칙과 같다)', () => {
-  const v = editValues({ ...E, hulls: [], zones: [], analysis_type: '' });
-  expect(missingRequired(v, true)).toEqual(['hull', 'zone_or_target', 'analysis_type']);
-  expect(missingRequired({ ...v, no_hull: true }, true)).toEqual(['zone_or_target', 'analysis_type']);
-  // 40 — 구역이 없어도 대상이 있으면 된다
-  expect(missingRequired({ ...v, no_hull: true, target: 'Unit' }, true)).toEqual(['analysis_type']);
+  const v = editValues({ ...E, hulls: [], zones: [] });
+  expect(missingRequired(v, true)).toEqual(['hull', 'zone_or_target']);
+  expect(missingRequired({ ...v, no_hull: true }, true)).toEqual(['zone_or_target']);
+  // 40 — 구역이 없어도 대상이 있으면 된다. 42 — 해석 종류는 필수가 아니다
+  expect(missingRequired({ ...v, no_hull: true, target: 'Unit' }, true)).toEqual([]);
   // 29 — 프로젝트는 없앴다: 예전 값이 있어도 호선 대신 인정하지 않는다
-  expect(missingRequired({ ...v, project: '크레인 연구' }, true)).toEqual(['hull', 'zone_or_target', 'analysis_type']);
+  expect(missingRequired({ ...v, project: '크레인 연구' }, true)).toEqual(['hull', 'zone_or_target']);
   expect(missingRequired(v, false)).toEqual([]);
   expect(hasBdf({ files: [{ kind: 'report' }, { kind: 'model', location: 'trash' }] })).toBe(false);
   expect(hasBdf({ files: [{ kind: 'model', location: 'vault' }] })).toBe(true);

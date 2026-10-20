@@ -11,7 +11,7 @@ import { errorText } from '../lib/labels.js';
 import { AuthContext } from '../auth/AuthContext.jsx';
 import { SHARED_WRITE_REASON, canWriteShared } from '../lib/levels.js';
 
-// 구역·해석 종류는 통제 어휘라 관리자의 '분류 목록'(08)으로 옮겼다 — 여기는 자유 태그만.
+// 구역·대상은 통제 어휘라 관리자의 '분류 목록'(08)으로 옮겼다 — 여기는 자유 태그만.
 const KIND = 'free';
 const valueLink = 'min-w-0 truncate rounded-xs underline-offset-2 hover:text-brand hover:underline';
 const COLS = 'grid grid-cols-[minmax(0,1fr)_64px_minmax(180px,auto)] items-center gap-3';
@@ -88,7 +88,7 @@ export default function TagsPage() {
 
   return (
     <Page>
-      <PageHeader title="태그 동의어" description="자유 태그는 누구나 붙이고 묶습니다. 동의어로 묶은 값은 검색과 필터에서 함께 찾고, 원래 입력한 값은 그대로 남습니다. 값을 누르면 그 태그로 검색합니다. 구역·해석 종류는 관리자가 ‘분류 목록’에서 관리합니다."
+      <PageHeader title="태그 동의어" description="자유 태그는 누구나 붙이고 묶습니다. 동의어로 묶은 값은 검색과 필터에서 함께 찾고, 원래 입력한 값은 그대로 남습니다. 값을 누르면 그 태그로 검색합니다. 구역·대상은 관리자가 ‘분류 목록’에서 관리합니다."
                   actions={<Link to="/browse?by=tag" className={buttonClass('ghost', 'sm')}><ArrowLeft size={14} aria-hidden="true" />분류로</Link>} />
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <label className={inputClass('flex w-56 items-center gap-2 px-2')}>

@@ -384,9 +384,8 @@ def setup_entry_with_files(db, storage):
         b = models.Batch(key=key, source="inbox", original_name="3496_검토", uploader=uploader)
         db.add(b)
         db.flush()
-        # 20 — BDF 자료는 호선·구역·해석 종류가 있어야 확정된다(확정 테스트용 기본값을 채워 둔다)
-        e = models.Entry(title="3496 검토", status="draft", batch_id=b.id, uploaded_by=uploader,
-                         analysis_type="강도 평가")
+        # 20 — BDF 자료는 호선·구역(또는 대상)이 있어야 확정된다(확정 테스트용 기본값을 채워 둔다)
+        e = models.Entry(title="3496 검토", status="draft", batch_id=b.id, uploaded_by=uploader)
         db.add(e)
         db.flush()
         e.entry_id = f"E{e.id:06d}"
@@ -411,12 +410,11 @@ def setup_entry_with_files(db, storage):
 
 @pytest.fixture
 def fill_required(db):
-    """20 — 초안에 확정 필수 분류(구역·해석 종류, 호선이 없으면 3496)를 채운다: fill_required(entry)."""
+    """20 — 초안에 확정 필수 분류(구역, 호선이 없으면 3496)를 채운다: fill_required(entry). 42 — 해석 종류는 없앴다."""
     from app import models
     from app.entries import service
 
-    def _fill(entry, *, zone="선수부", analysis_type="강도 평가", hull="3496"):
-        entry.analysis_type = analysis_type
+    def _fill(entry, *, zone="선수부", hull="3496"):
         service.set_zones(db, entry, [zone])
         if hull and not service.hulls_of(db, entry) and not entry.no_hull:
             db.add(models.EntryHull(entry_id=entry.id, hull_no=hull, is_primary=True))
@@ -449,7 +447,7 @@ def make_entry_file(db):
     seq = {"n": 0}
 
     def _make(*, entry=None, status="confirmed", title="구조 검토", hulls=("9999",), name="a.pdf",
-              kind="report", uploaded_by="A100001", analysis_type=None, period=None, sha=None,
+              kind="report", uploaded_by="A100001", analysis_type=None, period=None, sha=None,   # 42 — 옛 열 값(읽지 않음)
               location=None, confirmed_at=datetime(2026, 9, 1, 9, 0, 0)):
         seq["n"] += 1
         n = seq["n"]

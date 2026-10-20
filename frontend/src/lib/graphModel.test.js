@@ -6,10 +6,10 @@ import {
 const DATA = {
   hulls: { 3370: '컨테이너선', 3508: '컨테이너선' },
   entries: [
-    { id: 'E000001', title: '권상 A', analysis_type: '권상', hulls: ['3370', '3508'], zones: ['상갑판'], free: [], revisions: [] },
-    { id: 'E000002', title: '권상 B', analysis_type: '권상', hulls: ['3508'], zones: [], free: ['Truss'], revisions: [] },
-    { id: 'E000003', title: '계류 C', analysis_type: '계류', hulls: ['3370'], zones: ['상갑판'], free: [], revisions: [] },
-    { id: 'E000004', title: '공용', analysis_type: null, hulls: [], zones: [], free: [], revisions: [] },
+    { id: 'E000001', title: '권상 A', hulls: ['3370', '3508'], zones: ['상갑판'], free: [], revisions: [] },
+    { id: 'E000002', title: '권상 B', hulls: ['3508'], zones: [], free: ['Truss'], revisions: [] },
+    { id: 'E000003', title: '계류 C', hulls: ['3370'], zones: ['상갑판'], free: [], revisions: [] },
+    { id: 'E000004', title: '공용', hulls: [], zones: [], free: [], revisions: [] },
   ],
   pairs: [
     { a: 'E000002', b: 'E000003', type: 'geom', differs: ['load'], files: ['b.bdf', 'c.bdf'], count: 1 },
@@ -53,8 +53,10 @@ test('선 설명 문장', () => {
 
 test('색 범례 — 많은 순, 없는 값은 기타', () => {
   const m = buildModel(DATA);
-  expect(m.colors.atype.items.map((i) => i.label)).toEqual(['권상', '계류', '기타·없음']);
-  expect(m.colors.atype.colorOf(m.entries[3])).toBe('#9AA1AB');
+  // 42 — 자료 점 색은 선종만(해석 종류 색은 없앴다)
+  expect(Object.keys(m.colors)).toEqual(['ship']);
+  expect(m.colors.ship.items.map((i) => i.label)).toEqual(['컨테이너선', '기타·없음']);
+  expect(m.colors.ship.colorOf(m.entries[3])).toBe('#9AA1AB');
 });
 
 test('찾기 — 지금 기준 먼저', () => {
@@ -125,7 +127,7 @@ test('35 — 선종·크기급 기준: 호선들의 값을 모으고, 값 없는
     hull_sizes: { 3370: '174K급 LNG', 3508: '4500급 CNTR', 3600: '180K급 LNG' },
     entries: [
       ...DATA.entries,
-      { id: 'E000005', title: '계류 E', analysis_type: '계류', hulls: ['3600'], zones: [], free: [], revisions: [] },
+      { id: 'E000005', title: '계류 E', hulls: ['3600'], zones: [], free: [], revisions: [] },
     ],
   });
   const [a, b, c, lone, e] = m.entries;

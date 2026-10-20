@@ -131,7 +131,7 @@ class Entry(Base):
     id = Column(Integer, primary_key=True)
     entry_id = Column(String(10), unique=True, nullable=True)  # E000123 — 행 생성 직후 채움
     title = Column(String(200), nullable=False, default="")
-    analysis_type = Column(String(50), nullable=True)
+    analysis_type = Column(String(50), nullable=True)   # 42 — 해석 종류는 없앴다(열만 남고 읽지 않는다)
     description = Column(Text, nullable=True)
     analysis_period = Column(String(7), nullable=True)  # YYYY-MM — 15 부터 쓰지 않는다(값 보존용으로 열만 남김)
     status = Column(String(10), nullable=False, default="draft")
@@ -190,7 +190,7 @@ class Tag(Base):
     __table_args__ = (UniqueConstraint("kind", "value", name="uq_tags_kind_value"),)
 
     id = Column(Integer, primary_key=True)
-    # zone | free | atype(해석 종류 사전 — Entry 와 잇지 않는다, 08) (29 — 21 의 project 는 없앴다. 남은 행이 있어도 읽지 않는다)
+    # zone | free | target(38) | atype(42 — 해석 종류는 없앴다. 남은 행은 읽지 않는다) (29 — 21 의 project 는 없앴다. 남은 행이 있어도 읽지 않는다)
     kind = Column(String(10), nullable=False)
     value = Column(String(100), nullable=False)
     alias_of_id = Column(Integer, ForeignKey("tags.id"), nullable=True)

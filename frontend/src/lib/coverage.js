@@ -1,6 +1,6 @@
 /**
  * 갖춤 현황(26) — GET /api/coverage 의 자료 목록을 호선(·공용) × 구역 칸으로 놓는 순수 함수.
- * 해석 종류를 바꿔 걸러도 다시 부르지 않고 여기서 다시 센다.
+ * 42 — 해석 종류 거르기('해당 없음' 칸)는 없앴다.
  */
 
 export const STATES = ['full', 'noreport', 'nomodel', 'fail', 'empty'];
@@ -10,9 +10,7 @@ export const STATE_INFO = {
   nomodel: { name: '모델 없음', desc: '문서만 있고 모델이 없습니다' },
   fail: { name: '검증 실패만', desc: '모델이 모두 해석 검증에 실패했습니다' },
   empty: { name: '비어 있음', desc: '자료가 없습니다' },
-  na: { name: '해당 없음', desc: '이 구역에는 고른 해석 종류의 자료가 어디에도 없습니다' },
 };
-export const ALL = '전체';
 export const MAX_ZONES = 14;          // 이보다 많은 구역은 자료 수가 적은 쪽을 '기타' 한 열로 묶는다
 export const OTHER_ZONE = '기타';
 export const NO_ZONE = '구역 없음';
@@ -53,31 +51,9 @@ export function zoneMatch(e, col) {
   return (e.zones || []).includes(col.key);
 }
 
-export const atypeMatch = (e, atype) => atype === ALL || e.analysis_type === atype;
-
-/** 해석 종류 목록(자료 많은 순). */
-export function atypesOf(data) {
-  const n = new Map();
-  for (const e of data.entries) if (e.analysis_type) n.set(e.analysis_type, (n.get(e.analysis_type) || 0) + 1);
-  return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k]) => k);
-}
-
-/** 구역마다 자료가 있는 해석 종류 — 고른 해석 종류가 그 구역 어디에도 없으면 칸을 '해당 없음'으로 그린다. */
-export function applicability(data, cols) {
-  const out = new Map(cols.map((c) => [c.key, new Set()]));
-  for (const e of data.entries) {
-    if (!e.analysis_type) continue;
-    for (const c of cols) if (zoneMatch(e, c)) out.get(c.key).add(e.analysis_type);
-  }
-  return out;
-}
-
 /** 칸 하나의 상태. */
-export function cellOf(data, row, col, atype, applic) {
-  if (atype !== ALL && applic && !applic.get(col.key)?.has(atype)) {
-    return { entries: [], models: [], docs: [], state: 'na' };
-  }
-  const entries = data.entries.filter((e) => rowsOf(e).includes(row.key) && zoneMatch(e, col) && atypeMatch(e, atype));
+export function cellOf(data, row, col) {
+  const entries = data.entries.filter((e) => rowsOf(e).includes(row.key) && zoneMatch(e, col));
   const models = entries.filter((e) => e.models > 0);
   const docs = entries.filter((e) => e.reports > 0 || e.doc_linked);
   let state = 'empty';
@@ -93,27 +69,25 @@ export function cellOf(data, row, col, atype, applic) {
 }
 
 /** 격자 전체 — rows × cols 칸, 상태별 칸 수, 행마다 채운 칸 수, 열마다 자료가 있는 행 수. */
-export function buildGrid(data, atype) {
+export function buildGrid(data) {
   const rows = buildRows(data);
   const cols = buildZones(data);
-  const applic = applicability(data, cols);
   const cells = new Map();
-  const counts = { full: 0, noreport: 0, nomodel: 0, fail: 0, empty: 0, na: 0 };
+  const counts = { full: 0, noreport: 0, nomodel: 0, fail: 0, empty: 0 };
   const rowFilled = new Map(rows.map((r) => [r.key, 0]));
   const colFilled = new Map(cols.map((c) => [c.key, 0]));
   for (const r of rows) {
     for (const c of cols) {
-      const cell = cellOf(data, r, c, atype, applic);
+      const cell = cellOf(data, r, c);
       cells.set(`${r.key}|${c.key}`, cell);
       counts[cell.state] += 1;
-      if (cell.state !== 'empty' && cell.state !== 'na') {
+      if (cell.state !== 'empty') {
         rowFilled.set(r.key, rowFilled.get(r.key) + 1);
         colFilled.set(c.key, colFilled.get(c.key) + 1);
       }
     }
   }
-  const applicableCols = cols.filter((c) => atype === ALL || applic.get(c.key)?.has(atype)).length;
-  return { rows, cols, cells, counts, rowFilled, colFilled, applicableCols };
+  return { rows, cols, cells, counts, rowFilled, colFilled };
 }
 
 export const cellKey = (rowKey, colKey) => `${rowKey}|${colKey}`;
@@ -150,15 +124,15 @@ export const LIST_TABS = [
     test: (e) => !e.models && !e.model_linked },
   { id: 'solve_fail', label: '해석 검증 실패', note: '원본을 바꾸지 않은 사본으로 Nastran 을 돌렸을 때 모든 모델이 실패한 자료입니다.',
     test: (e) => e.solve === 'fail' },
-  { id: 'needs_fix', label: '분류 보완 필요', note: '호선(또는 공용)·구역·해석 종류 중 빠진 칸이 있는 BDF 자료입니다.',
+  { id: 'needs_fix', label: '분류 보완 필요', note: '호선(또는 공용)이나 구역·대상이 빠진 BDF 자료입니다.',
     test: (e) => e.needs_fix },
   { id: 'unsigned', label: '서명 없는 모델', note: '옛 방식으로 변환되어 내용 서명이 없습니다. 관리자가 다시 변환하면 채워집니다.',
     test: (e) => e.unsigned },
 ];
 
-/** 목록 탭 — 해석 종류 거르기를 따르고, scope({rowKey, col})가 있으면 그 칸 자료만. */
-export function listRows(data, atype, scope) {
-  let base = data.entries.filter((e) => atypeMatch(e, atype));
+/** 목록 탭 — scope({rowKey, col})가 있으면 그 칸 자료만. */
+export function listRows(data, scope) {
+  let base = data.entries;
   if (scope) base = base.filter((e) => rowsOf(e).includes(scope.rowKey) && zoneMatch(e, scope.col));
   return Object.fromEntries(LIST_TABS.map((t) => [t.id, base.filter(t.test)]));
 }

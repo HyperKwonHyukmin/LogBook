@@ -157,7 +157,7 @@ def _restore_entry(db: Session, storage: StoragePaths, data: dict, *, status: st
     acc = access_value(data.get("access"), data.get("private_min_role"))
     e = models.Entry(access=acc,
         id=int(entry_id[1:]), entry_id=entry_id, title=(data.get("title") or "")[:200],
-        analysis_type=data.get("analysis_type"), description=data.get("description"),
+        description=data.get("description"),   # 42 — 옛 entry.json 의 analysis_type 은 읽지 않는다
         # 15 — 해석 시기는 화면에서 뺐지만 옛 entry.json 에 있으면 열에 그대로 둔다(값 보존)
         analysis_period=data.get("analysis_period"), status=status, batch_id=batch.id,
         uploaded_by=data.get("uploaded_by"), confirmed_by=data.get("confirmed_by"),
@@ -245,7 +245,7 @@ def _restore_aliases(db: Session, registry: dict) -> int:
     n = 0
     for t in registry.get("tags") or []:
         kind, value, target = t.get("kind"), t.get("value"), t.get("alias_of")
-        if kind not in ("zone", "free", "atype", "target") or not value or not target or value == target:
+        if kind not in ("zone", "free", "target") or not value or not target or value == target:   # 42 — atype 은 읽지 않는다
             continue
         rows = {}
         for v in (value, target):
@@ -268,7 +268,7 @@ def _restore_vocab(db: Session, registry: dict) -> int:
     n = 0
     for t in registry.get("vocab") or []:
         kind, value = t.get("kind"), str(t.get("value") or "")[:100]
-        if kind not in ("zone", "atype", "target") or not value:
+        if kind not in ("zone", "target") or not value:   # 42 — atype 은 읽지 않는다
             continue
         row = db.query(models.Tag).filter_by(kind=kind, value=value).first()
         if row is None:

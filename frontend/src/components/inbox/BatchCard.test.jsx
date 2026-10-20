@@ -38,7 +38,7 @@ test('분석 중 — 워커가 꺼져 있으면 눈에 띄게 알린다', () => 
 
 test('정리 대기 — 왜 기다리는지, BDF 변환 상태, 초안마다 확인할 것', async () => {
   const draft = { entry_id: 'E000010', status: 'draft', title: '', version: 1, hulls: [], zones: [], hull_evidence: [],
-    analysis_type: null, suggested_entry: null, merge_into: null, uploaded_by: 'A100001',
+    suggested_entry: null, merge_into: null, uploaded_by: 'A100001',
     files: [
       { id: 1, rel_path: 'a.bdf', name: 'a.bdf', kind: 'model', size: 10, drm_encrypted: false, model: { state: 'queued', running: true } },
       { id: 2, rel_path: 'b.bdf', name: 'b.bdf', kind: 'model', size: 10, drm_encrypted: false, model: { state: 'done' } },

@@ -1,7 +1,7 @@
 import { compareLines, titleWithoutHull, likeWord, longest, mixText, orderResults, sectionUnion, sizeText } from './similar.js';
 
 const base = { dims: [22, 7.7, 1.5], elems: 960, mix: [0.92, 0, 0.06, 0.02], sections: ['L 100x100x10', 'H 300x300x10x15'],
-  zone: '정반', atype: 'Truss' };
+  zone: '정반' };
 
 test('말과 표기', () => {
   expect(likeWord(0.95)).toBe('거의 같음');
@@ -15,7 +15,7 @@ test('말과 표기', () => {
 });
 
 test('같은 설계는 같은 점에, 차이는 다른 점에', () => {
-  const other = { ...base, elems: 3000, sections: ['L 100x100x10', 'T 250x90x10x15'], zones: ['블록'], atype: '권상' };
+  const other = { ...base, elems: 3000, sections: ['L 100x100x10', 'T 250x90x10x15'], zones: ['블록'] };
   const c = compareLines(base, other, { shape: true, raw: { size: 0.9, mix: 0.95 }, same_sections: ['L 100x100x10'] });
   expect(c.same).toEqual(['형상 같음(같은 설계)', '크기 비슷', '보 위주']);
   expect(c.diff[0]).toBe('요소 3.1배 (3,000개)');

@@ -28,7 +28,7 @@ def test_hull_detail(client, db, make_entry_file, make_user, auth_headers):
     assert d["hull_no"] == "9999" and d["drafts"] == 1
     assert d["stats"]["entries"] == 2 and d["stats"]["files"] == 3
     assert d["stats"]["kinds"] == {"report": 2, "model": 1}
-    assert {x["value"] for x in d["stats"]["analysis_types"]} == {"Mooring", "Strength"}
+    assert "analysis_types" not in d["stats"]   # 42 — 해석 종류는 없앴다(옛 열 값이 있어도)
     assert d["stats"]["zones"] == [{"value": "선수부", "count": 1}]
     people = {p["employee_id"]: p for p in d["stats"]["people"]}
     assert people["A100002"]["name"] == "김해석" and people["A100002"]["count"] == 1

@@ -46,12 +46,11 @@ def test_query_by_zone_value_and_synonym(db, storage, make_entry_file):
 
 
 def test_query_by_spacing_variant(db, storage, make_entry_file):
-    a, _ = make_entry_file(title="가", analysis_type="강도평가")
+    make_entry_file(title="가", analysis_type="강도평가")   # 42 — 옛 해석 종류 값은 찾지 않는다
     b, _ = make_entry_file(title="나")
     vocab.seed(db, storage)
     _zone(db, b, "기관실")
-    assert _ids(_q(db, "강도평가")) == [a.entry_id]
-    assert _ids(_q(db, "강도 평가")) != []          # 두 낱말 AND — '강도'·'평가' 모두 맞음
+    assert _ids(_q(db, "강도평가")) == []
     assert _ids(_q(db, "engineroom")) == [b.entry_id]   # 'Engine Room' 의 표기 변형
 
 
@@ -98,8 +97,7 @@ def test_browse_lists_every_property(db, storage, make_entry_file, make_user):
     assert zone["선미부"]["count"] == 2 and "AFT" in zone["선미부"]["aliases"] and zone["선미부"]["listed"]
     assert zone["선수부"]["count"] == 0          # 아직 안 쓴 목록 용어도 보인다
     assert f["zone"][0]["value"] == "선미부"      # 건수순
-    atype = {x["value"]: x["count"] for x in f["analysis_type"]}
-    assert atype["FE 해석"] == 2 and atype["진동 해석"] == 0   # 초안은 기본에서 빠진다
+    assert "analysis_type" not in f              # 42 — 해석 종류는 없앴다
     assert f["tag"] == [{"value": "계류", "count": 2, "aliases": ["계류력"]}]
     assert f["hull"][0] == {"value": "3001", "count": 2, "label": "LNGC"}
     assert "year" not in f                       # 15 — 해석 연도는 없앴다
@@ -108,7 +106,7 @@ def test_browse_lists_every_property(db, storage, make_entry_file, make_user):
     assert f["ship_type"] == [{"value": "LNGC", "count": 2}]
 
     drafts = get_search().browse(db, include_drafts=True, user=SYSTEM)
-    assert {x["value"]: x["count"] for x in drafts["facets"]["analysis_type"]}["진동 해석"] == 1
+    assert drafts["total"] == 3                  # 초안은 기본에서 빠진다
 
 
 def test_browse_api(client, db, make_entry_file, make_user, auth_headers):
@@ -118,5 +116,5 @@ def test_browse_api(client, db, make_entry_file, make_user, auth_headers):
     res = client.get("/api/search/browse", headers=auth_headers("A100001"))
     assert res.status_code == 200
     body = res.json()
-    assert body["total"] == 1 and set(body["facets"]) >= {"hull", "zone", "analysis_type", "tag", "kind"}
-    assert "year" not in body["facets"]
+    assert body["total"] == 1 and set(body["facets"]) >= {"hull", "zone", "target", "tag", "kind"}
+    assert "year" not in body["facets"] and "analysis_type" not in body["facets"]

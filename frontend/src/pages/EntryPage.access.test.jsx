@@ -1,5 +1,5 @@
 /** 13·15 — 등급별 Entry 상세 버튼 노출(변경하기·파일 추가·휴지통·공개 범위). */
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthContext } from '../auth/AuthContext.jsx';
@@ -9,7 +9,7 @@ import EntryPage from './EntryPage.jsx';
 
 beforeEach(() => invalidateVocab());
 
-const ENTRY = { entry_id: 'E000001', status: 'confirmed', title: '계류 구조 검토', analysis_type: null,
+const ENTRY = { entry_id: 'E000001', status: 'confirmed', title: '계류 구조 검토',
   description: null, version: 3, hulls: [{ hull_no: '9999', ship_type: null, is_primary: true }],
   zones: [], tags: [], uploaded_by: 'U1', confirmed_by: 'U1', confirmed_at: '2026-09-02T09:00:00',
   files: [], vault_unc: null, access: 'blocked', label: '블록' };
@@ -19,7 +19,7 @@ function renderAs(user, entry) {
     'GET /api/entries/E000001': entry,
     'GET /api/entries/E000001/history': [],
     'GET /api/vocab?kind=zone': { kind: 'zone', other: '기타', terms: [] },
-    'GET /api/vocab?kind=atype': { kind: 'atype', other: '기타', terms: [] },
+    'GET /api/vocab?kind=target': { kind: 'target', other: '기타', terms: [] },
   });
   render(
     <AuthContext.Provider value={{ user }}>
@@ -77,25 +77,18 @@ test('LV3 — 블록 선택지가 있다', async () => {
   expect([...select.options].map((o) => o.value)).toEqual(['shared', 'normal', 'blocked']);
 });
 
-test('열람 허락을 주면 변경 이력을 다시 읽는다 — 허락은 version 을 올리지 않는다(2026-10-08 실화면에서 발견)', async () => {
+test('열람 허락을 주면 허락 목록에 보이고, 변경 이력에는 남지 않는다(2026-10-20)', async () => {
   let grants = [];
-  let historyReads = 0;
   const fn = mockApi({
     'GET /api/entries/E000001': () => ({ ...ENTRY, access: 'normal', label: null, can_edit: true, can_manage_access: true, grants }),
-    'GET /api/entries/E000001/history': () => {
-      historyReads += 1;
-      return grants.length
-        ? [{ at: '2026-10-08T08:02:00', employee_id: 'U1', name: '올린이', action: 'ENTRY_GRANT', before: null,
-             after: { employee_id: 'M2' }, subject_name: '박승인' }]
-        : [];
-    },
+    'GET /api/entries/E000001/history': [],
     'GET /api/users/lookup?q=%EB%B0%95': [{ employee_id: 'M2', name: '박승인', department: '구조', level: 1 }],
     'POST /api/entries/E000001/grants': () => {
       grants = [{ employee_id: 'M2', name: '박승인', level: 1, effective: true }];
       return { grants };
     },
     'GET /api/vocab?kind=zone': { kind: 'zone', other: '기타', terms: [] },
-    'GET /api/vocab?kind=atype': { kind: 'atype', other: '기타', terms: [] },
+    'GET /api/vocab?kind=target': { kind: 'target', other: '기타', terms: [] },
   });
   render(
     <AuthContext.Provider value={{ user: { employee_id: 'U1', name: '올린이', level: 2 } }}>
@@ -105,12 +98,10 @@ test('열람 허락을 주면 변경 이력을 다시 읽는다 — 허락은 ve
     </AuthContext.Provider>,
   );
   const box = await screen.findByRole('textbox', { name: '열람 허락할 사람 찾기' });
-  const before = historyReads;
   await userEvent.type(box, '박');
   await userEvent.click(await screen.findByRole('checkbox', { name: '박승인 고르기' }));
   await userEvent.click(screen.getByRole('button', { name: '1명 허락' }));
-  await screen.findByRole('list', { name: '열람 허락 목록' });
-  await waitFor(() => expect(historyReads).toBeGreaterThan(before));
-  expect(await screen.findByText('박승인 (M2)')).toBeInTheDocument();   // 이력에 대상 이름
+  const list = await screen.findByRole('list', { name: '열람 허락 목록' });
+  expect(list).toHaveTextContent('박승인');
   expect(fn.mock.calls.some(([u, i]) => i?.method === 'POST' && u === '/api/entries/E000001/grants')).toBe(true);
 });

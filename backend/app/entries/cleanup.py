@@ -4,8 +4,8 @@
 - 확정 자료를 숨기거나 상태를 바꾸지 않는다 — 목록·'보완 필요' 표시만.
 - 제목 적용은 자료 편집과 같은 경로(service.update_entry)를 타서 version 이 오르고 감사 기록(ENTRY_RETITLE,
   before/after 에 옛·새 제목)과 entry.json 이 남는다. 되돌리기는 그 감사 기록의 옛 제목으로(ENTRY_RETITLE_REVERT).
-- 필수 분류가 빠진 BDF 자료와 호선·구역·해석 종류가 하나도 없는 자료는 제목 변경 대상에서 뺀다(사유를 보인다).
-- 21 — 호선이 없는 자료의 프로젝트는 호선 칸을 채우고(필수 분류) 제목 머리가 된다(naming.compose_title).
+- 필수 분류가 빠진 BDF 자료와 호선·구역이 하나도 없는 자료는 제목 변경 대상에서 뺀다(사유를 보인다).
+- 42 — 해석 종류는 없앴다(필수 칸·제목 칸 아님).
 """
 from collections import defaultdict
 
@@ -18,12 +18,12 @@ from . import naming, quality
 
 RETITLE = "ENTRY_RETITLE"
 RETITLE_REVERT = "ENTRY_RETITLE_REVERT"
-MISSING_LABELS = {"hull": "호선", "zone_or_target": "구역 또는 대상", "analysis_type": "해석 종류"}
+MISSING_LABELS = {"hull": "호선", "zone_or_target": "구역 또는 대상"}
 MAX_LIMIT = 500
 
 
 def _facts(db: Session, user=None) -> list[dict]:
-    """확정 자료마다 호선·구역·해석 종류·BDF 여부를 한 번에 읽는다(자료 수천 건 전제 — 질의 4번)."""
+    """확정 자료마다 호선·구역·대상·BDF 여부를 한 번에 읽는다(자료 수천 건 전제 — 질의 4번)."""
     q = db.query(models.Entry).filter(models.Entry.status == "confirmed")
     if user is not None:
         q = q.filter(access.visible_entries_filter(user))
@@ -49,7 +49,7 @@ def _facts(db: Session, user=None) -> list[dict]:
     out = []
     for e in entries:
         missing = quality.missing_fields(has_bdf=e.id in bdf, hulls=hulls[e.id], no_hull=bool(e.no_hull),
-                                         zones=zones[e.id], target=targets.get(e.id), analysis_type=e.analysis_type)
+                                         zones=zones[e.id], target=targets.get(e.id))
         out.append({"entry": e, "hulls": hulls[e.id], "zones": zones[e.id], "target": targets.get(e.id),
                     "has_bdf": e.id in bdf, "missing": missing})
     return out
@@ -63,7 +63,7 @@ def _names(db: Session, ids) -> dict[str, str]:
 
 def missing_list(db: Session, user=None, *, missing: str | None = None, uploader: str | None = None,
                  q: str | None = None, offset: int = 0, limit: int = 100) -> dict:
-    """필수 분류가 빠진 확정 BDF 자료 — 무엇이 빠졌는지·올린 사람. missing(hull|zone_or_target|analysis_type)·uploader·q(번호·제목)."""
+    """필수 분류가 빠진 확정 BDF 자료 — 무엇이 빠졌는지·올린 사람. missing(hull|zone_or_target)·uploader·q(번호·제목)."""
     rows = [r for r in _facts(db, user) if r["missing"]]
     counts = {k: sum(1 for r in rows if k in r["missing"]) for k in quality.REQUIRED}
     by_uploader: dict[str, int] = defaultdict(int)
@@ -85,7 +85,7 @@ def missing_list(db: Session, user=None, *, missing: str | None = None, uploader
                       for k, n in sorted(by_uploader.items(), key=lambda x: (-x[1], x[0]))],
         "items": [{"entry_id": r["entry"].entry_id, "title": r["entry"].title, "version": r["entry"].version,
                    "missing": r["missing"], "hulls": r["hulls"], "no_hull": bool(r["entry"].no_hull),
-                   "zones": r["zones"], "target": r["target"], "analysis_type": r["entry"].analysis_type,
+                   "zones": r["zones"], "target": r["target"],
                    "uploaded_by": r["entry"].uploaded_by, "uploader_name": names.get(r["entry"].uploaded_by),
                    "confirmed_at": r["entry"].confirmed_at.isoformat() if r["entry"].confirmed_at else None}
                   for r in page],
@@ -97,10 +97,8 @@ def _proposal(ctx: quality.TitleContext, r: dict) -> dict | None:
     e = r["entry"]
     source = ctx.source_of(e)
     target = r.get("target")
-    phrases = (ctx.phrases("zone", r["zones"]) + ctx.phrases("atype", [e.analysis_type] if e.analysis_type else [])
-               + ctx.phrases("target", [target] if target else []))
-    structured = naming.compose_title(hulls=r["hulls"], no_hull=bool(e.no_hull), zones=r["zones"],
-                                      analysis_type=e.analysis_type, target=target,
+    phrases = ctx.phrases("zone", r["zones"]) + ctx.phrases("target", [target] if target else [])
+    structured = naming.compose_title(hulls=r["hulls"], no_hull=bool(e.no_hull), zones=r["zones"], target=target,
                                       distinct=naming.distinct_part(source, hulls=r["hulls"], phrases=phrases))
     current = (e.title or "").strip()
     if structured and structured == current:
@@ -112,7 +110,7 @@ def _proposal(ctx: quality.TitleContext, r: dict) -> dict | None:
                        "reason": "필수 분류 빠짐: " + ", ".join(MISSING_LABELS[k] for k in r["missing"])}
     if not structured:
         return base | {"status": "blocked", "new_title": None, "missing": [],
-                       "reason": "호선(또는 프로젝트)·구역·해석 종류가 하나도 없음"}
+                       "reason": "호선·구역이 하나도 없음"}
     return base | {"status": "ready", "new_title": structured, "missing": []}
 
 
@@ -185,7 +183,7 @@ def _facts_one(db: Session, e: models.Entry) -> list[dict]:
     target = target_of(db, e)
     return [{"entry": e, "hulls": hulls, "zones": zones, "target": target, "has_bdf": has_bdf,
              "missing": quality.missing_fields(has_bdf=has_bdf, hulls=hulls, no_hull=bool(e.no_hull), zones=zones,
-                                               target=target, analysis_type=e.analysis_type)}]
+                                               target=target)}]
 
 
 def applied_list(db: Session, user=None, limit: int = 100) -> list[dict]:

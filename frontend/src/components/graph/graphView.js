@@ -182,8 +182,7 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
 
   // ── 그리기 ──
   const sx = (x) => T.applyX(x), sy = (y) => T.applyY(y);
-  const leafColor = (e) => (S.color === 'atype' ? model.colors.atype.colorOf(e)
-    : S.color === 'ship' ? model.colors.ship.colorOf(e) : K.leaf);
+  const leafColor = (e) => (S.color === 'ship' ? model.colors.ship.colorOf(e) : K.leaf);
   const lineBatch = (list, style, width) => {
     if (!list.length) return;
     ctx.beginPath();

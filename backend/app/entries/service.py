@@ -17,8 +17,8 @@ from . import quality
 logger = logging.getLogger(__name__)
 
 HULL_PATTERN = re.compile(r"^[0-9]{4}$")
-# 15 — 해석 시기(analysis_period)는 뺐다(열은 남지만 받지도 보이지도 않는다)
-EDITABLE_FIELDS = ("title", "analysis_type", "description")
+# 15 — 해석 시기(analysis_period), 42 — 해석 종류(analysis_type)는 뺐다(열은 남지만 받지도 보이지도 않는다)
+EDITABLE_FIELDS = ("title", "description")
 
 
 def hulls_of(db: Session, entry: models.Entry) -> list[models.EntryHull]:
@@ -132,15 +132,15 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
     same_models = find_same_models(db, model_rows, files, viewer=viewer)
     suggested = _entry_ref(db, entry.suggested_entry_id, viewer)
     merge_into = _entry_ref(db, entry.merge_into_id, viewer)
-    # 20 — 필수 분류(BDF 자료는 호선·구역 또는 대상(40)·해석 종류)
+    # 20 — 필수 분류(BDF 자료는 호선·구역 또는 대상(40))
     zones = zones_of(db, entry)
     target = target_of(db, entry)
     missing = quality.missing_fields(has_bdf=any(f.kind == "model" and f.location != "trash" for f in files),
                                      hulls=[h.hull_no for h in hulls], no_hull=bool(entry.no_hull), zones=zones,
-                                     target=target, analysis_type=entry.analysis_type)
+                                     target=target)
     d = {
         "id": entry.id, "entry_id": entry.entry_id, "status": entry.status, "title": entry.title,
-        "analysis_type": entry.analysis_type, "description": entry.description, "version": entry.version,
+        "description": entry.description, "version": entry.version,
         "hulls": [{"hull_no": h.hull_no, "ship_type": ship.get(h.hull_no), "is_primary": bool(h.is_primary)}
                   for h in hulls],
         "no_hull": bool(entry.no_hull),
@@ -205,7 +205,7 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
 
 def snapshot(db: Session, entry: models.Entry) -> dict:
     d = entry_to_dict(db, entry)
-    return {k: d[k] for k in ("title", "analysis_type", "description", "zones", "tags")} | {
+    return {k: d[k] for k in ("title", "description", "zones", "tags")} | {
         "hulls": [h["hull_no"] for h in d["hulls"]]} | ({"no_hull": True} if d["no_hull"] else {}) | (
         {"target": d["target"]} if d["target"] else {})   # 38 — 값이 있을 때만(no_hull 과 같은 방식)
 
@@ -294,7 +294,7 @@ def _set_merge_into(db: Session, entry: models.Entry, value: str | None, user: m
 
 
 # 20 — 이 칸이 바뀌면 (사람이 고치지 않은) 초안 제목을 형식대로 다시 만든다
-TITLE_VALUE_FIELDS = ("hulls", "no_hull", "zones", "analysis_type", "target")
+TITLE_VALUE_FIELDS = ("hulls", "no_hull", "zones", "target")
 
 
 def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User | None,
@@ -303,9 +303,10 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
     """Entry 고치기(초안·확정 공용).
 
     20 — patch.no_hull('호선 없음(공용)'), patch.title_auto(제목을 형식대로 다시 만들기). 초안은 제목이 초안 그대로
-    (사람이 고치지 않음)면 호선·구역·해석 종류를 바꿀 때 제목도 따라 바뀐다. action·system_actor — 관리 정비
+    (사람이 고치지 않음)면 호선·구역·대상을 바꿀 때 제목도 따라 바뀐다. action·system_actor — 관리 정비
     (자료 정비 화면·CLI)가 같은 경로로 고치며 감사 동작 이름을 달리 남긴다. system_actor 가 있으면 권한 검사 없이
     그 이름으로 기록한다(서버 콘솔 CLI 전용 — API 는 넘기지 않는다)."""
+    patch = {k: v for k, v in patch.items() if k != "analysis_type"}   # 42 — 옛 화면이 보내도 무시
     entry = _lock(db, entry)
     if system_actor is None:
         ensure_editable(user, entry)
@@ -323,10 +324,7 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
     was_auto = entry.status == "draft" and ctx.is_auto(entry)
     if entry.status == "confirmed" and "title" in patch and not (patch["title"] or "").strip():
         raise HTTPException(status_code=422, detail="title_required")  # M6
-    # 08 — 해석 종류·구역은 통제 어휘: 동의어·표기 변형은 용어로 바꾸고, 목록 밖 새 값은 관리자만
-    if "analysis_type" in patch:
-        patch = {**patch, "analysis_type": vocab.normalize_input(
-            db, "atype", patch["analysis_type"], current=entry.analysis_type, admin=admin)}
+    # 08 — 구역·대상은 통제 어휘: 동의어·표기 변형은 용어로 바꾸고, 목록 밖 새 값은 관리자만
     if "zones" in patch:
         patch = {**patch, "zones": vocab.normalize_inputs(
             db, "zone", patch["zones"] or [], current=zones_of(db, entry), admin=admin)}
@@ -567,7 +565,7 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
 
     if not (entry.title or "").strip():
         raise HTTPException(status_code=422, detail="title_required")
-    # 20 — BDF 자료는 호선(또는 호선 없음(공용))·구역·해석 종류가 있어야 확정한다. 기존 자료에 합치기(위)는 보지 않는다
+    # 20 — BDF 자료는 호선(또는 호선 없음(공용))·구역 또는 대상이 있어야 확정한다. 기존 자료에 합치기(위)는 보지 않는다
     missing = quality.missing_required(db, entry)
     if missing:
         raise HTTPException(status_code=409, detail={"code": "required_fields", "missing": missing})
@@ -960,8 +958,9 @@ def set_access(db: Session, storage: StoragePaths, entry: models.Entry, user: mo
 
 def grant(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User, employee_id: str,
           ip: str | None = None) -> models.EntryGrant:
-    """개별 열람 허락(15) — 올린 사람 또는 LV3 가(블록 자료는 LV3 만) WorkBench 활성 사용자에게. 감사 ENTRY_GRANT.
-    이미 있으면 그대로(여러 번 불러도 같다). LogBook 에 들어온 적 없는 사람에게도 줄 수 있다(사번으로 남는다)."""
+    """개별 열람 허락(15) — 올린 사람 또는 LV3 가(블록 자료는 LV3 만) WorkBench 활성 사용자에게.
+    이미 있으면 그대로(여러 번 불러도 같다). LogBook 에 들어온 적 없는 사람에게도 줄 수 있다(사번으로 남는다).
+    허락·회수는 감사 기록을 남기지 않는다 — 변경 이력은 자료 내용만, 지금 명단은 entry_grants 가 가진다(2026-10-20)."""
     eid = (employee_id or "").strip().upper()
     grant_many(db, storage, entry, user, [eid], ip)
     return db.query(models.EntryGrant).filter_by(entry_id=entry.id, employee_id=eid).one()
@@ -973,7 +972,7 @@ GRANT_MANY_LIMIT = 200
 def grant_many(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User, employee_ids,
                ip: str | None = None) -> list[str]:
     """여러 사람에게 한 번에 열람 허락(31) — 규칙은 grant 와 같다. 대상을 모두 먼저 확인하고(한 명이라도
-    없거나 비활성이면 아무것도 주지 않는다) 새로 준 사람마다 감사 ENTRY_GRANT. registry 는 한 번만 쓴다.
+    없거나 비활성이면 아무것도 주지 않는다). 감사 기록은 남기지 않는다. registry 는 한 번만 쓴다.
     새로 허락한 사번 목록을 돌려준다(이미 있던 사람은 빠진다)."""
     from .. import wb_users
 
@@ -1000,17 +999,14 @@ def grant_many(db: Session, storage: StoragePaths, entry: models.Entry, user: mo
         return []
     for eid in added:
         db.add(models.EntryGrant(entry_id=entry.id, employee_id=eid, granted_by=user.employee_id))
-    db.flush()
-    for eid in added:
-        audit.record(db, storage, actor=user.employee_id, action="ENTRY_GRANT", target_type="entry",
-                     target_id=entry.entry_id, after={"employee_id": eid}, ip=ip)
+    db.commit()
     _after_access_change(db, storage, entry)
     return added
 
 
 def revoke(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User, employee_id: str,
            ip: str | None = None) -> None:
-    """열람 허락 회수 — 올린 사람 또는 LV3(블록 자료는 LV3 만). 없으면 404. 감사 ENTRY_REVOKE."""
+    """열람 허락 회수 — 올린 사람 또는 LV3(블록 자료는 LV3 만). 없으면 404. 감사 기록은 남기지 않는다."""
     access.ensure_can_manage_access(user, entry)
     eid = (employee_id or "").strip().upper()
     n = (db.query(models.EntryGrant).filter_by(entry_id=entry.id, employee_id=eid)
@@ -1018,6 +1014,5 @@ def revoke(db: Session, storage: StoragePaths, entry: models.Entry, user: models
     if not n:
         db.rollback()
         raise HTTPException(status_code=404, detail="grant_not_found")
-    audit.record(db, storage, actor=user.employee_id, action="ENTRY_REVOKE", target_type="entry",
-                 target_id=entry.entry_id, before={"employee_id": eid}, ip=ip)
+    db.commit()
     _after_access_change(db, storage, entry)

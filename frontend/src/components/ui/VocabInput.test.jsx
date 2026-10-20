@@ -6,7 +6,7 @@ import { invalidateVocab } from '../../lib/vocab.js';
 import { calls, mockApi } from '../../test/mockApi.js';
 import VocabInput from './VocabInput.jsx';
 
-const ATYPE = { kind: 'atype', other: '기타', terms: [
+const TARGET = { kind: 'target', other: '기타', terms: [
   { id: 1, value: '강도 평가', active: true, count: 3, synonyms: [] },
   { id: 2, value: 'FE 해석', active: true, count: 1, synonyms: [{ id: 10, value: 'FEM 해석' }] },
   { id: 3, value: '기타', active: true, count: 0, synonyms: [] },
@@ -23,10 +23,10 @@ function renderAs(ui, { admin = false } = {}) {
 beforeEach(() => invalidateVocab());
 
 test('동의어를 치면 대표 용어가 후보로 뜨고 Enter 로 고른다', async () => {
-  mockApi({ 'GET /api/vocab?kind=atype': ATYPE });
+  mockApi({ 'GET /api/vocab?kind=target': TARGET });
   const onChange = vi.fn();
-  renderAs(<VocabInput kind="atype" label="해석 종류" value={null} onChange={onChange} />);
-  const box = screen.getByRole('combobox', { name: '해석 종류' });
+  renderAs(<VocabInput kind="target" label="대상" value={null} onChange={onChange} />);
+  const box = screen.getByRole('combobox', { name: '대상' });
   await userEvent.click(box);
   await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(3));
   await userEvent.type(box, 'fem');
@@ -36,10 +36,10 @@ test('동의어를 치면 대표 용어가 후보로 뜨고 Enter 로 고른다'
 });
 
 test('목록에 없으면 일반 사용자에게는 기타만 보인다', async () => {
-  mockApi({ 'GET /api/vocab?kind=atype': ATYPE });
+  mockApi({ 'GET /api/vocab?kind=target': TARGET });
   const onChange = vi.fn();
-  renderAs(<VocabInput kind="atype" label="해석 종류" value="강도 평가" onChange={onChange} />);
-  const box = screen.getByRole('combobox', { name: '해석 종류' });
+  renderAs(<VocabInput kind="target" label="대상" value="강도 평가" onChange={onChange} />);
+  const box = screen.getByRole('combobox', { name: '대상' });
   await userEvent.click(box);
   await userEvent.type(box, '충돌 해석');
   expect(screen.getByText('목록에 없는 값입니다. 아래에서 고르세요.')).toBeInTheDocument();
@@ -50,19 +50,19 @@ test('목록에 없으면 일반 사용자에게는 기타만 보인다', async 
 
 test('관리자는 목록에 없는 값을 그 자리에서 용어로 추가한다', async () => {
   const fetch = mockApi({
-    'GET /api/vocab?kind=atype': ATYPE,
-    'POST /api/vocab/terms': { id: 7, kind: 'atype', value: '충돌 해석', active: true },
+    'GET /api/vocab?kind=target': TARGET,
+    'POST /api/vocab/terms': { id: 7, kind: 'target', value: '충돌 해석', active: true },
   });
   const onChange = vi.fn();
-  renderAs(<VocabInput kind="atype" label="해석 종류" value={null} onChange={onChange} />, { admin: true });
-  const box = screen.getByRole('combobox', { name: '해석 종류' });
+  renderAs(<VocabInput kind="target" label="대상" value={null} onChange={onChange} />, { admin: true });
+  const box = screen.getByRole('combobox', { name: '대상' });
   await userEvent.click(box);
   await userEvent.type(box, '충돌 해석');
   await userEvent.click(screen.getByRole('option', { name: /‘충돌 해석’ 목록에 추가/ }));
   await waitFor(() => expect(onChange).toHaveBeenCalledWith('충돌 해석'));
   const post = fetch.mock.calls.find(([u, i]) => u === '/api/vocab/terms' && i.method === 'POST');
-  expect(JSON.parse(post[1].body)).toEqual({ kind: 'atype', value: '충돌 해석' });
-  expect(calls(fetch).filter((c) => c === 'GET /api/vocab?kind=atype').length).toBe(2); // 목록 다시 받기
+  expect(JSON.parse(post[1].body)).toEqual({ kind: 'target', value: '충돌 해석' });
+  expect(calls(fetch).filter((c) => c === 'GET /api/vocab?kind=target').length).toBe(2); // 목록 다시 받기
 });
 
 test('구역 칩 — 고른 값은 후보에서 빠지고, 저장된 목록 밖 값도 보인다', async () => {
@@ -81,20 +81,20 @@ test('구역 칩 — 고른 값은 후보에서 빠지고, 저장된 목록 밖 
 });
 
 test('compact — 값만 보이다가 눌러서 고치고, Esc 로 닫는다', async () => {
-  mockApi({ 'GET /api/vocab?kind=atype': ATYPE });
-  renderAs(<VocabInput compact kind="atype" label="해석 종류" value="FE 해석" onChange={() => {}} />);
+  mockApi({ 'GET /api/vocab?kind=target': TARGET });
+  renderAs(<VocabInput compact kind="target" label="대상" value="FE 해석" onChange={() => {}} />);
   expect(screen.getByText('FE 해석')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: '해석 종류 고치기' }));
-  expect(screen.getByRole('combobox', { name: '해석 종류' })).toHaveFocus();
+  await userEvent.click(screen.getByRole('button', { name: '대상 고치기' }));
+  expect(screen.getByRole('combobox', { name: '대상' })).toHaveFocus();
   await userEvent.keyboard('{Escape}');
   expect(screen.queryByRole('combobox')).toBeNull();
 });
 
 test('관리자도 Enter 만으로는 용어를 만들지 않는다 — 목록에 추가는 직접 고른다', async () => {
-  const fetch = mockApi({ 'GET /api/vocab?kind=atype': ATYPE });
+  const fetch = mockApi({ 'GET /api/vocab?kind=target': TARGET });
   const onChange = vi.fn();
-  renderAs(<VocabInput kind="atype" label="해석 종류" value={null} onChange={onChange} />, { admin: true });
-  const box = screen.getByRole('combobox', { name: '해석 종류' });
+  renderAs(<VocabInput kind="target" label="대상" value={null} onChange={onChange} />, { admin: true });
+  const box = screen.getByRole('combobox', { name: '대상' });
   await userEvent.click(box);
   await userEvent.type(box, '오타해석{Enter}');
   expect(onChange).not.toHaveBeenCalled();

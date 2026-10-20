@@ -97,8 +97,8 @@ test('BatchCard: 제외 목록에 동일 BDF 이유·대상 링크·원본 보�
 });
 
 const DRAFT = {
-  // 20 — BDF 초안은 구역·해석 종류가 있어야 확정 단추가 열린다
-  entry_id: 'E000020', status: 'draft', title: '9999 초안', version: 1, analysis_type: '강도 평가', description: null, zones: ['선수부'],
+  // 20 — BDF 초안은 구역 또는 대상이 있어야 확정 단추가 열린다
+  entry_id: 'E000020', status: 'draft', title: '9999 초안', version: 1, description: null, zones: ['선수부'],
   hulls: [{ hull_no: '9999', ship_type: null, is_primary: true }], hull_evidence: [], suggested_entry: null, merge_into: null,
   files: [{ id: 5, rel_path: 'm.bdf', name: 'm.bdf', kind: 'model', size: 10, duplicate_of_entry: null, drm_encrypted: false }],
 };

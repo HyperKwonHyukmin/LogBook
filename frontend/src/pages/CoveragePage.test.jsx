@@ -4,12 +4,12 @@ import { MemoryRouter } from 'react-router-dom';
 import { mockApi } from '../test/mockApi.js';
 import CoveragePage from './CoveragePage.jsx';
 
-const E = (id, o) => ({ id, title: `${id} 제목`, analysis_type: 'Truss', rows: ['h:9001'], zones: ['정반'], models: 1, reports: 1,
+const E = (id, o) => ({ id, title: `${id} 제목`, rows: ['h:9001'], zones: ['정반'], models: 1, reports: 1,
   doc_linked: false, model_linked: false, solve: 'pass', needs_fix: false, unsigned: false, uploaded_by: 'M1', uploader_name: '김해석',
   confirmed_at: '2026-09', ...o });
 const DATA = {
   hulls: { 9001: 'LNGC', 9002: null }, zones: ['정반', '블록'], truncated: false,
-  entries: [E('E000001'), E('E000002', { rows: ['h:9002'], reports: 0 }), E('E000003', { zones: ['블록'], reports: 0, solve: 'fail', analysis_type: '권상' })],
+  entries: [E('E000001'), E('E000002', { rows: ['h:9002'], reports: 0 }), E('E000003', { zones: ['블록'], reports: 0, solve: 'fail' })],
 };
 
 function renderPage(data = DATA) {
@@ -35,11 +35,13 @@ test('칸을 누르면 그 칸의 자료와 칸만 보기가 나온다', async (
   expect(screen.getByRole('tab', { name: /문서 없는 모델/ })).toHaveTextContent('1건');
 });
 
-test('해석 종류로 거르면 그 종류가 없는 구역은 해당 없음', async () => {
-  renderPage();
+test('42 — 해석 종류 거르기는 없다(옛 응답에 analysis_type 이 있어도)', async () => {
+  renderPage({ ...DATA, entries: DATA.entries.map((e) => ({ ...e, analysis_type: '권상' })) });
   await screen.findByRole('grid', { name: '호선별 구역 자료 현황' });
-  await userEvent.click(screen.getByRole('radio', { name: '권상' }));
-  expect(screen.getAllByLabelText(/정반: 해당 없음/).length).toBeGreaterThan(0);
+  expect(screen.queryByRole('radiogroup', { name: '해석 종류' })).toBeNull();
+  expect(screen.queryByText('해석 종류')).toBeNull();
+  expect(screen.queryByRole('radio', { name: '권상' })).toBeNull();
+  expect(screen.queryAllByLabelText(/해당 없음/)).toHaveLength(0);
 });
 
 test('자료가 없으면 빈 상태', async () => {

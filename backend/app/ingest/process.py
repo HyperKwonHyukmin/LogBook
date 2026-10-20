@@ -158,7 +158,7 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
     known = {h for (h,) in db.query(models.Hull.hull_no)}
     created = 0
     for p in propose(infos, known):
-        # 20 — 호선을 알면 제목 초안을 형식(`3496 · 구별자`)으로, 모르면 예전처럼 폴더/파일 이름. 구역·해석 종류는
+        # 20 — 호선을 알면 제목 초안을 형식(`3496 · 구별자`)으로, 모르면 예전처럼 폴더/파일 이름. 구역·대상은
         # 사람이 정리 대기에서 고르고, 그때 (사람이 제목을 고치지 않았으면) 제목도 따라 바뀐다
         title = naming.title_draft(p.source, hulls=[p.best_hull] if p.best_hull else []) if p.best_hull else p.title
         entry = models.Entry(title=title or p.title, status="draft", batch_id=batch.id, uploaded_by=batch.uploader,

@@ -45,17 +45,13 @@ def suggest_values(db: Session, user, kind: str, q: str, limit: int) -> list[str
                     .filter(access.visible_entries_filter(user)))
             rows = rows.filter(models.Tag.id.notin_(used) | models.Tag.id.in_(seen))
         rows = rows.order_by(models.Tag.value).limit(limit)
-    else:
-        rows = (db.query(models.Entry.analysis_type).distinct()
-                .filter(models.Entry.analysis_type.isnot(None),
-                        models.Entry.analysis_type.like(f"%{q}%", escape="\\"),
-                        access.visible_entries_filter(user))
-                .order_by(models.Entry.analysis_type).limit(limit))
+    else:   # 42 — 해석 종류(analysis_type)는 없앴다
+        return []
     return [v for (v,) in rows]
 
 
 @router.get("/suggest")
-def suggest(kind: str = Query(pattern="^(hull|zone|tag|analysis_type)$"), q: str = "",
+def suggest(kind: str = Query(pattern="^(hull|zone|tag)$"), q: str = "",
             limit: int = Query(default=10, ge=1, le=50),
             db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
     return suggest_values(db, user, kind, q, limit)

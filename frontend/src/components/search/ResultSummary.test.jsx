@@ -6,26 +6,29 @@ import { FamilyBar, ModelLine, ReportLine } from './RowInsight.jsx';
 
 const SUMMARY = {
   total: 38,
-  analysis_type: [{ value: '강도 평가', count: 14 }, { value: 'FE 해석', count: 9 }, { value: '피로 평가', count: 5 },
-    { value: '진동 해석', count: 3 }, { value: '좌굴 평가', count: 2 }],
-  analysis_type_values: 6,
-  hull: [{ value: '9002', count: 11 }, { value: '9001', count: 7 }],
-  hull_values: 2,
+  // 42 — 해석 종류 분포는 없앴다(옛 응답에 있어도 그리지 않는다)
+  analysis_type: [{ value: '강도 평가', count: 14 }],
+  analysis_type_values: 1,
+  hull: [{ value: '9002', count: 11 }, { value: '9001', count: 7 }, { value: '9003', count: 5 },
+    { value: '9004', count: 3 }, { value: '9005', count: 2 }],
+  hull_values: 6,
   solve: { pass: 21, fail: 3, error: 0, stale: 1, pending: 0, none: 14, no_model: 2 },
   model_size: { min: 1200, max: 50000, models: 36, buckets: [{ min: 0, max: 1000, count: 0 }, { min: 1000, max: 10000, count: 20 },
     { min: 10000, max: 50000, count: 15 }, { min: 50000, max: null, count: 1 }] },
 };
 
-test('요약 띠 — 두 줄 분포, 막대를 누르면 그 필터를 건다', async () => {
+test('요약 띠 — 호선 분포, 막대를 누르면 그 필터를 건다', async () => {
   const onFilter = vi.fn();
   render(<ResultSummary summary={SUMMARY} filters={{ hull: '9001' }} onFilter={onFilter} />);
   const region = screen.getByRole('region', { name: '결과 요약' });
   expect(region).toHaveTextContent('결과 38건 요약');
-  const atype = within(region).getByRole('group', { name: '해석 종류 분포' });
-  expect(within(atype).getAllByRole('button')).toHaveLength(3);
-  expect(atype).toHaveTextContent('외 3');
-  await userEvent.click(within(atype).getByRole('button', { name: /FE 해석/ }));
-  expect(onFilter).toHaveBeenLastCalledWith('analysis_type', 'FE 해석');
+  expect(within(region).queryByRole('group', { name: '해석 종류 분포' })).toBeNull();
+  expect(region).not.toHaveTextContent('강도 평가');
+  const hulls = within(region).getByRole('group', { name: '호선 분포' });
+  expect(within(hulls).getAllByRole('button')).toHaveLength(3);
+  expect(hulls).toHaveTextContent('외 3');
+  await userEvent.click(within(hulls).getByRole('button', { name: /9002/ }));
+  expect(onFilter).toHaveBeenLastCalledWith('hull', '9002');
   // 걸린 값은 강조되고, 다시 누르면 그 값을 끈다(19 — 칸 안 값 켜고 끄기, 목록 모양 필터도 받는다)
   const on = within(region).getByRole('button', { name: /9001/ });
   expect(on).toHaveAttribute('aria-pressed', 'true');
@@ -48,7 +51,7 @@ test('요약 띠는 접은 상태를 기억하고, 결과가 2건 미만이면 �
   const { unmount } = render(<ResultSummary summary={SUMMARY} onFilter={() => {}} />);
   await userEvent.click(screen.getByRole('button', { name: /결과 38건 요약/ }));
   expect(screen.getByRole('button', { name: /결과 38건 요약/ })).toHaveAttribute('aria-expanded', 'false');
-  expect(screen.queryByRole('group', { name: '해석 종류 분포' })).toBeNull();
+  expect(screen.queryByRole('group', { name: '호선 분포' })).toBeNull();
   expect(localStorage.getItem('logbook.searchSummaryCollapsed.v1')).toBe('1');
   unmount();
   render(<ResultSummary summary={SUMMARY} onFilter={() => {}} />);

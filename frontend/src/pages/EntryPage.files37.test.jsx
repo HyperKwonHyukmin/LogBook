@@ -15,7 +15,7 @@ const FILES = [
   { id: 1, name: 'm.bdf', rel_path: 'model/m.bdf', kind: 'model', size: 100, extract: null },
   { id: 2, name: 'r.pdf', rel_path: 'r.pdf', kind: 'report', size: 200, extract: { state: 'done', error: null, summary: null } },
 ];
-const ENTRY = { entry_id: 'E000051', status: 'confirmed', title: '계류 구조 검토', analysis_type: 'Mooring',
+const ENTRY = { entry_id: 'E000051', status: 'confirmed', title: '계류 구조 검토',
   description: null, version: 3, hulls: [{ hull_no: '9999', ship_type: 'LNGC', is_primary: true }],
   zones: ['선수부'], tags: [], uploaded_by: 'A100009', confirmed_by: 'A100009', confirmed_at: '2026-09-02T09:00:00',
   files: FILES, removed_files: [], vault_unc: '\\\\srv\\E000051', can_edit: true };
@@ -100,7 +100,6 @@ test('38 — 고치기에서 대상을 고르면(동의어도 용어로) PATCH �
   const fetch = renderPage({
     'GET /api/entries/E000051': () => current,
     'GET /api/vocab?kind=zone': { kind: 'zone', other: '기타', terms: [{ id: 1, value: '선수부', active: true, count: 1, synonyms: [] }] },
-    'GET /api/vocab?kind=atype': { kind: 'atype', other: '기타', terms: [] },
     'GET /api/vocab?kind=target': { kind: 'target', other: '기타', terms: [
       { id: 6, value: '계류 의장품', active: true, count: 0, synonyms: [{ id: 7, value: 'Mooring Fitting' }] }] },
     'PATCH /api/entries/E000051': (init) => { current = { ...ENTRY, ...JSON.parse(init.body), version: 4 }; return current; },

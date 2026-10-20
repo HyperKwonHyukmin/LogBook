@@ -81,9 +81,9 @@ function EntryRow({ item, on, terms, filters }) {
   const hullFilter = filterValues(filters, 'hull');
   const hulls = hullFilter.length === 1 ? item.hulls.filter((h) => h !== hullFilter[0]) : item.hulls;
   const shared = !!item.no_hull && !item.hulls.length;
-  // 둘째 줄 = 통제 값만, 고정 순서: 호선 · 구역 · 해석 종류 · 대상(38) · 선종
+  // 둘째 줄 = 통제 값만, 고정 순서: 호선 · 구역 · 대상(38) · 선종 (42 — 해석 종류는 없앴다)
   // 값마다 그 값으로 거른 검색 링크(09) — '선미부' 를 누르면 구역 선미부 전체
-  const meta = [...(item.zones || []).map((v) => ['zone', v]), ...(item.analysis_type ? [['analysis_type', item.analysis_type]] : []),
+  const meta = [...(item.zones || []).map((v) => ['zone', v]),
     ...(item.target ? [['target', item.target]] : []),
     ...(item.ship_types || []).map((v) => ['ship_type', v])];
   return (

@@ -17,7 +17,8 @@ import {
 
 const PIVOT_ITEMS = [{ id: 'hull', label: '호선' }, { id: 'zone', label: '구역' }, { id: 'kind', label: '선종' },
   { id: 'size', label: '크기급' }];
-const COLOR_ITEMS = [{ id: 'none', label: '없음' }, { id: 'atype', label: '해석 종류' }, { id: 'ship', label: '선종' }];
+// 42 — 해석 종류 색은 없앴다
+const COLOR_ITEMS = [{ id: 'none', label: '없음' }, { id: 'ship', label: '선종' }];
 // 32 — 자료 사이 선의 층: 모델(형상만 같음·똑같은 BDF) · 문서(사용한 모델·보고서 다른 판·본문 비슷함)
 const LAYER_ITEMS = [{ id: 'all', label: '모두' }, { id: 'model', label: '모델' }, { id: 'doc', label: '문서' }];
 const reduced = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -95,7 +96,7 @@ export default function GraphPage() {
                         layer={opts.layer} onLayer={(v) => setOpts((o) => ({ ...o, layer: v }))} />
           <Stage model={model} view={view} setView={setView} pivot={pivot} hl={hl} setHl={setHl} onSelect={onSelect}
                  opts={opts} setOpts={setOpts} pop={pop} setPop={setPop} />
-          <DetailColumn model={model} pivot={pivot} sel={sel} color={color} onGo={goTo} layer={opts.layer} />
+          <DetailColumn model={model} pivot={pivot} sel={sel} onGo={goTo} layer={opts.layer} />
         </div>
       )}
     </div>
@@ -160,7 +161,7 @@ function FilterColumn({ model, pivot, onPivot, color, onColor, onGo, layer, onLa
     setHint(`${hits.current.idx + 1} / ${list.length}`);
     onGo(list[hits.current.idx].id);
   }
-  const legend = color === 'atype' ? model.colors.atype.items : color === 'ship' ? model.colors.ship.items : null;
+  const legend = color === 'ship' ? model.colors.ship.items : null;
   return (
     <aside aria-label="보기 설정" className="flex min-w-0 flex-col gap-6 overflow-y-auto border-r border-n-200 px-4 py-5
                                          max-[1100px]:order-2 max-[1100px]:border-r-0 max-[1100px]:border-t">
@@ -381,9 +382,9 @@ function HubChip({ h, onGo }) {
   );
 }
 
-function DetailColumn({ model, pivot, sel, color, onGo, layer }) {
+function DetailColumn({ model, pivot, sel, onGo, layer }) {
   const n = sel && model.byId.get(sel);
-  const dot = (e) => (color === 'ship' ? model.colors.ship.colorOf(e) : model.colors.atype.colorOf(e));
+  const dot = (e) => model.colors.ship.colorOf(e);
   const aggs = useMemo(() => aggregate(model, pivot, layer), [model, pivot, layer]);
   let body;
   if (!n) {
@@ -413,9 +414,9 @@ function DetailColumn({ model, pivot, sel, color, onGo, layer }) {
     );
   } else if (n.hub) {
     const ents = membersOf(model, n).sort((a, b) => (b.raw.confirmed_at || '').localeCompare(a.raw.confirmed_at || ''));
-    const pal = color === 'ship' ? model.colors.ship : model.colors.atype;
+    const pal = model.colors.ship;
     const mix = new Map();
-    for (const e of ents) { const c = pal.colorOf(e); const key = (color === 'ship' ? e.ship : e.atype) || '없음'; const v = mix.get(key) || [c, 0]; v[1] += 1; mix.set(key, v); }
+    for (const e of ents) { const c = pal.colorOf(e); const key = e.ship || '없음'; const v = mix.get(key) || [c, 0]; v[1] += 1; mix.set(key, v); }
     const mixArr = [...mix.entries()].sort((a, b) => b[1][1] - a[1][1]);
     const rel = n.g === pivot ? aggs.filter((a) => a.a === n || a.b === n).map((a) => [a.a === n ? a.b : a.a, a]).sort((x, y) => y[1].c - x[1].c) : [];
     const others = GROUP_KEYS.filter((g) => g !== n.g).map((g) => {
@@ -431,7 +432,7 @@ function DetailColumn({ model, pivot, sel, color, onGo, layer }) {
           {n.g === 'hull' && !n.none && <Link to={`/h/${encodeURIComponent(n.label)}`} className="text-ui text-brand underline underline-offset-2">호선 화면 열기</Link>}
         </section>
         <section className="flex flex-col gap-2">
-          <SecTitle>{color === 'ship' ? '선종' : '해석 종류'} 구성</SecTitle>
+          <SecTitle>선종 구성</SecTitle>
           <div className="flex h-2 gap-px overflow-hidden rounded-full bg-n-150">
             {mixArr.map(([k, [c, v]]) => <i key={k} className="block h-full" style={{ width: `${(v / ents.length) * 100}%`, background: c }} />)}
           </div>
@@ -486,7 +487,7 @@ function DetailColumn({ model, pivot, sel, color, onGo, layer }) {
     body = (
       <>
         <section className="flex flex-col gap-1">
-          <span className="text-meta text-n-600">{n.atype || '해석 종류 없음'}</span>
+          <span className="text-meta text-n-600">{n.ship || '자료'}</span>
           <div className="text-[17px] font-semibold leading-snug text-n-900 [text-wrap:balance]">{n.label}</div>
           <div className="font-mono text-meta text-n-500">{n.eid}</div>
         </section>

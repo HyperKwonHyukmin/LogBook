@@ -236,7 +236,6 @@ button.cov-cell:hover { box-shadow: 0 0 0 2px var(--color-brand-ring); }
 .cov-fail { background: var(--color-err-bg); color: var(--color-err); border-color: var(--color-err-line); }
 .cov-fail::before { content: ""; position: absolute; left: 4px; top: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--color-err); }
 .cov-empty { background: var(--color-n-0); border: 1px dashed var(--color-n-300); }
-.cov-na { background: repeating-linear-gradient(135deg, var(--color-n-100) 0 4px, var(--color-n-50) 4px 8px); border-color: var(--color-n-150); }
 .cov-sel { outline: 2px solid var(--color-n-900); outline-offset: 2px; }
 .cov-dim .cov-cell:not(.cov-on) { opacity: 0.14; }
 .cov-dim .cov-empty.cov-on { border: 1.5px solid var(--color-n-700); background: var(--color-n-50); }

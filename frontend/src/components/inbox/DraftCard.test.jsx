@@ -5,7 +5,7 @@ import DraftCard from './DraftCard.jsx';
 import { invalidateVocab } from '../../lib/vocab.js';
 
 const ENTRY = {
-  entry_id: 'E000010', status: 'draft', title: '9999 연결시험', version: 3, analysis_type: null,
+  entry_id: 'E000010', status: 'draft', title: '9999 연결시험', version: 3,
   analysis_period: null, description: null, zones: [],
   hulls: [{ hull_no: '9999', ship_type: null, is_primary: true }],
   hull_evidence: [{ hull_no: '9999', score: 5, reasons: ['파일명 2개'] }],
@@ -16,14 +16,10 @@ const ENTRY = {
   ],
 };
 const OTHER = { entry_id: 'E000011', title: '다른 묶음' };
-// 20 — BDF 자료는 호선·구역 또는 대상(40)·해석 종류가 있어야 확정 단추가 열린다
-const READY = { ...ENTRY, zones: ['선수부'], analysis_type: '강도 평가' };
-// 분류 목록(08) — 해석 종류·구역 입력이 받아 간다
+// 20 — BDF 자료는 호선·구역 또는 대상(40)이 있어야 확정 단추가 열린다(42 — 해석 종류는 없앴다)
+const READY = { ...ENTRY, zones: ['선수부'] };
+// 분류 목록(08) — 구역·대상 입력이 받아 간다
 const VOCAB = {
-  '/api/vocab?kind=atype': { kind: 'atype', other: '기타', terms: [
-    { id: 1, value: '강도 평가', active: true, count: 0, synonyms: [] },
-    { id: 2, value: '피로 평가', active: true, count: 0, synonyms: [{ id: 9, value: '피로 해석' }] },
-    { id: 3, value: '기타', active: true, count: 0, synonyms: [] }] },
   '/api/vocab?kind=zone': { kind: 'zone', other: '기타', terms: [
     { id: 4, value: '선수부', active: true, count: 0, synonyms: [{ id: 8, value: 'FWD' }] },
     { id: 5, value: '기타', active: true, count: 0, synonyms: [] }] },
@@ -138,7 +134,7 @@ test('같은 내용의 새 entry 객체로 다시 그려도(폴링) 저장 전 �
 const patches = () => fetch.mock.calls.filter(([, i = {}]) => i.method === 'PATCH').map(([, i]) => JSON.parse(i.body));
 
 test('고쳐도 칸을 벗어날 때 저장하지 않고, [변경 저장] 이 바뀐 칸 전부를 한 번에 보낸다', async () => {
-  mockFetch({ 'PATCH /api/entries/E000010': { ...ENTRY, title: '새 제목', analysis_type: '피로 평가', hulls: [{ hull_no: '9999' }, { hull_no: '9998' }], version: 4 } });
+  mockFetch({ 'PATCH /api/entries/E000010': { ...ENTRY, title: '새 제목', target: '계류 의장품', hulls: [{ hull_no: '9999' }, { hull_no: '9998' }], version: 4 } });
   const onChanged = vi.fn();
   const onDirty = vi.fn();
   render(<DraftCard entry={ENTRY} siblings={[OTHER]} canEdit onChanged={onChanged} onDirtyChange={onDirty} />);
@@ -146,17 +142,17 @@ test('고쳐도 칸을 벗어날 때 저장하지 않고, [변경 저장] 이 �
   await userEvent.clear(title);
   await userEvent.type(title, '새 제목');
   await userEvent.tab();
-  // 해석 종류는 목록에서 고른다(08) — 동의어 '피로 해석' 을 쳐도 용어 '피로 평가'
-  await userEvent.type(screen.getByLabelText('해석 종류'), '피로 해석');
+  // 대상은 목록에서 고른다(08·38) — 동의어 'Mooring Fitting' 을 쳐도 용어 '계류 의장품'
+  await userEvent.type(screen.getByRole('combobox', { name: '대상' }), 'Mooring Fitting');
   await userEvent.keyboard('{Enter}');
   await userEvent.type(screen.getByRole('combobox', { name: '호선' }), '9998{Enter}');
   expect(patches()).toHaveLength(0);
   expect(onDirty).toHaveBeenLastCalledWith('E000010', true);
   const bar = screen.getByRole('status', { name: '저장하지 않은 변경' });
-  expect(bar).toHaveTextContent('저장하지 않은 변경 3칸 · 제목, 해석 종류, 호선');
+  expect(bar).toHaveTextContent('저장하지 않은 변경 3칸 · 제목, 호선, 대상');
   expect(screen.getByRole('button', { name: '저장하고 확정' })).toBeInTheDocument();
   await userEvent.click(within(bar).getByRole('button', { name: '변경 저장' }));
-  await vi.waitFor(() => expect(patches()).toEqual([{ version: 3, title: '새 제목', analysis_type: '피로 평가', hulls: ['9999', '9998'] }]));
+  await vi.waitFor(() => expect(patches()).toEqual([{ version: 3, title: '새 제목', target: '계류 의장품', hulls: ['9999', '9998'] }]));
   await vi.waitFor(() => expect(screen.queryByRole('status', { name: '저장하지 않은 변경' })).toBeNull());
   expect(onChanged).toHaveBeenCalled();
   expect(onDirty).toHaveBeenLastCalledWith('E000010', false);
@@ -289,13 +285,15 @@ test('판 묶음이 없으면 흐름 줄도 없다', () => {
 
 /* ── 20 — 필수 분류·공용 호선·제목 형식·비슷한 제목 ── */
 
-test('BDF 자료는 구역·해석 종류가 없으면 확정 단추가 잠기고 이유를 보인다', () => {
+test('BDF 자료는 구역·대상이 없으면 확정 단추가 잠기고 이유를 보인다(42 — 해석 종류 칸은 없다)', () => {
   mockFetch({});
   render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={() => {}} />);
   const btn = screen.getByRole('button', { name: '확정' });
   expect(btn).toBeDisabled();
   expect(btn).toHaveAttribute('title', expect.stringContaining('구역·대상 없음'));
-  expect(screen.getByLabelText('확인할 것')).toHaveTextContent('해석 종류 없음: BDF 자료는 해석 종류가 필요합니다');
+  expect(screen.getByLabelText('확인할 것')).toHaveTextContent('구역·대상 없음: BDF 자료는 구역 또는 대상이 필요합니다');
+  expect(screen.getByLabelText('확인할 것')).not.toHaveTextContent('해석 종류');
+  expect(screen.queryByLabelText('해석 종류')).toBeNull();
 });
 
 test('확정 409 required_fields 는 빠진 칸을 사람 말로 보인다', async () => {
@@ -317,18 +315,18 @@ test("'호선 없음(공용)' 을 고르면 호선을 비우고, 바뀐 칸 하�
 });
 
 test('제목이 초안 그대로면 값을 바꿀 때 "저장하면 형식대로" 안내, 직접 고친 제목이면 [형식대로 다시 만들기]', async () => {
-  mockFetch({ 'PATCH /api/entries/E000010': { ...READY, title: '9999 · 선수부 · 강도 평가 · 시험', version: 4 } });
-  const auto = { ...READY, title: '9999 · 시험', title_draft: '9999 · 선수부 · 강도 평가 · 시험', title_is_auto: true };
-  const { unmount } = render(<DraftCard entry={{ ...auto, title_draft: auto.title, zones: [], analysis_type: null }} siblings={[]} canEdit onChanged={() => {}} />);
+  mockFetch({ 'PATCH /api/entries/E000010': { ...READY, title: '9999 · 선수부 · 계류 의장품 · 시험', version: 4 } });
+  const auto = { ...READY, title: '9999 · 시험', title_draft: '9999 · 선수부 · 계류 의장품 · 시험', title_is_auto: true };
+  const { unmount } = render(<DraftCard entry={{ ...auto, title_draft: auto.title, zones: [] }} siblings={[]} canEdit onChanged={() => {}} />);
   await userEvent.type(screen.getByLabelText('설명'), 'x');
   expect(screen.queryByText(/저장하면 제목이 형식대로/)).toBeNull();   // 분류 값이 아니면 안내 없음
-  await userEvent.type(screen.getByLabelText('해석 종류'), '피로 해석');
+  await userEvent.type(screen.getByRole('combobox', { name: '대상' }), 'Mooring Fitting');
   await userEvent.keyboard('{Enter}');
   expect(await screen.findByText(/저장하면 제목이 형식대로 바뀝니다/)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '형식대로 다시 만들기' })).toBeNull();
   unmount();
   render(<DraftCard entry={{ ...auto, title: '직접 지은 제목', title_is_auto: false }} siblings={[]} canEdit onChanged={() => {}} />);
-  expect(screen.getByText('9999 · 선수부 · 강도 평가 · 시험')).toBeInTheDocument();
+  expect(screen.getByText('9999 · 선수부 · 계류 의장품 · 시험')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '형식대로 다시 만들기' }));
   await vi.waitFor(() => expect(patches()).toEqual([{ version: 3, title_auto: true }]));
 });

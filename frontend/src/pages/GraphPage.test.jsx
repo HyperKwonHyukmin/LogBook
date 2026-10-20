@@ -22,9 +22,9 @@ vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: () => ({ isAdmin: false }) 
 const DATA = {
   hulls: { 3370: '컨테이너선', 3508: '컨테이너선' },
   entries: [
-    { id: 'E000001', title: '권상 A', analysis_type: '권상', confirmed_at: '2026-09', hulls: ['3370', '3508'], zones: [], free: [], files: 3,
+    { id: 'E000001', title: '권상 A', confirmed_at: '2026-09', hulls: ['3370', '3508'], zones: [], free: [], files: 3,
       revisions: [{ name: 'a_r1.bdf', count: 2 }] },
-    { id: 'E000002', title: '권상 B', analysis_type: '권상', confirmed_at: '2026-08', hulls: ['3508'], zones: [], free: [], files: 1, revisions: [] },
+    { id: 'E000002', title: '권상 B', confirmed_at: '2026-08', hulls: ['3508'], zones: [], free: [], files: 1, revisions: [] },
   ],
   pairs: [{ a: 'E000001', b: 'E000002', type: 'geom', differs: ['load'], files: ['a.bdf', 'b.bdf'], count: 1 }],
   unsigned_models: 3, truncated: false,
@@ -60,6 +60,15 @@ test('기준을 바꾸면 엔진에 알린다', async () => {
   await userEvent.click(screen.getByRole('radio', { name: '구역' }));
   expect(engine.last.setPivot).toHaveBeenLastCalledWith('zone');
   expect(await screen.findByText('구역별 자료')).toBeInTheDocument();
+});
+
+test('42 — 자료 점 색은 없음·선종뿐(해석 종류는 없앴다)', async () => {
+  renderPage();
+  await screen.findByRole('button', { name: /3370/ });
+  const color = screen.getByRole('radiogroup', { name: '자료 점 색' });
+  expect(within(color).getAllByRole('radio').map((r) => r.textContent)).toEqual(['없음', '선종']);
+  await userEvent.click(within(color).getByRole('radio', { name: '선종' }));
+  expect(engine.last.setColor).toHaveBeenLastCalledWith('ship');
 });
 
 test('자료가 없으면 빈 화면', async () => {

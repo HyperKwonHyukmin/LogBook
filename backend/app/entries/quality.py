@@ -1,7 +1,7 @@
 """20 — 자료 필수 분류·제목 초안·비슷한 제목(DB 를 읽는 쪽). 순수 규칙은 naming.py.
 
-필수 분류: BDF(kind=model 파일)가 있는 자료는 호선(또는 '호선 없음(공용)' 또는 프로젝트 — 21)·구역 또는 대상(40)·
-해석 종류가 있어야 확정한다. 40 — 위치 개념이 없는 모델(Unit·Truss·전선 모델)은 대상만 있어도 된다. 21 — 호선과 상관없는 독립 프로젝트 모델도 등록할 수 있게 프로젝트가 있으면 호선 칸을 채운 것으로 본다.
+필수 분류: BDF(kind=model 파일)가 있는 자료는 호선(또는 '호선 없음(공용)')·구역 또는 대상(40)이 있어야 확정한다.
+40 — 위치 개념이 없는 모델(Unit·Truss·전선 모델)은 대상만 있어도 된다. 42 — 해석 종류는 없앴다(필수 칸 아님).
 BDF 없는 자료(보고서만 등)는 지금처럼 권하기만 한다. 이미 확정된 자료는 숨기거나 상태를 바꾸지 않고
 '보완 필요'(needs_fix)로만 표시한다 — 관리 화면 '자료 정비'·CLI naming-cleanup 이 고칠 목록을 보여 준다.
 """
@@ -11,7 +11,7 @@ from .. import access, models, vocab
 from . import naming
 
 # 확정을 막는 빠진 칸 이름(오류 응답 missing 과 화면이 같은 이름을 쓴다)
-REQUIRED = ("hull", "zone_or_target", "analysis_type")
+REQUIRED = ("hull", "zone_or_target")
 SIMILAR_MIN = 0.6     # 비슷한 제목 경고(호선 번호를 뺀 낱말 겹침)
 SIMILAR_LIMIT = 5
 
@@ -21,7 +21,7 @@ def has_model(db: Session, entry: models.Entry) -> bool:
                                            models.File.location != "trash").first() is not None
 
 
-def missing_fields(*, has_bdf: bool, hulls, no_hull: bool, zones, target, analysis_type) -> list[str]:
+def missing_fields(*, has_bdf: bool, hulls, no_hull: bool, zones, target) -> list[str]:
     """빠진 필수 칸 — BDF 가 없으면 늘 빈 목록(권하기만 한다). 'hull' = 호선·'호선 없음(공용)' 모두 없음."""
     if not has_bdf:
         return []
@@ -30,8 +30,6 @@ def missing_fields(*, has_bdf: bool, hulls, no_hull: bool, zones, target, analys
         out.append("hull")
     if not list(zones or []) and not (target or "").strip():
         out.append("zone_or_target")
-    if not (analysis_type or "").strip():
-        out.append("analysis_type")
     return out
 
 
@@ -39,8 +37,7 @@ def missing_required(db: Session, entry: models.Entry) -> list[str]:
     from .service import hulls_of, target_of, zones_of
 
     return missing_fields(has_bdf=has_model(db, entry), hulls=[h.hull_no for h in hulls_of(db, entry)],
-                          no_hull=bool(entry.no_hull), zones=zones_of(db, entry), target=target_of(db, entry),
-                          analysis_type=entry.analysis_type)
+                          no_hull=bool(entry.no_hull), zones=zones_of(db, entry), target=target_of(db, entry))
 
 
 class TitleContext:
@@ -72,21 +69,18 @@ class TitleContext:
         rows.sort(key=lambda r: r[1] != "model")   # BDF 를 앞에(안정 정렬 — 같은 종류는 경로 순)
         return naming.source_from_files([r for r, _k in rows])
 
-    def draft(self, entry: models.Entry, *, hulls=None, no_hull=None, zones=None, analysis_type=None,
+    def draft(self, entry: models.Entry, *, hulls=None, no_hull=None, zones=None,
               target=None, source: str | None = None) -> str:
         """제목 초안 — 값을 안 주면 지금 저장된 값으로."""
         from .service import hulls_of, target_of, zones_of
 
         hulls = [h.hull_no for h in hulls_of(self.db, entry)] if hulls is None else list(hulls)
         zones = zones_of(self.db, entry) if zones is None else list(zones)
-        atype = entry.analysis_type if analysis_type is None else analysis_type
         no_hull = bool(entry.no_hull) if no_hull is None else bool(no_hull)
         source = self.source_of(entry) if source is None else source
         target = target_of(self.db, entry) if target is None else (target or None)
-        phrases = (self.phrases("zone", zones) + self.phrases("atype", [atype] if atype else [])
-                   + self.phrases("target", [target] if target else []))
-        return naming.title_draft(source, hulls=hulls, no_hull=no_hull, zones=zones, analysis_type=atype, target=target,
-                                  phrases=phrases)
+        phrases = self.phrases("zone", zones) + self.phrases("target", [target] if target else [])
+        return naming.title_draft(source, hulls=hulls, no_hull=no_hull, zones=zones, target=target, phrases=phrases)
 
     def is_auto(self, entry: models.Entry) -> bool:
         """지금 제목이 사람이 고친 것이 아니라 초안 그대로인가(형식 초안 또는 예전 방식 이름)."""

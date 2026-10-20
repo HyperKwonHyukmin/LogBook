@@ -16,6 +16,7 @@ const FILES = [
   { id: 1, name: 'm.bdf', rel_path: 'model/m.bdf', kind: 'model', size: 100, extract: null },
   { id: 2, name: 'r.pdf', rel_path: 'r.pdf', kind: 'report', size: 200, extract: { state: 'done', error: null, summary: null } },
 ];
+// 42 — analysis_type 은 옛 서버 값(화면에 보이지 않아야 한다)
 const ENTRY = { entry_id: 'E000001', status: 'confirmed', title: '계류 구조 검토', analysis_type: 'Mooring',
   analysis_period: '2026-08', description: null, version: 3, hulls: [{ hull_no: '9999', ship_type: 'LNGC', is_primary: true }],
   zones: ['선수부'], tags: [], uploaded_by: 'A100001', confirmed_by: 'A100001', confirmed_at: '2026-09-02T09:00:00',
@@ -31,12 +32,12 @@ function renderPage(map, { url = '/e/E000001', storage } = {}) {
     'POST /api/files/2/link?inline=true': { url: '/api/files/2/content?t=a&inline=1' },
     // BDF 는 3D 미리보기(04b) — 변환 상태 'include' 면 안내 한 줄만 보인다.
     'GET /api/files/1/model': { state: 'include' },
-    // 분류 목록(08) — 구역·해석 종류 입력
+    // 분류 목록(08) — 구역·대상 입력
     'GET /api/vocab?kind=zone': { kind: 'zone', other: '기타', terms: [
       { id: 1, value: '선수부', active: true, count: 1, synonyms: [] },
       { id: 2, value: '선미부', active: true, count: 0, synonyms: [] }] },
-    'GET /api/vocab?kind=atype': { kind: 'atype', other: '기타', terms: [
-      { id: 3, value: '계류 해석', active: true, count: 0, synonyms: [{ id: 4, value: 'Mooring' }] }] },
+    'GET /api/vocab?kind=target': { kind: 'target', other: '기타', terms: [
+      { id: 3, value: '계류 의장품', active: true, count: 0, synonyms: [{ id: 4, value: 'Mooring Fitting' }] }] },
     ...map,
   });
   render(
@@ -279,7 +280,9 @@ test('기본은 읽기 화면 — 값은 찾기 링크이고 고치기 칸이 �
   renderPage({ 'GET /api/entries/E000001': { ...ENTRY, tags: ['계류'] } });
   expect(await screen.findByRole('heading', { name: '계류 구조 검토' })).toBeInTheDocument();
   const rail = screen.getByRole('complementary', { name: '속성' });
-  expect(within(rail).getByRole('link', { name: 'Mooring' })).toHaveAttribute('href', '/?analysis_type=Mooring');
+  // 42 — 해석 종류 칸은 없다
+  expect(within(rail).queryByRole('link', { name: 'Mooring' })).toBeNull();
+  expect(rail).not.toHaveTextContent('해석 종류');
   expect(within(rail).getByRole('link', { name: '계류' })).toHaveAttribute('href', '/?tag=%EA%B3%84%EB%A5%98');
   expect(within(rail).getByRole('link', { name: /A100001/ })).toHaveAttribute('href', '/?uploaded_by=A100001');
   expect(screen.queryByRole('textbox')).toBeNull();
@@ -414,7 +417,7 @@ test('데이터 라우터에서는 모든 앱 안 이동을 막고 묻는다 —
     'GET /api/entries/E000001': ENTRY, 'GET /api/entries/E000001/history': HISTORY,
     'POST /api/files/2/link?inline=true': { url: '/api/files/2/content?t=a&inline=1' },
     'GET /api/vocab?kind=zone': { kind: 'zone', other: '기타', terms: [] },
-    'GET /api/vocab?kind=atype': { kind: 'atype', other: '기타', terms: [] },
+    'GET /api/vocab?kind=target': { kind: 'target', other: '기타', terms: [] },
   });
   const router = createMemoryRouter([
     { path: '/e/:entryId', element: <EntryPage /> },

@@ -11,7 +11,7 @@ import { Segmented, Tabs } from '../components/ui/Tabs.jsx';
 import { errorText } from '../lib/labels.js';
 import { titleWithoutHull } from '../lib/similar.js';
 import {
-  ALL, buildGrid, cellKey, cellSentence, headerLines, LIST_TABS, listRows, rowsOf, sortRows, STATE_INFO, STATES, todoCells, atypesOf,
+  buildGrid, cellKey, cellSentence, headerLines, LIST_TABS, listRows, rowsOf, sortRows, STATE_INFO, STATES, todoCells,
 } from '../lib/coverage.js';
 
 const SORTS = [{ id: 'hull', label: '호선 번호' }, { id: 'recent', label: '최근 확정' }, { id: 'gaps', label: '빈 구역 많은 순' }];
@@ -56,12 +56,11 @@ function EntryLine({ e }) {
 
 /**
  * 갖춤 현황(26, `/coverage`) — 확정 자료를 호선(·공용) × 구역 칸에 놓고, 칸마다 무엇을 갖췄는지 보인다.
- * 칸 상태·목록은 lib/coverage.js(순수 함수). 해석 종류 거르기는 다시 부르지 않고 그 자리에서 다시 센다.
+ * 칸 상태·목록은 lib/coverage.js(순수 함수). 42 — 해석 종류 거르기는 없앴다.
  */
 export default function CoveragePage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
-  const [atype, setAtype] = useState(ALL);
   const [sort, setSort] = useState('hull');
   const [focus, setFocus] = useState(null);     // 범례로 고른 상태만 남기기
   const [sel, setSel] = useState(null);         // { rowKey, colKey }
@@ -79,14 +78,13 @@ export default function CoveragePage() {
     return () => { alive = false; };
   }, []);
 
-  const grid = useMemo(() => (data ? buildGrid(data, atype) : null), [data, atype]);
+  const grid = useMemo(() => (data ? buildGrid(data) : null), [data]);
   const rows = useMemo(() => (grid ? sortRows(grid, data, sort) : []), [grid, data, sort]);
-  const atypes = useMemo(() => (data ? atypesOf(data) : []), [data]);
   const selRow = grid && sel ? grid.rows.find((r) => r.key === sel.rowKey) : null;
   const selCol = grid && sel ? grid.cols.find((c) => c.key === sel.colKey) : null;
   const selCell = selRow && selCol ? grid.cells.get(cellKey(selRow.key, selCol.key)) : null;
-  const lists = useMemo(() => (data ? listRows(data, atype, scoped && selRow && selCol ? { rowKey: selRow.key, col: selCol } : null) : null),
-    [data, atype, scoped, selRow, selCol]);
+  const lists = useMemo(() => (data ? listRows(data, scoped && selRow && selCol ? { rowKey: selRow.key, col: selCol } : null) : null),
+    [data, scoped, selRow, selCol]);
   const todos = useMemo(() => (grid ? todoCells(grid) : []), [grid]);
 
   if (error) return <div className="px-6 py-6"><ErrorNote>{error}</ErrorNote></div>;
@@ -129,11 +127,6 @@ export default function CoveragePage() {
 
       <div className="mb-3 flex flex-wrap items-end gap-x-6 gap-y-3">
         <div className="flex flex-col gap-1">
-          <span className="text-meta font-medium text-n-600">해석 종류</span>
-          <Segmented label="해석 종류" items={[ALL, ...atypes].map((a) => ({ id: a, label: a }))} value={atype}
-                     onChange={(v) => { setAtype(v); setShowAll(false); }} />
-        </div>
-        <div className="flex flex-col gap-1">
           <span className="text-meta font-medium text-n-600">행 순서</span>
           <Segmented label="행 순서" items={SORTS} value={sort} onChange={setSort} />
         </div>
@@ -148,11 +141,6 @@ export default function CoveragePage() {
             <Swatch state={s} />{STATE_INFO[s].name} <b className="font-mono font-medium">{grid.counts[s]}</b><span className="text-meta text-n-600">칸</span>
           </button>
         ))}
-        {atype !== ALL && grid.counts.na > 0 && (
-          <span className="inline-flex h-[30px] items-center gap-2 rounded-md border border-n-200 px-2.5 pl-1.5 text-ui">
-            <Swatch state="na" />해당 없음 <b className="font-mono font-medium">{grid.counts.na}</b><span className="text-meta text-n-600">칸</span>
-          </span>
-        )}
       </div>
 
       <div className="grid items-start gap-5 min-[1180px]:grid-cols-[minmax(0,1fr)_340px]">
@@ -184,7 +172,7 @@ export default function CoveragePage() {
                       <div className="flex h-[34px] items-center gap-2">
                         <RowChip row={r} />
                         <span className="truncate text-meta text-n-600">{r.sub}</span>
-                        <span className="ml-auto font-mono text-meta text-n-600" title="자료가 있는 구역 수">{grid.rowFilled.get(r.key)}/{grid.applicableCols}</span>
+                        <span className="ml-auto font-mono text-meta text-n-600" title="자료가 있는 구역 수">{grid.rowFilled.get(r.key)}/{grid.cols.length}</span>
                       </div>
                     </th>
                     {grid.cols.map((c, ci) => {
@@ -196,22 +184,18 @@ export default function CoveragePage() {
                       const cls = `cov-cell cov-${cell.state} ${on ? 'cov-on' : ''} ${isSel ? 'cov-sel' : ''}`;
                       return (
                         <td key={c.key} className="border-b border-n-100 p-1 text-center">
-                          {cell.state === 'na' ? (
-                            <span className={cls} aria-label={label} role="gridcell" />
-                          ) : (
-                            <button type="button" className={cls} aria-label={label} data-pos={`${ri}:${ci}`}
-                                    tabIndex={cur.r === ri && cur.c === ci ? 0 : -1}
-                                    onClick={() => { setCursor({ r: ri, c: ci }); pick(r.key, c.key); }}
-                                    onMouseEnter={(ev) => showTip(ev.currentTarget, r, c, cell)} onMouseLeave={() => setTip(null)}
-                                    onFocus={(ev) => showTip(ev.currentTarget, r, c, cell)} onBlur={() => setTip(null)}
-                                    onKeyDown={(ev) => {
-                                      const mv = { ArrowRight: [0, 1], ArrowLeft: [0, -1], ArrowDown: [1, 0], ArrowUp: [-1, 0] }[ev.key];
-                                      if (mv) { ev.preventDefault(); moveFocus(ri + mv[0], ci + mv[1]); }
-                                      if (ev.key === 'Escape') setTip(null);
-                                    }}>
-                              {cell.entries.length || ''}
-                            </button>
-                          )}
+                          <button type="button" className={cls} aria-label={label} data-pos={`${ri}:${ci}`}
+                                  tabIndex={cur.r === ri && cur.c === ci ? 0 : -1}
+                                  onClick={() => { setCursor({ r: ri, c: ci }); pick(r.key, c.key); }}
+                                  onMouseEnter={(ev) => showTip(ev.currentTarget, r, c, cell)} onMouseLeave={() => setTip(null)}
+                                  onFocus={(ev) => showTip(ev.currentTarget, r, c, cell)} onBlur={() => setTip(null)}
+                                  onKeyDown={(ev) => {
+                                    const mv = { ArrowRight: [0, 1], ArrowLeft: [0, -1], ArrowDown: [1, 0], ArrowUp: [-1, 0] }[ev.key];
+                                    if (mv) { ev.preventDefault(); moveFocus(ri + mv[0], ci + mv[1]); }
+                                    if (ev.key === 'Escape') setTip(null);
+                                  }}>
+                            {cell.entries.length || ''}
+                          </button>
                         </td>
                       );
                     })}
@@ -227,7 +211,7 @@ export default function CoveragePage() {
 
           <section className="mt-6" aria-label="손볼 자료 목록">
             <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-ui font-semibold text-n-800">손볼 자료 목록{atype !== ALL ? ` · ${atype}` : ''}</h2>
+              <h2 className="text-ui font-semibold text-n-800">손볼 자료 목록</h2>
               {selRow && selCol && (scoped ? (
                 <span className="inline-flex h-[26px] items-center gap-1 rounded-full bg-brand-subtle pl-2.5 pr-1 text-ui text-brand">
                   {selRow.label} · {selCol.label}만
@@ -246,7 +230,7 @@ export default function CoveragePage() {
                 <table className="w-full border-collapse text-ui">
                   <thead>
                     <tr className="h-9 bg-n-50 text-left text-meta font-medium text-n-600">
-                      {['자료', '호선', '구역 · 해석 종류', '파일 · 검증', '올린 사람', '확정'].map((h) => (
+                      {['자료', '호선', '구역', '파일 · 검증', '올린 사람', '확정'].map((h) => (
                         <th key={h} className="whitespace-nowrap border-b border-n-200 px-2.5 font-medium">{h}</th>
                       ))}
                     </tr>
@@ -262,7 +246,7 @@ export default function CoveragePage() {
                           const r = grid.rows.find((x) => x.key === k);
                           return r ? <RowChip key={k} row={r} /> : null;
                         })}</span></td>
-                        <td className="whitespace-nowrap px-2.5 py-2 text-n-700">{(e.zones[0] || '구역 없음')}{e.zones.length > 1 ? ` 외 ${e.zones.length - 1}` : ''} · {e.analysis_type || '해석 종류 없음'}</td>
+                        <td className="whitespace-nowrap px-2.5 py-2 text-n-700">{(e.zones[0] || '구역 없음')}{e.zones.length > 1 ? ` 외 ${e.zones.length - 1}` : ''}</td>
                         <td className="whitespace-nowrap px-2.5 py-2"><span className="mr-2 text-n-700">{fileText(e)}</span><SolveText solve={e.solve} /></td>
                         <td className="whitespace-nowrap px-2.5 py-2 text-n-700" title={e.uploaded_by || undefined}>{e.uploader_name || e.uploaded_by || '—'}</td>
                         <td className="whitespace-nowrap px-2.5 py-2 font-mono text-meta text-n-600">{e.confirmed_at || '—'}</td>
@@ -288,7 +272,7 @@ export default function CoveragePage() {
                 <h2 className="flex flex-wrap items-center gap-2 text-body font-semibold text-n-900"><RowChip row={selRow} />{selCol.label}</h2>
                 <Button variant="ghost" size="sm" onClick={() => { setSel(null); setScoped(false); }}>닫기</Button>
               </div>
-              <p className="text-meta text-n-600">{selRow.sub}{atype !== ALL ? ` · ${atype}만` : ''}</p>
+              <p className="text-meta text-n-600">{selRow.sub}</p>
               <p className="my-3 rounded-md bg-n-50 px-3 py-2.5 text-ui text-n-700">
                 <b className="font-semibold">{STATE_INFO[selCell.state].name}</b>. {STATE_INFO[selCell.state].desc}.
                 {selCell.linkedOnly && ' 문서가 다른 자료의 모델과 연결되어 있어 갖춤으로 셉니다.'}
@@ -299,7 +283,7 @@ export default function CoveragePage() {
                   {selCell.entries.map((e) => <EntryLine key={e.id} e={e} />)}
                 </>
               ) : (
-                <NearBy data={data} grid={grid} row={selRow} col={selCol} atype={atype} />
+                <NearBy data={data} grid={grid} row={selRow} col={selCol} />
               )}
             </>
           ) : (
@@ -335,12 +319,12 @@ export default function CoveragePage() {
 }
 
 /** 빈 칸 — 같은 선종 다른 호선의 같은 구역, 같은 행의 다른 구역 자료를 참고로. */
-function NearBy({ data, grid, row, col, atype }) {
+function NearBy({ data, grid, row, col }) {
   const ship = row.kind === 'hull' ? row.sub : null;
-  const sameCol = data.entries.filter((e) => e.zones.includes(col.key) && (atype === ALL || e.analysis_type === atype)
+  const sameCol = data.entries.filter((e) => e.zones.includes(col.key)
     && !rowsOf(e).includes(row.key)
     && (!ship || rowsOf(e).some((k) => grid.rows.find((r) => r.key === k)?.sub === ship))).slice(0, 4);
-  const sameRow = data.entries.filter((e) => rowsOf(e).includes(row.key) && (atype === ALL || e.analysis_type === atype)).slice(0, 4);
+  const sameRow = data.entries.filter((e) => rowsOf(e).includes(row.key)).slice(0, 4);
   return (
     <>
       <h3 className="text-ui font-semibold text-n-800">참고할 자료 · {ship ? `같은 선종(${ship}) ` : ''}다른 행의 {col.label}</h3>
