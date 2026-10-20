@@ -1,14 +1,17 @@
 """18-b — WorkBench 앱(target)별 보내기 제한(분류 규칙). 판정은 이 파일 한 곳에서만 한다.
 
-계획: docs/plans/2026-10-08-logbook-18-workbench-link.md §8.
-- 모델 내용(카드 수)으로 막지 않고 LogBook 분류(구역·자유 태그)로 막는다. 규칙은 LV3 가 관리 화면에서 정한다.
-- 규칙은 Entry 단위다. Entry 의 구역 또는 태그 가운데 **하나라도** 규칙 값과 같으면 통과한다(OR).
+계획: docs/plans/2026-10-08-logbook-18-workbench-link.md §8, 40(대상 추가).
+- 모델 내용(카드 수)으로 막지 않고 LogBook 분류(구역·대상·자유 태그)로 막는다. 규칙은 LV3 가 관리 화면에서 정한다.
+- 규칙은 Entry 단위다. Entry 의 구역·대상·태그 가운데 **하나라도** 규칙 값과 같으면 통과한다(OR).
   비교는 동의어 묶음의 대표값 기준이고(vocab.Vocab.canon), 표기 열쇠(vocab.key — 공백 제거·대소문자 무시)로 맞춘다.
-- 규칙 행이 없거나 두 목록이 모두 비면 제한하지 않는다. Entry 에 속하지 않은 파일(배치에서 빠진 것)은
+- 규칙 행이 없거나 세 목록이 모두 비면 제한하지 않는다. Entry 에 속하지 않은 파일(배치에서 빠진 것)은
   분류가 없으므로 규칙이 있으면 보낼 수 없다.
-- 기본 규칙(seed): truss = 구역 'Truss' 또는 태그 'Truss'. 행이 없을 때만 넣는다 — 관리자가 비워 두면 다시 넣지 않는다.
-  구역 값은 목록 용어여야 하므로 구역 목록에 'Truss' 용어가 없으면 함께 만든다.
-  이전 기본값(태그 'Truss' 만)을 관리자가 손대지 않은 채 갖고 있는 DB 는 새 기본값으로 한 번 올린다."""
+- 기본 규칙(seed): truss = 대상 'Truss' 또는 태그 'Truss'. 행이 없을 때만 넣는다 — 관리자가 비워 두면 다시 넣지 않는다.
+  구역·대상 값은 목록 용어여야 하므로 대상 목록에 'Truss' 용어가 없으면 함께 만든다.
+  이전 기본값을 관리자가 손대지 않은 채(updated_by=system) 갖고 있는 DB 는 새 기본값으로 한 번 올린다.
+- 40 — 'Truss' 는 구역(위치)이 아니라 대상(구조물)이다. 예전 기본값(구역 'Truss')을 가진 DB 는 구역을 그대로 둔 채
+  대상 'Truss' 를 더한다 — 자료의 구역 값을 대상으로 옮기는(vocab-move) 사이에도 보내기가 막히지 않게.
+  vocab-move 가 규칙의 구역 값도 대상으로 옮긴다(plan_move·apply_move)."""
 import logging
 from collections import defaultdict
 
@@ -25,10 +28,15 @@ TARGETS: dict[str, str] = {
     "gmu": "Group & Module Unit 권상 구조 해석",
     "truss": "Truss Structural Assessment",
 }
-SEED_RULES: dict[str, dict] = {"truss": {"zones": ["Truss"], "tags": ["Truss"]}}
-# 이전 판의 기본값 — 관리자가 바꾸지 않았으면(updated_by=system) 새 기본값으로 올린다
-_OLD_SEEDS: dict[str, list[dict]] = {"truss": [{"zones": [], "tags": ["Truss"]}]}
-MAX_VALUES = 20          # 한 규칙의 구역·태그 각각 최대 개수
+FIELDS = ("zones", "targets", "tags")
+KIND_FIELD = {"zone": "zones", "target": "targets"}   # 어휘 종류 → 규칙 칸
+SEED_RULES: dict[str, dict] = {"truss": {"zones": [], "targets": ["Truss"], "tags": ["Truss"]}}
+# 이전 판의 기본값 → 올릴 값. 관리자가 바꾸지 않았으면(updated_by=system) 한 번 올린다
+_UPGRADES: dict[str, list[tuple[dict, dict]]] = {"truss": [
+    ({"zones": [], "targets": [], "tags": ["Truss"]}, SEED_RULES["truss"]),
+    ({"zones": ["Truss"], "targets": [], "tags": ["Truss"]}, {"zones": ["Truss"], "targets": ["Truss"], "tags": ["Truss"]}),
+]}
+MAX_VALUES = 20          # 한 규칙의 구역·대상·태그 각각 최대 개수
 MAX_ELIGIBLE_IDS = 200   # eligible API 한 번에 묻는 Entry 수 상한
 
 
@@ -49,21 +57,25 @@ def _values(raw) -> list[str]:
     return [str(v) for v in (raw or []) if isinstance(v, str) and v.strip()]
 
 
+def _row_rule(row: models.WbTargetRule | None) -> dict:
+    return {f: _values(getattr(row, f)) if row else [] for f in FIELDS}
+
+
 def get_rule(db: Session, target: str) -> dict:
-    """{zones, tags} — 행이 없으면 빈 목록(제한 없음)."""
-    row = db.get(models.WbTargetRule, target)
-    return {"zones": _values(row.zones) if row else [], "tags": _values(row.tags) if row else []}
+    """{zones, targets, tags} — 행이 없으면 빈 목록(제한 없음)."""
+    return _row_rule(db.get(models.WbTargetRule, target))
 
 
 def is_empty(rule: dict) -> bool:
-    return not rule["zones"] and not rule["tags"]
+    return not any(rule.get(f) for f in FIELDS)
 
 
 def condition(rule: dict) -> str | None:
-    """선택 띠·사유 문구의 조건 부분 — "구역 '선수부' 또는 태그 'Truss' 가 붙은 자료만". 제한이 없으면 None."""
+    """선택 띠·사유 문구의 조건 부분 — "대상 'Truss' 또는 태그 'Truss' 가 붙은 자료만". 제한이 없으면 None."""
     if is_empty(rule):
         return None
-    parts = [f"구역 '{z}'" for z in rule["zones"]] + [f"태그 '{t}'" for t in rule["tags"]]
+    parts = ([f"대상 '{t}'" for t in rule.get("targets", [])] + [f"구역 '{z}'" for z in rule.get("zones", [])]
+             + [f"태그 '{t}'" for t in rule.get("tags", [])])
     return " 또는 ".join(parts) + " 가 붙은 자료만"
 
 
@@ -76,10 +88,10 @@ def reason(target: str, rule: dict) -> str | None:
 
 
 def describe(db: Session, target: str) -> dict:
-    """화면용 — {target, label, zones, tags, condition, reason}. condition 은 선택 띠 문구(제한 없으면 None)."""
+    """화면용 — {target, label, zones, targets, tags, condition, reason}. condition 은 선택 띠 문구(제한 없으면 None)."""
     rule = get_rule(db, target)
     cond = condition(rule)
-    return {"target": target, "label": label(target), "zones": rule["zones"], "tags": rule["tags"],
+    return {"target": target, "label": label(target), **rule,
             "condition": f"{cond} 보낼 수 있습니다" if cond else None, "reason": reason(target, rule)}
 
 
@@ -95,7 +107,9 @@ def check_target(target: str) -> None:
 # ---- 판정 ----
 
 class Matcher:
-    """한 target 의 규칙 + 구역·자유 태그 어휘 스냅숏(요청 하나 동안 쓴다)."""
+    """한 target 의 규칙 + 구역·대상·자유 태그 어휘 스냅숏(요청 하나 동안 쓴다)."""
+
+    _KINDS = {"zone": "zones", "target": "targets", "free": "tags"}   # 태그 종류 → 규칙 칸
 
     def __init__(self, db: Session, target: str):
         self.db, self.target = db, target
@@ -104,25 +118,19 @@ class Matcher:
         self.reason = reason(target, self.rule)
         if self.empty:
             return
-        self._zone = vocab.Vocab(db, "zone")
-        self._free = vocab.Vocab(db, "free")
-        self._zone_keys = {self._key(self._zone, z) for z in self.rule["zones"]}
-        self._tag_keys = {self._key(self._free, t) for t in self.rule["tags"]}
+        self._vocab = {k: vocab.Vocab(db, k) for k in self._KINDS}
+        self._keys = {k: {self._key(self._vocab[k], v) for v in self.rule[f]} for k, f in self._KINDS.items()}
 
     @staticmethod
     def _key(v: vocab.Vocab, value: str) -> str:
         return vocab.key(v.canon(value) or value)
 
     def _match(self, tags: list[models.Tag]) -> bool:
-        for t in tags:
-            if t.kind == "zone" and self._key(self._zone, t.value) in self._zone_keys:
-                return True
-            if t.kind == "free" and self._key(self._free, t.value) in self._tag_keys:
-                return True
-        return False
+        return any(t.kind in self._keys and self._key(self._vocab[t.kind], t.value) in self._keys[t.kind]
+                   for t in tags)
 
     def entries(self, entry_pks) -> dict[int, tuple[bool, str | None]]:
-        """Entry pk → (ok, 사유). 한 번의 질의로 구역·태그를 읽는다."""
+        """Entry pk → (ok, 사유). 한 번의 질의로 구역·대상·태그를 읽는다."""
         pks = [p for p in dict.fromkeys(entry_pks) if p is not None]
         if self.empty:
             return {p: (True, None) for p in pks}
@@ -130,7 +138,7 @@ class Matcher:
         if pks:
             for eid, tag in (self.db.query(models.EntryTag.entry_id, models.Tag)
                              .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
-                             .filter(models.EntryTag.entry_id.in_(pks), models.Tag.kind.in_(("zone", "free")))):
+                             .filter(models.EntryTag.entry_id.in_(pks), models.Tag.kind.in_(tuple(self._KINDS)))):
                 by_entry[eid].append(tag)
         return {p: (True, None) if self._match(by_entry.get(p, [])) else (False, self.reason) for p in pks}
 
@@ -145,14 +153,14 @@ class Matcher:
 
 # ---- 기본 규칙 ----
 
-def _ensure_zone_terms(db: Session, storage: StoragePaths | None, actor: str, zones: list[str]) -> list[str]:
-    """기본 규칙의 구역 값을 구역 목록 용어로 맞춘다 — 없으면 목록에 용어로 더한다(동의어면 그 용어를 쓴다)."""
+def _ensure_terms(db: Session, storage: StoragePaths | None, actor: str, kind: str, values: list[str]) -> list[str]:
+    """기본 규칙의 구역·대상 값을 목록 용어로 맞춘다 — 없으면 목록에 용어로 더한다(동의어면 그 용어를 쓴다)."""
     out = []
-    for z in zones:
-        term = vocab.Vocab(db, "zone").target(z)
+    for z in values:
+        term = vocab.Vocab(db, kind).target(z)
         if term is None:
-            term = (vocab.add_term(db, storage, actor, "zone", z) if storage is not None
-                    else vocab._new_tag(db, "zone", vocab.clean(z, "zone")))
+            term = (vocab.add_term(db, storage, actor, kind, z) if storage is not None
+                    else vocab._new_tag(db, kind, vocab.clean(z, kind)))
             term.listed, term.active = True, True
             db.flush()
         if term.value not in out:
@@ -170,15 +178,21 @@ def seed(db: Session, storage: StoragePaths | None = None, actor: str = "system"
     for target, rule in SEED_RULES.items():
         row = db.get(models.WbTargetRule, target)
         if row is not None:
-            current = {"zones": list(row.zones or []), "tags": list(row.tags or [])}
-            if row.updated_by != "system" or current not in _OLD_SEEDS.get(target, []):
+            current = {f: list(getattr(row, f) or []) for f in FIELDS}
+            up = next((new for old, new in _UPGRADES.get(target, []) if old == current), None)
+            if row.updated_by != "system" or up is None:
                 continue
-        zones = _ensure_zone_terms(db, storage, actor, rule["zones"])
+            rule = up
+        # 올릴 때 남겨 둔 옛 구역 값은 이미 목록에 있다 — 새로 만드는 것은 기본값 자체의 값뿐
+        new = {"zones": (list(rule["zones"]) if row is not None
+                         else _ensure_terms(db, storage, actor, "zone", rule["zones"])),
+               "targets": _ensure_terms(db, storage, actor, "target", rule["targets"]),
+               "tags": list(rule["tags"])}
         if row is None:
-            db.add(models.WbTargetRule(target=target, zones=zones, tags=list(rule["tags"]), updated_by=actor))
+            db.add(models.WbTargetRule(target=target, **new, updated_by=actor))
         else:
-            row.zones, row.tags, row.updated_by = zones, list(rule["tags"]), actor
-        added.append((target, {"zones": zones, "tags": list(rule["tags"])}))
+            row.zones, row.targets, row.tags, row.updated_by = new["zones"], new["targets"], new["tags"], actor
+        added.append((target, new))
     if not added:
         return []
     db.commit()
@@ -199,6 +213,38 @@ def safe_seed(db: Session, storage: StoragePaths) -> None:
         log.warning("WorkBench 보내기 기본 규칙을 넣지 못했습니다: %s", exc)
 
 
+# ---- 40 — 어휘 종류 옮기기(vocab.move_term)와 함께 ----
+
+def plan_move(db: Session, kind_from: str, values: list[str], kind_to: str, dest: str) -> list[dict]:
+    """kind_from 칸에 values(용어·동의어) 중 하나를 쓴 규칙 → [{target, before, after}]. 바꾸지 않는다."""
+    f_from, f_to = KIND_FIELD[kind_from], KIND_FIELD[kind_to]
+    keys = {vocab.key(v) for v in values}
+    out = []
+    for row in db.query(models.WbTargetRule).order_by(models.WbTargetRule.target):
+        before = _row_rule(row)
+        if not any(vocab.key(v) in keys for v in before[f_from]):
+            continue
+        after = dict(before)
+        after[f_from] = [v for v in before[f_from] if vocab.key(v) not in keys]
+        if not any(vocab.key(v) == vocab.key(dest) for v in before[f_to]):
+            after[f_to] = before[f_to] + [dest]
+        out.append({"target": row.target, "before": before, "after": after})
+    return out
+
+
+def apply_move(db: Session, storage: StoragePaths | None, plans: list[dict], actor: str) -> None:
+    """plan_move 결과를 저장한다. 고친 사람(updated_by)은 그대로 둔다 — 값의 뜻만 옮긴 것이라
+    손대지 않은 기본 규칙은 계속 기본 규칙으로 본다."""
+    for p in plans:
+        row = db.get(models.WbTargetRule, p["target"])
+        for f in FIELDS:
+            setattr(row, f, list(p["after"][f]))
+        db.flush()
+        if storage is not None:
+            audit.record(db, storage, actor=actor, action="WB_RULE_SET", target_type="wb_target",
+                         target_id=p["target"], before=p["before"], after=p["after"])
+
+
 # ---- 관리(LV3) ----
 
 def _dedupe(values) -> list[str]:
@@ -212,31 +258,36 @@ def _dedupe(values) -> list[str]:
     return out
 
 
+def _resolve(db: Session, kind: str, values: list[str]) -> list[str]:
+    v = vocab.Vocab(db, kind)
+    out = []
+    for raw in values:
+        term = v.target(raw)
+        if term is None:
+            raise HTTPException(status_code=422, detail=f"{kind}_not_listed")
+        if term.value not in out:
+            out.append(term.value)
+    return out
+
+
 def set_rule(db: Session, storage: StoragePaths, actor: str, target: str, zones, tags,
-             ip: str | None = None) -> dict:
-    """규칙을 통째로 바꾼다. 구역은 목록 용어여야 하고(동의어를 쓰면 용어로 바꿔 저장) 목록 밖이면 422.
+             ip: str | None = None, *, targets=None) -> dict:
+    """규칙을 통째로 바꾼다. 구역·대상은 목록 용어여야 하고(동의어를 쓰면 용어로 바꿔 저장) 목록 밖이면 422.
     태그는 입력한 그대로 저장한다(판정 때 동의어를 푼다). 감사 기록 WB_RULE_SET + registry.json."""
     check_target(target)
-    zones, tags = _dedupe(zones), _dedupe(tags)
-    if len(zones) > MAX_VALUES or len(tags) > MAX_VALUES:
+    zones, targets, tags = _dedupe(zones), _dedupe(targets), _dedupe(tags)
+    if max(len(zones), len(targets), len(tags)) > MAX_VALUES:
         raise HTTPException(status_code=422, detail="too_many_values")
-    zv = vocab.Vocab(db, "zone")
-    resolved = []
-    for z in zones:
-        term = zv.target(z)
-        if term is None:
-            raise HTTPException(status_code=422, detail="zone_not_listed")
-        if term.value not in resolved:
-            resolved.append(term.value)
+    zones, targets = _resolve(db, "zone", zones), _resolve(db, "target", targets)
     row = db.get(models.WbTargetRule, target)
     before = get_rule(db, target) if row is not None else None
     if row is None:
         row = models.WbTargetRule(target=target)
         db.add(row)
-    row.zones, row.tags, row.updated_by = resolved, tags, actor
+    row.zones, row.targets, row.tags, row.updated_by = zones, targets, tags, actor
     db.flush()
     audit.record(db, storage, actor=actor, action="WB_RULE_SET", target_type="wb_target", target_id=target,
-                 before=before, after={"zones": resolved, "tags": tags}, ip=ip)
+                 before=before, after={"zones": zones, "targets": targets, "tags": tags}, ip=ip)
     from .ops.registry import write_registry  # 순환 import 방지
 
     write_registry(db, storage)

@@ -56,11 +56,11 @@ def build_coverage(db: Session, user) -> dict:
     ships = dict(db.query(models.Hull.hull_no, models.Hull.ship_type)
                  .filter(models.Hull.hull_no.in_({h for hs in hulls.values() for h in hs} or {""})))
 
-    vocabs = {"zone": Vocab(db, "zone")}
-    tags: dict[int, dict[str, list[str]]] = defaultdict(lambda: {"zone": []})
+    vocabs = {"zone": Vocab(db, "zone"), "target": Vocab(db, "target")}   # 대상은 필수 분류(40)에만 쓴다
+    tags: dict[int, dict[str, list[str]]] = defaultdict(lambda: {"zone": [], "target": []})
     for eid, tag in (db.query(models.EntryTag.entry_id, models.Tag)
                      .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
-                     .filter(models.EntryTag.entry_id.in_(pks), models.Tag.kind == "zone")):
+                     .filter(models.EntryTag.entry_id.in_(pks), models.Tag.kind.in_(("zone", "target")))):
         v = vocabs[tag.kind].root(tag).value
         if v not in tags[eid][tag.kind]:
             tags[eid][tag.kind].append(v)
@@ -113,7 +113,7 @@ def build_coverage(db: Session, user) -> dict:
     zone_count: dict[str, int] = defaultdict(int)
     out = []
     for e in rows:
-        t = tags.get(e.id) or {"zone": []}
+        t = tags.get(e.id) or {"zone": [], "target": []}
         n_models = model_files.get(e.id, 0)
         row_keys = [f"h:{h}" for h in hulls.get(e.id, [])]
         if e.no_hull:
@@ -121,7 +121,8 @@ def build_coverage(db: Session, user) -> dict:
         for z in t["zone"]:
             zone_count[z] += 1
         missing = quality.missing_fields(has_bdf=n_models > 0, hulls=hulls.get(e.id, []), no_hull=bool(e.no_hull),
-                                         zones=t["zone"], analysis_type=e.analysis_type)
+                                         zones=t["zone"], target=(t["target"] or [None])[0],
+                                         analysis_type=e.analysis_type)
         out.append({
             "id": e.entry_id, "title": e.title,
             "analysis_type": atype.canon(e.analysis_type) if e.analysis_type else None,

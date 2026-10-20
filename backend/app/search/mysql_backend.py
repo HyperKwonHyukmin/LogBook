@@ -684,7 +684,8 @@ class MySqlSearch:
                 "no_hull": r["no_hull"],
                 # 20 — '보완 필요'(확정 BDF 자료의 빠진 필수 칸) — 고칠 수 있는 사람(올린 사람·LV3)에게만
                 "needs_fix": (missing_fields(has_bdf=r["kind_counts"].get("model", 0) > 0, hulls=r["hulls"],
-                                             no_hull=r["no_hull"], zones=r["zones"], analysis_type=r["analysis_type"])
+                                             no_hull=r["no_hull"], zones=r["zones"], target=min(r["targets"]) if r["targets"] else None,
+                                             analysis_type=r["analysis_type"])
                               if e.status == "confirmed" and user is not None and access.can_edit_entry(user, e)
                               else []),
             })

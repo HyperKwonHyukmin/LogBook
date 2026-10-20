@@ -50,7 +50,7 @@ test('구역을 고르고 태그를 바꿔 저장한다 — PUT 본문과 결과
   await userEvent.click(within(truss).getByRole('button', { name: 'Truss Structural Assessment 규칙 저장' }));
   await waitFor(() => {
     const put = fetch.mock.calls.find(([u, i = {}]) => u === '/api/admin/wb-targets/truss' && i.method === 'PUT');
-    expect(JSON.parse(put[1].body)).toEqual({ zones: ['선수부'], tags: ['Frame'] });
+    expect(JSON.parse(put[1].body)).toEqual({ zones: ['선수부'], targets: [], tags: ['Frame'] });
   });
   expect(await within(truss).findByText(/저장했습니다 — 구역 '선수부' 또는 태그 'Frame'/)).toBeInTheDocument();
 });

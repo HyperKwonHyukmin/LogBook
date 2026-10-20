@@ -1,5 +1,5 @@
 /**
- * 18-b — WorkBench 앱별 보내기 제한(분류 규칙: 구역·태그) 화면 쪽 저장소.
+ * 18-b — WorkBench 앱별 보내기 제한(분류 규칙: 구역·대상(40)·태그) 화면 쪽 저장소.
  *
  * - 규칙 목록(GET /api/wb-targets)은 창 하나에서 한 번만 받는다.
  * - Entry 별 판정(POST /api/wb-targets/{target}/eligible)은 같은 틱에 요청된 Entry 번호를 모아 한 번에 묻고,
@@ -7,7 +7,7 @@
  * - 판정 요청이 실패하면 버튼을 **켜 둔다**(fail-open). 서버(/api/integration/.../content?target=)가 같은 규칙으로
  *   다시 막고, 그때 WorkBench 가 LogBook 사유를 토스트로 보여 주므로 잘못 보내지는 일은 없다.
  *   반대로 닫아 두면 일시적인 네트워크 문제로 정상 모델까지 보낼 수 없게 된다.
- * - Entry 의 구역·태그가 바뀌면 invalidateWbEligibility(entryId) — 그 Entry 의 버튼들이 다시 묻는다.
+ * - Entry 의 구역·대상·태그가 바뀌면 invalidateWbEligibility(entryId) — 그 Entry 의 버튼들이 다시 묻는다.
  */
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
@@ -22,7 +22,7 @@ const listeners = new Set();
 
 const norm = (id) => String(id || '').trim().toUpperCase();
 
-/** 대상 목록 [{target, label, zones, tags, condition, reason}] — 실패하면 다음 호출이 다시 받는다. */
+/** 대상 목록 [{target, label, zones, targets, tags, condition, reason}] — 실패하면 다음 호출이 다시 받는다. */
 export function loadWbTargets() {
   if (!targetsPromise) {
     targetsPromise = api('/wb-targets');
@@ -37,14 +37,15 @@ export async function loadWbTarget(target) {
   return (Array.isArray(list) ? list : []).find((t) => t.target === target) || null;
 }
 
-export const ruleIsEmpty = (rule) => !rule || (!(rule.zones?.length) && !(rule.tags?.length));
+const RULE_NEEDS = [['targets', '대상 필요'], ['zones', '구역 필요'], ['tags', '태그 필요']];
 
-/** 좁은 자리용 짧은 안내 — 태그만 있으면 '태그 필요', 구역만 '구역 필요', 둘 다 '분류 필요'. */
+export const ruleIsEmpty = (rule) => !rule || RULE_NEEDS.every(([f]) => !(rule[f]?.length));
+
+/** 좁은 자리용 짧은 안내 — 한 칸만 쓰면 '대상 필요'·'구역 필요'·'태그 필요', 둘 이상이면 '분류 필요'. */
 export function needText(rule) {
   if (ruleIsEmpty(rule)) return '';
-  if (rule.tags?.length && !rule.zones?.length) return '태그 필요';
-  if (rule.zones?.length && !rule.tags?.length) return '구역 필요';
-  return '분류 필요';
+  const used = RULE_NEEDS.filter(([f]) => rule[f]?.length);
+  return used.length === 1 ? used[0][1] : '분류 필요';
 }
 
 function flush() {
@@ -165,20 +166,22 @@ export function useWbEligibility(target, entryId, enabled = true) {
 /** 창이 열린 뒤 자동 필터를 이미 한 번 적용했다는 표시(sessionStorage) — 사용자가 끄면 다시 강제하지 않는다. */
 export const WB_FILTER_APPLIED_KEY = 'logbook_wb_filter_applied';
 
-const KEY_LABEL = { tag: '태그', zone: '구역' };
+const KEY_LABEL = { tag: '태그', target: '대상', zone: '구역' };
+const RULE_KEYS = [['tag', 'tags'], ['target', 'targets'], ['zone', 'zones']];   // 필터로 켤 칸의 우선순위
 const quoteAll = (values) => values.map((v) => `'${v}'`).join(' 또는 ');
 
 /**
- * 규칙 → 켤 검색 필터 {key:'tag'|'zone', values:[…], label, others:[라벨]}. 규칙이 비면 null.
- * label = "태그 'Truss' 또는 'Frame'", others = 다른 칸의 조건 라벨(["구역 '선수부'"]).
+ * 규칙 → 켤 검색 필터 {key:'tag'|'target'|'zone', values:[…], label, others:[라벨]}. 규칙이 비면 null.
+ * 값이 있는 첫 칸(태그 → 대상 → 구역)만 켠다 — 검색 필터는 칸끼리 AND 라 규칙의 OR 를 다 담을 수 없다.
+ * label = "태그 'Truss' 또는 'Frame'", others = 다른 칸의 조건 라벨(["대상 'Truss'", "구역 '선수부'"]).
  */
 export function ruleFilter(rule) {
   if (ruleIsEmpty(rule)) return null;
-  const tags = rule.tags || [];
-  const zones = rule.zones || [];
-  const [key, values, otherKey, otherValues] = tags.length ? ['tag', tags, 'zone', zones] : ['zone', zones, 'tag', tags];
+  const used = RULE_KEYS.filter(([, f]) => rule[f]?.length);
+  const [[key, field], ...rest] = used;
+  const values = rule[field];
   return { key, values: [...values], label: `${KEY_LABEL[key]} ${quoteAll(values)}`,
-    others: otherValues.map((v) => `${KEY_LABEL[otherKey]} '${v}'`) };
+    others: rest.flatMap(([k, f]) => rule[f].map((v) => `${KEY_LABEL[k]} '${v}'`)) };
 }
 
 export function filterApplied() {

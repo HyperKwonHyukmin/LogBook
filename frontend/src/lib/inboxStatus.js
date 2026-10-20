@@ -122,7 +122,9 @@ export function draftChecks(form, entry) {
   const noHull = !(form.hulls || []).length && !form.no_hull;
   if (bdf) {
     if (noHull) out.push({ id: 'hull', text: "호선 없음: BDF 자료는 호선(또는 '호선 없음(공용)')이 필요합니다", blocking: true });
-    if (!(form.zones || []).length) out.push({ id: 'zone', text: '구역 없음: BDF 자료는 구역이 필요합니다', blocking: true });
+    if (!(form.zones || []).length && !String(form.target || '').trim()) {
+      out.push({ id: 'zone', text: '구역·대상 없음: BDF 자료는 구역 또는 대상이 필요합니다', blocking: true });
+    }
     if (!(form.analysis_type || '').trim()) out.push({ id: 'type', text: '해석 종류 없음: BDF 자료는 해석 종류가 필요합니다', blocking: true });
   } else if (!entry.merge_into) {
     if (noHull) out.push({ id: 'hull', text: '호선 없음: 호선으로 찾을 수 있게 넣어 주세요' });

@@ -94,7 +94,7 @@ function MissingView() {
                 <td className={td}><EntryCell id={it.entry_id} title={it.title} /></td>
                 <td className={`${td} font-medium text-wait`}>{requiredText(it.missing)}</td>
                 <td className={`${td} text-meta text-n-600`}>
-                  호선 {it.hulls.join(', ') || (it.no_hull ? '공용' : '—')} · 구역 {it.zones.join(', ') || '—'} · 해석 종류 {it.analysis_type || '—'}
+                  호선 {it.hulls.join(', ') || (it.no_hull ? '공용' : '—')} · 구역 {it.zones.join(', ') || '—'} · 대상 {it.target || '—'} · 해석 종류 {it.analysis_type || '—'}
                 </td>
                 <td className={`${td} text-meta text-n-700`}>{who(it)}</td>
               </tr>

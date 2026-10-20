@@ -1,7 +1,7 @@
 """20 — 자료 필수 분류·제목 초안·비슷한 제목(DB 를 읽는 쪽). 순수 규칙은 naming.py.
 
-필수 분류: BDF(kind=model 파일)가 있는 자료는 호선(또는 '호선 없음(공용)' 또는 프로젝트 — 21)·구역·해석 종류가
-있어야 확정한다. 21 — 호선과 상관없는 독립 프로젝트 모델도 등록할 수 있게 프로젝트가 있으면 호선 칸을 채운 것으로 본다.
+필수 분류: BDF(kind=model 파일)가 있는 자료는 호선(또는 '호선 없음(공용)' 또는 프로젝트 — 21)·구역 또는 대상(40)·
+해석 종류가 있어야 확정한다. 40 — 위치 개념이 없는 모델(Unit·Truss·전선 모델)은 대상만 있어도 된다. 21 — 호선과 상관없는 독립 프로젝트 모델도 등록할 수 있게 프로젝트가 있으면 호선 칸을 채운 것으로 본다.
 BDF 없는 자료(보고서만 등)는 지금처럼 권하기만 한다. 이미 확정된 자료는 숨기거나 상태를 바꾸지 않고
 '보완 필요'(needs_fix)로만 표시한다 — 관리 화면 '자료 정비'·CLI naming-cleanup 이 고칠 목록을 보여 준다.
 """
@@ -11,7 +11,7 @@ from .. import access, models, vocab
 from . import naming
 
 # 확정을 막는 빠진 칸 이름(오류 응답 missing 과 화면이 같은 이름을 쓴다)
-REQUIRED = ("hull", "zone", "analysis_type")
+REQUIRED = ("hull", "zone_or_target", "analysis_type")
 SIMILAR_MIN = 0.6     # 비슷한 제목 경고(호선 번호를 뺀 낱말 겹침)
 SIMILAR_LIMIT = 5
 
@@ -21,25 +21,26 @@ def has_model(db: Session, entry: models.Entry) -> bool:
                                            models.File.location != "trash").first() is not None
 
 
-def missing_fields(*, has_bdf: bool, hulls, no_hull: bool, zones, analysis_type) -> list[str]:
+def missing_fields(*, has_bdf: bool, hulls, no_hull: bool, zones, target, analysis_type) -> list[str]:
     """빠진 필수 칸 — BDF 가 없으면 늘 빈 목록(권하기만 한다). 'hull' = 호선·'호선 없음(공용)' 모두 없음."""
     if not has_bdf:
         return []
     out = []
     if not list(hulls or []) and not no_hull:
         out.append("hull")
-    if not list(zones or []):
-        out.append("zone")
+    if not list(zones or []) and not (target or "").strip():
+        out.append("zone_or_target")
     if not (analysis_type or "").strip():
         out.append("analysis_type")
     return out
 
 
 def missing_required(db: Session, entry: models.Entry) -> list[str]:
-    from .service import hulls_of, zones_of
+    from .service import hulls_of, target_of, zones_of
 
     return missing_fields(has_bdf=has_model(db, entry), hulls=[h.hull_no for h in hulls_of(db, entry)],
-                          no_hull=bool(entry.no_hull), zones=zones_of(db, entry), analysis_type=entry.analysis_type)
+                          no_hull=bool(entry.no_hull), zones=zones_of(db, entry), target=target_of(db, entry),
+                          analysis_type=entry.analysis_type)
 
 
 class TitleContext:

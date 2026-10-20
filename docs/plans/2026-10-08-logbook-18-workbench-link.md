@@ -257,6 +257,9 @@ A의 통로는 처음부터 A-1(Electron 다리)로 간다. WorkBench는 작업 
   알려진 대상·라벨·판정은 `backend/app/wb_targets.py` 한 곳(`TARGETS` — 새 앱은 여기 한 줄).
 - 기본 규칙: API 시작 때 `truss` 행이 **없을 때만** `{tags:["Truss"]}` 를 넣는다(비워 두면 다시 넣지 않는다). 이때 registry 는 쓰지 않는다
   (빈 DB 로 막 뜬 서버가 재구축 전에 registry 를 덮지 않게). 규칙 변경(WB_RULE_SET)은 감사 + registry `wb_target_rules`, 재구축이 되살린다.
+- **40(2026-10-20) — 이제 대상(`wb_target_rules.targets`)으로도 제한한다.** 기본 규칙 truss = 대상 'Truss' 또는 태그 'Truss'.
+  예전 기본값(구역 'Truss')은 구역을 둔 채 대상을 더하고, `vocab-move zone Truss target` 이 규칙의 구역 값도 대상으로 옮긴다.
+  아래 '구역' 이야기는 대상에도 똑같다(목록 용어만 — 아니면 422 `target_not_listed`, 선택 띠 필터 우선순위 태그 → 대상 → 구역).
 - 판정: 구역은 분류 목록 대표 용어, 태그는 동의어 묶음 대표값으로 바꾼 뒤 `vocab.key`(공백 제거·대소문자 무시)로 비교, OR.
   Entry 에 속하지 않은 파일은 규칙이 있으면 거절.
 - API: `GET /api/wb-targets`(대상·규칙·띠 문구) · `POST /api/wb-targets/{target}/eligible {entry_ids}`(볼 수 없는 Entry 는 뺌, 200개 상한)

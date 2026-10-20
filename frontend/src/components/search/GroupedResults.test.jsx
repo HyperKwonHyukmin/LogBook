@@ -18,7 +18,7 @@ test("공용 묶음 — 이름 '공용', 거르기 단추 없음, 행에 공용�
                       onSelect={() => {}} onOpen={() => {}} terms={[]} filters={{}} multiValued={0}
                       groups={[
                         { value: '3496', label: null, count: 1, items: [row('E000001', '3496 모델', { hulls: ['3496'] })] },
-                        { value: '__shared__', label: '공용', count: 1, items: [row('E000002', '공용 모델', { no_hull: true, needs_fix: ['zone'] })] },
+                        { value: '__shared__', label: '공용', count: 1, items: [row('E000002', '공용 모델', { no_hull: true, needs_fix: ['zone_or_target'] })] },
                         { value: null, label: null, count: 1, items: [row('E000003', '호선 모름')] },
                       ]} />
     </MemoryRouter>,
@@ -27,7 +27,7 @@ test("공용 묶음 — 이름 '공용', 거르기 단추 없음, 행에 공용�
   expect(within(groups[1]).getByTitle("'호선 없음(공용)' 을 고른 자료")).toHaveTextContent('공용');
   expect(within(groups[1]).queryByRole('button', { name: /거르기/ })).toBeNull();
   expect(within(groups[0]).getByRole('button', { name: '3496' })).toBeInTheDocument();
-  expect(within(groups[1]).getByText('보완 필요 · 구역')).toBeInTheDocument();
+  expect(within(groups[1]).getByText('보완 필요 · 구역 또는 대상')).toBeInTheDocument();
   expect(within(groups[1]).getByTitle('호선 없음(공용)')).toHaveTextContent('공용');
   expect(within(groups[2]).getByText('호선 없음')).toBeInTheDocument();
 });

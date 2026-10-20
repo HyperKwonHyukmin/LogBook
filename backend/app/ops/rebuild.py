@@ -292,13 +292,13 @@ def _restore_wb_rules(db: Session, registry: dict) -> int:
         target = r.get("target") if isinstance(r, dict) else None
         if target not in TARGETS:
             continue
-        zones = [str(v)[:100] for v in r.get("zones") or [] if isinstance(v, str) and v.strip()]
-        tags = [str(v)[:100] for v in r.get("tags") or [] if isinstance(v, str) and v.strip()]
+        zones, targets, tags = ([str(v)[:100] for v in r.get(f) or [] if isinstance(v, str) and v.strip()]
+                                for f in ("zones", "targets", "tags"))   # 40 이전 registry 에는 targets 가 없다
         row = db.get(models.WbTargetRule, target)
         if row is None:
             row = models.WbTargetRule(target=target)
             db.add(row)
-        row.zones, row.tags = zones, tags
+        row.zones, row.targets, row.tags = zones, targets, tags
         row.updated_by = str(r.get("updated_by"))[:20] if r.get("updated_by") else None
         db.flush()
         n += 1

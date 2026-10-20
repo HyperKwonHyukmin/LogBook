@@ -37,7 +37,8 @@ export const ACTION_LABELS = {
 
 /** 20 — 확정에 필요한 분류 칸(BDF 자료). 서버 required_missing·409 required_fields 의 missing 과 같은 이름. */
 // 'hull' = 호선·'호선 없음(공용)'이 모두 없음
-export const REQUIRED_LABELS = { hull: '호선(또는 공용)', zone: '구역', analysis_type: '해석 종류' };
+// 40 — 구역(위치)이 없는 모델(Unit·Truss·전선 모델)은 대상만 있어도 된다
+export const REQUIRED_LABELS = { hull: '호선(또는 공용)', zone_or_target: '구역 또는 대상', analysis_type: '해석 종류' };
 export const requiredText = (missing) => (missing || []).map((k) => REQUIRED_LABELS[k] || k).join(', ');
 
 /** 워커 작업 종류·상태(관리자 운영 화면). */
@@ -143,11 +144,12 @@ export const ERROR_LABELS = {
   use_access_endpoint: '공개 범위는 공개 범위 패널에서 바꿉니다.',
   // 18-b — WorkBench 연결 규칙
   zone_not_listed: '구역 목록에 없는 값입니다. 분류 목록의 구역에서 골라 주세요.',
+  target_not_listed: '대상 목록에 없는 값입니다. 분류 목록의 대상에서 골라 주세요.',
   unknown_target: '알 수 없는 WorkBench 앱입니다.',
   too_many_values: '구역·태그는 각각 20개까지 정할 수 있습니다.',
   too_many_entries: '한 번에 확인할 수 있는 자료 수를 넘었습니다.',
   // 20 — 필수 분류·자료 정비
-  required_fields: 'BDF 자료는 호선(또는 공용)·구역·해석 종류가 있어야 확정할 수 있습니다.',
+  required_fields: 'BDF 자료는 호선(또는 공용)·구역 또는 대상·해석 종류가 있어야 확정할 수 있습니다.',
   no_hull_with_hulls: "'호선 없음(공용)' 과 호선을 함께 넣을 수 없습니다.",
   nothing_to_revert: '되돌릴 제목 정비 기록이 없습니다.',
   title_changed_since: '정비 뒤에 제목이 다시 바뀌어 되돌리지 않았습니다.',
@@ -164,7 +166,7 @@ export const ERROR_LABELS = {
 export function errorText(err, fallback = '요청을 처리하지 못했습니다.') {
   const code = typeof err?.detail === 'string' ? err.detail : err?.detail?.code;
   if (code === 'required_fields' && err.detail?.missing?.length) {
-    return `BDF 자료는 호선(또는 공용)·구역·해석 종류가 있어야 확정할 수 있습니다 — 빠진 칸: ${requiredText(err.detail.missing)}`;
+    return `BDF 자료는 호선(또는 공용)·구역 또는 대상·해석 종류가 있어야 확정할 수 있습니다 — 빠진 칸: ${requiredText(err.detail.missing)}`;
   }
   return ERROR_LABELS[code] || fallback;
 }

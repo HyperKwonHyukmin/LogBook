@@ -98,7 +98,7 @@ function OutsideRow({ row, terms, busy, onMerge, onPromote }) {
   );
 }
 
-/** 분류 목록(관리자, 08) — 해석 종류·구역의 용어·동의어·순서·사용 여부, 목록 밖 값 합치기. 모든 변경은 기록된다. */
+/** 분류 목록(관리자, 08·40) — 해석 종류·구역·대상의 용어·동의어·순서·사용 여부, 목록 밖 값 합치기. 모든 변경은 기록된다. */
 export default function VocabPage() {
   const [kind, setKind] = useState('atype');
   const [terms, setTerms] = useState(null);
@@ -158,7 +158,7 @@ export default function VocabPage() {
   return (
     <Page>
       <PageHeader title="분류 목록"
-                  description="해석 종류와 구역은 이 목록에서만 고릅니다. 동의어로 입력해도 대표 용어로 저장되고, 검색·필터에서 함께 찾습니다." />
+                  description="해석 종류·구역·대상은 이 목록에서만 고릅니다. 구역 = 배 안의 위치(선수부·기관실), 대상 = 해석한 구조물·모델 단위(전선 모델·블록·Unit) — 같은 값을 두 목록에 두지 않습니다. 동의어로 입력해도 대표 용어로 저장되고, 검색·필터에서 함께 찾습니다." />
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Segmented role="tablist" label="분류 종류" items={VOCAB_KINDS} value={kind}
                    onChange={(k) => { if (k !== kind) setKind(k); }} />

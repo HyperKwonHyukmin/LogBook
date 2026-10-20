@@ -18,6 +18,7 @@ class EligibleBody(BaseModel):
 
 class RuleBody(BaseModel):
     zones: list[str] = Field(default_factory=list)
+    targets: list[str] = Field(default_factory=list)   # 40
     tags: list[str] = Field(default_factory=list)
 
 
@@ -51,4 +52,5 @@ def admin_list(db: Session = Depends(get_db), user: models.User = Depends(requir
 @admin_router.put("/{target}")
 def admin_set(target: str, body: RuleBody, request: Request, db: Session = Depends(get_db),
               storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_admin)):
-    return wb_targets.set_rule(db, storage, user.employee_id, target, body.zones, body.tags, client_ip(request))
+    return wb_targets.set_rule(db, storage, user.employee_id, target, body.zones, body.tags, client_ip(request),
+                                targets=body.targets)

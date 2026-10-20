@@ -58,7 +58,8 @@ def build_registry(db: Session) -> dict:
               .join(models.Entry, models.Entry.id == models.EntryGrant.entry_id)
               .order_by(models.Entry.entry_id, models.EntryGrant.employee_id)]
     # 18-b — WorkBench 앱별 보내기 제한(행이 있는 대상만 — 비워 둔 규칙도 남긴다)
-    wb_rules = [{"target": r.target, "zones": list(r.zones or []), "tags": list(r.tags or []),
+    wb_rules = [{"target": r.target, "zones": list(r.zones or []), "targets": list(r.targets or []),
+                 "tags": list(r.tags or []),
                  "updated_by": r.updated_by, "updated_at": r.updated_at.isoformat() if r.updated_at else None}
                 for r in db.query(models.WbTargetRule).order_by(models.WbTargetRule.target)]
     return {"version": 1, "written_at": datetime.now().replace(microsecond=0).isoformat(),

@@ -11,20 +11,21 @@ import { invalidateWbTargets } from '../../lib/wbTargets.js';
 
 const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 
-/** 한 WorkBench 앱의 규칙 카드 — 구역(분류 목록에서 고르기)·태그(자유 입력 + 자동완성)·저장. */
+/** 한 WorkBench 앱의 규칙 카드 — 대상·구역(분류 목록에서 고르기)·태그(자유 입력 + 자동완성)·저장. */
 function TargetCard({ item, onSaved }) {
+  const [targets, setTargets] = useState(item.targets || []);
   const [zones, setZones] = useState(item.zones);
   const [tags, setTags] = useState(item.tags);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  useEffect(() => { setZones(item.zones); setTags(item.tags); }, [item]);
-  const dirty = !same(zones, item.zones) || !same(tags, item.tags);
+  useEffect(() => { setTargets(item.targets || []); setZones(item.zones); setTags(item.tags); }, [item]);
+  const dirty = !same(targets, item.targets || []) || !same(zones, item.zones) || !same(tags, item.tags);
 
   async function save() {
     setBusy(true); setError(''); setNotice('');
     try {
-      const r = await api(`/admin/wb-targets/${encodeURIComponent(item.target)}`, { method: 'PUT', body: { zones, tags } });
+      const r = await api(`/admin/wb-targets/${encodeURIComponent(item.target)}`, { method: 'PUT', body: { zones, targets, tags } });
       invalidateWbTargets();
       onSaved(r);
       setNotice(r.condition ? `저장했습니다 — ${r.condition}.` : '저장했습니다 — 이제 제한 없이 보낼 수 있습니다.');
@@ -46,7 +47,12 @@ function TargetCard({ item, onSaved }) {
           </span>
         )}
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-3">
+        <div>
+          <p className="mb-1 text-meta font-medium text-n-700">필요한 대상</p>
+          <VocabInput kind="target" label={`${item.label} 필요한 대상`} multiple values={targets} onChange={setTargets}
+                      disabled={busy} placeholder="대상 목록에서 고르기" />
+        </div>
         <div>
           <p className="mb-1 text-meta font-medium text-n-700">필요한 구역</p>
           <VocabInput kind="zone" label={`${item.label} 필요한 구역`} multiple values={zones} onChange={setZones}
@@ -73,7 +79,7 @@ function TargetCard({ item, onSaved }) {
   );
 }
 
-/** WorkBench 연결 규칙(관리자, 18-b) — WorkBench 앱마다 [WorkBench로 보내기]에 필요한 구역·태그. 변경은 기록된다. */
+/** WorkBench 연결 규칙(관리자, 18-b·40) — WorkBench 앱마다 [WorkBench로 보내기]에 필요한 대상·구역·태그. 변경은 기록된다. */
 export default function WbRulesPage() {
   const [items, setItems] = useState(null);
   const [error, setError] = useState('');
@@ -91,7 +97,7 @@ export default function WbRulesPage() {
   return (
     <Page>
       <PageHeader title="WorkBench 연결 규칙"
-                  description="WorkBench 앱마다 LogBook 에서 보낼 수 있는 자료를 구역·태그로 정합니다. 조건에 맞지 않는 모델은 목록에 그대로 보이고 [WorkBench로 보내기]만 잠깁니다." />
+                  description="WorkBench 앱마다 LogBook 에서 보낼 수 있는 자료를 대상·구역·태그로 정합니다. 조건에 맞지 않는 모델은 목록에 그대로 보이고 [WorkBench로 보내기]만 잠깁니다." />
       {error && <ErrorNote className="mb-4 max-w-[960px]">{error}</ErrorNote>}
       {!items && !error && <RowsSkeleton rows={4} label="규칙을 불러오는 중" />}
       {items && (

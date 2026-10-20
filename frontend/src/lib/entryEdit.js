@@ -73,7 +73,7 @@ export function missingRequired(values, hasBdf) {
   if (!hasBdf) return [];
   const out = [];
   if (!(values?.hulls || []).length && !values?.no_hull) out.push('hull');
-  if (!(values?.zones || []).length) out.push('zone');
+  if (!(values?.zones || []).length && !String(values?.target ?? '').trim()) out.push('zone_or_target');   // 40
   if (!String(values?.analysis_type ?? '').trim()) out.push('analysis_type');
   return out;
 }

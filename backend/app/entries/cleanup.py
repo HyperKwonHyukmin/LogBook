@@ -18,7 +18,7 @@ from . import naming, quality
 
 RETITLE = "ENTRY_RETITLE"
 RETITLE_REVERT = "ENTRY_RETITLE_REVERT"
-MISSING_LABELS = {"hull": "호선", "zone": "구역", "analysis_type": "해석 종류"}
+MISSING_LABELS = {"hull": "호선", "zone_or_target": "구역 또는 대상", "analysis_type": "해석 종류"}
 MAX_LIMIT = 500
 
 
@@ -49,7 +49,7 @@ def _facts(db: Session, user=None) -> list[dict]:
     out = []
     for e in entries:
         missing = quality.missing_fields(has_bdf=e.id in bdf, hulls=hulls[e.id], no_hull=bool(e.no_hull),
-                                         zones=zones[e.id], analysis_type=e.analysis_type)
+                                         zones=zones[e.id], target=targets.get(e.id), analysis_type=e.analysis_type)
         out.append({"entry": e, "hulls": hulls[e.id], "zones": zones[e.id], "target": targets.get(e.id),
                     "has_bdf": e.id in bdf, "missing": missing})
     return out
@@ -63,7 +63,7 @@ def _names(db: Session, ids) -> dict[str, str]:
 
 def missing_list(db: Session, user=None, *, missing: str | None = None, uploader: str | None = None,
                  q: str | None = None, offset: int = 0, limit: int = 100) -> dict:
-    """필수 분류가 빠진 확정 BDF 자료 — 무엇이 빠졌는지·올린 사람. missing(hull|zone|analysis_type)·uploader·q(번호·제목)."""
+    """필수 분류가 빠진 확정 BDF 자료 — 무엇이 빠졌는지·올린 사람. missing(hull|zone_or_target|analysis_type)·uploader·q(번호·제목)."""
     rows = [r for r in _facts(db, user) if r["missing"]]
     counts = {k: sum(1 for r in rows if k in r["missing"]) for k in quality.REQUIRED}
     by_uploader: dict[str, int] = defaultdict(int)
@@ -85,7 +85,7 @@ def missing_list(db: Session, user=None, *, missing: str | None = None, uploader
                       for k, n in sorted(by_uploader.items(), key=lambda x: (-x[1], x[0]))],
         "items": [{"entry_id": r["entry"].entry_id, "title": r["entry"].title, "version": r["entry"].version,
                    "missing": r["missing"], "hulls": r["hulls"], "no_hull": bool(r["entry"].no_hull),
-                   "zones": r["zones"], "analysis_type": r["entry"].analysis_type,
+                   "zones": r["zones"], "target": r["target"], "analysis_type": r["entry"].analysis_type,
                    "uploaded_by": r["entry"].uploaded_by, "uploader_name": names.get(r["entry"].uploaded_by),
                    "confirmed_at": r["entry"].confirmed_at.isoformat() if r["entry"].confirmed_at else None}
                   for r in page],
@@ -182,9 +182,10 @@ def _facts_one(db: Session, e: models.Entry) -> list[dict]:
     hulls = [h.hull_no for h in hulls_of(db, e)]
     zones = zones_of(db, e)
     has_bdf = quality.has_model(db, e)
-    return [{"entry": e, "hulls": hulls, "zones": zones, "target": target_of(db, e), "has_bdf": has_bdf,
+    target = target_of(db, e)
+    return [{"entry": e, "hulls": hulls, "zones": zones, "target": target, "has_bdf": has_bdf,
              "missing": quality.missing_fields(has_bdf=has_bdf, hulls=hulls, no_hull=bool(e.no_hull), zones=zones,
-                                               analysis_type=e.analysis_type)}]
+                                               target=target, analysis_type=e.analysis_type)}]
 
 
 def applied_list(db: Session, user=None, limit: int = 100) -> list[dict]:

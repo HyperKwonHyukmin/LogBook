@@ -18,6 +18,7 @@ from .storage.paths import StoragePaths
 
 log = logging.getLogger(__name__)
 
+# 40 — 구역 = 배 안의 위치(여럿), 대상 = 해석한 구조물·모델 단위(하나). 두 축이라 같은 값을 두지 않는다
 KINDS = ("atype", "zone", "target")
 TAG_KINDS = ("zone", "target")   # entry_tags 로 Entry 와 잇는 종류(atype 은 entries.analysis_type 문자열)
 FIELD = {"atype": "analysis_type", "zone": "zones", "target": "target"}   # Entry 이력(감사)의 칸 이름
@@ -568,6 +569,121 @@ def remove_synonym(db: Session, storage: StoragePaths, actor: str, tag: models.T
     audit.record(db, storage, actor=actor, action="VOCAB_SYNONYM_REMOVE", target_type="vocab",
                  target_id=f"{kind}:{term.value}"[:40], before={"synonym": value}, ip=ip)
     _write_registry(db, storage)
+
+
+# ---- 종류 옮기기(40 — 구역에 들어간 구조물 값을 대상으로) ----
+
+def move_term(db: Session, storage: StoragePaths | None, actor: str, kind_from: str, value, kind_to: str, *,
+              apply: bool = False, ip: str | None = None) -> dict:
+    """한 종류의 용어를 동의어 묶음째 다른 종류 목록으로 옮기고, 그 값을 단 자료도 옮긴다(CLI vocab-move).
+
+    - 옮길 곳에 같은 값(또는 그 동의어)의 용어가 있으면 그 용어로 합친다.
+    - 대상(target)은 자료당 하나 — 이미 다른 대상이 있는 자료는 옮기지 않고 보고한다. 그 자료의 원래 칸 값은
+      그대로 남고(목록 밖 값), 관리자가 손으로 정리한다.
+    - WorkBench 보내기 규칙(wb_targets)에 쓴 값도 함께 옮긴다.
+    - 초안의 자동 제목(사람이 고치지 않은 것)은 새 값으로 다시 만든다(20). 확정 자료 제목은 naming-cleanup 이 맡는다.
+    - apply=False 면 보고만 하고 아무것도 남기지 않는다."""
+    from . import wb_targets  # 순환 import 방지
+    from .entries import quality, service
+
+    if kind_from not in TAG_KINDS or kind_to not in TAG_KINDS or kind_from == kind_to:
+        raise _err(422, "invalid_kind")
+    src = Vocab(db, kind_from)
+    v = clean(value, kind_from)
+    root = src.target(v)
+    if root is None:
+        tag = _find(db, kind_from, v) if v else None
+        root = src.root(tag) if tag is not None else None
+    if root is None:
+        raise _err(404, "value_not_found")
+    group = src.synonyms(root) + [root]   # 동의어 먼저 — 대표를 지우거나 옮길 때 가리키는 행이 남지 않게
+    names = {g.value.casefold() for g in group}
+    dst = Vocab(db, kind_to)
+    dest = next((t for t in (dst.target(g.value) for g in reversed(group)) if t is not None), None)
+    dest_value = dest.value if dest is not None else clean(root.value, kind_to)
+    single = kind_to == "target"
+
+    E = models.Entry
+    entries = (db.query(E).join(models.EntryTag, models.EntryTag.entry_id == E.id)
+               .filter(models.EntryTag.tag_id.in_([g.id for g in group])).distinct().order_by(E.id).all())
+    plan, skipped, auto = [], [], set()
+    ctx = quality.TitleContext(db)
+    for e in entries:
+        b_from, b_to = service.tags_of(db, e, kind_from), service.tags_of(db, e, kind_to)
+        same = [t for t in b_to if dst.canon(t).casefold() == dest_value.casefold()]
+        if single and b_to and not same:
+            skipped.append({"entry_id": e.entry_id, "status": e.status, kind_to: b_to[0]})
+            continue
+        a_from = [z for z in b_from if z.casefold() not in names]
+        a_to = b_to if same else sorted(b_to + [dest_value])
+        plan.append((e, b_from, b_to, a_from, a_to))
+        if e.status == "draft" and ctx.is_auto(e):
+            auto.add(e.id)
+    rules = wb_targets.plan_move(db, kind_from, [g.value for g in group], kind_to, dest_value)
+    report = {"from": kind_from, "to": kind_to, "value": root.value, "listed": bool(root.listed),
+              "synonyms": [g.value for g in group if g.id != root.id], "dest": dest_value,
+              "dest_exists": dest is not None, "moved": [e.entry_id for e, *_ in plan], "skipped": skipped,
+              "rules": rules, "applied": apply}
+    if not apply:
+        return report
+
+    if dest is None:
+        dest = _find(db, kind_to, dest_value)
+        if dest is None:
+            dest = _new_tag(db, kind_to, dest_value)
+        else:
+            _make_root(db, dest)   # 목록 밖 묶음의 한 값이면 그 묶음의 대표로 올린다
+        dest.listed, dest.active = True, True
+        _renumber(dst.terms + [dest])
+        db.flush()
+    for e, b_from, b_to, a_from, a_to in plan:
+        service.set_tags(db, e, kind_from, a_from)
+        service.set_tags(db, e, kind_to, a_to)
+        e.version += 1
+        db.flush()
+        if e.status == "confirmed":
+            audit.record(db, storage, actor=actor, action="ENTRY_UPDATE", target_type="entry", target_id=e.entry_id,
+                         before={FIELD[kind_from]: field_value(kind_from, b_from),
+                                 FIELD[kind_to]: field_value(kind_to, b_to)},
+                         after={FIELD[kind_from]: field_value(kind_from, a_from),
+                                FIELD[kind_to]: field_value(kind_to, a_to)}, ip=ip)
+            service._write_meta_or_queue(db, storage, e)
+        else:
+            db.commit()
+
+    # 어휘 — 옮기지 못한 자료가 아직 단 행은 원래 종류에 목록 밖 값으로 남긴다(정보를 잃지 않는다)
+    linked = {tid for (tid,) in db.query(models.EntryTag.tag_id)
+              .filter(models.EntryTag.tag_id.in_([g.id for g in group])).distinct()}
+    for g in group:
+        if g.id in linked:
+            g.alias_of_id, g.listed, g.sort_order = None, False, None
+            db.flush()
+            continue
+        other = _find(db, kind_to, g.value)
+        if other is None:
+            g.kind, g.alias_of_id, g.listed, g.sort_order = kind_to, dest.id, False, None
+        else:
+            r = _root(db, other)
+            if r.id != dest.id and not r.listed:
+                _attach_group(db, r, dest)
+            db.delete(g)   # 같은 값이 옮길 곳에 이미 있다(다른 용어 묶음이면 그 뜻을 그대로 둔다)
+        db.flush()
+    wb_targets.apply_move(db, storage, rules, actor)
+    db.flush()
+    if auto:
+        ctx = quality.TitleContext(db)   # 옮긴 뒤 어휘로
+        for e, *_ in plan:
+            if e.id in auto and (title := ctx.draft(e)):
+                e.title = title
+        db.commit()
+    audit.record(db, storage, actor=actor, action="VOCAB_MOVE", target_type="vocab",
+                 target_id=f"{kind_from}>{kind_to}:{report['value']}"[:40],
+                 before={"kind": kind_from, "value": report["value"], "synonyms": report["synonyms"]},
+                 after={"kind": kind_to, "term": dest.value, "entries": report["moved"],
+                        "skipped": [s["entry_id"] for s in skipped],
+                        "rules": [r["target"] for r in rules]}, ip=ip)
+    _write_registry(db, storage)
+    return report
 
 
 # ---- 일괄 정규화(CLI vocab-report / vocab-normalize) ----

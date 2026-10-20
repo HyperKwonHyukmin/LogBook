@@ -72,6 +72,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("files", "trash_rel", "VARCHAR(80) NULL"),
     ("batches", "origin", "JSON NULL"),            # 39 — WorkBench 해석 출처
     ("batches", "wb_analysis_id", "INT NULL"),
+    ("wb_target_rules", "targets", "JSON NULL"),   # 40 — WorkBench 보내기 규칙의 대상
 )
 # 기존 표에 더하는 색인 (표, 색인 이름, 열들). 이름은 SQLAlchemy index=True 가 새 표에 만드는 이름과 같게 둔다.
 ADDED_INDEXES: tuple[tuple[str, str, tuple[str, ...]], ...] = (

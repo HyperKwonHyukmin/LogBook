@@ -62,7 +62,7 @@ def test_confirm_bdf_requires_hull_zone_type(db, storage, make_user, setup_entry
     with pytest.raises(HTTPException) as ei:
         service.confirm(db, storage, e, u)
     assert ei.value.status_code == 409
-    assert ei.value.detail == {"code": "required_fields", "missing": ["hull", "zone", "analysis_type"]}
+    assert ei.value.detail == {"code": "required_fields", "missing": ["hull", "zone_or_target", "analysis_type"]}
     db.rollback()
     assert db.get(models.Entry, e.id).status == "draft"
 
@@ -98,10 +98,23 @@ def test_confirm_api_required_fields_shape(client, auth_headers, db, make_user, 
     db.commit()
     h = auth_headers("A100001")
     d = client.get(f"/api/entries/{e.entry_id}", headers=h).json()
-    assert d["required_missing"] == ["zone"]
+    assert d["required_missing"] == ["zone_or_target"]
     r = client.post(f"/api/entries/{e.entry_id}/confirm", headers=h)
     assert r.status_code == 409
-    assert r.json()["detail"] == {"code": "required_fields", "missing": ["zone"]}
+    assert r.json()["detail"] == {"code": "required_fields", "missing": ["zone_or_target"]}
+
+
+def test_confirm_target_without_zone(db, storage, make_user, setup_entry_with_files):
+    """40 — 위치 개념이 없는 모델(Unit·Truss)은 구역 없이 대상만 있어도 확정한다."""
+    u = make_user("A100001")
+    _b, e = setup_entry_with_files()
+    service.set_zones(db, e, [])
+    service.set_tags(db, e, "target", ["Unit"])
+    db.commit()
+    assert quality.missing_required(db, e) == []
+    service.confirm(db, storage, e, u)
+    db.expire_all()
+    assert db.get(models.Entry, e.id).status == "confirmed"
 
 
 def test_merge_into_existing_skips_required(db, storage, make_user, setup_entry_with_files, make_entry_file):
@@ -249,8 +262,8 @@ def test_cleanup_missing_list_and_permissions(client, auth_headers, db, make_use
     assert client.get("/api/admin/cleanup/missing", headers=auth_headers("A100001")).status_code == 403
     r = client.get("/api/admin/cleanup/missing", headers=auth_headers("C300001")).json()
     assert r["total"] == 1 and r["items"][0]["entry_id"] == bad.entry_id
-    assert r["items"][0]["missing"] == ["zone", "analysis_type"]
-    assert r["counts"] == {"hull": 0, "zone": 1, "analysis_type": 1}
+    assert r["items"][0]["missing"] == ["zone_or_target", "analysis_type"]
+    assert r["counts"] == {"hull": 0, "zone_or_target": 1, "analysis_type": 1}
     assert client.get("/api/admin/cleanup/missing?missing=hull", headers=auth_headers("C300001")).json()["total"] == 0
     # 상태는 그대로(숨기거나 바꾸지 않는다)
     db.expire_all()
@@ -362,10 +375,10 @@ def test_search_needs_fix_only_for_editor(client, auth_headers, db, make_user, m
     e = _confirmed_bdf(make_entry_file, db, title="빠짐", zones=())
     mine = client.get("/api/search", headers=auth_headers("A100001")).json()["items"]
     other = client.get("/api/search", headers=auth_headers("A100002")).json()["items"]
-    assert [i["needs_fix"] for i in mine if i["entry_id"] == e.entry_id] == [["zone", "analysis_type"]]
+    assert [i["needs_fix"] for i in mine if i["entry_id"] == e.entry_id] == [["zone_or_target", "analysis_type"]]
     assert [i["needs_fix"] for i in other if i["entry_id"] == e.entry_id] == [[]]
     d = client.get(f"/api/entries/{e.entry_id}", headers=auth_headers("A100001")).json()
-    assert d["needs_fix"] == ["zone", "analysis_type"]
+    assert d["needs_fix"] == ["zone_or_target", "analysis_type"]
 
 
 def test_search_group_shared_separate_from_none(client, auth_headers, db, make_user, make_entry_file):

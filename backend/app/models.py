@@ -491,15 +491,16 @@ class RevisionDiff(Base):
 
 
 class WbTargetRule(Base):
-    """18-b — WorkBench 앱(target)별 보내기 제한. Entry 의 구역·태그 중 하나라도 맞으면 보낼 수 있다(OR).
+    """18-b — WorkBench 앱(target)별 보내기 제한. Entry 의 구역·대상(40)·태그 중 하나라도 맞으면 보낼 수 있다(OR).
 
-    행이 없거나 두 목록이 모두 비면 제한하지 않는다. 알려진 target 목록·판정은 wb_targets.py 한 곳.
+    행이 없거나 세 목록이 모두 비면 제한하지 않는다. 알려진 target 목록·판정은 wb_targets.py 한 곳.
     registry.json(wb_target_rules)에도 남겨 재구축 때 되살린다."""
 
     __tablename__ = "wb_target_rules"
 
     target = Column(String(20), primary_key=True)   # gmu | truss (wb_targets.TARGETS)
     zones = Column(JSON, nullable=True)             # 구역 목록 용어 값
+    targets = Column(JSON, nullable=True)           # 40 — 대상 목록 용어 값(기존 DB 는 database.ensure_columns)
     tags = Column(JSON, nullable=True)              # 자유 태그(입력한 그대로 — 판정 때 동의어를 푼다)
     updated_by = Column(String(20), nullable=True)
     updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)

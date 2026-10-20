@@ -132,11 +132,12 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
     same_models = find_same_models(db, model_rows, files, viewer=viewer)
     suggested = _entry_ref(db, entry.suggested_entry_id, viewer)
     merge_into = _entry_ref(db, entry.merge_into_id, viewer)
-    # 20 — 필수 분류(BDF 자료는 호선·구역·해석 종류)
+    # 20 — 필수 분류(BDF 자료는 호선·구역 또는 대상(40)·해석 종류)
     zones = zones_of(db, entry)
+    target = target_of(db, entry)
     missing = quality.missing_fields(has_bdf=any(f.kind == "model" and f.location != "trash" for f in files),
                                      hulls=[h.hull_no for h in hulls], no_hull=bool(entry.no_hull), zones=zones,
-                                     analysis_type=entry.analysis_type)
+                                     target=target, analysis_type=entry.analysis_type)
     d = {
         "id": entry.id, "entry_id": entry.entry_id, "status": entry.status, "title": entry.title,
         "analysis_type": entry.analysis_type, "description": entry.description, "version": entry.version,
@@ -144,7 +145,7 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
                   for h in hulls],
         "no_hull": bool(entry.no_hull),
         "zones": zones,
-        "target": target_of(db, entry),   # 38 — 대상 구조물
+        "target": target,   # 38 — 대상 구조물
         "tags": tags_of(db, entry, "free"),
         "hull_evidence": entry.hull_evidence or [],
         "uploaded_by": entry.uploaded_by, "confirmed_by": entry.confirmed_by,

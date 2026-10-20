@@ -41,6 +41,9 @@ DB 백업(mysqldump → 80_Backup, 05):
     .venv\\Scripts\\python.exe -m app.cli vocab-normalize --apply
     (다시 돌려도 바뀌는 것이 없다. 맞추지 못한 값은 그대로 두고 관리 화면 '목록 밖 값'에 남는다)
 
+구역에 잘못 들어간 구조물 값을 대상으로 옮기기(40) — 보고서를 본 뒤 --apply:
+    .venv\\Scripts\\python.exe -m app.cli vocab-move zone Unit target [--apply]
+
 한 자료 안 BDF 판 묶음(14)을 모든 자료에 대해 다시 맞추고, 계열 인접 판 비교를 대기열에 넣기(배포 뒤 1회):
     .venv\\Scripts\\python.exe -m app.cli revisions-refresh [--no-diffs]
 
@@ -287,6 +290,43 @@ def _cmd_vocab(apply: bool) -> int:
     return 0
 
 
+def _print_vocab_move(rep: dict) -> None:
+    n_from, n_to = _VOCAB_NAMES[rep["from"]], _VOCAB_NAMES[rep["to"]]
+    syn = f" (동의어 {', '.join(rep['synonyms'])})" if rep["synonyms"] else ""
+    where = "있는 용어로 합침" if rep["dest_exists"] else "새 용어"
+    print(f"[{n_from} → {n_to}] '{rep['value']}'{syn} → {n_to} '{rep['dest']}' ({where})")
+    print(f"  옮길 자료 {len(rep['moved'])}건: {', '.join(rep['moved']) or '-'}")
+    if rep["skipped"]:
+        print(f"  옮기지 않는 자료 {len(rep['skipped'])}건 — 이미 다른 {n_to}가 있음({n_from} 값은 목록 밖 값으로 남김):")
+        for s in rep["skipped"]:
+            print(f"    {s['entry_id']} ({s['status']})  {n_to}: {s.get(rep['to'])}")
+    for r in rep["rules"]:
+        names = {"zones": "구역", "targets": "대상", "tags": "태그"}
+        diff = " · ".join(f"{names[f]} {r['before'][f]} → {r['after'][f]}" for f in names
+                          if r["before"][f] != r["after"][f])
+        print(f"  WorkBench 보내기 규칙 {r['target']}: {diff}")
+    if not rep["applied"]:
+        print("\n아무것도 바꾸지 않았습니다. 적용하려면 같은 명령에 --apply")
+
+
+def _cmd_vocab_move(kind_from: str, value: str, kind_to: str, apply: bool) -> int:
+    from fastapi import HTTPException
+
+    from .vocab import move_term
+
+    init_schema()
+    db = SessionLocal()
+    try:
+        rep = move_term(db, get_storage(), "system", kind_from, value, kind_to, apply=apply)
+    except HTTPException as exc:
+        print(f"옮기지 못했습니다: {exc.detail}", file=sys.stderr)
+        return 1
+    finally:
+        db.close()
+    _print_vocab_move(rep)
+    return 0
+
+
 def naming_cleanup(db: Session, storage: StoragePaths, *, apply: bool = False, limit: int = 200,
                    out=None) -> dict:
     """20 — 자료 정비 보고(그리고 --apply 면 제목 적용). 화면 '자료 정비'와 같은 함수(entries.cleanup)."""
@@ -437,6 +477,11 @@ def main(argv: list[str]) -> int:
     sub.add_parser("vocab-report", help="해석 종류·구역 값이 분류 목록 용어로 어떻게 맞춰질지 보고한다(쓰지 않음)")
     n = sub.add_parser("vocab-normalize", help="해석 종류·구역 값을 분류 목록 용어로 맞춘다(--apply 없으면 보고만)")
     n.add_argument("--apply", action="store_true", help="실제로 바꾼다(감사 로그·entry.json 갱신)")
+    vm = sub.add_parser("vocab-move", help="40 — 분류 값을 다른 종류로 옮긴다(예: vocab-move zone Unit target, --apply 없으면 보고만)")
+    vm.add_argument("kind_from", choices=("zone", "target"))
+    vm.add_argument("value")
+    vm.add_argument("kind_to", choices=("zone", "target"))
+    vm.add_argument("--apply", action="store_true", help="실제로 옮긴다(감사 VOCAB_MOVE·ENTRY_UPDATE·entry.json 갱신)")
     nc = sub.add_parser("naming-cleanup", help="필수 분류가 빠진 자료·새 형식 제목 목록(20) — --apply 면 제목을 바꾼다")
     nc.add_argument("--apply", action="store_true", help="바꿀 수 있는 제목을 실제로 바꾼다(감사 ENTRY_RETITLE)")
     nc.add_argument("--limit", type=int, default=200, help="목록마다 출력할 줄 수(기본 200)")
@@ -464,6 +509,8 @@ def main(argv: list[str]) -> int:
         return _cmd_vocab(False)
     if args.cmd == "vocab-normalize":
         return _cmd_vocab(args.apply)
+    if args.cmd == "vocab-move":
+        return _cmd_vocab_move(args.kind_from, args.value, args.kind_to, args.apply)
     if args.cmd == "backup":
         return _cmd_backup()
     if args.cmd == "rebuild":

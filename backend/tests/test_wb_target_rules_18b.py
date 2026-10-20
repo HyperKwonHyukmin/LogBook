@@ -32,9 +32,9 @@ def _tag(db, entry, kind, value):
     return t
 
 
-def _set(db, target, zones=(), tags=()):
+def _set(db, target, zones=(), tags=(), targets=()):
     row = db.get(models.WbTargetRule, target) or models.WbTargetRule(target=target)
-    row.zones, row.tags = list(zones), list(tags)
+    row.zones, row.targets, row.tags = list(zones), list(targets), list(tags)
     db.add(row)
     db.commit()
 
@@ -67,11 +67,22 @@ def world(db, storage, make_user, make_entry_file):
 # ---- 기본 규칙 ----
 
 def test_seed_upgrades_untouched_old_default(db, storage):
-    """이전 기본값(태그만)을 관리자가 손대지 않았으면 구역 'Truss' 를 더한 새 기본값으로 올린다."""
+    """이전 기본값(태그만)을 관리자가 손대지 않았으면 대상 'Truss' 를 더한 새 기본값으로 올린다."""
     db.add(models.WbTargetRule(target="truss", zones=[], tags=["Truss"], updated_by="system"))
     db.commit()
     assert wb_targets.seed(db, storage) == ["truss"]
-    assert wb_targets.get_rule(db, "truss") == {"zones": ["Truss"], "tags": ["Truss"]}
+    assert wb_targets.get_rule(db, "truss") == {"zones": [], "targets": ["Truss"], "tags": ["Truss"]}
+    assert wb_targets.seed(db, storage) == []
+
+
+def test_seed_upgrade_keeps_old_zone_until_moved(db, storage):
+    """40 — 예전 기본값(구역 'Truss')은 구역을 남긴 채 대상 'Truss' 를 더한다(자료를 옮기기 전에도 막히지 않게)."""
+    vocab._new_tag(db, "zone", "Truss").listed = True
+    db.add(models.WbTargetRule(target="truss", zones=["Truss"], tags=["Truss"], updated_by="system"))
+    db.commit()
+    assert wb_targets.seed(db, storage) == ["truss"]
+    assert wb_targets.get_rule(db, "truss") == {"zones": ["Truss"], "targets": ["Truss"], "tags": ["Truss"]}
+    assert vocab.Vocab(db, "target").target("truss").value == "Truss"
     assert wb_targets.seed(db, storage) == []
 
 
@@ -79,14 +90,14 @@ def test_seed_keeps_admin_rule(db, storage):
     db.add(models.WbTargetRule(target="truss", zones=[], tags=["Truss"], updated_by=LV3))
     db.commit()
     assert wb_targets.seed(db, storage) == []
-    assert wb_targets.get_rule(db, "truss") == {"zones": [], "tags": ["Truss"]}
+    assert wb_targets.get_rule(db, "truss") == {"zones": [], "targets": [], "tags": ["Truss"]}
 
 
-def test_truss_zone_alone_is_enough(db, storage, world):
-    """태그가 없어도 구역이 'Truss' 면 Truss 로 보낼 수 있다."""
+def test_truss_target_alone_is_enough(db, storage, world):
+    """40 — 태그가 없어도 대상이 'Truss' 면 Truss 로 보낼 수 있다."""
     wb_targets.seed(db, storage)
     e, _f = world["plain"]
-    _tag(db, e, "zone", "Truss")
+    _tag(db, e, "target", "Truss")
     db.commit()
     ok, _ = wb_targets.Matcher(db, "truss").entries([e.id])[e.id]
     assert ok
@@ -94,13 +105,14 @@ def test_truss_zone_alone_is_enough(db, storage, world):
 
 def test_seed_once_and_not_reseeded_after_emptying(db, storage):
     assert wb_targets.seed(db, storage) == ["truss"]
-    assert wb_targets.get_rule(db, "truss") == {"zones": ["Truss"], "tags": ["Truss"]}
-    assert vocab.Vocab(db, "zone").target("truss").value == "Truss"   # 구역 목록 용어로 생긴다
-    assert wb_targets.get_rule(db, "gmu") == {"zones": [], "tags": []}   # 행 없음 = 제한 없음
+    assert wb_targets.get_rule(db, "truss") == {"zones": [], "targets": ["Truss"], "tags": ["Truss"]}
+    assert vocab.Vocab(db, "target").target("truss").value == "Truss"   # 대상 목록 용어로 생긴다(40)
+    assert vocab.Vocab(db, "zone").target("truss") is None
+    assert wb_targets.get_rule(db, "gmu") == {"zones": [], "targets": [], "tags": []}   # 행 없음 = 제한 없음
     assert db.query(models.AuditLog).filter_by(action="WB_RULE_SEED").count() == 1
     _set(db, "truss")                                  # 관리자가 비움
     assert wb_targets.seed(db, storage) == []
-    assert wb_targets.get_rule(db, "truss") == {"zones": [], "tags": []}
+    assert wb_targets.get_rule(db, "truss") == {"zones": [], "targets": [], "tags": []}
 
 
 # ---- 판정 ----
@@ -233,6 +245,14 @@ def test_admin_put_validation_permission_audit_registry(client, db, storage, wor
 
     r = client.put("/api/admin/wb-targets/truss", json={"zones": ["없는구역"], "tags": []}, headers=h3)
     assert r.status_code == 422 and r.json()["detail"] == "zone_not_listed"
+    # 40 — 대상도 목록 용어로(동의어 → 용어), 목록 밖이면 422
+    r = client.put("/api/admin/wb-targets/truss", json={"targets": ["Block", "블록"], "tags": ["Truss", "트러스"]},
+                   headers=h3)
+    assert r.status_code == 200 and r.json()["targets"] == ["블록"] and r.json()["zones"] == []
+    assert r.json()["condition"] == "대상 '블록' 또는 태그 'Truss' 또는 태그 '트러스' 가 붙은 자료만 보낼 수 있습니다"
+    assert read_registry(storage)["wb_target_rules"][0]["targets"] == ["블록"]
+    r = client.put("/api/admin/wb-targets/truss", json={"targets": ["없는대상"]}, headers=h3)
+    assert r.status_code == 422 and r.json()["detail"] == "target_not_listed"
     r = client.put("/api/admin/wb-targets/bogus", json={"zones": [], "tags": []}, headers=h3)
     assert r.status_code == 422 and r.json()["detail"] == "unknown_target"
     r = client.put("/api/admin/wb-targets/truss", json={"zones": [], "tags": [f"t{i}" for i in range(21)]}, headers=h3)
@@ -256,8 +276,8 @@ def test_rebuild_restores_rules(db, storage):
                                                     {"target": "bogus", "tags": ["x"]}]})
     db.commit()
     assert n == 2
-    assert wb_targets.get_rule(db, "truss") == {"zones": [], "tags": []}
-    assert wb_targets.get_rule(db, "gmu") == {"zones": ["선수부"], "tags": []}
+    assert wb_targets.get_rule(db, "truss") == {"zones": [], "targets": [], "tags": []}
+    assert wb_targets.get_rule(db, "gmu") == {"zones": ["선수부"], "targets": [], "tags": []}
 
 
 def test_sso_resets_auto_filter_flag(secret, client, world, monkeypatch):

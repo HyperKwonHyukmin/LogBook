@@ -116,6 +116,15 @@ WorkBench 관리자가 All Projects 에서 해석 1건을 보내면 자료 화�
 LogBook `LOGBOOK_WB_ORIGIN_SHOW=1`(화면·검색), WorkBench `LOGBOOK_SEND_PASSPORT=1`(여권 싣기). 비우고 재시작하면 꺼진다(출처 저장은 늘 한다).
 두 플랫폼 사이 약속은 `hitess-core` 저장소(`docs/02-current-links.md`·`docs/03-safety.md`) — 연동을 바꾸기 전에 먼저 본다.
 
+## 구역·대상 (40)
+
+분류 두 칸은 뜻이 다르다. **구역 = 배 안의 위치**(선수부·기관실·거주구, 여럿), **대상 = 해석한 구조물·모델 단위**(전선 모델·블록·Unit·Truss, 하나).
+같은 값을 두 목록에 두지 않는다. BDF 자료는 구역 **또는** 대상 중 하나만 있으면 확정된다(위치 없는 Unit·Truss 모델은 대상만).
+WorkBench 보내기 규칙도 대상으로 정한다(기본: Truss = 대상 'Truss' 또는 태그 'Truss').
+구역 목록에 잘못 들어간 구조물 값은 145 에서 보고서를 본 뒤 옮긴다:
+`.venv\Scripts\python.exe -m app.cli vocab-move zone Unit target` → 확인 후 같은 명령에 `--apply`.
+이미 다른 대상이 있는 자료는 옮기지 않고 보고만 한다(그 자료의 구역 값은 '목록 밖 값'으로 남으니 관리 › 분류 목록에서 정리).
+
 ## 운영 참고 (145)
 
 - **uvicorn 실행 계정 권한**: 145 에서 `uvicorn app.main:app` 을 실행하는 Windows 계정은 `999_LogBook` UNC 경로(`\\storage.hpc.hd.com\a476854\00_PROJECT\AA_300_CF44\999_LogBook`)에 **쓰기 권한**이 있어야 한다. 없으면 폴더 구조 생성(`ensure_layout`)·업로드·감사 로그 JSONL 기록이 조용히 실패한다(DB 기록은 남지만 파일 기록은 경고 로그만 남고 사라짐 — `app/audit.py` 참고).

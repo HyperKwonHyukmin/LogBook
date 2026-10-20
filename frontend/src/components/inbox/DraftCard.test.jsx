@@ -16,7 +16,7 @@ const ENTRY = {
   ],
 };
 const OTHER = { entry_id: 'E000011', title: '다른 묶음' };
-// 20 — BDF 자료는 호선·구역·해석 종류가 있어야 확정 단추가 열린다
+// 20 — BDF 자료는 호선·구역 또는 대상(40)·해석 종류가 있어야 확정 단추가 열린다
 const READY = { ...ENTRY, zones: ['선수부'], analysis_type: '강도 평가' };
 // 분류 목록(08) — 해석 종류·구역 입력이 받아 간다
 const VOCAB = {
@@ -294,15 +294,15 @@ test('BDF 자료는 구역·해석 종류가 없으면 확정 단추가 잠기�
   render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={() => {}} />);
   const btn = screen.getByRole('button', { name: '확정' });
   expect(btn).toBeDisabled();
-  expect(btn).toHaveAttribute('title', expect.stringContaining('구역 없음'));
+  expect(btn).toHaveAttribute('title', expect.stringContaining('구역·대상 없음'));
   expect(screen.getByLabelText('확인할 것')).toHaveTextContent('해석 종류 없음: BDF 자료는 해석 종류가 필요합니다');
 });
 
 test('확정 409 required_fields 는 빠진 칸을 사람 말로 보인다', async () => {
-  mockFetch({ 'POST /api/entries/E000010/confirm': { __status: 409, detail: { code: 'required_fields', missing: ['zone'] } } });
+  mockFetch({ 'POST /api/entries/E000010/confirm': { __status: 409, detail: { code: 'required_fields', missing: ['zone_or_target'] } } });
   render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={() => {}} />);
   await userEvent.click(screen.getByRole('button', { name: '확정' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('빠진 칸: 구역');
+  expect(await screen.findByRole('alert')).toHaveTextContent('빠진 칸: 구역 또는 대상');
 });
 
 test("'호선 없음(공용)' 을 고르면 호선을 비우고, 바뀐 칸 하나로 저장한다", async () => {
