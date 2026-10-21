@@ -422,7 +422,8 @@ def plm_fill(db: Session, storage: StoragePaths, *, only_unchecked: bool = False
     except HTTPException as exc:
         print(f"PLM 조회 실패: {exc.detail}", file=out)
         return 2
-    print(f"조회 {r['checked']}건 — 찾음 {r['found']} · 없음 {r['not_found']} · 선종 채움 {r['filled']}", file=out)
+    print(f"조회 {r['checked']}건 — 찾음 {r['found']} · 없음 {r['not_found']} · 선종 채움 {r['filled']}"
+          f" · 같은 시리즈 호선 더함 {r.get('series_added', 0)}", file=out)
     return 0
 
 

@@ -205,6 +205,17 @@ def diagnose(ship_no: str = "3370") -> list[str]:
 def _default_fetcher(ship_nos: list[str]) -> dict[str, dict]:
     """운영용 — 번호들을 한 번 접속해 IN 목록으로 읽는다. {번호: 원시 행}. 설정·드라이버가 없으면 PlmUnavailable,
     접속·질의 오류는 그대로 올린다(분류는 lookup·fill 이 한다)."""
+    return _query_ships("SHIP_NO", ship_nos)
+
+
+def _default_series_fetcher(leads: list[str]) -> dict[str, dict]:
+    """45 — 시리즈 대표 번호들로 같은 시리즈 호선 전체를 읽는다(WHERE SHIP_PRE IN …). {호선 번호: 원시 행}."""
+    return _query_ships("SHIP_PRE", leads)
+
+
+def _query_ships(column: str, values: list[str]) -> dict[str, dict]:
+    """VT_PLM_SHIP 에서 column IN values 인 행을 읽는다. {SHIP_NO: 원시 행}. column 은 코드 안 상수만 넘긴다."""
+    assert column in ("SHIP_NO", "SHIP_PRE")
     settings = plm_settings()
     if settings is None:
         raise PlmUnavailable("not_configured")
@@ -222,15 +233,15 @@ def _default_fetcher(ship_nos: list[str]) -> dict[str, dict]:
         except Exception:
             pass
         cur = conn.cursor()
-        for i in range(0, len(ship_nos), CHUNK):
-            part = ship_nos[i:i + CHUNK]
+        for i in range(0, len(values), CHUNK):
+            part = values[i:i + CHUNK]
             binds = {f"n{k}": v for k, v in enumerate(part)}
-            sql = (f"SELECT {', '.join(_COLUMNS)} FROM VT_PLM_SHIP WHERE SHIP_NO IN "
+            sql = (f"SELECT {', '.join(_COLUMNS)} FROM VT_PLM_SHIP WHERE {column} IN "
                    f"({', '.join(':' + k for k in binds)})")
             cur.execute(sql, binds)
             names = [c[0] for c in cur.description]
-            for values in cur.fetchall():
-                row = dict(zip(names, values))
+            for vals in cur.fetchall():
+                row = dict(zip(names, vals))
                 no = _text(row.get("SHIP_NO"))
                 if not no:
                     continue
@@ -249,10 +260,16 @@ _cache: dict[str, tuple[float, ShipLookup]] = {}
 _cache_lock = threading.Lock()
 
 
-def set_fetcher(fn: Optional[Callable[[list[str]], dict[str, dict]]]) -> None:
-    """시험용 — 가짜 PLM 을 끼운다(None 이면 운영 fetcher). 캐시도 비운다."""
-    global _fetcher
+_series_fetcher: Callable[[list[str]], dict[str, dict]] = _default_series_fetcher
+
+
+def set_fetcher(fn: Optional[Callable[[list[str]], dict[str, dict]]],
+                series_fn: Optional[Callable[[list[str]], dict[str, dict]]] = None) -> None:
+    """시험용 — 가짜 PLM 을 끼운다(None 이면 운영 fetcher). 캐시도 비운다.
+    45 — series_fn 은 같은 시리즈 조회(SHIP_PRE IN). 가짜 PLM 만 주고 series_fn 을 안 주면 시리즈 조회는 빈 결과."""
+    global _fetcher, _series_fetcher
     _fetcher = fn or _default_fetcher
+    _series_fetcher = series_fn or (_default_series_fetcher if fn is None else (lambda leads: {}))
     clear_cache()
 
 
@@ -298,6 +315,15 @@ def lookup_many(values) -> dict[str, ShipLookup]:
         row = rows.get(no)
         out[no] = _remember(no, ShipLookup("found", ship=to_ship(row)) if row else ShipLookup("not_found"))
     return out
+
+
+def lookup_series(leads) -> dict[str, dict]:
+    """45 — 시리즈 대표 번호들 → 같은 시리즈 호선 전체 {호선 번호: 응답 모양(to_ship)}. 캐시하지 않는다(채우기 때 한 번).
+    설정·드라이버가 없으면 PlmUnavailable, 접속·질의 오류는 그대로 올린다(부르는 쪽이 건너뛴다)."""
+    nos = sorted({n for n in (normalize_ship_no(v) for v in leads or []) if n})
+    if not nos:
+        return {}
+    return {no: to_ship(row) for no, row in _series_fetcher(nos).items() if normalize_ship_no(no)}
 
 
 def lookup(value) -> ShipLookup:

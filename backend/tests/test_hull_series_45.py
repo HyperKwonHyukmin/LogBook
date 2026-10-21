@@ -27,7 +27,12 @@ def plm():
         state["calls"].append(list(ship_nos))
         return {n: state["rows"][n] for n in ship_nos if n in state["rows"]}
 
-    plm_ship.set_fetcher(fetch)
+    def fetch_series(leads):   # 45 6단계 — WHERE SHIP_PRE IN (…)
+        state["series_calls"].append(list(leads))
+        return {n: r for n, r in state["rows"].items() if r.get("SHIP_PRE") in leads}
+
+    state["series_calls"] = []
+    plm_ship.set_fetcher(fetch, fetch_series)
     try:
         yield state
     finally:
@@ -202,3 +207,50 @@ def test_browse_keeps_real_hulls(db, series_corpus):
 
     hulls = {f["value"]: f["count"] for f in get_search().browse(db, user=SYSTEM)["facets"]["hull"]}
     assert hulls == {"3370": 1, "3371": 1, "3500": 1}
+
+
+
+# ---- 6단계 — PLM 의 같은 시리즈 호선 전체 ----
+
+def test_fill_adds_series_siblings_without_entries(client, db, make_user, make_entry_file, auth_headers, plm):
+    """3370 자료만 있어도 PLM 의 같은 시리즈 3371 · 3372 를 호선 행으로 — 호선 화면 시리즈 줄 · 검색(3372 → 3370 자료)."""
+    make_user("A100001")
+    plm["rows"]["3372"] = _row("3372", "3370", "3")
+    e, _ = make_entry_file(title="a", hulls=("3370",), name="a.pdf")
+    h = auth_headers("A100001")
+    r = client.post("/api/hulls/plm-fill", headers=h).json()
+    assert r["series_added"] == 2 and plm["series_calls"] == [["3370"]]
+    sib = db.get(models.Hull, "3372")
+    assert (sib.series_lead, sib.series_seq, sib.plm_status, sib.ship_type) == ("3370", "3", "found", "174K LNG")
+    assert db.query(models.AuditLog).filter_by(action="HULL_PLM", target_id="3372").count() == 1
+    d = client.get("/api/hulls/3370", headers=h).json()
+    assert [(m["hull_no"], m["entries"]) for m in d["series"]["members"]] == [("3370", 1), ("3371", 0), ("3372", 0)]
+    assert [x["hull_no"] for x in client.get("/api/hulls", headers=h).json()] == ["3370"]   # 목록은 자료 있는 호선만
+    assert [i["entry_id"] for i in _search(db, "3372")["items"]] == [e.entry_id]
+    # 다시 채워도 늘지 않는다
+    assert client.post("/api/hulls/plm-fill", headers=h).json()["series_added"] == 0
+
+
+def test_series_flag_adds_siblings_for_known_leads(db, storage, make_entry_file, plm):
+    """이미 시리즈를 채운 145 — plm-fill --series 가 조회할 호선이 없어도 같은 시리즈 호선을 더한다."""
+    make_entry_file(title="x", hulls=("3371",), name="a.pdf")
+    hull = db.get(models.Hull, "3371")
+    hull.plm_status, hull.ship_type, hull.series_lead = "found", "174K LNG", "3370"
+    db.commit()
+    out = io.StringIO()
+    assert cli.plm_fill(db, storage, series=True, out=out) == 0
+    assert "같은 시리즈 호선 더함 1" in out.getvalue()
+    assert db.get(models.Hull, "3370").series_seq == "1"
+
+
+def test_sibling_lookup_failure_does_not_block_fill(client, db, make_user, make_entry_file, auth_headers, plm):
+    make_user("A100001")
+    make_entry_file(title="a", hulls=("3370",), name="a.pdf")
+
+    def broken(leads):
+        raise RuntimeError("x")
+
+    plm_ship.set_fetcher(lambda nos: {n: plm["rows"][n] for n in nos if n in plm["rows"]}, broken)
+    r = client.post("/api/hulls/plm-fill", headers=auth_headers("A100001")).json()
+    assert r["found"] == 1 and r["series_added"] == 0
+    assert db.get(models.Hull, "3371") is None

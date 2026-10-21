@@ -165,7 +165,7 @@ def test_bulk_fill_keeps_typed_ship_type(client, db, make_user, make_entry_file,
     db.get(models.Hull, "3371").ship_type = "VLCC 직접 입력"
     db.commit()
     r = client.post("/api/hulls/plm-fill", headers=auth_headers("A100001")).json()
-    assert r == {"checked": 3, "found": 2, "not_found": 1, "filled": 1}
+    assert r == {"checked": 3, "found": 2, "not_found": 1, "filled": 1, "series_added": 0}
     assert len(plm["calls"]) == 1                         # 한 번의 조회로 묶어서
     db.expire_all()
     assert db.get(models.Hull, "3370").ship_type == "174K LNG"
@@ -273,7 +273,7 @@ def test_bulk_fill_includes_confirmed_hulls_without_row(client, db, make_user, m
     assert db.get(models.Hull, "3371") is None
     plm["rows"]["3371"] = {**ROW_3370, "SHIP_NO": "3371"}
     r = client.post("/api/hulls/plm-fill", headers=auth_headers("A100001")).json()
-    assert r == {"checked": 2, "found": 2, "not_found": 0, "filled": 2}
+    assert r == {"checked": 2, "found": 2, "not_found": 0, "filled": 2, "series_added": 0}
     assert db.get(models.Hull, "3371").ship_type == "174K LNG"
     assert db.get(models.Hull, "3372") is None
 

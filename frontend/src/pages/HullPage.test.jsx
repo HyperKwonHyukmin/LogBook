@@ -128,3 +128,17 @@ test('45 — 같은 시리즈 호선 줄: 다른 호선은 링크, 자기는 굵
   expect(within(line).queryByRole('link', { name: /3371/ })).toBeNull();
   expect(screen.getByRole('link', { name: '이 호선 자료 검색' })).toHaveAttribute('title', '같은 시리즈 호선 자료도 함께 나옵니다');
 });
+
+test('45 — 자료 없는 같은 시리즈 호선은 "자료 없음", 한 척이면 "한 척(시리즈 아님)"', async () => {
+  renderAt('/h/3370', { 'GET /api/hulls/3370': { ...HULL, hull_no: '3370',
+    series: { lead: '3370', seq: '1', manual: false, members: [
+      { hull_no: '3370', seq: '1', entries: 2 }, { hull_no: '3372', seq: '3', entries: 0 }] } } });
+  const line = await screen.findByLabelText('시리즈');
+  expect(within(line).getByRole('link', { name: /3372/ })).toHaveTextContent('자료 없음');
+});
+
+test('45 — 한 척짜리 시리즈', async () => {
+  renderAt('/h/3500', { 'GET /api/hulls/3500': { ...HULL, hull_no: '3500',
+    series: { lead: '3500', seq: '1', manual: false, members: [{ hull_no: '3500', seq: '1', entries: 2 }] } } });
+  expect(await screen.findByText('한 척(시리즈 아님)')).toBeInTheDocument();
+});

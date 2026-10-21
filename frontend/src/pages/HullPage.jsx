@@ -62,10 +62,10 @@ function SeriesLine({ hullNo, series, readOnly, onSave }) {
             <Link key={m.hull_no} to={`/h/${encodeURIComponent(m.hull_no)}`} title={`${m.hull_no} 호선 — 자료 ${m.entries}건`}
                   className="font-mono text-brand underline-offset-2 hover:underline">
               {m.hull_no}{m.seq ? <span className="text-n-500"> #{m.seq}</span> : null}
-              <span className="ml-0.5 font-sans text-n-500">({m.entries})</span>
+              <span className="ml-0.5 font-sans text-n-500">({m.entries ? m.entries : '자료 없음'})</span>
             </Link>
           )
-      )) : <span className="text-n-500">{series ? '같은 시리즈 호선 없음' : '—'}</span>}
+      )) : <span className="text-n-500">{series ? '한 척(시리즈 아님)' : '—'}</span>}
       {!readOnly && (
         <span className="flex items-center gap-1"><span className="text-n-500">· 대표</span>
           <InlineText label="시리즈 대표 호선" value={series?.lead || ''} onSave={(v) => onSave({ series_lead: v || '' })}

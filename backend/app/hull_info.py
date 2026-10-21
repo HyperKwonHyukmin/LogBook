@@ -222,6 +222,39 @@ def plm_http_error(result) -> HTTPException:
     return HTTPException(status_code=code, detail=detail)
 
 
+def add_series_siblings(db: Session, storage: StoragePaths, actor: str, leads, ip: str | None = None) -> int:
+    """45 — 시리즈 대표들의 같은 시리즈 호선 전체를 PLM 에서 읽어, LogBook 에 없는 호선은 호선 행(PLM 정보 · 시리즈)으로 만든다.
+    자료가 없는 호선이라 호선 목록에는 나오지 않고, 호선 화면의 '시리즈' 줄과 검색(3371 → 3370 자료)에 쓰인다.
+    이미 있는 호선 행은 건드리지 않는다(그 호선은 자기 조회로 채운다). PLM 장애면 0 — 부가 정보라 채우기를 막지 않는다.
+    만든 호선 수를 돌려준다(commit 은 부르는 쪽)."""
+    from . import plm_ship
+
+    leads = sorted({x for x in (leads or []) if x})
+    if not leads:
+        return 0
+    try:
+        ships = plm_ship.lookup_series(leads)
+    except Exception as exc:   # PlmUnavailable · 접속 · 질의 오류
+        import logging
+        logging.getLogger(__name__).warning("PLM 같은 시리즈 조회 실패(%d개): %s", len(leads), exc)
+        return 0
+    have = {h for (h,) in db.query(models.Hull.hull_no).filter(models.Hull.hull_no.in_(list(ships) or [""]))}
+    added = 0
+    for no in sorted(ships):
+        if no in have or not HULL_PATTERN.fullmatch(no):
+            continue
+        hull = models.Hull(hull_no=no)
+        db.add(hull)
+        db.flush()
+        before = _snapshot(hull)
+        _apply(db, hull, plm_ship.ShipLookup("found", ship=ships[no]), replace_ship_type=False)
+        audit.record(db, storage, actor=actor, action="HULL_PLM", target_type="hull", target_id=no,
+                     before=before, after=_snapshot(hull), ip=ip)
+        added += 1
+    db.flush()
+    return added
+
+
 def lookup_and_apply(db: Session, storage: StoragePaths, actor: str, hull_no: str, ip: str | None = None) -> models.Hull:
     """호선 화면 [선박 정보 검색] — PLM 을 조회해 선종(선형)·PLM 칸을 채운다. 사람이 누른 것이라 선종을 바꾼다.
     없음은 기록하고 404, 형식 오류 422, 설정·드라이버 없음 503, 조회 실패 502."""
@@ -244,6 +277,7 @@ def lookup_and_apply(db: Session, storage: StoragePaths, actor: str, hull_no: st
     if before != after:
         audit.record(db, storage, actor=actor, action="HULL_PLM", target_type="hull", target_id=hull_no,
                      before=before, after=after, ip=ip)
+    add_series_siblings(db, storage, actor, [hull.series_lead], ip)   # 45 — 같은 시리즈 호선도
     db.commit()
     from .ops.registry import write_registry  # 순환 import 방지
 
@@ -302,6 +336,10 @@ def _ensure_confirmed_hull_rows(db: Session) -> int:
     return added
 
 
+def _known_leads(db: Session) -> set[str]:
+    return {x for (x,) in db.query(models.Hull.series_lead).distinct() if x}
+
+
 def fill_from_plm(db: Session, storage: StoragePaths, actor: str, *, only_unchecked: bool = False,
                   series: bool = False, ip: str | None = None) -> dict:
     """호선 목록 [선종 채우기]·확정 뒤 작업·CLI — 한 번의 조회로 여러 호선을 채운다. 선종은 비어 있을 때만 채운다.
@@ -317,8 +355,15 @@ def fill_from_plm(db: Session, storage: StoragePaths, actor: str, *, only_unchec
     else:
         hulls = [h for h in hulls if h.plm_status != "found" or not h.ship_type
                  or (series and not h.series_lead and not h.series_manual)]
-    out = {"checked": len(hulls), "found": 0, "not_found": 0, "filled": 0}
+    out = {"checked": len(hulls), "found": 0, "not_found": 0, "filled": 0, "series_added": 0}
     if not hulls:
+        if series:   # 45 — 조회할 호선이 없어도 이미 아는 시리즈의 같은 시리즈 호선은 채운다
+            out["series_added"] = add_series_siblings(db, storage, actor, _known_leads(db), ip)
+            if out["series_added"]:
+                db.commit()
+                from .ops.registry import write_registry
+
+                write_registry(db, storage)
         return out
     results = plm_ship.lookup_many([h.hull_no for h in hulls])
     bad = next((r for r in results.values() if r.status in ("unavailable", "error")), None)
@@ -334,6 +379,9 @@ def fill_from_plm(db: Session, storage: StoragePaths, actor: str, *, only_unchec
         if before != after:
             audit.record(db, storage, actor=actor, action="HULL_PLM", target_type="hull", target_id=h.hull_no,
                          before=before, after=after, ip=ip)
+    # 45 — 같은 시리즈 호선(LogBook 에 없는 것). series 면 이미 아는 시리즈 전체, 아니면 이번에 찾은 호선의 시리즈만
+    leads = _known_leads(db) if series else {h.series_lead for h in hulls if h.series_lead}
+    out["series_added"] = add_series_siblings(db, storage, actor, leads, ip)
     db.commit()
     from .ops.registry import write_registry
 
