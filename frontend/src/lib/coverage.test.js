@@ -111,3 +111,18 @@ test('44 — 크기급 행, 칸만 목록, 기본은 호선 × 구역', () => {
   expect(d.axes).toEqual({ rows: 'hull', cols: 'zone' });
   expect(d.rows[0].key).toBe('h:9001');
 });
+
+test('45 — 같은 시리즈 호선은 한 행(대표 호선), 같은 자료의 두 시리즈 호선도 한 번만', () => {
+  const data = {
+    hulls: { 3370: '174K LNG', 3371: '174K LNG', 3500: null },
+    hull_series: { 3371: '3370' }, series_members: { 3370: ['3370', '3371'] },
+    zones: ['정반'],
+    entries: [E('a', { rows: ['h:3370'] }), E('b', { rows: ['h:3371'] }), E('both', { rows: ['h:3370', 'h:3371'] }),
+      E('c', { rows: ['h:3500'] })],
+  };
+  const g = buildGrid(data);
+  expect(g.rows.map((r) => [r.key, r.members, r.sub])).toEqual([
+    ['h:3370', ['3370', '3371'], '174K LNG'], ['h:3500', ['3500'], '선종 미입력']]);
+  expect(g.keysOf(data.entries[2])).toEqual(['h:3370']);
+  expect(data.entries.filter((e) => g.keysOf(e).includes('h:3370')).map((e) => e.id)).toEqual(['a', 'b', 'both']);
+});

@@ -3,6 +3,7 @@
  * 44 — 행 기준은 호선 · 선종 · 크기급, 열 기준은 구역 · 대상(관계 지도 35 와 같은 이름). 기본은 호선 × 구역.
  * 42 — 해석 종류 거르기('해당 없음' 칸)는 없앴다.
  */
+import { seriesKeyOf, seriesMembers, seriesShip } from './hullSeries';
 
 export const STATES = ['full', 'noreport', 'nomodel', 'fail', 'empty'];
 export const STATE_INFO = {
@@ -30,12 +31,25 @@ export const axisLabel = (list, id) => (list.find((a) => a.id === id) || list[0]
 
 const hullNo = (k) => k.slice(2);
 
+/** 45 — 호선 행 열쇠를 시리즈 묶음 키로('h:3371' → 'h:3370'). 같은 자료에 같은 시리즈 호선이 둘이면 한 행. */
+function seriesRows(data) {
+  const keyOf = seriesKeyOf(data);
+  return (e) => {
+    const keys = [];
+    for (const k of rowsOf(e)) {
+      const key = k.startsWith('h:') ? `h:${keyOf(hullNo(k))}` : k;
+      if (!keys.includes(key)) keys.push(key);
+    }
+    return keys;
+  };
+}
+
 /** 호선 행 열쇠(서버 rows) — 호선 · 공용. 둘 다 없으면 미지정. */
 export const rowsOf = (e) => (e.rows?.length ? e.rows : [UNSET_ROW]);
 
-/** 고른 행 기준에서 자료가 놓일 행 열쇠들. 선종 · 크기급은 호선마다의 값을 겹치지 않게(값이 없는 호선은 'none'). */
+/** 고른 행 기준에서 자료가 놓일 행 열쇠들. 호선은 시리즈로 묶고(45), 선종 · 크기급은 호선마다의 값을 겹치지 않게(값이 없는 호선은 'none'). */
 export function rowKeysFor(data, axis = 'hull') {
-  if (axis === 'hull') return rowsOf;
+  if (axis === 'hull') return seriesRows(data);
   const map = axis === 'kind' ? data.hull_kinds || {} : data.hull_sizes || {};
   const pre = ROW_PREFIX[axis];
   return (e) => {
@@ -59,7 +73,9 @@ export function buildRows(data, axis = 'hull') {
   }));
   if (axis === 'hull') {
     const hulls = [...used].filter((k) => k.startsWith('h:')).sort((a, b) => hullNo(a).localeCompare(hullNo(b), 'ko', { numeric: true }));
-    return [...hulls.map((key) => ({ key, kind: 'hull', label: hullNo(key), sub: data.hulls?.[hullNo(key)] || '선종 미입력' })), ...rest];
+    // 45 — 시리즈 행: label = 대표 호선, members = 이 화면에 나온 같은 시리즈 호선들(하나면 시리즈 아님)
+    return [...hulls.map((key) => ({ key, kind: 'hull', label: hullNo(key), members: seriesMembers(data, hullNo(key)),
+      sub: seriesShip(data, hullNo(key)) || '선종 미입력' })), ...rest];
   }
   const map = axis === 'kind' ? data.hull_kinds || {} : data.hull_sizes || {};
   const pre = ROW_PREFIX[axis];

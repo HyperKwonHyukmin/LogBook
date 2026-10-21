@@ -1,6 +1,6 @@
 import {
   aggregate, aggText, buildModel, diffShort, explainAgg, explainPair, isLoudPair, isMember, isReportOnly, pairsOf, parentsOf,
-  pivotHubs, searchNodes, stepText,
+  hubTip, pivotHubs, searchNodes, stepText,
 } from './graphModel.js';
 
 const DATA = {
@@ -168,4 +168,20 @@ test('44 — 대상 기준: 대상 점과 대상 없음 묶음, 기준 순서는
   expect(m.byId.get('target:Unit')).toMatchObject({ cnt: 2, label: 'Unit' });
   expect(m.NONE.target).toMatchObject({ cnt: 2, label: '대상 없음' });
   expect(pivotHubs(m, 'target').map((h) => h.id)).toEqual(['target:Unit', 'target:__none']);
+});
+
+test('45 — 같은 시리즈 호선은 한 무리: 이름 · 소속 · 호선 번호로 찾기', () => {
+  const m = buildModel({
+    hulls: { 3370: '174K LNG', 3371: '174K LNG' }, hull_series: { 3371: '3370' }, series_members: { 3370: ['3370', '3371'] },
+    entries: [
+      { id: 'E1', title: 'a', hulls: ['3370'], zones: [], free: [], revisions: [] },
+      { id: 'E2', title: 'b', hulls: ['3371'], zones: [], free: [], revisions: [] },
+    ],
+    pairs: [],
+  });
+  const h = m.byId.get('hull:3370');
+  expect(h).toMatchObject({ label: '3370 시리즈', members: ['3370', '3371'], ship: '174K LNG', cnt: 2 });
+  expect(m.byId.get('hull:3371')).toBeUndefined();
+  expect(searchNodes(m, '3371', 'hull')[0].id).toBe('hull:3370');
+  expect(hubTip(h)).toBe('3370 시리즈 (3370 · 3371) · 174K LNG · 자료 2건');
 });

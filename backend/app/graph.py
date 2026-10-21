@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session, aliased
 
 from . import access, models
 from .bdf.signature import VERSION as SIG_VERSION, differing
-from .plm_ship import ship_facets
+from .plm_ship import series_view, ship_facets
 from .report_index import features as report_features
 from .revisions import reports as report_revs
 from .vocab import Vocab
@@ -167,9 +167,11 @@ def build_graph(db: Session, user, store=None) -> dict:
     used = {h for hs in hulls.values() for h in hs}
     out_doc = [{**p, "a": code[a], "b": code[b], **({"from": code[p["from"]]} if p.get("from") else {})}
                for (a, b), p in sorted(doc_pairs.items())]
+    hull_series, series_members = series_view(db, used)   # 45 — '호선' 기준은 시리즈로 묶는다
     return {"entries": out_entries, "hulls": {h: ships.get(h) for h in sorted(used)},
             "hull_kinds": {h: kinds.get(h) for h in sorted(used)},
             "hull_sizes": {h: sizes.get(h) for h in sorted(used)},
+            "hull_series": hull_series, "series_members": series_members,
             "pairs": out_pairs, "doc_pairs": out_doc, "unsigned_models": unsigned, "truncated": truncated,
             "doc_index": doc_index}
 

@@ -118,3 +118,13 @@ test('호선 목록 [선종 채우기(PLM)] — 한 번에 조회하고 목록�
   await userEvent.click(btn);
   expect(await screen.findByText('174K LNG')).toBeInTheDocument();
 });
+
+test('45 — 같은 시리즈 호선 줄: 다른 호선은 링크, 자기는 굵게', async () => {
+  renderAt('/h/3371', { 'GET /api/hulls/3371': { ...HULL, hull_no: '3371',
+    series: { lead: '3370', seq: '2', manual: false, members: [
+      { hull_no: '3370', seq: '1', entries: 4 }, { hull_no: '3371', seq: '2', entries: 2 }] } } });
+  const line = await screen.findByLabelText('시리즈');
+  expect(within(line).getByRole('link', { name: /3370/ })).toHaveAttribute('href', '/h/3370');
+  expect(within(line).queryByRole('link', { name: /3371/ })).toBeNull();
+  expect(screen.getByRole('link', { name: '이 호선 자료 검색' })).toHaveAttribute('title', '같은 시리즈 호선 자료도 함께 나옵니다');
+});

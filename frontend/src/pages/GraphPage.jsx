@@ -432,7 +432,7 @@ function DetailColumn({ model, pivot, sel, onGo, layer }) {
           <span className="text-meta text-n-600">{n.none ? '기준 없음' : GROUP[n.g]}</span>
           <div className={n.g === 'hull' && !n.none ? 'font-mono text-[20px] font-medium text-brand' : 'text-[17px] font-semibold text-n-900'}>{n.label}</div>
           <div className="text-ui text-n-600">{n.ship ? `${n.ship} · ` : ''}자료 {ents.length}건</div>
-          {n.g === 'hull' && !n.none && <Link to={`/h/${encodeURIComponent(n.label)}`} className="text-ui text-brand underline underline-offset-2">호선 화면 열기</Link>}
+          {n.g === 'hull' && !n.none && <Link to={`/h/${encodeURIComponent(n.id.slice('hull:'.length))}`} className="text-ui text-brand underline underline-offset-2">호선 화면 열기</Link>}
         </section>
         <section className="flex flex-col gap-2">
           <SecTitle>선종 구성</SecTitle>

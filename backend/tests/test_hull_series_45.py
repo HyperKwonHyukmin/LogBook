@@ -127,3 +127,78 @@ def test_registry_round_trip(db, make_entry_file, plm):
     _restore_hulls(db, reg)
     hull = db.get(models.Hull, "3371")
     assert (hull.series_lead, hull.series_seq, hull.series_manual) == ("3370", "2", True)
+
+
+def test_coverage_and_graph_carry_series(db, make_user, make_entry_file, plm):
+    """2단계 — 갖춤 현황 · 관계 지도 응답에 hull_series(다른 것만) · series_members(둘 이상만)."""
+    from app.coverage import build_coverage
+    from app.graph import build_graph
+
+    user = make_user("A100001")
+    for no in ("3370", "3371", "3500"):
+        make_entry_file(title=no, hulls=(no,), name=f"{no}.pdf")
+    db.get(models.Hull, "3370").series_lead = "3370"
+    db.get(models.Hull, "3371").series_lead = "3370"
+    db.commit()
+    for body in (build_coverage(db, user), build_graph(db, user)):
+        assert body["hull_series"] == {"3371": "3370"}
+        assert body["series_members"] == {"3370": ["3370", "3371"]}
+
+
+# ---- 3단계 — 검색 ----
+
+def _search(db, q="", **kw):
+    from app.access import SYSTEM
+    from app.search import SearchQuery, get_search
+
+    filters = kw.pop("filters", {})
+    return get_search().search(db, SearchQuery(q=q, filters=filters, **({"user": SYSTEM} | kw)))
+
+
+@pytest.fixture
+def series_corpus(db, make_entry_file):
+    out = {}
+    for no, title in (("3370", "a"), ("3371", "b"), ("3500", "c")):
+        out[no], _ = make_entry_file(title=title, hulls=(no,), name=f"{no}.pdf")
+    for no, lead, seq in (("3370", "3370", "1"), ("3371", "3370", "2")):
+        h = db.get(models.Hull, no)
+        h.series_lead, h.series_seq, h.ship_type = lead, seq, "174K LNG"
+    db.commit()
+    return {k: v.entry_id for k, v in out.items()}
+
+
+def test_search_term_finds_series_siblings(db, series_corpus):
+    e = series_corpus
+    res = _search(db, "3371")
+    assert [i["entry_id"] for i in res["items"]] == [e["3371"], e["3370"]]   # 정확 일치가 먼저
+    assert res["items"][1]["matched"] == ["hull_series"] and res["items"][1]["hulls"] == ["3370"]   # 실제 호선 그대로
+    assert [i["entry_id"] for i in _search(db, "3500")["items"]] == [e["3500"]]
+
+
+def test_search_filter_and_facets_by_series(db, series_corpus):
+    e = series_corpus
+    res = _search(db, filters={"hull": ["3371"]})
+    assert {i["entry_id"] for i in res["items"]} == {e["3370"], e["3371"]}
+    assert res["applied_filters"]["hull"] == ["3370"]
+    facets = {f["value"]: f for f in res["facets"]["hull"]}
+    assert facets["3370"] == {"value": "3370", "count": 2, "label": "3370·3371 시리즈 · 174K LNG"}
+    assert "3371" not in facets and facets["3500"]["count"] == 1
+    assert _search(db, "3371", filters={"hull": ["3370"]})["hull_suggestion"] is None
+
+
+def test_search_group_by_series(db, series_corpus):
+    e = series_corpus
+    res = _search(db, group="hull")
+    groups = {g["value"]: g for g in res["groups"]}
+    assert groups["3370"]["count"] == 2 and groups["3370"]["label"] == "3370·3371 시리즈 · 174K LNG"
+    assert res["multi_valued"] == 0
+    more = _search(db, group="hull", group_value="3371")   # '더 보기'도 시리즈 단위
+    assert {i["entry_id"] for i in more["items"]} == {e["3370"], e["3371"]}
+
+
+def test_browse_keeps_real_hulls(db, series_corpus):
+    from app.access import SYSTEM
+    from app.search import get_search
+
+    hulls = {f["value"]: f["count"] for f in get_search().browse(db, user=SYSTEM)["facets"]["hull"]}
+    assert hulls == {"3370": 1, "3371": 1, "3500": 1}

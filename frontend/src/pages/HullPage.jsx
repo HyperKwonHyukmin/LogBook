@@ -47,6 +47,35 @@ function PlmLine({ plm }) {
   );
 }
 
+/** 45 — 시리즈(같은 설계로 지은 호선들) 한 줄. 같은 시리즈 호선은 검색 · 관계 지도 · 갖춤 현황에서 한 묶음이다.
+ * 시리즈 대표는 PLM 선행호선 — LV2 이상이 고칠 수 있다(빈 값 = 시리즈 아님, 고친 값은 일괄 채우기가 덮지 않는다). */
+function SeriesLine({ hullNo, series, readOnly, onSave }) {
+  if (!series && readOnly) return null;
+  const members = series?.members || [];
+  return (
+    <div aria-label="시리즈" className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-n-600">
+      <span className="text-n-500">시리즈</span>
+      {members.length > 1 ? members.map((m) => (
+        m.hull_no === hullNo
+          ? <span key={m.hull_no} className="font-mono font-medium text-n-900">{m.hull_no}{m.seq ? <span className="text-n-500"> #{m.seq}</span> : null}</span>
+          : (
+            <Link key={m.hull_no} to={`/h/${encodeURIComponent(m.hull_no)}`} title={`${m.hull_no} 호선 — 자료 ${m.entries}건`}
+                  className="font-mono text-brand underline-offset-2 hover:underline">
+              {m.hull_no}{m.seq ? <span className="text-n-500"> #{m.seq}</span> : null}
+              <span className="ml-0.5 font-sans text-n-500">({m.entries})</span>
+            </Link>
+          )
+      )) : <span className="text-n-500">{series ? '같은 시리즈 호선 없음' : '—'}</span>}
+      {!readOnly && (
+        <span className="flex items-center gap-1"><span className="text-n-500">· 대표</span>
+          <InlineText label="시리즈 대표 호선" value={series?.lead || ''} onSave={(v) => onSave({ series_lead: v || '' })}
+                      className="font-mono text-n-900" /></span>
+      )}
+      {series?.manual && <span className="text-n-500">(직접 정함)</span>}
+    </div>
+  );
+}
+
 /** 분포 목록 — 값을 누르면 그 필터로 이 호선을 검색한다. 막대는 중립색. */
 function Distribution({ title, rows, hullNo, filterKey }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
@@ -100,7 +129,7 @@ export default function HullPage() {
   async function saveHull(patch) {
     try {
       const h = await api(`/hulls/${encodeURIComponent(hullNo)}`, { method: 'PATCH', body: patch });
-      setHull((cur) => ({ ...cur, ship_type: h.ship_type, memo: h.memo }));
+      setHull((cur) => ({ ...cur, ship_type: h.ship_type, memo: h.memo, series: h.series }));
       setError('');
       return true;
     } catch (err) { setError(errorText(err, '저장하지 못했습니다.')); return false; }
@@ -113,6 +142,8 @@ export default function HullPage() {
       const h = await api(`/hulls/${encodeURIComponent(hullNo)}/plm`, { method: 'POST' });
       setHull((cur) => ({ ...cur, ship_type: h.ship_type, plm: h.plm }));
       setError('');
+      // 45 — 시리즈도 PLM 값으로 바뀐다 — 같은 시리즈 호선 줄을 다시 읽는다
+      api(`/hulls/${encodeURIComponent(hullNo)}`).then((d) => setHull((cur) => ({ ...cur, series: d.series }))).catch(() => {});
       toast.show({ message: h.ship_type ? `선박 정보를 채웠습니다 — 선종 ${h.ship_type}` : '선박 정보를 채웠습니다.', tone: 'ok' });
     } catch (err) {
       setError(errorText(err, '선박 정보를 찾지 못했습니다.'));
@@ -154,6 +185,7 @@ export default function HullPage() {
               <InlineText label="메모" value={hull.memo} disabled={readOnly} onSave={(v) => saveHull({ memo: v || null })} className="text-n-900" /></span>
           </div>
           <PlmLine plm={hull.plm} />
+          <SeriesLine hullNo={hull.hull_no} series={hull.series} readOnly={readOnly} onSave={saveHull} />
           <p className="tnum mt-2 flex flex-wrap items-center gap-x-2 text-ui text-n-600">
             {stat(s.entries, '자료')}<span aria-hidden="true" className="text-n-300">·</span>
             {stat(s.files, '파일')}<span aria-hidden="true" className="text-n-300">·</span>
@@ -175,7 +207,8 @@ export default function HullPage() {
               <Ship size={14} aria-hidden="true" />선박 정보 검색
             </Button>
           )}
-          <Link to={`/?hull=${hull.hull_no}`} className={buttonClass('secondary', 'sm')}>
+          <Link to={`/?hull=${hull.hull_no}`} className={buttonClass('secondary', 'sm')}
+                title={hull.series?.members?.length > 1 ? '같은 시리즈 호선 자료도 함께 나옵니다' : undefined}>
             <Search size={14} aria-hidden="true" />이 호선 자료 검색
           </Link>
         </div>

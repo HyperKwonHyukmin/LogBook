@@ -25,6 +25,7 @@ from .. import models
 from ..tags import group_ids
 from ..vocab import Vocab
 from ..entries.quality import missing_fields
+from ..plm_ship import series_keys, series_members
 from .base import FILTER_KEYS, GROUP_KEYS, GROUP_NONE, GROUP_SHARED, GROUP_SORTS, SORT_ALIASES, SORTS, SearchQuery, filter_values
 from . import insight
 from .. import wb_origin
@@ -41,6 +42,7 @@ HULL_TERM = re.compile(r"^[0-9]{4}$")
 HULL_PREFIX_TERM = re.compile(r"^[0-9]{2,}$")
 S_ID, S_HULL, S_TITLE_EXACT, S_TITLE, S_TAG, S_TYPE, S_DESC, S_FILE, S_BODY = 100, 100, 90, 70, 50, 50, 40, 30, 10
 S_HULL_PREFIX = 60
+S_HULL_SERIES = 95   # 45 — 같은 시리즈 다른 호선(정확 일치 바로 아래)
 _EPOCH = datetime(1970, 1, 1)
 # 결과 행의 종류별 파일 수(08) — 화면은 BDF·보고서·도면·결과를 0 이어도, 기타는 있을 때만 보인다
 ROW_KINDS = ("model", "report", "drawing", "result", "other")
@@ -74,6 +76,24 @@ def _ts(r: dict) -> float:
 
 def _fav_ts(r: dict) -> float:
     return (r["fav_at"] - _EPOCH).total_seconds() if r.get("fav_at") else 0.0
+
+
+def hull_labels(db: Session, keys) -> dict[str, str]:
+    """45 — 호선 거르기 · 묶음의 보조 이름. 시리즈(같은 시리즈 호선 둘 이상)면 '3370·3371 시리즈 · 174K LNG', 아니면 선종."""
+    keys = [k for k in keys if k and k != GROUP_SHARED]
+    if not keys:
+        return {}
+    members = series_members(db, keys)
+    ships = dict(db.query(models.Hull.hull_no, models.Hull.ship_type)
+                 .filter(models.Hull.hull_no.in_({h for k in keys for h in members[k]}), models.Hull.ship_type.isnot(None)))
+    out = {}
+    for k in keys:
+        ship = ships.get(k) or next((ships[h] for h in members[k] if ships.get(h)), None)
+        series = f"{'·'.join(members[k])} 시리즈" if len(members[k]) > 1 else None
+        label = " · ".join(x for x in (series, ship) if x)
+        if label:
+            out[k] = label
+    return out
 
 
 def hull_known(db: Session, hull_no: str, user=None) -> bool:
@@ -167,6 +187,9 @@ class MySqlSearch:
         # 화면이 공유 URL 의 동의어 값으로도 필터 항목을 올바르게 강조할 수 있게 한다.
         # 19 — 값마다 대표 값으로 바꾸고, 같은 대표 값으로 모이는 값(ER·기관실)은 하나로 — {칸: [값, …]}
         filters = {k: list(dict.fromkeys(self._canon_filter(vocab, k, v) for v in vs)) for k, vs in raw.items()}
+        if filters.get("hull"):   # 45 — 호선 거르기는 시리즈 단위(3371 → 3370 시리즈)
+            keys = series_keys(db, filters["hull"])
+            filters["hull"] = list(dict.fromkeys(keys.get(v, v) for v in filters["hull"]))
 
         # 13 — 볼 수 없는 Entry 는 모든 적중 질의의 SQL 조건에서 뺀다(건수·묶음·요약이 그 뒤에 계산된다)
         vis = access.visible_entries_filter(query.user)
@@ -218,6 +241,8 @@ class MySqlSearch:
                 if group:
                     # 11 — 묶음 하나의 '더 보기' — 같은 정렬로 그 값을 가진 행만
                     want = self._group_value(vocab, group, query.group_value)
+                    if group == "hull" and want is not None and want != GROUP_SHARED:   # 45 — 시리즈 묶음
+                        want = series_keys(db, [want])[want]
                     passed = [r for r in passed
                               if ((want in self._group_values(r, group)) if want is not None
                                   else not self._group_values(r, group))]
@@ -255,7 +280,8 @@ class MySqlSearch:
         for key in FILTER_KEYS:
             c = Counter()
             for r in rows.values():
-                c.update(self._values(r, key))
+                # 45 — 분류 화면의 호선 목록은 실제 호선(호선 화면으로 간다). 검색 거르기 · 묶기만 시리즈 단위
+                c.update(r["hulls"] if key == "hull" else self._values(r, key))
             out[key] = [{"value": v, "count": n} for v, n in c.items()]
         for key, kind in (("zone", "zone"), ("target", "target")):
             v = vocab[kind]
@@ -327,7 +353,7 @@ class MySqlSearch:
         if not values:
             return {}
         if key == "hull":
-            return dict(db.query(models.Hull.hull_no, models.Hull.ship_type).filter(models.Hull.hull_no.in_(values)))
+            return hull_labels(db, values)
         if key == "uploaded_by":
             return dict(db.query(models.User.employee_id, models.User.name).filter(models.User.employee_id.in_(values)))
         return {}
@@ -376,6 +402,13 @@ class MySqlSearch:
         for (eid,) in (db.query(models.EntryHull.entry_id).join(E, E.id == models.EntryHull.entry_id)
                        .filter(live, models.EntryHull.hull_no == term)):
             h.entry(eid, S_HULL, "hull")
+        # 45 — 같은 시리즈 다른 호선의 자료도(3371 → 3370 자료). 정확 일치가 이미 맞은 자료는 점수가 높아 그대로다
+        key = series_keys(db, [term])[term] if len(term) <= 8 and term.isalnum() else None
+        others = [m for m in series_members(db, [key])[key] if m != term] if key else []
+        if others:
+            for (eid,) in (db.query(models.EntryHull.entry_id).join(E, E.id == models.EntryHull.entry_id)
+                           .filter(live, models.EntryHull.hull_no.in_(others)).distinct()):
+                h.entry(eid, S_HULL_SERIES, "hull_series")
         if HULL_PREFIX_TERM.fullmatch(term):
             # 19 — 호선 앞부분 일치('349' → 3496). 정확 일치(위)가 이미 맞은 Entry 는 점수가 높아 그대로다.
             # 숫자만 받으므로 LIKE 특수 문자가 끼어들 수 없다
@@ -477,6 +510,10 @@ class MySqlSearch:
             rows[eid]["hulls"].append(hull_no)
             if ship:
                 rows[eid]["ship_types"].add(ship)
+        # 45 — 거르기 · 묶기용 시리즈 묶음 키(같은 시리즈 호선 둘이면 하나로). 결과 행에는 실제 호선(hulls)이 간다
+        keys = series_keys(db, {h for r in rows.values() for h in r["hulls"]})
+        for r in rows.values():
+            r["series"] = list(dict.fromkeys(keys[h] for h in r["hulls"]))
         tag_rows = (db.query(models.EntryTag.entry_id, models.Tag.kind, models.Tag.value)
                     .join(models.Tag, models.Tag.id == models.EntryTag.tag_id)
                     .filter(models.EntryTag.entry_id.in_(id_list), models.Tag.kind.in_(("zone", "target", "free")))
@@ -507,7 +544,7 @@ class MySqlSearch:
     @staticmethod
     def _values(r: dict, key: str) -> list[str]:
         if key == "hull":
-            return r["hulls"]
+            return r["series"]   # 45 — 시리즈 묶음 키
         if key == "ship_type":
             return sorted(r["ship_types"])
         if key == "zone":
@@ -553,12 +590,10 @@ class MySqlSearch:
         for f in out["uploaded_by"]:
             f["label"] = names.get(f["value"])
         if out["hull"]:
-            ships = dict(db.query(models.Hull.hull_no, models.Hull.ship_type)
-                         .filter(models.Hull.hull_no.in_([f["value"] for f in out["hull"]]),
-                                 models.Hull.ship_type.isnot(None)))
+            labels = hull_labels(db, [f["value"] for f in out["hull"]])   # 45 — 시리즈면 '3370·3371 시리즈 · 선종'
             for f in out["hull"]:
-                if ships.get(f["value"]):
-                    f["label"] = ships[f["value"]]
+                if labels.get(f["value"]):
+                    f["label"] = labels[f["value"]]
         if vocab is not None:
             for key, kind in (("zone", "zone"), ("target", "target")):
                 for f in out[key]:
@@ -574,7 +609,7 @@ class MySqlSearch:
 
     def _hull_suggestion(self, db: Session, terms: list[str], filters: dict, user=None) -> dict | None:
         for t in terms:
-            if HULL_TERM.fullmatch(t) and t not in filters.get("hull", ()):
+            if HULL_TERM.fullmatch(t) and series_keys(db, [t])[t] not in filters.get("hull", ()):
                 return {"hull_no": t, "known": hull_known(db, t, user)}
         return None
 

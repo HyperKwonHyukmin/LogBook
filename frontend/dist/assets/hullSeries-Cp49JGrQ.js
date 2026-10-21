@@ -1,0 +1,1 @@
+var e=e=>{let t=e?.hull_series||{};return e=>t[e]||e},t=(e,t)=>e?.series_members?.[t]||[t],n=(e,n)=>t(e,n).length>1?`${n} 시리즈`:n,r=(e,n)=>{let r=e?.hulls||{};return r[n]||t(e,n).map(e=>r[e]).find(Boolean)||null};export{r as i,n,t as r,e as t};

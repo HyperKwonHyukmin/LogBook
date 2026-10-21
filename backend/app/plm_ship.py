@@ -356,6 +356,16 @@ def series_members(db: Session, keys) -> dict[str, list[str]]:
     return {k: sorted(v, key=lambda h: (not h.isdigit(), h.zfill(8))) for k, v in out.items()}
 
 
+def series_view(db: Session, hull_nos) -> tuple[dict, dict]:
+    """45 — 관계 지도 · 갖춤 현황 응답용: (호선 → 묶음 키 — 자기 번호와 다른 것만, 키 → 이 응답에 나온 호선들 — 둘 이상인 것만).
+    프런트는 '호선' 기준에서 호선을 묶음 키로 바꿔 묶고, 둘 이상이면 '3370 시리즈'로 이름 붙인다."""
+    keys = series_keys(db, hull_nos)
+    members: dict[str, list[str]] = {}
+    for no in sorted(keys, key=lambda h: (not h.isdigit(), h.zfill(8))):
+        members.setdefault(keys[no], []).append(no)
+    return ({h: k for h, k in keys.items() if h != k}, {k: v for k, v in members.items() if len(v) > 1})
+
+
 def register_hulls(db: Session, hull_nos) -> Optional[models.Job]:
     """43 — 정리 대기(초안)에 호선이 붙자마자 호선 행을 만들고 PLM 일괄 조회 작업을 넣는다(설정돼 있을 때만).
     확정을 기다리지 않아 정리 대기 카드에서 선종 · 선형을 보고 맞는 호선인지 확인할 수 있다.

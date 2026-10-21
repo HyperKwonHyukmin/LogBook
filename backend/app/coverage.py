@@ -6,7 +6,8 @@
 자료 목록에서 계산한다(42 — 해석 종류 거르기는 없앴다).
 
 자료 하나에 싣는 사실
-    rows        자료가 놓일 행 — 호선(entry_hulls, 주 호선 먼저) · 공용(no_hull)
+    rows        자료가 놓일 행 — 호선(entry_hulls, 주 호선 먼저) · 공용(no_hull). 45 — 호선 행은 프런트가 시리즈로 묶는다
+                (응답의 hull_series · series_members)
     zones       구역(entry_tags kind=zone, 분류 목록의 대표 값 — 동의어가 갈라지지 않게)
     target      대상(38, 자료당 하나, 대표 값) — 44 열 기준 '대상'
     models      BDF 파일 수(휴지통 제외)
@@ -27,7 +28,7 @@ from sqlalchemy.orm import Session
 from . import access, models
 from .bdf.signature import VERSION as SIG_VERSION
 from .entries import quality
-from .plm_ship import ship_facets
+from .plm_ship import series_view, ship_facets
 from .vocab import Vocab
 
 MAX_ENTRIES = 3000        # 최근 확정 순으로 이만큼 — 넘으면 truncated(관계 지도와 같은 상한)
@@ -48,7 +49,8 @@ def build_coverage(db: Session, user) -> dict:
     truncated = len(rows) > MAX_ENTRIES
     rows = rows[:MAX_ENTRIES]
     if not rows:
-        return {"entries": [], "hulls": {}, "hull_kinds": {}, "hull_sizes": {}, "zones": [], "targets": [], "truncated": False}
+        return {"entries": [], "hulls": {}, "hull_kinds": {}, "hull_sizes": {}, "hull_series": {}, "series_members": {},
+                "zones": [], "targets": [], "truncated": False}
     pks = [e.id for e in rows]
     visible = set(pks)
 
@@ -141,6 +143,8 @@ def build_coverage(db: Session, user) -> dict:
     used = sorted({h for hs in hulls.values() for h in hs})
     zones = sorted(zone_count, key=lambda z: (-zone_count[z], z))
     targets = sorted(target_count, key=lambda z: (-target_count[z], z))
+    hull_series, series_members = series_view(db, used)   # 45 — 같은 시리즈 호선은 한 행
     return {"entries": out, "hulls": {h: ships.get(h) for h in used},
             "hull_kinds": {h: ship_kinds.get(h) for h in used}, "hull_sizes": {h: ship_sizes.get(h) for h in used},
+            "hull_series": hull_series, "series_members": series_members,
             "zones": zones, "targets": targets, "truncated": truncated}

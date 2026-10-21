@@ -25,7 +25,15 @@ const axisOf = (list, v, d) => (list.some((a) => a.id === v) ? v : d);
 const LIST_LIMIT = 12;
 
 function RowChip({ row }) {
-  if (row.kind === 'hull') return <HullChip hull={row.label} />;
+  if (row.kind === 'hull') {
+    if ((row.members?.length || 0) < 2) return <HullChip hull={row.label} />;
+    // 45 — 같은 시리즈 호선은 한 행: 호선 칩을 나란히(각각 호선 화면으로)
+    return (
+      <span className="inline-flex flex-wrap items-center gap-1" title={`${row.label} 시리즈 — 같은 설계 ${row.members.length}척`}>
+        {row.members.map((h) => <HullChip key={h} hull={h} />)}
+      </span>
+    );
+  }
   return <span className="inline-flex h-5 items-center rounded-sm bg-n-100 px-1.5 text-meta font-medium text-n-800">{row.label}</span>;
 }
 
