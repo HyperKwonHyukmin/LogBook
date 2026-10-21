@@ -136,6 +136,12 @@ def _restore_hulls(db: Session, registry: dict) -> int:
                 v = plm.get(k)
                 setattr(row, k, (bool(v) if v is not None else None) if k == "delivered"
                         else (str(v) if v is not None else None))
+        series = h.get("series") if isinstance(h.get("series"), dict) else None
+        if series:   # 45 — 시리즈
+            lead = str(series.get("lead") or "") or None
+            row.series_lead = lead if lead and HULL_PATTERN.fullmatch(lead) else None
+            row.series_seq = str(series["seq"])[:10] if series.get("seq") is not None else None
+            row.series_manual = True if series.get("manual") else None
     db.flush()
     return n
 

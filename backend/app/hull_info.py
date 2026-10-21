@@ -97,6 +97,7 @@ def hull_detail(db: Session, hull_no: str, user=None) -> dict:
     return {
         "hull_no": hull_no, "ship_type": hull.ship_type if hull else None, "memo": hull.memo if hull else None,
         "plm": plm_of(hull),   # 30 — PLM 선박 정보(조회 안 했으면 None)
+        "series": series_of(db, hull, hull_no, user),   # 45 — 같은 시리즈 호선
         "drafts": drafts,
         "stats": {"entries": len(entries), "files": files, "kinds": dict(kinds),
                   "zones": ranked(zones),
@@ -115,15 +116,23 @@ def update_hull(db: Session, storage: StoragePaths, actor: str, hull_no: str, pa
         hull = models.Hull(hull_no=hull_no)
         db.add(hull)
         db.flush()
-    before = {"ship_type": hull.ship_type, "memo": hull.memo}
+    before = {"ship_type": hull.ship_type, "memo": hull.memo, "series_lead": hull.series_lead}
     for key in ("ship_type", "memo"):
         if key in patch:
             setattr(hull, key, (patch[key] or "").strip() or None)
+    if "series_lead" in patch:   # 45 — 사람이 정한 시리즈 대표(빈 값 = 시리즈 아님). PLM 일괄 채우기가 덮지 않는다
+        lead = (patch["series_lead"] or "").strip().upper() or None
+        if lead is not None and not HULL_PATTERN.fullmatch(lead):
+            raise HTTPException(status_code=422, detail="invalid_series_lead")
+        if lead != hull.series_lead:
+            hull.series_lead, hull.series_seq = lead, None
+        hull.series_manual = True
     for e in _confirmed_entries(db, hull_no):
         jobs.enqueue(db, "write_meta", e.id)  # entry.json 의 호선 선종을 맞춘다
     db.flush()
     audit.record(db, storage, actor=actor, action="HULL_UPDATE", target_type="hull", target_id=hull_no,
-                 before=before, after={"ship_type": hull.ship_type, "memo": hull.memo}, ip=ip)
+                 before=before, after={"ship_type": hull.ship_type, "memo": hull.memo,
+                                       "series_lead": hull.series_lead}, ip=ip)
     from .ops.registry import write_registry  # 순환 import 방지
 
     write_registry(db, storage)  # 선종·메모를 registry.json 에도 남긴다(05 — 재구축 원천)
@@ -146,13 +155,38 @@ def plm_of(hull: models.Hull | None) -> dict | None:
             "delivered": hull.delivered, "checked_at": hull.plm_checked_at.isoformat() if hull.plm_checked_at else None}
 
 
+SERIES_FIELDS = ("series_lead", "series_seq", "series_manual")   # 45
+
+
 def _snapshot(hull: models.Hull) -> dict:
-    return {"ship_type": hull.ship_type, **{k: getattr(hull, k) for k in PLM_FIELDS}}
+    return {"ship_type": hull.ship_type, **{k: getattr(hull, k) for k in PLM_FIELDS + SERIES_FIELDS}}
+
+
+def series_of(db: Session, hull: models.Hull | None, hull_no: str, user=None) -> dict | None:
+    """45 — 호선 화면의 시리즈: 대표 호선 · 이 호선 순번 · 같은 시리즈 호선(볼 수 있는 확정 자료 수와 함께).
+    시리즈 대표가 없으면 None. 시리즈가 자기 혼자면 members 가 하나."""
+    from .plm_ship import series_members
+
+    if hull is None or not hull.series_lead:
+        return None
+    lead = hull.series_lead
+    members = series_members(db, [lead])[lead]
+    if hull_no not in members:
+        members = sorted({*members, hull_no})
+    seqs = dict(db.query(models.Hull.hull_no, models.Hull.series_seq).filter(models.Hull.hull_no.in_(members)))
+    counts = dict(db.query(models.EntryHull.hull_no, func.count(models.Entry.id))
+                  .join(models.Entry, models.Entry.id == models.EntryHull.entry_id)
+                  .filter(models.EntryHull.hull_no.in_(members), models.Entry.status == "confirmed",
+                          access.visible_entries_filter(user if user is not None else access.SYSTEM))
+                  .group_by(models.EntryHull.hull_no))
+    return {"lead": lead, "seq": hull.series_seq, "manual": bool(hull.series_manual),
+            "members": [{"hull_no": m, "seq": seqs.get(m), "entries": counts.get(m, 0)} for m in members]}
 
 
 def _apply(db: Session, hull: models.Hull, result, *, replace_ship_type: bool) -> bool:
     """조회 결과 하나를 호선 행에 옮긴다. 선종을 바꿨으면 True.
-    PLM 칸은 찾으면 늘 PLM 값으로, 선종(사람이 고칠 수 있는 값)은 replace_ship_type 이거나 비어 있을 때만 선형으로."""
+    PLM 칸은 찾으면 늘 PLM 값으로, 선종(사람이 고칠 수 있는 값)은 replace_ship_type 이거나 비어 있을 때만 선형으로.
+    45 — 시리즈도 같다: 사람이 고친 시리즈(series_manual)는 replace_ship_type(호선 화면 단추)일 때만 PLM 값으로 되돌린다."""
     hull.plm_checked_at = datetime.now().replace(microsecond=0)
     if result.status != "found":
         hull.plm_status = "not_found"   # 이전에 찾은 값은 지우지 않는다(PLM 에서 사라진 호선도 기록은 남긴다)
@@ -166,6 +200,8 @@ def _apply(db: Session, hull: models.Hull, result, *, replace_ship_type: bool) -
         s["shipType"], s["capacity"], s["shipKind"], s["variant"])
     hull.main_engine, hull.ship_class = s["mainEngine"], s["shipClass"]
     hull.delivery_date, hull.delivered = s["deliveryDate"], s["delivered"]
+    if replace_ship_type or not hull.series_manual:
+        hull.series_lead, hull.series_seq, hull.series_manual = s.get("seriesLead"), s.get("seriesSeq"), None
     label = (s["label"] or "")[:50] or None
     if label and (replace_ship_type or not hull.ship_type) and hull.ship_type != label:
         hull.ship_type = label
@@ -267,9 +303,10 @@ def _ensure_confirmed_hull_rows(db: Session) -> int:
 
 
 def fill_from_plm(db: Session, storage: StoragePaths, actor: str, *, only_unchecked: bool = False,
-                  ip: str | None = None) -> dict:
+                  series: bool = False, ip: str | None = None) -> dict:
     """호선 목록 [선종 채우기]·확정 뒤 작업·CLI — 한 번의 조회로 여러 호선을 채운다. 선종은 비어 있을 때만 채운다.
     대상: only_unchecked 면 아직 조회하지 않은 호선(자동), 아니면 찾지 못했거나 안 본 호선 + 선종이 빈 호선.
+    45 — series 면 이미 찾은 호선 중 시리즈가 빈 것(사람이 고친 것 빼고)도 다시 본다(시리즈를 읽기 전에 찾은 호선).
     PLM 장애면 PlmUnavailable·예외를 그대로 올린다(아무것도 바꾸지 않는다)."""
     from . import plm_ship
 
@@ -278,7 +315,8 @@ def fill_from_plm(db: Session, storage: StoragePaths, actor: str, *, only_unchec
     if only_unchecked:
         hulls = [h for h in hulls if h.plm_status is None]
     else:
-        hulls = [h for h in hulls if h.plm_status != "found" or not h.ship_type]
+        hulls = [h for h in hulls if h.plm_status != "found" or not h.ship_type
+                 or (series and not h.series_lead and not h.series_manual)]
     out = {"checked": len(hulls), "found": 0, "not_found": 0, "filled": 0}
     if not hulls:
         return out

@@ -68,6 +68,9 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("hulls", "ship_class", "VARCHAR(20) NULL"),
     ("hulls", "delivery_date", "VARCHAR(10) NULL"),
     ("hulls", "delivered", "TINYINT(1) NULL"),
+    ("hulls", "series_lead", "VARCHAR(8) NULL"),   # 45 — 시리즈
+    ("hulls", "series_seq", "VARCHAR(10) NULL"),
+    ("hulls", "series_manual", "TINYINT(1) NULL"),
     ("files", "removed_from_id", "INT NULL"),      # 37 — 자료에서 뺀 파일(원래 자료 pk)
     ("files", "trash_rel", "VARCHAR(80) NULL"),
     ("batches", "origin", "JSON NULL"),            # 39 — WorkBench 해석 출처
@@ -80,6 +83,7 @@ ADDED_INDEXES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("user_sessions", "ix_user_sessions_wb_ref", ("wb_ref",)),                    # 18 — WorkBench 로그아웃 연동
     ("files", "ix_files_removed_from_id", ("removed_from_id",)),                  # 37 — 자료에서 뺀 파일
     ("batches", "ix_batches_wb_analysis_id", ("wb_analysis_id",)),               # 39 — 'WB #123' 검색
+    ("hulls", "ix_hulls_series_lead", ("series_lead",)),                         # 45 — 시리즈 호선
 )
 
 

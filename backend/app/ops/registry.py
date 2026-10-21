@@ -38,7 +38,10 @@ def build_registry(db: Session) -> dict:
              | ({"plm": {"status": h.plm_status,
                          "checked_at": h.plm_checked_at.isoformat() if h.plm_checked_at else None,
                          **{k: getattr(h, k) for k in PLM_FIELDS}}} if h.plm_status else {})
-             for h in db.query(models.Hull).order_by(models.Hull.hull_no) if h.ship_type or h.memo or h.plm_status]
+             | ({"series": {"lead": h.series_lead, "seq": h.series_seq, "manual": bool(h.series_manual)}}
+                if h.series_lead or h.series_manual else {})   # 45 — 시리즈
+             for h in db.query(models.Hull).order_by(models.Hull.hull_no)
+             if h.ship_type or h.memo or h.plm_status or h.series_lead or h.series_manual]
     roots = {t.id: t.value for t in db.query(models.Tag).filter(models.Tag.alias_of_id.is_(None))}
     tags = [{"kind": t.kind, "value": t.value, "alias_of": roots.get(t.alias_of_id)}
             for t in db.query(models.Tag).filter(models.Tag.alias_of_id.isnot(None), models.Tag.kind != "atype")

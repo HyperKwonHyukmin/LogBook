@@ -118,6 +118,11 @@ class Hull(Base):
     ship_class = Column(String(20), nullable=True)        # SHIP_CLASS1
     delivery_date = Column(String(10), nullable=True)     # 'YYYY-MM-DD'
     delivered = Column(Boolean, nullable=True)
+    # 45 — 시리즈(같은 설계로 여러 척). PLM SHIP_PRE = 시리즈 첫 호선(첫 호선은 자기 번호). 묶음 키는 series_lead or hull_no.
+    # series_manual = 사람이 고친 값 — PLM 일괄 채우기가 덮지 않는다([선박 정보 검색] 단추는 PLM 값으로 되돌린다).
+    series_lead = Column(String(8), nullable=True, index=True)
+    series_seq = Column(String(10), nullable=True)
+    series_manual = Column(Boolean, nullable=True)
 
 
 class Entry(Base):

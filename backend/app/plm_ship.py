@@ -47,7 +47,8 @@ _SHIP_TYPE = re.compile(
     r"(?P<rest>.*)",
     re.IGNORECASE,
 )
-_COLUMNS = ("SHIP_NO", "SHIP_TYPE_NAME", "MAIN_ENGINE", "SHIP_CLASS1", "RESULT_DELIVERY_DATE", "RESULT_DELIVERY_YN")
+_COLUMNS = ("SHIP_NO", "SHIP_TYPE_NAME", "MAIN_ENGINE", "SHIP_CLASS1", "RESULT_DELIVERY_DATE", "RESULT_DELIVERY_YN",
+            "SHIP_PRE", "SHIP_SEQ")   # 45 — 선행호선(시리즈 첫 호선, 첫 호선은 자기 번호) · 시리즈 순번
 
 
 class PlmUnavailable(Exception):
@@ -106,7 +107,9 @@ def to_ship(row: dict) -> dict:
     return {"shipNo": _text(row.get("SHIP_NO")), "shipType": raw_type, **parse_ship_type(raw_type),
             "mainEngine": _text(row.get("MAIN_ENGINE")), "shipClass": _text(row.get("SHIP_CLASS1")),
             "deliveryDate": delivery,
-            "delivered": (_text(row.get("RESULT_DELIVERY_YN")) or "").upper() == "Y"}
+            "delivered": (_text(row.get("RESULT_DELIVERY_YN")) or "").upper() == "Y",
+            "seriesLead": normalize_ship_no(row.get("SHIP_PRE")),
+            "seriesSeq": (_text(row.get("SHIP_SEQ")) or "")[:10] or None}
 
 
 # ---- 접속 ----
@@ -323,6 +326,34 @@ def ship_facets(db: Session, hull_nos) -> tuple[dict, dict, dict]:
         kinds[no] = kind
         sizes[no] = f"{cap}급 {kind}" if cap and kind else None
     return ships, kinds, sizes
+
+
+def series_keys(db: Session, hull_nos) -> dict[str, str]:
+    """45 — 호선 → 시리즈 묶음 키(시리즈 대표 호선, 없으면 자기 번호). 검색 · 관계 지도 · 갖춤 현황이 같은 규칙을 쓴다.
+    호선 행이 없는 번호도 자기 번호로 돌려준다."""
+    nos = {h for h in (hull_nos or []) if h}
+    out = {h: h for h in nos}
+    if nos:
+        for no, lead in (db.query(models.Hull.hull_no, models.Hull.series_lead)
+                         .filter(models.Hull.hull_no.in_(nos), models.Hull.series_lead.isnot(None))):
+            out[no] = lead
+    return out
+
+
+def series_members(db: Session, keys) -> dict[str, list[str]]:
+    """45 — 시리즈 키 → 그 시리즈에 드는 호선(호선 행이 있는 것, 번호순). 대표 호선 자신은 행이 없어도 넣는다."""
+    keys = {k for k in (keys or []) if k}
+    out: dict[str, set] = {k: {k} for k in keys}
+    if keys:
+        for no, lead in (db.query(models.Hull.hull_no, models.Hull.series_lead)
+                         .filter(models.Hull.series_lead.in_(keys))):
+            out[lead].add(no)
+        # 키 번호의 호선 행이 다른 시리즈를 가리키면(사람이 고침) 그 번호 자신은 이 묶음에 들지 않는다
+        for no, lead in (db.query(models.Hull.hull_no, models.Hull.series_lead)
+                         .filter(models.Hull.hull_no.in_(keys), models.Hull.series_lead.isnot(None))):
+            if lead != no:
+                out[no].discard(no)
+    return {k: sorted(v, key=lambda h: (not h.isdigit(), h.zfill(8))) for k, v in out.items()}
 
 
 def register_hulls(db: Session, hull_nos) -> Optional[models.Job]:

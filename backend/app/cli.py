@@ -408,15 +408,17 @@ def report_catalog_migrate(db: Session, storage: StoragePaths, *, apply: bool = 
     return plan
 
 
-def plm_fill(db: Session, storage: StoragePaths, *, only_unchecked: bool = False, out=None) -> int:
-    """30 — 사내 PLM(VT_PLM_SHIP)에서 호선 선박 정보를 채운다. 선종은 비어 있는 호선만 선형으로."""
+def plm_fill(db: Session, storage: StoragePaths, *, only_unchecked: bool = False, series: bool = False,
+             out=None) -> int:
+    """30 — 사내 PLM(VT_PLM_SHIP)에서 호선 선박 정보를 채운다. 선종은 비어 있는 호선만 선형으로.
+    45 — series 면 시리즈가 빈 찾은 호선도 다시 본다(시리즈를 읽기 전에 채운 호선에 한 번)."""
     from fastapi import HTTPException
 
     from .hull_info import fill_from_plm
 
     out = out or sys.stdout
     try:
-        r = fill_from_plm(db, storage, "system", only_unchecked=only_unchecked)
+        r = fill_from_plm(db, storage, "system", only_unchecked=only_unchecked, series=series)
     except HTTPException as exc:
         print(f"PLM 조회 실패: {exc.detail}", file=out)
         return 2
@@ -498,6 +500,7 @@ def main(argv: list[str]) -> int:
     df.add_argument("--apply", action="store_true", help="실제로 저장한다(감사 REPORT_META·entry.json 갱신)")
     pf = sub.add_parser("plm-fill", help="30 — 사내 PLM 에서 호선 선박 정보를 한 번에 조회해 채운다(선종은 빈 것만)")
     pf.add_argument("--unchecked", action="store_true", help="아직 조회하지 않은 호선만(기본: 못 찾은 것·선종 빈 것도)")
+    pf.add_argument("--series", action="store_true", help="45 — 이미 찾은 호선 중 시리즈가 빈 것도 다시 조회(한 번)")
     pc = sub.add_parser("plm-check", help="30 — PLM 접속 환경(모드·tnsnames 항목)을 보이고 호선 하나를 조회해 본다(바꾸지 않음)")
     pc.add_argument("ship_no", nargs="?", default="3370")
     vf = sub.add_parser("verify", help="DB 의 파일 위치와 공유 폴더를 대조한다(기본은 보고만)")
@@ -571,7 +574,7 @@ def main(argv: list[str]) -> int:
             document_type_fill(db, get_storage(), apply=args.apply)
             return 0
         if args.cmd == "plm-fill":
-            return plm_fill(db, get_storage(), only_unchecked=args.unchecked)
+            return plm_fill(db, get_storage(), only_unchecked=args.unchecked, series=args.series)
         if args.cmd == "verify":
             from .ops.verify import has_problems, verify
 

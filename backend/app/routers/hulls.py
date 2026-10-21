@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/hulls", tags=["hulls"])
 class HullPatch(BaseModel):
     ship_type: str | None = Field(default=None, max_length=50)
     memo: str | None = Field(default=None, max_length=2000)
+    series_lead: str | None = Field(default=None, max_length=8)   # 45 — 시리즈 대표(빈 값 = 시리즈 아님)
 
 
 @router.get("")
@@ -47,7 +48,8 @@ def patch_hull(hull_no: str, body: HullPatch, request: Request, db: Session = De
     access.require_shared_writer(user)   # 15 — 호선 선종·메모는 공용 데이터라 LV2 이상
     h = hull_info.update_hull(db, storage, user.employee_id, hull_no, body.model_dump(exclude_unset=True),
                               client_ip(request))
-    return {"hull_no": h.hull_no, "ship_type": h.ship_type, "memo": h.memo}
+    return {"hull_no": h.hull_no, "ship_type": h.ship_type, "memo": h.memo,
+            "series": hull_info.series_of(db, h, h.hull_no, user)}
 
 
 @router.post("/{hull_no}/plm")

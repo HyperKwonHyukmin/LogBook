@@ -78,7 +78,7 @@ def test_lookup_found_shape(plm):
     assert r.status == "found" and plm["calls"] == [["3370"]]
     assert r.ship == {"shipNo": "3370", "shipType": "174K-LNG", "capacity": "174K", "shipKind": "LNG", "variant": None,
                       "label": "174K LNG", "mainEngine": "G70ME-C10.5-GA-EGRBP", "shipClass": "BV",
-                      "deliveryDate": "2025-02-28", "delivered": True}
+                      "deliveryDate": "2025-02-28", "delivered": True, "seriesLead": None, "seriesSeq": None}
 
 
 def test_lookup_empty_delivery_and_statuses(plm):
