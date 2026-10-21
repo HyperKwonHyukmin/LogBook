@@ -224,6 +224,10 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry, b
     # 38 — 대상 구조물(있을 때만)
     if d["target"]:
         meta["target"] = d["target"]
+    # 46 — 담당자(명부 사본 — 재구축 때 명부를 되살린다, 있을 때만)
+    from .. import people
+    if d["assignees"]:
+        meta["assignees"] = people.export(d["assignees"])
     # 21 — 프로젝트(자료의 소속, 있을 때만)
     meta["files"] = [{k: f[k] for k in ("rel_path", "kind", "size", "sha256")} for f in d["files"]]
     # 14 — 사용자가 정리한 판 배치(재구축 원천). 정리한 것이 없으면 쓰지 않는다(자동 추정은 다시 계산된다)
@@ -244,7 +248,8 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry, b
             + f"구역: {', '.join(d['zones']) or '-'}\n"
             + (f"대상: {d['target']}\n" if d["target"] else "")
             + f"태그: {', '.join(d['tags']) or '-'}\n"
-            f"공개 범위: {d['label'] or '일반'}\n"
+            + (f"담당자: {', '.join(people.label(p) for p in d['assignees'])}\n" if d["assignees"] else "")
+            + f"공개 범위: {d['label'] or '일반'}\n"
             f"올린 사람: {d['uploaded_by'] or '-'}  확정: {d['confirmed_by'] or '-'} {d['confirmed_at'] or ''}\n"
             f"파일 {len(d['files'])}개 — 원본은 files 폴더. 이 폴더는 Hi-TESS LogBook 이 관리합니다(직접 수정 금지).\n")
     write_text_atomic(base / "_INFO.txt", info)

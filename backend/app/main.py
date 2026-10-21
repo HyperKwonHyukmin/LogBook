@@ -21,6 +21,8 @@ from .routers import draft_attachments as draft_attachments_router
 from .routers import vocab as vocab_router
 from .routers import wb_targets as wb_targets_router
 from .routers import reports as reports_router
+from .routers import people as people_router
+from .routers import updates as updates_router
 from .spa import mount_spa
 from .vocab import safe_seed
 from .wb_targets import safe_seed as safe_seed_wb_rules
@@ -77,6 +79,7 @@ def create_app(frontend_dist: Path | None | object = _USE_DEFAULT) -> FastAPI:
     app.include_router(system.router)
     app.include_router(batches.router)
     app.include_router(entries.router)
+    app.include_router(people_router.router)   # 46 — 담당자 명부
     app.include_router(draft_attachments_router.router)
     app.include_router(uploads.router)
     app.include_router(suggest.router)
@@ -102,6 +105,7 @@ def create_app(frontend_dist: Path | None | object = _USE_DEFAULT) -> FastAPI:
     app.include_router(wb_targets_router.router)
     app.include_router(wb_targets_router.admin_router)
     dist = settings.frontend_dist if frontend_dist is _USE_DEFAULT else frontend_dist
+    app.include_router(updates_router.router)   # 46 — 개선·업데이트 이력(/updates, LV3)
     mount_spa(app, dist)  # 반드시 마지막 — 나머지 경로를 index.html 로 받는다
     return app
 

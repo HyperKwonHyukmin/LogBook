@@ -6,9 +6,14 @@
 // 15 — 해석 시기(analysis_period)는 없앴다. 20 — '호선 없음(공용)'(no_hull, 참/거짓)
 // 29 — 프로젝트(21)는 없앴다
 // 38 — 대상 구조물(target, 하나·선택). 42 — 해석 종류(analysis_type)는 없앴다
-export const EDIT_FIELDS = ['title', 'description', 'hulls', 'no_hull', 'zones', 'target', 'tags'];
+// 46 — 담당자(assignees, 명부 사람 목록 — 순서대로, 첫 사람이 주 담당자)
+export const EDIT_FIELDS = ['title', 'description', 'hulls', 'no_hull', 'zones', 'target', 'tags', 'assignees'];
 const LIST_FIELDS = new Set(['hulls', 'zones', 'tags']);
 const BOOL_FIELDS = new Set(['no_hull']);
+const PEOPLE_FIELDS = new Set(['assignees']);
+
+/** 46 — 담당자 한 사람의 열쇠: 명부 행 id, 아직 명부에 없는 WorkBench 사용자는 사번. */
+export const personKey = (p) => (p?.id ? `p${p.id}` : `wb:${p?.employee_id}`);
 
 /** 서버 Entry → 고칠 값(문자열은 '' 로, 목록은 배열로). */
 export function editValues(entry) {
@@ -20,11 +25,14 @@ export function editValues(entry) {
     zones: [...(entry?.zones || [])],
     target: entry?.target || '',
     tags: [...(entry?.tags || [])],
+    assignees: [...(entry?.assignees || [])],
   };
 }
 
 const norm = (k, v) => {
   if (LIST_FIELDS.has(k)) return JSON.stringify(v || []);
+  // 명부를 고쳐(퇴사 표시 등) 이름·부서가 바뀌어도 같은 사람이면 같은 값이다
+  if (PEOPLE_FIELDS.has(k)) return JSON.stringify((v || []).map(personKey));
   if (BOOL_FIELDS.has(k)) return v ? '1' : '';
   return String(v ?? '').trim();
 };
@@ -39,6 +47,7 @@ export function patchBody(base, draft) {
   const body = {};
   for (const k of changedFields(base, draft)) {
     if (LIST_FIELDS.has(k)) body[k] = [...draft[k]];
+    else if (PEOPLE_FIELDS.has(k)) body[k] = draft[k].map((p) => (p.id ? { id: p.id } : { employee_id: p.employee_id }));
     else if (BOOL_FIELDS.has(k)) body[k] = !!draft[k];
     else body[k] = String(draft[k] ?? '').trim() || null;
   }

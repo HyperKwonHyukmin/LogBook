@@ -11,6 +11,7 @@ export const ACTION_LABELS = {
   FILES_PURGE: '뺀 파일 영구 삭제',
   ENTRY_TRASH: '휴지통으로', ENTRY_RESTORE: '복원', DRAFT_DISCARD: '초안 버림',
   TAG_ALIAS: '동의어 묶기', TAG_UNALIAS: '동의어 풀기', HULL_UPDATE: '호선 정보 수정', HULL_PLM: '선박 정보(PLM) 반영',
+  PERSON_UPDATE: '담당자 명부 수정',   // 46
   TRASH_PURGE: '영구 삭제', JOB_RETRY: '작업 다시 시도',
   OPS_REEXTRACT: '본문 다시 추출', OPS_RECONVERT: 'BDF 다시 변환', OPS_BACKUP: '수동 백업',
   SOLVE_CHECK: '해석 검증 요청', OPS_SOLVE_CHECK: '해석 검증 일괄',
@@ -208,6 +209,7 @@ export const MODEL_STATE_LABELS = {
 export const MATCH_LABELS = { entry_id: 'Entry 번호', hull: '호선', title: '제목', tag: '태그',
   target: '대상', description: '설명', file: '파일명', body: '본문',
   wb_origin: 'WorkBench 해석',   // 39 — 'WB #123' 검색
+  assignee: '담당자',   // 46
   document_type: '문서 분류' };   // 21
 
 // 23 — 문서 분류 목록과 빠른 구분(보고서/발표자료/기타) 묶음은 프런트에 사본을 두지 않는다 — 서버(models.REPORT_DOCUMENT_TYPES·

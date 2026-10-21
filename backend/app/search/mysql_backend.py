@@ -489,6 +489,13 @@ class MySqlSearch:
         if users:
             for (eid,) in db.query(E.id).filter(live, E.uploaded_by.in_(users)):
                 h.entry(eid, S_DESC, "uploaded_by")
+        # 46 — 담당자: 명부의 이름·사번이 낱말과 정확히 같을 때(올린 사람과 같은 규칙)
+        pids = [p for (p,) in db.query(models.Person.id)
+                .filter((models.Person.name == term) | (models.Person.employee_id == term.upper()))]
+        if pids:
+            for (eid,) in (db.query(models.EntryAssignee.entry_id).join(E, E.id == models.EntryAssignee.entry_id)
+                           .filter(live, models.EntryAssignee.person_id.in_(pids)).distinct()):
+                h.entry(eid, S_DESC, "assignee")
 
     # ---- 필터용 속성 ----
     def _rows(self, db: Session, ids: set[int], vocab: dict) -> dict[int, dict]:

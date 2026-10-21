@@ -37,14 +37,16 @@ import HullPlmLookup, { HullPlmSummary } from '../components/hull/HullPlmLookup.
 import NeedsFixBadge from '../components/ui/NeedsFixBadge.jsx';
 import ModelTraits, { defaultFile } from '../components/preview/ModelTraits.jsx';
 import WbOrigins from '../components/workbench/WbOrigins.jsx';
+import AssigneeInput, { AssigneeList } from '../components/people/AssigneeInput.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
 // 21 — 프로젝트(있을 때만 기록). 29 — 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
 // 42 — 해석 종류도 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
 const FIELD_LABELS = { title: '제목', analysis_type: '해석 종류', description: '설명',
-  hulls: '호선', no_hull: '호선 없음(공용)', project: '프로젝트', zones: '구역', target: '대상', tags: '태그' };
+  hulls: '호선', no_hull: '호선 없음(공용)', project: '프로젝트', zones: '구역', target: '대상', tags: '태그',
+  assignees: '담당자' };   // 46
 // 감사 기록에서 '참/값일 때만' 실리는 칸 — before 에만 있으면 지운 것이다
-const OPTIONAL_KEYS = new Set(['no_hull', 'project', 'target']);
+const OPTIONAL_KEYS = new Set(['no_hull', 'project', 'target', 'assignees']);
 const hullRule = (v) => /^\d{4}$/.test(v) || '호선은 숫자 4자리입니다.';
 const show = (v) => (v === true ? '예' : (Array.isArray(v) ? v.join(', ') : v) || '(없음)');
 const HISTORY_FILES_SHOWN = 5;
@@ -754,6 +756,10 @@ export default function EntryPage() {
               <Prop label="태그" changed={isChanged('tags')}>
                 <ChipInput label="태그" kind="tag" values={draft.tags} onChange={set('tags')} />
               </Prop>
+              {/* 46 — 담당자(과제를 한 사람) — 올린 사람과 따로 */}
+              <Prop label="담당자" changed={isChanged('assignees')}>
+                <AssigneeInput values={draft.assignees} onChange={set('assignees')} />
+              </Prop>
               <Prop label="올린 사람">
                 {entry.uploaded_by ? <FilterLink field="uploaded_by" value={entry.uploaded_by}>{person(entry.uploaded_by)}</FilterLink> : person(null)}
               </Prop>
@@ -778,6 +784,9 @@ export default function EntryPage() {
               <Prop label="태그">
                 {entry.tags.length ? <span className="flex flex-wrap gap-1">{entry.tags.map((t) => <TagLink key={t} tag={t} />)}</span>
                   : <span className="text-n-500">—</span>}
+              </Prop>
+              <Prop label="담당자">
+                <AssigneeList people={entry.assignees} />
               </Prop>
               <Prop label="올린 사람">
                 {entry.uploaded_by ? <FilterLink field="uploaded_by" value={entry.uploaded_by}>{person(entry.uploaded_by)}</FilterLink> : person(null)}

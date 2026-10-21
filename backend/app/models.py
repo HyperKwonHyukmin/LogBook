@@ -188,6 +188,37 @@ class EntryHull(Base):
     is_primary = Column(Boolean, nullable=False, default=False)
 
 
+class Person(Base):
+    """46 — 담당자 명부. 과제를 실제로 한 사람(올린 사람과 다를 수 있다). WorkBench 에서 골라 넣은 사람(source='wb',
+    사번 있음)과 손으로 만든 사람(source='manual', 사번 없을 수 있음 — 퇴사자 등)을 같은 표에 둔다.
+    여러 자료가 한 행을 가리키므로 퇴사 처리(employed)를 한 번 하면 그 사람의 모든 자료에 보인다.
+    재구축 원천은 각 entry.json 의 assignees(사람 정보 사본) — 고치면 그 사람의 확정 자료 entry.json 을 다시 쓴다."""
+
+    __tablename__ = "people"
+    __table_args__ = (CheckConstraint("source IN ('wb','manual')", name="ck_people_source"),)
+
+    id = Column(Integer, primary_key=True)
+    employee_id = Column(String(20), unique=True, nullable=True)   # NULL 은 여러 개 둘 수 있다(MySQL UNIQUE)
+    name = Column(String(50), nullable=False)
+    department = Column(String(100), nullable=True)
+    position = Column(String(50), nullable=True)
+    employed = Column(Boolean, nullable=False, default=True, server_default=sa_text("1"))   # 재직(참)·퇴사(거짓)
+    source = Column(String(10), nullable=False, default="manual")
+    created_by = Column(String(20), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=_now)
+    updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
+
+
+class EntryAssignee(Base):
+    """46 — 자료의 담당자(여러 명, sort_order 0 이 주 담당자)."""
+
+    __tablename__ = "entry_assignees"
+
+    entry_id = Column(Integer, ForeignKey("entries.id", ondelete="CASCADE"), primary_key=True)
+    person_id = Column(Integer, ForeignKey("people.id"), primary_key=True, index=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+
+
 class Tag(Base):
     """자유 입력 태그(구역 등). alias_of 로 동의어를 묶는다(03 에서 화면 제공)."""
 

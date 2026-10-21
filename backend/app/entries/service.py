@@ -8,7 +8,7 @@ from pathlib import Path, PurePosixPath
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from .. import access, audit, jobs, models, vocab
+from .. import access, audit, jobs, models, people, vocab
 from ..storage.paths import StoragePaths, long_join, to_long
 from ..revisions.series import refresh as refresh_revisions, series_brief
 from .same_model import find_same_models
@@ -147,6 +147,7 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
         "zones": zones,
         "target": target,   # 38 — 대상 구조물
         "tags": tags_of(db, entry, "free"),
+        "assignees": people.assignees_of(db, entry),   # 46 — 담당자(과제를 한 사람, 올린 사람과 따로)
         "hull_evidence": entry.hull_evidence or [],
         "uploaded_by": entry.uploaded_by, "confirmed_by": entry.confirmed_by,
         "confirmed_at": entry.confirmed_at.isoformat() if entry.confirmed_at else None,
@@ -207,7 +208,8 @@ def snapshot(db: Session, entry: models.Entry) -> dict:
     d = entry_to_dict(db, entry)
     return {k: d[k] for k in ("title", "description", "zones", "tags")} | {
         "hulls": [h["hull_no"] for h in d["hulls"]]} | ({"no_hull": True} if d["no_hull"] else {}) | (
-        {"target": d["target"]} if d["target"] else {})   # 38 — 값이 있을 때만(no_hull 과 같은 방식)
+        {"target": d["target"]} if d["target"] else {}) | (   # 38 — 값이 있을 때만(no_hull 과 같은 방식)
+        {"assignees": [people.label(p) for p in d["assignees"]]} if d["assignees"] else {})   # 46
 
 
 def can_edit_draft(user: models.User, entry: models.Entry) -> bool:
@@ -350,6 +352,8 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
         set_tags(db, entry, "target", [patch["target"]] if patch["target"] else [])
     if "tags" in patch:
         set_tags(db, entry, "free", patch["tags"] or [])
+    if "assignees" in patch:   # 46 — 담당자({id} 또는 WorkBench 사번 {employee_id})
+        people.set_assignees(db, entry, people.resolve_refs(db, patch["assignees"] or []))
     if "merge_into_id" in patch:
         _set_merge_into(db, entry, patch["merge_into_id"], user)
     if patch.get("access"):
@@ -477,6 +481,7 @@ def _clear_dangling_references(db: Session, entry_id: int) -> None:
         {"target_entry_id": None}, synchronize_session=False)
     # 10 — 즐겨찾기는 Entry 와 함께 사라진다(영구 삭제·합치기). 휴지통 이동은 여기를 거치지 않아 남는다
     db.query(models.Favorite).filter_by(entry_id=entry_id).delete(synchronize_session=False)
+    db.query(models.EntryAssignee).filter_by(entry_id=entry_id).delete(synchronize_session=False)   # 46
 
 
 def _recheck_duplicates(db: Session, user: models.User, batch: models.Batch, files: list[models.File],
@@ -539,6 +544,7 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
         try:
             for f, r in plans:
                 f.entry_id, f.rel_path, f.location = target.id, r, "vault"
+            people.copy_assignees(db, entry, target)   # 46 — 초안에 단 담당자도 대상 자료에
             db.query(models.ModelRevision).filter_by(entry_id=entry.id).delete(synchronize_session=False)
             _clear_dangling_references(db, entry.id)
             db.delete(entry)
@@ -861,6 +867,7 @@ def split(db: Session, entry: models.Entry, user: models.User, file_ids: list[in
         db.add(models.EntryHull(entry_id=new.id, hull_no=h.hull_no, is_primary=h.is_primary))
     for f in files:
         f.entry_id = new.id
+    people.copy_assignees(db, entry, new)   # 46
     entry.version += 1
     db.commit()
     refresh_revisions(db, entry.id)   # 14 — 판 묶음은 Entry 안에서만
@@ -882,6 +889,7 @@ def merge(db: Session, entry: models.Entry, other: models.Entry, user: models.Us
     if entry.id == other.id or entry.batch_id != other.batch_id:
         raise HTTPException(status_code=422, detail="different_batch")
     db.query(models.File).filter_by(entry_id=other.id).update({"entry_id": entry.id}, synchronize_session=False)
+    people.copy_assignees(db, other, entry)   # 46
     _clear_dangling_references(db, other.id)
     db.query(models.ModelRevision).filter_by(entry_id=other.id).delete(synchronize_session=False)
     db.delete(other)

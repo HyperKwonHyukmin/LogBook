@@ -1,5 +1,5 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Activity, Anchor, ClipboardCheck, Columns2, FileText, Grid2x2Check, History, Inbox, ListTree, ScanSearch, Search, Send, Star, Tags, Trash2, Users, Waypoints } from 'lucide-react';
+import { Activity, Anchor, ClipboardCheck, Columns2, FileText, Grid2x2Check, History, Inbox, ListTree, ScanSearch, ScrollText, Search, Send, Star, Tags, Trash2, Users, Waypoints } from 'lucide-react';
 
 // 10 — 검색과 즐겨찾기는 같은 화면('/')이고 주소의 fav=1 로 갈린다
 const isFav = (search) => new URLSearchParams(search).get('fav') === '1';
@@ -80,6 +80,12 @@ export default function SideNav({ isAdmin, storage }) {
           <Item to="/admin/wb-targets" label="WorkBench 연결 규칙" icon={Send} pathname={pathname} />
           {/* 20 — 기존 자료를 필수 분류·제목 형식에 맞추기 */}
           <Item to="/admin/cleanup" label="자료 정비" icon={ClipboardCheck} pathname={pathname} />
+          {/* 46 — 개선·업데이트 이력(서버의 독립 페이지 /updates — 앱 화면이 아니라 새 탭으로) */}
+          <a href="/updates" target="_blank" rel="noopener" className={`group ${linkClass({ isActive: false })}`}>
+            <ScrollText size={16} strokeWidth={1.75} aria-hidden="true"
+                        className="shrink-0 text-on-navy-icon transition-colors duration-150 ease-out group-hover:text-on-navy-muted" />
+            업데이트 이력
+          </a>
         </div>
       )}
       <div role="status" title={reachable ? '공유 폴더에 연결되어 있습니다' : '공유 폴더에 연결할 수 없습니다'}

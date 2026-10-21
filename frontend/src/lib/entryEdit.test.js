@@ -5,7 +5,18 @@ const E = { title: '제목', description: null, hulls: [{ hull_no: '9001' }, { h
 
 test('서버 값 → 고칠 값', () => {
   expect(editValues(E)).toEqual({ title: '제목', description: '', hulls: ['9001', '9002'], no_hull: false, zones: ['선미부'],
-    target: '', tags: [] });
+    target: '', tags: [], assignees: [] });
+});
+
+test('46 — 담당자: 같은 사람이면 이름·재직이 바뀌어도 같은 값, 본문은 id 또는 WorkBench 사번', () => {
+  const kim = { id: 7, employee_id: 'N1', name: '김', employed: true };
+  const base = editValues({ ...E, assignees: [kim] });
+  expect(changedFields(base, { ...base, assignees: [{ ...kim, employed: false, name: '김(퇴사)' }] })).toEqual([]);
+  const draft = { ...base, assignees: [{ id: null, employee_id: 'N2', name: '이' }, kim] };
+  expect(changedFields(base, draft)).toEqual(['assignees']);
+  expect(patchBody(base, draft)).toEqual({ assignees: [{ employee_id: 'N2' }, { id: 7 }] });
+  expect(patchBody(base, { ...base, assignees: [] })).toEqual({ assignees: [] });
+  expect(sameEditable({ ...E, assignees: [kim] }, { ...E, version: 4, assignees: [{ ...kim, employed: false }] })).toBe(true);
 });
 
 test('바뀐 칸만 PATCH 본문에 — 빈 글자는 null, 앞뒤 공백 무시, 호선은 순서도 본다', () => {

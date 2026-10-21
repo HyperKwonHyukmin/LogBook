@@ -189,6 +189,9 @@ def _restore_entry(db: Session, storage: StoragePaths, data: dict, *, status: st
     set_tags(db, e, "zone", [str(z) for z in data.get("zones") or []])
     if isinstance(data.get("target"), str) and data["target"].strip():   # 38 — 대상 구조물
         set_tags(db, e, "target", [data["target"]])
+    if data.get("assignees"):   # 46 — 담당자(명부 행을 찾거나 만든다)
+        from ..people import restore_assignees
+        restore_assignees(db, e, data["assignees"])
     set_tags(db, e, "free", [str(t) for t in data.get("tags") or []])
     files: list[models.File] = []
     missing = 0

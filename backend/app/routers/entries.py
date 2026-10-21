@@ -16,6 +16,12 @@ from ..storage.paths import StoragePaths
 router = APIRouter(prefix="/api", tags=["entries"])
 
 
+class AssigneeRef(BaseModel):
+    """46 — 담당자 하나: 명부 행 id, 또는 아직 명부에 없는 WorkBench 사용자의 사번."""
+    id: int | None = None
+    employee_id: str | None = Field(default=None, max_length=20)
+
+
 class EntryPatch(BaseModel):
     # 42 — analysis_type 은 받지 않는다(옛 화면이 보내도 모르는 칸으로 무시)
     version: int
@@ -28,7 +34,8 @@ class EntryPatch(BaseModel):
     merge_into_id: str | None = None
     access: str | None = Field(default=None, pattern="^(shared|normal|blocked)$")   # 15 — 초안에서만
     no_hull: bool | None = None       # 20 — '호선 없음(공용)'
-    title_auto: bool | None = None    # 20 — 제목을 형식대로 다시 만들기(호선·구역·대상 + 구별자)
+    title_auto: bool | None = None
+    assignees: list[AssigneeRef] | None = Field(default=None, max_length=20)   # 46 — 담당자(순서대로, 첫 사람이 주)    # 20 — 제목을 형식대로 다시 만들기(호선·구역·대상 + 구별자)
 
 
 class AccessBody(BaseModel):
