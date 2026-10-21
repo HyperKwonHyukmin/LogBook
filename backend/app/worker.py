@@ -249,6 +249,16 @@ def main() -> None:
         if recovered:
             log.info("이전 실행에서 멈춘 작업 %d개를 복구해 다시 큐에 넣었습니다.", recovered)
         _log_orphaned_staging_folders(recover_db, storage)
+        # 45 — 시작할 때 PLM 조회가 남은 호선(시리즈를 안 본 호선 포함)이 있으면 작업 하나 — Update 뒤 손으로 돌리지 않게
+        try:
+            from .plm_ship import enqueue_fill
+
+            if enqueue_fill(recover_db) is not None:
+                recover_db.commit()
+                log.info("PLM 호선 조회 작업을 넣었습니다(남은 호선 · 시리즈).")
+        except Exception:
+            recover_db.rollback()
+            log.exception("PLM 호선 조회 작업을 넣지 못함")
     finally:
         recover_db.close()
 

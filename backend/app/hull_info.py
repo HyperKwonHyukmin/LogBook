@@ -201,7 +201,9 @@ def _apply(db: Session, hull: models.Hull, result, *, replace_ship_type: bool) -
     hull.main_engine, hull.ship_class = s["mainEngine"], s["shipClass"]
     hull.delivery_date, hull.delivered = s["deliveryDate"], s["delivered"]
     if replace_ship_type or not hull.series_manual:
-        hull.series_lead, hull.series_seq, hull.series_manual = s.get("seriesLead"), s.get("seriesSeq"), None
+        # PLM 에 선행호선이 없으면 자기 번호 — '시리즈를 봤고 혼자'. 비어 있는 것(None)은 '아직 시리즈를 안 본 호선'만 남는다
+        hull.series_lead = s.get("seriesLead") or (hull.hull_no if HULL_PATTERN.fullmatch(hull.hull_no) else None)
+        hull.series_seq, hull.series_manual = s.get("seriesSeq"), None
     label = (s["label"] or "")[:50] or None
     if label and (replace_ship_type or not hull.ship_type) and hull.ship_type != label:
         hull.ship_type = label
@@ -336,6 +338,11 @@ def _ensure_confirmed_hull_rows(db: Session) -> int:
     return added
 
 
+def needs_series(h: models.Hull) -> bool:
+    """45 — PLM 에서 찾았는데 시리즈를 아직 안 본 호선(사람이 정한 시리즈는 빼고)."""
+    return h.plm_status == "found" and not h.series_lead and not h.series_manual
+
+
 def _known_leads(db: Session) -> set[str]:
     return {x for (x,) in db.query(models.Hull.series_lead).distinct() if x}
 
@@ -351,10 +358,10 @@ def fill_from_plm(db: Session, storage: StoragePaths, actor: str, *, only_unchec
     _ensure_confirmed_hull_rows(db)
     hulls = [h for h in db.query(models.Hull).order_by(models.Hull.hull_no) if HULL_PATTERN.fullmatch(h.hull_no)]
     if only_unchecked:
-        hulls = [h for h in hulls if h.plm_status is None]
+        # 45 — 자동 작업은 시리즈를 아직 안 본 찾은 호선(시리즈 기능 전에 찾은 호선)도 함께 — 단추 · CLI 없이 채워지게
+        hulls = [h for h in hulls if h.plm_status is None or needs_series(h)]
     else:
-        hulls = [h for h in hulls if h.plm_status != "found" or not h.ship_type
-                 or (series and not h.series_lead and not h.series_manual)]
+        hulls = [h for h in hulls if h.plm_status != "found" or not h.ship_type or (series and needs_series(h))]
     out = {"checked": len(hulls), "found": 0, "not_found": 0, "filled": 0, "series_added": 0}
     if not hulls:
         if series:   # 45 — 조회할 호선이 없어도 이미 아는 시리즈의 같은 시리즈 호선은 채운다

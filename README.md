@@ -98,6 +98,7 @@ SHOW GRANTS FOR '<logbook 계정>'@'<호스트>';
    `PLM_ORACLE_LIB_DIR`(145 의 PLM 은 10G password verifier 라 Oracle Client 폴더를 주는 thick mode 가 필요하다) ·
    **`TNS_ADMIN`**(별칭 `HIPLM` 을 풀 tnsnames.ora 폴더 — 빠지면 다른 tnsnames 의 옛 주소로 가서 `ORA-12541 No listener`).
 3. 서버 재시작 → 호선 화면에서 [선박 정보 검색]. 처음 한 번은 `.venv\Scripts\python.exe -m app.cli plm-fill` 로 기존 호선을 모두 채운다.
+   시리즈 호선(45, 2026-10-21): PLM 선행호선이 같은 호선은 검색 · 관계 지도 · 갖춤 현황에서 한 묶음이다. 시리즈는 자동으로 채운다 — 워커가 시작할 때 · 자료를 올리고 확정할 때 시리즈를 아직 안 본 호선과 같은 시리즈 호선(자료 없는 것 포함)을 PLM 에서 읽는다. 바로 채우려면 `plm-fill --series`.
 
 접속이 안 되면 `.venv\Scripts\python.exe -m app.cli plm-check 3370` — 모드(thin/thick)·`TNS_ADMIN`·별칭이 가리키는 tnsnames 항목을 보이고 한 번 조회해 본다(WorkBench `scripts\inspect_plm_hull_tables.py` 결과와 견준다).
 

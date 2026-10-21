@@ -71,7 +71,9 @@ def test_hull_detail_shows_series(client, db, make_user, make_entry_file, auth_h
                                        {"hull_no": "3371", "seq": "2", "entries": 2}]}
     make_entry_file(title="d", hulls=("3500",), name="d.pdf")
     client.post("/api/hulls/plm-fill", headers=h)
-    assert client.get("/api/hulls/3500", headers=h).json()["series"] is None
+    # PLM 에 선행호선이 없는 호선 = 자기 번호(시리즈를 봤고 혼자) — 화면은 '한 척'
+    assert client.get("/api/hulls/3500", headers=h).json()["series"] == {
+        "lead": "3500", "seq": None, "manual": False, "members": [{"hull_no": "3500", "seq": None, "entries": 1}]}
 
 
 def test_manual_series_kept_by_fill_and_reset_by_button(client, db, storage, make_user, make_entry_file,
@@ -254,3 +256,45 @@ def test_sibling_lookup_failure_does_not_block_fill(client, db, make_user, make_
     r = client.post("/api/hulls/plm-fill", headers=auth_headers("A100001")).json()
     assert r["found"] == 1 and r["series_added"] == 0
     assert db.get(models.Hull, "3371") is None
+
+
+
+# ---- 자동 — 단추 · CLI 없이 ----
+
+def test_auto_job_fills_series_of_already_found_hulls(db, storage, make_entry_file, monkeypatch, plm):
+    """시리즈 기능 전에 찾은 호선(found · 시리즈 없음)도 자동 작업(only_unchecked)과 작업 넣기가 다룬다."""
+    from app import hull_info
+
+    monkeypatch.setattr(plm_ship, "is_configured", lambda: True)
+    make_entry_file(title="x", hulls=("3371",), name="a.pdf")
+    hull = db.get(models.Hull, "3371")
+    hull.plm_status, hull.ship_type = "found", "174K LNG"
+    db.query(models.Job).delete()
+    db.commit()
+    assert plm_ship.enqueue_fill(db) is not None          # 워커 시작 · 확정 때 넣는 작업
+    r = hull_info.fill_from_plm(db, storage, "system", only_unchecked=True)
+    assert r["checked"] == 1 and r["series_added"] == 1   # 3371 시리즈 + 같은 시리즈 3370
+    db.expire_all()
+    assert db.get(models.Hull, "3371").series_lead == "3370" and db.get(models.Hull, "3370").series_seq == "1"
+    db.query(models.Job).delete()
+    db.commit()
+    assert plm_ship.enqueue_fill(db) is None              # 더 할 일이 없다(되풀이하지 않는다)
+
+
+def test_auto_job_skips_manual_and_marks_alone(db, storage, make_entry_file, monkeypatch, plm):
+    from app import hull_info
+
+    monkeypatch.setattr(plm_ship, "is_configured", lambda: True)
+    make_entry_file(title="x", hulls=("3500",), name="a.pdf")
+    make_entry_file(title="y", hulls=("3371",), name="b.pdf")
+    h3500, h3371 = db.get(models.Hull, "3500"), db.get(models.Hull, "3371")
+    h3500.plm_status = h3371.plm_status = "found"
+    h3371.series_manual = True                             # 사람이 '시리즈 아님'으로 정함
+    db.query(models.Job).delete()
+    db.commit()
+    r = hull_info.fill_from_plm(db, storage, "system", only_unchecked=True)
+    assert r["checked"] == 1
+    db.expire_all()
+    assert db.get(models.Hull, "3500").series_lead == "3500"   # PLM 에 시리즈 없음 → 자기 번호
+    assert db.get(models.Hull, "3371").series_lead is None
+    assert plm_ship.enqueue_fill(db) is None

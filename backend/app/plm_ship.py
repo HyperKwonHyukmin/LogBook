@@ -411,7 +411,13 @@ def enqueue_fill(db: Session) -> Optional[models.Job]:
     """확정 때 — PLM 이 설정돼 있고 아직 조회하지 않은 호선이 있으면 일괄 조회 작업을 하나 넣는다(이미 대기 중이면 넣지 않는다)."""
     if not is_configured():
         return None
-    pending = db.query(models.Hull.hull_no).filter(models.Hull.plm_status.is_(None)).first()
+    H = models.Hull
+    # 45 — 시리즈를 아직 안 본 찾은 호선도 할 일(hull_info.needs_series 와 같은 조건)
+    pending = (db.query(H.hull_no)
+               .filter(H.plm_status.is_(None)
+                       | ((H.plm_status == "found") & H.series_lead.is_(None)
+                          & (H.series_manual.is_(None) | (H.series_manual.is_(False)))))
+               .first())
     if pending is None:
         return None
     if db.query(models.Job.id).filter(models.Job.type == JOB_TYPE, models.Job.state == "queued").first():
