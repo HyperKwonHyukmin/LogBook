@@ -13,6 +13,7 @@
 - 용어: '지식자산'(지적자산 X), '후속선'(자매선 X), '연구실의 자산'(팀의 자산 X). 2026-10-20 — 본문에 'BDF' 를 쓰지 않는다(다른 형식도 들어올 수 있음 → '해석 모델'·'모델'), '크롬' 대신 '웹 브라우저'(줄바꿈 안 되게 `웹&nbsp;브라우저`). 2쪽 '이름의 본뜻은 기록 — ③은 LogBook이 더한 방향' 문구는 지웠다. 캡처 그림 속 글자는 화면 그대로.
 - 고치는 법: 새 버전은 최신본을 복사해 만든다(이전 버전 보존). v12 빌드 원본은 `Results\LogBook-deck-src12uild12.py`(v11 → v12, 6쪽 신설 · 뒤 쪽 번호 · 기록 번호 · `PARTS[].at` 밀기) · `view12.js`. v11 빌드 원본은 `Results\LogBook-deck-src11uild11.py`(v10 → v11, 7쪽 부탁 띠) · `view11.js`(넘침 점검). v10 빌드 원본은 `Results\LogBook-deck-src\v10\build10.py`(v9 → v10, 18쪽 跋 추가). v9 빌드 원본은 `Results\LogBook-deck-src\v9\`(`build9.py` = v8 → v9 16쪽 치환, `view9.js`), 그 전 v8 은 `…\v8\` — `build8.py`(v7 → v8 문자열 치환, 치환마다 일치 횟수 assert) · `name.html` · `assets.html`(새 쪽) · `view8.js`(쪽마다 `.sb` 넘침 점검, `node view8.js <접두어> <쪽 번호…>`).
   PDF: huashu-design 폴더에서 `node scripts/export_single_absolute_deck_pdf.mjs --html Results/LogBook-Deck-v12.html --out Results/LogBook-Deck-v12.pdf`.
+  **다른 PC로 옮길 때는 `-standalone.html`** — 원본은 `LogBook-assets/` 그림과 웹 글꼴(CDN)을 바깥에서 불러와, HTML 만 옮기거나 CDN 이 막히면 캡처가 빠지고 글꼴이 바뀌어 칸이 깨진다. `Results\LogBook-deck-src\make_standalone.py ../LogBook-Deck-vNN.html` 로 그림·글꼴(쓰인 글자만)을 한 파일에 넣는다(약 6 MB, 인터넷 되는 PC에서 3분). 원본을 고친 뒤에는 다시 돌린다.
 - 쪽을 넣거나 빼면 본문의 「→ NN쪽」 참조, `data-entry` 기록 번호, 스크립트의 `PARTS[].at`을 함께 고친다.
 
 ## 통합 데모 (설명회용) — 2026-10-20 다시 만듦

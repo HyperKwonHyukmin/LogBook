@@ -78,6 +78,20 @@ README '사내 PLM 선박 정보 (30)'. ⟳ Update(requirements 변경 → pip i
 - 아직 145 에서 안 한 것: ⟳ Update(1a7b8bd 이후 반영) → `app.cli plm-fill` 한 번 → 자료 화면 속성 칸·수정 화면 [선박 정보 검색] 눈으로 확인.
 - 하지 않기로 미룬 것: 이미 찾은 호선 다시 조회(주기 갱신) — 인도일이 바뀌는 경우가 문제가 되면.
 
+## PLM 추가 정보 탐색 (2026-10-21, 145 `inspect_plm_hull_tables.py`)
+
+| 대상 | 결과 | 판단 |
+|---|---|---|
+| `WSS_SIMILAR_SHIP`(유사선) · `TB_SHIP_SPECIFICS`(주요 치수) · `TB_PMS_SHIPMEMBER`(호선 담당) · `VT_SEARCH_SHIP_REMARK_LIST`(특이사항) | 열이 안 보임 — caduser 권한 없음(INFODBA2 · ANET 소유) | 쓰려면 권한 요청. 유사선이 가장 기대됨 |
+| `TB_HULL_TROUBLEREPORT_LIST` | 읽힘, 5행 — 2012년 CAD 프로그램 오류 문의 | 구조 트러블이 아님 → 쓰지 않음 |
+| `TB_PROJECT_PROBLEM_ACTION` | 읽힘, 2행 — CAD DB 조치 기록 | 쓰지 않음 |
+| `TB_HULL_STRUCT_SCANTLING` | 읽힘, 69행 — 3000 호선 AFT 부재 치수 일부만 | 체계적 자료가 아님 → 쓰지 않음 |
+
+→ 쓸 만한 것은 이미 읽는 `VT_PLM_SHIP` 의 안 쓰는 열(공정 실적일 · `SHIP_TYPE_CODE` · 선주 · 선급2)과 `VT_PLM_USER`(35열, 팀 등)뿐.
+- 키워드 `DWG` · `BLOCK` · `WEIGHT` 로 한 번 더 훑음 — 도면 목록(`VT_PLM_DWGITEM*`) · 블록 분할 · 중량(`TB_MBOM_BLOCKDIV` 등)이 이름으로 보였으나 나머지는 BOM · 배관 · 전장 · 네스팅 등 생산 데이터.
+- **결론(사용자, 2026-10-21): PLM 활용은 사번(사용자) · 호선 기본 정보 · 시리즈까지로 닫는다.** 같은 선형 · 선주 · 도면 · 블록 중량 후보는 실사용 가치가 낮다고 판단.
+  더 넓히려면 PLM 이 아니라 다른 시스템이나 DB 권한 요청(유사선 · 주요 치수 등)부터 다시 검토한다.
+
 ## 다음 후보 — 시리즈 호선 (2026-10-21 조사 시작)
 
 요구: 같은 선종·같은 설계의 시리즈(예: 3척)는 호선 번호가 달라도 **같은 호선으로 취급**하고 싶다 → PLM 에서 시리즈를 알 수 있나.
