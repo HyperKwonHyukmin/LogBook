@@ -27,3 +27,22 @@ def test_api_admin_only(client, make_user, auth_headers):
 def test_data_newest_first():
     dates = [i["date"] for i in json.loads(DATA.read_text(encoding="utf-8"))["items"]]
     assert dates == sorted(dates, reverse=True)
+
+
+def test_page_borrows_app_css(tmp_path):
+    from app.routers.updates import app_css_link
+
+    (tmp_path / "index.html").write_text('<head><link rel="stylesheet" crossorigin href="/assets/index-ab12.css"></head>',
+                                         encoding="utf-8")
+    assert app_css_link(tmp_path) == '<link rel="stylesheet" crossorigin href="/assets/index-ab12.css">'
+    assert app_css_link(tmp_path / "없음") == "" and app_css_link(None) == ""
+
+
+def test_data_shape_for_page():
+    """화면 문구에 em dash 를 쓰지 않는다(DESIGN.md 7-8). 바로가기는 앱 안 경로만."""
+    items = json.loads(DATA.read_text(encoding="utf-8"))["items"]
+    for i in items:
+        shown = [i["title"], i["summary"], i.get("status") or ""] + i.get("points", [])
+        assert not any("—" in t for t in shown), i["title"]
+        if "path" in i:
+            assert i["path"].startswith("/") and i["screen"]
