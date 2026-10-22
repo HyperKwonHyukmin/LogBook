@@ -6,13 +6,12 @@ from app.routers.updates import DATA
 KINDS = {"기능", "개선", "정리", "운영", "검토"}
 
 
-def test_page_is_html_without_content(client):
-    r = client.get("/updates")
-    assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
-    assert "/api/admin/updates" in r.text and "logbook_token" in r.text
-    # 내용(항목 제목)은 페이지에 없다 — API 뒤에만
-    for i in json.loads(DATA.read_text(encoding="utf-8"))["items"][:5]:
-        assert i["title"] not in r.text
+def test_old_page_redirects_to_app_screen(client):
+    """옛 독립 페이지 주소는 앱 안 화면으로 — 주소 꼬리(?period=)도 함께."""
+    r = client.get("/updates", follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"] == "/admin/updates"
+    r = client.get("/updates?period=2026-10", follow_redirects=False)
+    assert r.headers["location"] == "/admin/updates?period=2026-10"
 
 
 def test_api_admin_only(client, make_user, auth_headers):
@@ -27,15 +26,6 @@ def test_api_admin_only(client, make_user, auth_headers):
 def test_data_newest_first():
     dates = [i["date"] for i in json.loads(DATA.read_text(encoding="utf-8"))["items"]]
     assert dates == sorted(dates, reverse=True)
-
-
-def test_page_borrows_app_css(tmp_path):
-    from app.routers.updates import app_css_link
-
-    (tmp_path / "index.html").write_text('<head><link rel="stylesheet" crossorigin href="/assets/index-ab12.css"></head>',
-                                         encoding="utf-8")
-    assert app_css_link(tmp_path) == '<link rel="stylesheet" crossorigin href="/assets/index-ab12.css">'
-    assert app_css_link(tmp_path / "없음") == "" and app_css_link(None) == ""
 
 
 def test_data_shape_for_page():

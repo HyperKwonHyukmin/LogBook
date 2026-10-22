@@ -20,6 +20,7 @@ import OpsPage from './pages/admin/OpsPage.jsx';
 import UsersPage from './pages/admin/UsersPage.jsx';
 import VocabPage from './pages/admin/VocabPage.jsx';
 import WbRulesPage from './pages/admin/WbRulesPage.jsx';
+import UpdatesPage from './pages/admin/UpdatesPage.jsx';
 import ViewerPage from './pages/ViewerPage.jsx';
 
 // 비교 화면(07)은 뷰어 상태·표 묶음이 커서 따로 묶는다.
@@ -65,6 +66,7 @@ export default function App() {
               <Route path="admin/vocab" element={<VocabPage />} />
               <Route path="admin/wb-targets" element={<WbRulesPage />} />
               <Route path="admin/cleanup" element={<CleanupPage />} />
+              <Route path="admin/updates" element={<UpdatesPage />} />   {/* 46 — 업데이트 이력(옛 /updates 는 서버가 넘긴다) */}
             </Route>
           </Route>
         </Route>

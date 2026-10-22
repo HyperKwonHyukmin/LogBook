@@ -32,13 +32,14 @@
   자료 화면 담당자 이름 → `?assignee=<번호>`.
 
 ## 업데이트 이력
-- `/updates` = 독립 HTML 한 장(`backend/app/changelog/page.html`, 외부 파일 없음). 브라우저의 LogBook 토큰(localStorage)으로
-  `/api/admin/updates`(LV3)를 불러 그린다 — 페이지 자체에는 내용이 없어 LV3 제한이 실제로 걸린다. 401·403·503 은 안내 문구.
+- 화면 = 앱 안 관리 › 업데이트 이력(`/admin/updates`, `frontend/src/pages/admin/UpdatesPage.jsx` + `lib/updateHistory.js`), 내용은
+  `/api/admin/updates`(LV3). 처음엔 독립 HTML(`/updates`)이었는데 앱을 벗어나 사이드 메뉴가 사라져서 옮겼다(사용자 지적, 2026-10-22).
+  옛 `/updates` 는 서버가 `?period=` 를 붙여 새 화면으로 넘긴다(307).
 - 내용 `backend/app/changelog/changelog.json` — 01~45 는 계획 표에서 옮겼다. **새 기능을 끝내면 맨 앞에 한 줄**(CLAUDE.md 규칙).
   프런트 빌드와 무관해 145 Update 만으로 바뀐다.
-- 관리 메뉴 '업데이트 이력'(새 탭).
+- 관리 메뉴 '업데이트 이력'(같은 창, 다른 관리 화면과 같다).
 
 ## 145 확인
 - Update 뒤 자료 하나에 담당자(WorkBench 사용자 + 직접 입력 퇴사자)를 넣고 저장 → 공유 폴더 entry.json `assignees` 확인.
-- LV3 브라우저로 `/updates` 열기, LV2 로는 '관리자(LV3)만' 문구.
+- LV3 로 관리 › 업데이트 이력 열기(사이드 메뉴 그대로), 옛 주소 `/updates` 가 그 화면으로 넘어가는지.
 - `.env` 새 키 없음. `server_manager.py` 안 바꿈(창 다시 열 필요 없음).
