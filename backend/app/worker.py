@@ -76,6 +76,10 @@ def run_once(db: Session, storage: StoragePaths, watcher: InboxWatcher) -> dict:
         except OSError as exc:
             db.rollback()
             log.warning("배치 받기 실패(다음 주기에 재시도): %s — %s", item.name, exc)
+        except Exception:
+            # 47 — DB 오류 등 다른 예외도 이 항목만 건너뛴다. 밖으로 내보내면 아래 작업 큐 처리가 통째로 밀린다
+            db.rollback()
+            log.exception("배치 받기 실패(다음 주기에 재시도): %s", item.name)
     def exhausted(job: models.Job) -> None:
         # OS 에 죽어 시도 횟수를 다 쓴 작업 — 다시 돌리지 않고 최종 실패 후처리만 한다
         log.error("시도 횟수를 다 쓴 작업을 실패로 끝냅니다: %s %s", job.type, job.target_id)

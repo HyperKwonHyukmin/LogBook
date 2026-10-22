@@ -46,6 +46,9 @@ def list_audit(
     if employee_id:
         q = q.filter_by(employee_id=employee_id.upper())
     rows = q.order_by(models.AuditLog.at.desc(), models.AuditLog.id.desc()).limit(limit)
+    # 47 — 바뀐 내용(before/after)은 관리자만. 위 거르개는 '지금 있는' Entry 만 가려서, 영구 삭제·합치기로
+    # 사라진 비공개 자료의 제목·설명이나 다른 기록 안에 적힌 자료 번호가 새어 나간다. 활동 로그 화면은 내용을 쓰지 않는다
+    detail = access.is_admin(user)
     return [
         {
             "id": r.id,
@@ -53,8 +56,8 @@ def list_audit(
             "employee_id": r.employee_id,
             "action": r.action,
             "target": {"type": r.target_type, "id": r.target_id},
-            "before": r.before,
-            "after": r.after,
+            "before": r.before if detail else None,
+            "after": r.after if detail else None,
         }
         for r in rows
     ]

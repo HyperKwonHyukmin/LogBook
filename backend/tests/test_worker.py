@@ -57,6 +57,32 @@ def test_failed_processing_marks_batch_after_retries(db, storage, monkeypatch):
     assert "처리 실패" in db.get(models.Batch, b.id).error
 
 
+def test_stage_error_does_not_block_job_queue(db, storage, monkeypatch):
+    # 47 — Inbox 항목 하나가 OSError 아닌 예외를 내도 그 주기의 작업은 처리한다
+    import app.worker as worker
+
+    d = storage.inbox / "깨진_항목"
+    d.mkdir()
+    (d / "a.bdf").write_text("GRID", encoding="utf-8")  # 빈 폴더는 준비 완료가 되지 않는다
+
+    def stage_boom(*a, **k):
+        raise RuntimeError("DB 오류")
+
+    monkeypatch.setattr(worker, "stage_item", stage_boom)
+    monkeypatch.setattr(worker, "process_batch", lambda *a, **k: None)
+    monkeypatch.setattr(worker, "auto_merge_batch", lambda *a, **k: None)
+    clock = Clock()
+    w = InboxWatcher(storage, stable_seconds=60, clock=clock, owner_of=lambda p: None)
+    run_once(db, storage, w)  # 첫 주기는 항목을 보기만 한다(안정 대기)
+    b = models.Batch(key="k2", source="inbox", original_name="x")
+    db.add(b)
+    db.flush()
+    db.add(models.Job(type="process_batch", target_id=b.id))
+    db.commit()
+    clock.t += 61
+    assert run_once(db, storage, w) == {"staged": 0, "processed": 1, "failed": 0}
+
+
 def test_run_once_processes_write_meta_jobs(db, storage, make_user, setup_entry_with_files):
     """워커가 'write_meta' 작업을 받으면 entry.json/_INFO.txt 를 다시 쓴다(I3) —
     confirm() 이 메타 쓰기 실패 시 큐에 넣어 두는 재시도 경로."""
