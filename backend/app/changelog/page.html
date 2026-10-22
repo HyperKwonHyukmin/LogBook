@@ -351,6 +351,10 @@
   function render() {
     renderHead();
     app.textContent = '';
+    if (!state.items.length) {   // 아직 기록이 없다 — 거르기 도구 없이 안내만
+      notice('none', '아직 기록한 업데이트가 없습니다', '새 기능·개선을 배포하면 여기에 최근 것부터 쌓입니다.');
+      return;
+    }
     var input = el('input', { type: 'search', placeholder: '제목·설명·번호로 찾기', 'aria-label': '이력 찾기', autocomplete: 'off' });
     var seg = el('div', { class: 'seg', role: 'group', 'aria-label': '분류' });
     [''].concat(KINDS).forEach(function (k) {
