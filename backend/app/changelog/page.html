@@ -75,8 +75,9 @@
   .toggle input { width: 14px; height: 14px; margin: 0; accent-color: var(--brand); }
   .toggle .n { color: var(--n-500); font-size: 11px; }
   /* 기간 줄 — 전체 · 최근 7일 · 최근 30일 · 달별 */
-  .periods { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 8px; }
-  .periods .lbl { margin-right: 4px; color: var(--n-600); font-size: 12px; line-height: 18px; font-weight: 500; }
+  .periods { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+  .prow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .periods .lbl { width: 44px; flex: none; color: var(--n-600); font-size: 12px; line-height: 18px; font-weight: 500; }
   .periods button { height: 26px; padding: 0 9px; border: 1px solid var(--n-200); border-radius: 5px; background: var(--n-0);
                     color: var(--n-700); font: 500 12px/18px var(--sans); cursor: pointer;
                     transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out); }
@@ -194,7 +195,7 @@
   var SEEN_KEY = 'logbook_updates_seen';
   var app = document.getElementById('app');
   var stats = document.getElementById('stats');
-  var state = { items: [], kind: '', q: '', pending: false, period: '', seen: '', seenAt: -1 };
+  var state = { items: [], kind: '', q: '', pending: false, period: '', viewYear: '', seen: '', seenAt: -1 };
   var RECENT = { d7: { days: 7, label: '최근 7일' }, d30: { days: 30, label: '최근 30일' } };
 
   // ---- 작은 도우미 ----
@@ -251,7 +252,8 @@
     if (!period) return true;
     var date = it.date || '';
     if (RECENT[period]) return date >= daysAgo(RECENT[period].days);
-    return date.slice(0, 7) === period;
+    if (period.length === 4) return date.slice(0, 4) === period;   // 해 하나
+    return date.slice(0, 7) === period;                            // 달 하나
   }
   // skip — 그 칸은 빼고 본다(분류·기간 단추의 건수 셈). true 는 옛 호출(분류 포함)과 같다
   function matches(it, skip) {
@@ -371,6 +373,7 @@
       var n = state.items.filter(function (it) { return matches(it, 'kind') && (!b.getAttribute('data-kind') || it.kind === b.getAttribute('data-kind')); }).length;
       b.querySelector('.n').textContent = n;
     });
+    renderMonths();
     Array.prototype.forEach.call(ui.periods.querySelectorAll('button'), function (b) {
       var p = b.getAttribute('data-period');
       var n = state.items.filter(function (it) { return matches(it, 'period') && inPeriod(it, p); }).length;
@@ -378,6 +381,22 @@
       b.querySelector('.n').textContent = n;
       b.disabled = n === 0 && p !== state.period;   // 0건 기간은 눌러도 빈 화면 — 누를 수 없게(고른 것은 풀 수 있게 둔다)
     });
+  }
+  function periodBtn(p, label) {
+    return el('button', { type: 'button', 'data-period': p, 'aria-pressed': 'false', on: { click: function () { setPeriod(p); } } },
+      [label, el('span', { class: 'n mono' })]);
+  }
+  // 둘째 단 — 보고 있는 해의 달. 해를 고르면 그 해, 달을 고르면 그 달의 해, 아니면 마지막으로 본 해(처음엔 가장 최근 해)
+  function renderMonths() {
+    var p = state.period;
+    if (p && !RECENT[p]) state.viewYear = p.slice(0, 4);
+    var year = state.viewYear;
+    if (ui.monthYear === year) return;   // 같은 해면 단추를 그대로 둔다(누른 단추의 포커스가 남게)
+    ui.monthYear = year;
+    var months = ui.months.filter(function (m) { return m.slice(0, 4) === year; });
+    ui.monthRow.textContent = '';
+    ui.monthRow.appendChild(el('span', { class: 'lbl', text: year ? year + '년' : '' }));
+    months.forEach(function (m) { ui.monthRow.appendChild(periodBtn(m, Number(m.slice(5)) + '월')); });
   }
   function setPeriod(p) {
     state.period = p;
@@ -405,24 +424,29 @@
     });
     var pendingCount = state.items.filter(function (it) { return it.status; }).length;
     var pending = el('input', { type: 'checkbox' });
-    var months = [];
-    state.items.forEach(function (it) { var m = (it.date || '').slice(0, 7); if (m && months.indexOf(m) < 0) months.push(m); });
-    var years = {}; months.forEach(function (m) { years[m.slice(0, 4)] = 1; });
-    var oneYear = Object.keys(years).length === 1 && months[0] && months[0].slice(0, 4) === String(new Date().getFullYear());
-    var periodBtn = function (p, label) {
-      return el('button', { type: 'button', 'data-period': p, 'aria-pressed': 'false', on: { click: function () { setPeriod(p); } } },
-        [label, el('span', { class: 'n mono' })]);
-    };
-    var periods = el('div', { class: 'periods', role: 'group', 'aria-label': '기간' }, [
-      el('span', { class: 'lbl', text: '기간' }),
-      periodBtn('', '전체'), periodBtn('d7', RECENT.d7.label), periodBtn('d30', RECENT.d30.label),
-      el('span', { class: 'sep', 'aria-hidden': 'true' }),
-    ].concat(months.map(function (m) { return periodBtn(m, oneYear ? Number(m.slice(5)) + '월' : monthLabel(m)); })));
+    // 첫 단: 전체 · 최근 7일 · 최근 30일 · 해. 둘째 단: 보고 있는 해의 달(renderMonths)
+    var months = [], years = [];
+    state.items.forEach(function (it) {
+      var m = (it.date || '').slice(0, 7);
+      if (m.length === 7 && months.indexOf(m) < 0) months.push(m);
+      if (m.length === 7 && years.indexOf(m.slice(0, 4)) < 0) years.push(m.slice(0, 4));
+    });
+    var monthRow = el('div', { class: 'prow', role: 'group', 'aria-label': '달' });
+    var periods = el('div', { class: 'periods' }, [
+      el('div', { class: 'prow', role: 'group', 'aria-label': '기간' }, [
+        el('span', { class: 'lbl', text: '기간' }),
+        periodBtn('', '전체'), periodBtn('d7', RECENT.d7.label), periodBtn('d30', RECENT.d30.label),
+        el('span', { class: 'sep', 'aria-hidden': 'true' }),
+      ].concat(years.map(function (y) { return periodBtn(y, y + '년'); }))),
+      monthRow,
+    ]);
+    state.viewYear = years[0] || '';
     var p0 = new URLSearchParams(location.search).get('period') || '';
-    if (p0 && (RECENT[p0] || months.indexOf(p0) >= 0)) state.period = p0;
+    if (p0 && (RECENT[p0] || months.indexOf(p0) >= 0 || years.indexOf(p0) >= 0)) state.period = p0;
     var result = el('p', { class: 'result', role: 'status' });
     var box = el('div');
-    ui = { input: input, seg: seg, pending: pending, periods: periods, result: result, box: box };
+    ui = { input: input, seg: seg, pending: pending, periods: periods, monthRow: monthRow, months: months,
+      result: result, box: box };
     input.addEventListener('input', function () { state.q = input.value; syncSeg(); renderList(box, result); });
     input.addEventListener('keydown', function (e) { if (e.key === 'Escape' && input.value) { e.preventDefault(); clearFilters(); } });
     pending.addEventListener('change', function () { state.pending = pending.checked; syncSeg(); renderList(box, result); });
