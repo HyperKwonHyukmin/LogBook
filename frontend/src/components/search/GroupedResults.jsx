@@ -12,6 +12,7 @@ const MONO = new Set(['hull']);
 
 /** 묶음 머리의 값 글자 — 호선은 mono, 올린 사람은 이름(사번은 title). */
 function GroupValue({ group, by }) {
+  if (by === 'assignee') return <span>{group.label || group.value}</span>;   // 46 — 값은 명부 번호라 보이지 않는다
   if (by === 'uploaded_by') return <span title={group.value}>{group.label || <span className="font-mono">{group.value}</span>}</span>;
   return <span className={MONO.has(by) ? 'font-mono' : ''}>{group.value}</span>;
 }
@@ -24,13 +25,14 @@ export default function GroupedResults({ by, groups, collapsed, onToggle, onMore
                                          terms, filters, multiValued }) {
   const meta = GROUPS.find((g) => g.id === by) || { none: '없음' };
   const multiNote = {
-    hull: '호선이 둘 이상인 자료', zone: '구역이 둘 이상인 자료', tag: '태그가 둘 이상인 자료',   // 19 — 태그별
+    hull: '호선이 둘 이상인 자료', zone: '구역이 둘 이상인 자료', tag: '태그가 둘 이상인 자료',
+    assignee: '담당자가 둘 이상인 자료',   // 19 — 태그별
   }[by];
   const sections = groups.map((g, gi) => {
     const isOpen = !collapsed.has(gi);
     // 20 — '공용'(호선 없음을 고른 자료) 묶음은 거르기 값이 아니다(호선 필터에 없는 값)
     const shared = by === 'hull' && g.value === GROUP_SHARED;
-    const title = g.value == null ? meta.none : shared ? '공용' : (by === 'uploaded_by' ? (g.label || g.value) : g.value);
+    const title = g.value == null ? meta.none : shared ? '공용' : (by === 'uploaded_by' || by === 'assignee' ? (g.label || g.value) : g.value);
     const left = g.count - g.items.length;
     return {
       key: `g${gi}`,

@@ -457,7 +457,7 @@ export default function EntryPage() {
   const canWrite = canWriteLevel(user);
   const editable = entry.status === 'confirmed' && canWrite && entry.can_edit !== false;
   const readOnlyNote = entry.status === 'confirmed' && !editable
-    ? '올린 사람·관리자(LV3)만 고칠 수 있습니다.' : '';
+    ? '작성자·관리자(LV3)만 고칠 수 있습니다.' : '';
   const trashed = entry.status === 'trashed';
   const offline = storage?.reachable === false;
   // 처음 보는 파일 — 고른 파일(주소 ?file=)이 없으면 대표 BDF(3D), BDF 가 없으면 첫 문서
@@ -633,7 +633,7 @@ export default function EntryPage() {
           <div className="flex-1" />
           {readOnlyNote && !editing && (
             <span className="inline-flex items-center gap-1 text-meta text-n-500" title={readOnlyNote} data-testid="read-only-note">
-              <Lock size={12} aria-hidden="true" />올린 사람만 수정
+              <Lock size={12} aria-hidden="true" />작성자만 수정
             </span>
           )}
           {editable && !editing && (
@@ -760,7 +760,7 @@ export default function EntryPage() {
               <Prop label="담당자" changed={isChanged('assignees')}>
                 <AssigneeInput values={draft.assignees} onChange={set('assignees')} />
               </Prop>
-              <Prop label="올린 사람">
+              <Prop label="작성자">
                 {entry.uploaded_by ? <FilterLink field="uploaded_by" value={entry.uploaded_by}>{person(entry.uploaded_by)}</FilterLink> : person(null)}
               </Prop>
             </dl>
@@ -788,8 +788,16 @@ export default function EntryPage() {
               <Prop label="담당자">
                 <AssigneeList people={entry.assignees} />
               </Prop>
-              <Prop label="올린 사람">
-                {entry.uploaded_by ? <FilterLink field="uploaded_by" value={entry.uploaded_by}>{person(entry.uploaded_by)}</FilterLink> : person(null)}
+              {/* 46 — 작성자(자료를 올린 사람) + 등록일. 확정한 사람이 작성자와 다를 때만(관리자 대신 확정) '확정' 줄을 따로 */}
+              <Prop label="작성자">
+                {entry.uploaded_by ? (
+                  <span className="min-w-0 truncate">
+                    <FilterLink field="uploaded_by" value={entry.uploaded_by}>{person(entry.uploaded_by)}</FilterLink>
+                    {entry.confirmed_at && (
+                      <span className="ml-1.5 font-mono text-meta text-n-500" title={`등록 ${formatDateTime(entry.confirmed_at)}`}>{formatDateTime(entry.confirmed_at).slice(0, 10)}</span>
+                    )}
+                  </span>
+                ) : person(null)}
               </Prop>
               {/* 39 — WorkBench 해석 출처(서버가 켰을 때만 실린다) */}
               {entry.wb_origins?.length > 0 && (
@@ -797,14 +805,9 @@ export default function EntryPage() {
                   <WbOrigins origins={entry.wb_origins} files={entry.files} onCopy={(t) => copy(t, `해석 번호 ${t}`)} />
                 </Prop>
               )}
-              <Prop label="확정자">
-                {entry.confirmed_by ? (
-                  <span className="min-w-0 truncate">{person(entry.confirmed_by)}
-                    {/* 15 — 올린 날짜(확정일)는 여기·미리보기·결과 행 오른쪽에 보인다 */}
-                    <span className="ml-1.5 font-mono text-meta text-n-500" title={formatDateTime(entry.confirmed_at)}>{formatDateTime(entry.confirmed_at).slice(0, 10)}</span>
-                  </span>
-                ) : <span className="text-n-500">—</span>}
-              </Prop>
+              {entry.confirmed_by && entry.confirmed_by !== entry.uploaded_by && (
+                <Prop label="확정">{person(entry.confirmed_by)}</Prop>
+              )}
             </dl>
           )}
           {/* 13 — 공개 범위(변경하기와 분리: 확인 후 바로 적용, 이력에 따로 남는다) */}

@@ -264,7 +264,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
             </span>
           </span>
         )}
-        {!canEdit && <span className="inline-flex items-center gap-1 text-meta text-n-500"><Lock size={12} aria-hidden="true" />올린 사람만 수정</span>}
+        {!canEdit && <span className="inline-flex items-center gap-1 text-meta text-n-500"><Lock size={12} aria-hidden="true" />작성자만 수정</span>}
         <div className="flex-1" />
         <Button variant="ghost" size="sm" disabled={disabled} onClick={discard} className="hover:text-err">
           <Trash2 size={14} aria-hidden="true" />버리기

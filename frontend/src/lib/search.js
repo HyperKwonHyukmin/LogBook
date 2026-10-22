@@ -3,7 +3,7 @@
 // 29 — 프로젝트(21) 필터는 없앴다(옛 주소의 project= 는 읽지 않는다)
 // 38 — 대상 구조물(target)
 // 42 — 해석 종류(analysis_type) 필터·묶기는 없앴다(옛 주소의 analysis_type=·group=analysis_type 은 읽지 않는다)
-export const FILTER_KEYS = ['hull', 'ship_type', 'zone', 'target', 'tag', 'uploaded_by', 'kind'];
+export const FILTER_KEYS = ['hull', 'ship_type', 'zone', 'target', 'tag', 'uploaded_by', 'assignee', 'kind'];   // 46 — 담당자(명부 번호)
 
 /**
  * 정렬(08·15) — 주소에 없으면 서버가 정한다(검색어가 있으면 관련도, 없으면 최신순 = 올린 날짜).
@@ -25,7 +25,8 @@ export const GROUPS = [
   { id: 'hull', label: '호선별', none: '호선 없음' },
   { id: 'zone', label: '구역별', none: '구역 없음' },
   { id: 'target', label: '대상별', none: '대상 없음' },   // 38
-  { id: 'uploaded_by', label: '올린 사람별', none: '올린 사람 미상' },
+  { id: 'uploaded_by', label: '작성자별', none: '작성자 미상' },
+  { id: 'assignee', label: '담당자별', none: '담당자 없음' },   // 46 — 담당자가 여럿인 자료는 여러 묶음에 나온다
   { id: 'tag', label: '태그별', none: '태그 없음' },   // 19 — 태그가 여러 개인 자료는 여러 묶음에 나온다
 ];
 export const GROUP_IDS = GROUPS.map((g) => g.id);

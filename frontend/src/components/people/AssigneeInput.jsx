@@ -23,7 +23,7 @@ export function RetiredBadge({ person }) {
   return <span className="ml-1.5 rounded-xs bg-n-100 px-1 text-micro font-medium text-n-600">퇴사</span>;
 }
 
-/** 읽기 화면 — 이름(누르면 그 이름으로 검색)·부서·직책·퇴사 표시. */
+/** 읽기 화면 — 이름(누르면 그 담당자의 자료 검색, 46)·부서·직책·퇴사 표시. */
 export function AssigneeList({ people }) {
   if (!people?.length) return <span className="text-n-500">—</span>;
   return (
@@ -31,7 +31,8 @@ export function AssigneeList({ people }) {
       {people.map((p, i) => (
         <li key={personKey(p)} className="min-w-0">
           <span className="block truncate" title={p.employee_id || undefined}>
-            <Link to={`/?${writeSearch({ q: p.name })}`} className="hover:underline">{p.name}</Link>
+            <Link to={p.id ? `/?${writeSearch({ filters: { assignee: [String(p.id)] } })}` : `/?${writeSearch({ q: p.name })}`}
+                  title={`담당자 ‘${p.name}’ 의 자료`} className="hover:underline">{p.name}</Link>
             <RetiredBadge person={p} />
             {people.length > 1 && i === 0 && <span className="ml-1.5 text-micro text-n-500">주</span>}
           </span>

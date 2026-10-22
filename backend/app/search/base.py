@@ -7,13 +7,14 @@ from sqlalchemy.orm import Session
 # 15 — '해석 연도'(year) 필터는 해석 시기와 함께 없앴다
 # 29 — 프로젝트(21) 필터는 없앴다
 # 38 — 대상 구조물(target). 42 — 해석 종류(analysis_type) 필터는 없앴다
-FILTER_KEYS = ("hull", "ship_type", "zone", "target", "uploaded_by", "kind", "tag")
+# 46 — 담당자(assignee, 값 = 담당자 명부 번호 문자열 — 같은 이름도 가른다)
+FILTER_KEYS = ("hull", "ship_type", "zone", "target", "uploaded_by", "assignee", "kind", "tag")
 # 관련도 | 최신순(올린 날짜, 15) | 즐겨찾기한 순(10) | 호선순·제목순(19)
 SORTS = ("relevance", "recent", "favorited", "hull", "title")
 # 옛 주소의 정렬 이름 → 지금 이름(15 — '해석 시기' 정렬은 최신순으로 받는다)
 SORT_ALIASES = {"period": "recent"}
 # 11 — '보기 기준'(묶어 보기). 값이 없는 Entry 의 묶음은 GROUP_NONE 으로 가리킨다(화면: 없음/미상)
-GROUP_KEYS = ("hull", "zone", "target", "uploaded_by", "tag")   # 19 — 태그별, 38 — 대상별, 42 — 해석 종류별은 없앴다
+GROUP_KEYS = ("hull", "zone", "target", "uploaded_by", "assignee", "tag")   # 19 — 태그별, 38 — 대상별, 42 — 해석 종류별은 없앴다
 GROUP_SORTS = ("count", "name")
 GROUP_NONE = "__none__"
 # 20 — 호선별 묶기에서 '호선 없음(공용)' 을 고른 자료의 묶음(화면: 공용). 값이 빈 '호선 없음' 묶음과 따로 둔다

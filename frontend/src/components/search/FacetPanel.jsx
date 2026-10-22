@@ -9,7 +9,7 @@ const MONO_KEYS = new Set(['hull']);
 
 export function valueLabel(key, f) {
   if (key === 'kind') return KIND_LABELS[f.value] || f.value;
-  if (key === 'uploaded_by') return f.label || f.value;
+  if (key === 'uploaded_by' || key === 'assignee') return f.label || f.value;   // 사람은 이름(값은 사번·명부 번호)
   return f.value;
 }
 

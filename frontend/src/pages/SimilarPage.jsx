@@ -238,7 +238,7 @@ export default function SimilarPage() {
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-meta text-n-700">
                         <SolveText solve={L.solve} />
                         <span>{L.reports ? `문서 ${L.reports}개` : '문서 없음'}</span>
-                        <span title={L.uploaded_by || undefined}>{L.uploader_name || L.uploaded_by || '올린 사람 모름'} · <span className="font-mono">{L.confirmed_at}</span></span>
+                        <span title={L.uploaded_by || undefined}>{L.uploader_name || L.uploaded_by || '작성자 모름'} · <span className="font-mono">{L.confirmed_at}</span></span>
                       </div>
                       <dl className="mt-2 grid grid-cols-[44px_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1">
                         <dt className="text-meta text-n-600">같은 점</dt>
@@ -347,7 +347,7 @@ function Detail({ base, item, row }) {
         {base.file_id && <Link to={`/compare?ids=${base.file_id},${item.file_id}`} className={buttonClass('secondary', 'sm')}>나란히 비교</Link>}
         <Link to={`/v/${item.file_id}`} className={buttonClass('ghost', 'sm')}>3D 로 보기</Link>
       </div>
-      {!item.reports && <p className="mt-2 text-meta text-n-600">이 선례에는 문서가 없습니다. 올린 사람에게 결과를 물어보세요.</p>}
+      {!item.reports && <p className="mt-2 text-meta text-n-600">이 선례에는 문서가 없습니다. 작성자에게 결과를 물어보세요.</p>}
     </>
   );
 }

@@ -13,7 +13,7 @@ import { FACET_LABELS, errorText } from '../lib/labels.js';
 import { writeSearch } from '../lib/search.js';
 
 /** 분류 화면의 속성 순서(09) — 검색 필터 차원 전부. 42 — 해석 종류는 없앴다. */
-export const BROWSE_KEYS = ['zone', 'target', 'hull', 'ship_type', 'tag', 'kind', 'uploaded_by'];
+export const BROWSE_KEYS = ['zone', 'target', 'hull', 'ship_type', 'tag', 'kind', 'uploaded_by', 'assignee'];   // 46 — 담당자
 const DEFAULT_KEY = 'zone';
 const SORTS = [{ id: 'count', label: '건수순' }, { id: 'name', label: '이름순' }];
 const VOCAB_KEYS = new Set(['zone', 'target']);
@@ -34,7 +34,8 @@ function ValueRow({ field, f, max, drafts }) {
   const label = valueLabel(field, f);
   const empty = f.count === 0;
   const pct = max > 0 ? Math.max(2, Math.round((f.count / max) * 100)) : 0;
-  const secondary = field === 'hull' ? f.label : field === 'uploaded_by' && f.label ? f.value : null;
+  const secondary = field === 'hull' ? f.label : field === 'uploaded_by' && f.label ? f.value
+    : field === 'assignee' ? f.detail || null : null;   // 46 — 담당자는 부서·직책·퇴사
   return (
     <li className={`${COLS} min-h-10 border-b border-n-200 px-3 py-1.5 text-ui last:border-0 ${empty ? '' : 'transition-colors duration-150 hover:bg-n-50'}`}>
       <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">

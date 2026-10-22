@@ -38,7 +38,7 @@ test('행 체크박스 — 고칠 수 없는 행은 비활성(사유 title), 고
   const mine = await screen.findByRole('checkbox', { name: '검토.pdf 선택' });
   const others = screen.getByRole('checkbox', { name: '남의.pdf 선택' });
   expect(others).toBeDisabled();
-  expect(others.closest('label')).toHaveAttribute('title', expect.stringContaining('올린 사람과 관리자만'));
+  expect(others.closest('label')).toHaveAttribute('title', expect.stringContaining('작성자와 관리자만'));
   expect(screen.queryByRole('region', { name: '선택한 문서 분류 바꾸기' })).not.toBeInTheDocument();
   await user.click(mine);
   const bar = screen.getByRole('region', { name: '선택한 문서 분류 바꾸기' });

@@ -113,7 +113,7 @@ export default function AccessPanel({ entry, onChanged, disabled = false }) {
 /** 고르기 칸 상태 — 이미 허락받았거나 고를 필요가 없는 사람은 잠근다. */
 function pickState(u, have, uploader) {
   if (have.has(u.employee_id)) return { locked: true, checked: true, note: '허락됨' };
-  if (u.employee_id === uploader) return { locked: true, checked: false, note: '올린 사람' };
+  if (u.employee_id === uploader) return { locked: true, checked: false, note: '작성자' };
   if (u.level === 3) return { locked: true, checked: false, note: '관리자 — 이미 봄' };
   return { locked: false, checked: false, note: '' };
 }

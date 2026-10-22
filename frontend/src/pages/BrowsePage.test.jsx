@@ -65,12 +65,12 @@ test('탭을 바꾸면 주소에 남고, 동의어로도 거른다', async () =>
   expect(hulls[0]).toMatch(/^9001/);
 });
 
-test('호선은 선종, 올린 사람은 이름으로 보이고 각각 필터 주소로 간다', async () => {
+test('호선은 선종, 작성자는 이름으로 보이고 각각 필터 주소로 간다', async () => {
   renderAt('/browse?by=hull');
   const list = await screen.findByRole('list', { name: '호선 값' });
   expect(within(list).getByRole('link', { name: '9002' })).toHaveAttribute('href', '/?hull=9002');
   expect(list).toHaveTextContent('벌크선');
-  await userEvent.click(screen.getByRole('tab', { name: /올린 사람/ }));
+  await userEvent.click(screen.getByRole('tab', { name: /작성자/ }));
   expect(screen.getByRole('link', { name: '홍길동' })).toHaveAttribute('href', '/?uploaded_by=A100001');
 });
 

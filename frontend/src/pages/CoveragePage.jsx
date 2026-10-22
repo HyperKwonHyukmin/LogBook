@@ -60,7 +60,7 @@ function EntryLine({ e }) {
         <span className="font-mono">{e.id}</span><span>{fileText(e)}</span><SolveText solve={e.solve} />
       </div>
       <div className="mt-0.5 text-meta text-n-600">
-        <span title={e.uploaded_by || undefined}>{e.uploader_name || e.uploaded_by || '올린 사람 모름'}</span>
+        <span title={e.uploaded_by || undefined}>{e.uploader_name || e.uploaded_by || '작성자 모름'}</span>
         {e.confirmed_at && <> · <span className="font-mono">{e.confirmed_at}</span></>}
         {e.doc_linked && ' · 다른 자료의 문서가 이 모델을 씀'}
         {e.model_linked && ' · 다른 자료의 모델과 연결됨'}
@@ -264,7 +264,7 @@ export default function CoveragePage() {
                 <table className="w-full border-collapse text-ui">
                   <thead>
                     <tr className="h-9 bg-n-50 text-left text-meta font-medium text-n-600">
-                      {['자료', rowLabel, colLabel, '파일 · 검증', '올린 사람', '확정'].map((h) => (
+                      {['자료', rowLabel, colLabel, '파일 · 검증', '작성자', '등록일'].map((h) => (
                         <th key={h} className="whitespace-nowrap border-b border-n-200 px-2.5 font-medium">{h}</th>
                       ))}
                     </tr>

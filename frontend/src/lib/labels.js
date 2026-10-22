@@ -73,7 +73,7 @@ export const ERROR_LABELS = {
   bdf_no_elements: '요소가 없는 BDF 입니다. INCLUDE 로 나뉜 모델이면 본 파일이 아니라 요소가 든 파일을 넣어 주세요.',
   bdf_model_error: 'BDF 를 모델로 읽지 못했습니다. 카드 형식을 확인해 주세요.',
   version_conflict: '다른 사람이 먼저 고쳤습니다. 최신 내용으로 다시 불러왔습니다.',
-  not_uploader: '올린 사람만 할 수 있습니다.',
+  not_uploader: '작성자만 할 수 있습니다.',
   storage_unreachable: '999_LogBook 공유 폴더에 연결할 수 없습니다.',
   storage_error_partial: '파일 이동 중 문제가 생겼습니다. 관리자에게 알려 주세요.',
   title_required: '제목을 입력해 주세요.',
@@ -184,7 +184,7 @@ export function formatBytes(n) {
 
 // 15 — '해석 연도'(year)는 해석 시기와 함께 없앴다 · 42 — 해석 종류도 없앴다
 export const FACET_LABELS = { hull: '호선', ship_type: '선종', zone: '구역', target: '대상',
-  tag: '태그', uploaded_by: '올린 사람', kind: '파일 종류' };
+  tag: '태그', uploaded_by: '작성자', assignee: '담당자', kind: '파일 종류' };   // 46 — 올린 사람 → 작성자, 담당자
 
 export const EXTRACT_LABELS = {
   queued: '본문 추출 대기 중', failed: '본문을 읽지 못했습니다',

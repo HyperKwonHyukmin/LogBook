@@ -42,7 +42,7 @@ test('주소로 검색하고 결과·발췌·필터 건수를 보인다', async 
   expect(within(screen.getByText('초안 자료').closest('li')).getByText('미확정')).toBeInTheDocument();
   const hullFacet = screen.getByRole('group', { name: '호선' });
   expect(within(hullFacet).getByText('9998')).toBeInTheDocument();
-  expect(screen.getByRole('group', { name: '올린 사람' })).toHaveTextContent('홍길동');
+  expect(screen.getByRole('group', { name: '작성자' })).toHaveTextContent('홍길동');
   expect(calls(fetch)).toHaveLength(1);
 });
 

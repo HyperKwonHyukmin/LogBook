@@ -63,13 +63,13 @@ function MissingView() {
     <section aria-label="빠진 필수 분류">
       <p className="mb-3 text-meta text-n-600">
         BDF 가 있는 확정 자료 중 호선(또는 '호선 없음(공용)')이나 구역·대상이 빠진 것입니다. 자료는 그대로 보이고,
-        올린 사람과 관리자에게만 ‘보완 필요’ 표시가 붙습니다. 번호를 눌러 자료 화면의 [변경하기]로 채워 주세요.
+        작성자와 관리자에게만 ‘보완 필요’ 표시가 붙습니다. 번호를 눌러 자료 화면의 [변경하기]로 채워 주세요.
       </p>
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <Tabs label="빠진 칸으로 거르기" items={tabs} value={missing} onChange={(v) => { setMissing(v); setLimit(PAGE); }} />
-        <select aria-label="올린 사람" value={uploader} className={selectClass('h-8 text-meta')}
+        <select aria-label="작성자" value={uploader} className={selectClass('h-8 text-meta')}
                 onChange={(e) => { setUploader(e.target.value); setLimit(PAGE); }}>
-          <option value="">올린 사람 전체</option>
+          <option value="">작성자 전체</option>
           {(data?.uploaders || []).map((u) => (
             <option key={u.employee_id || '-'} value={u.employee_id || ''}>{u.name || u.employee_id || '—'} ({u.count})</option>
           ))}
@@ -85,7 +85,7 @@ function MissingView() {
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className={th}>자료</th><th className={th}>빠진 칸</th><th className={th}>지금 값</th><th className={th}>올린 사람</th>
+              <th className={th}>자료</th><th className={th}>빠진 칸</th><th className={th}>지금 값</th><th className={th}>작성자</th>
             </tr>
           </thead>
           <tbody>

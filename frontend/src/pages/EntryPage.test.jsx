@@ -231,13 +231,13 @@ test('휴지통으로 보낸 뒤 토스트의 되돌리기로 복원하고 자�
   expect(await screen.findByText('E000001 을 복원했습니다.')).toBeInTheDocument();
 });
 
-test('올린 사람은 이력에 이름이 있으면 사번 대신 이름으로 보인다', async () => {
+test('작성자는 이력에 이름이 있으면 사번 대신 이름으로 보인다', async () => {
   renderPage({
     'GET /api/entries/E000001': { ...ENTRY, uploaded_by: 'A100002' },
   });
   const rail = await screen.findByRole('complementary', { name: '속성' });
   await within(rail).findAllByText('김해석');
-  const uploader = within(rail).getByText('올린 사람').nextElementSibling;
+  const uploader = within(rail).getByText('작성자').nextElementSibling;
   expect(uploader).toHaveTextContent('김해석');
   expect(uploader).not.toHaveTextContent('A100002');
 });

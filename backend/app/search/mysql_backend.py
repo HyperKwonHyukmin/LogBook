@@ -166,6 +166,20 @@ class _Hits:
             self.files[fid] = (score, where)
 
 
+def _label_people(db: Session, facets: list[dict]) -> None:
+    """46 — 담당자 값(명부 번호)에 이름(label)과 부서·퇴사(detail)를 단다. 같은 이름이 둘이면 부서로 가른다."""
+    ids = [int(f["value"]) for f in facets if str(f["value"]).isdigit()]
+    people = {str(p.id): p for p in db.query(models.Person).filter(models.Person.id.in_(ids or [0]))}
+    for f in facets:
+        p = people.get(str(f["value"]))
+        if p is None:
+            continue
+        f["label"] = p.name
+        detail = [x for x in (p.department, p.position) if x] + ([] if p.employed else ["퇴사"])
+        if detail:
+            f["detail"] = " · ".join(detail)
+
+
 class MySqlSearch:
     def search(self, db: Session, query: SearchQuery) -> dict:
         statuses = ("confirmed", "draft") if query.include_drafts else ("confirmed",)
@@ -302,6 +316,7 @@ class MySqlSearch:
                      .filter(models.User.employee_id.in_([f["value"] for f in out["uploaded_by"]] or [""])))
         for f in out["uploaded_by"]:
             f["label"] = names.get(f["value"])
+        _label_people(db, out["assignee"])
         for key in FILTER_KEYS:
             out[key].sort(key=lambda f: (-f["count"], f["value"]))
         return {"total": len(rows), "facets": out}
@@ -356,6 +371,10 @@ class MySqlSearch:
             return hull_labels(db, values)
         if key == "uploaded_by":
             return dict(db.query(models.User.employee_id, models.User.name).filter(models.User.employee_id.in_(values)))
+        if key == "assignee":
+            facets = [{"value": v} for v in values]
+            _label_people(db, facets)
+            return {f["value"]: f.get("label") for f in facets}
         return {}
 
     @staticmethod
@@ -506,7 +525,7 @@ class MySqlSearch:
         for e in db.query(models.Entry).filter(models.Entry.id.in_(id_list)):
             rows[e.id] = {"id": e.id, "entry": e, "hulls": [], "ship_types": set(), "zones": set(), "targets": set(), "tags": set(),
                           "kinds": set(), "kind_counts": Counter(), "file_count": 0,
-                          "uploaded_by": e.uploaded_by,
+                          "uploaded_by": e.uploaded_by, "assignees": [],
                           "no_hull": bool(e.no_hull),
                           "sort_at": e.confirmed_at or e.created_at}
         hull_rows = (db.query(models.EntryHull.entry_id, models.EntryHull.hull_no, models.Hull.ship_type)
@@ -532,6 +551,11 @@ class MySqlSearch:
                 rows[eid]["targets"].add(vocab["target"].canon(value))
             else:
                 rows[eid]["tags"].add(vocab["free"].canon(value))
+        # 46 — 담당자(명부 번호, 주 담당자 먼저)
+        for eid, pid in (db.query(models.EntryAssignee.entry_id, models.EntryAssignee.person_id)
+                         .filter(models.EntryAssignee.entry_id.in_(id_list))
+                         .order_by(models.EntryAssignee.sort_order, models.EntryAssignee.person_id)):
+            rows[eid]["assignees"].append(str(pid))
         # 파일 행을 다 읽지 않고 (Entry, 종류) 별 개수만 센다
         for eid, kind, n in (db.query(models.File.entry_id, models.File.kind, func.count(models.File.id))
                              .filter(models.File.entry_id.in_(id_list), models.File.location != "trash")
@@ -562,6 +586,8 @@ class MySqlSearch:
             return sorted(r["kinds"])
         if key == "tag":
             return sorted(r["tags"])
+        if key == "assignee":
+            return list(r["assignees"])
         v = r[key]   # uploaded_by — 값 하나
         return [v] if v else []
 
@@ -596,6 +622,7 @@ class MySqlSearch:
                      .filter(models.User.employee_id.in_([f["value"] for f in out["uploaded_by"]] or [""])))
         for f in out["uploaded_by"]:
             f["label"] = names.get(f["value"])
+        _label_people(db, out["assignee"])
         if out["hull"]:
             labels = hull_labels(db, [f["value"] for f in out["hull"]])   # 45 — 시리즈면 '3370·3371 시리즈 · 선종'
             for f in out["hull"]:

@@ -137,3 +137,28 @@ def test_restore_assignees_reuses_roster(db, users):
     got = people.assignees_of(db, e)
     assert [(a["employee_id"], a["source"], a["employed"]) for a in got] == [("N460001", "wb", True),
                                                                             (None, "manual", False)]
+
+
+def test_search_filter_facet_group_by_assignee(entry, client, auth_headers, make_entry_file, db):
+    """46 — 담당자별로 거르고(필터)·세고(건수)·묶고(보기 기준)·분류 화면에서 본다. 값은 명부 번호."""
+    ho = auth_headers(OWNER)
+    other, _f = make_entry_file(title="담당자 없는 자료", hulls=("9998",), name="o.pdf", uploaded_by=OWNER)
+    p = client.post("/api/people", json={"name": "구조옛", "department": "선체설계부", "employed": False}, headers=ho).json()
+    _patch(client, ho, entry, {"assignees": [{"employee_id": "N460001"}, {"id": p["id"]}]})
+    kim = client.get(f"/api/entries/{entry.entry_id}", headers=ho).json()["assignees"][0]["id"]
+
+    r = client.get("/api/search", headers=ho).json()
+    facet = {f["value"]: f for f in r["facets"]["assignee"]}
+    assert facet[str(kim)] == {"value": str(kim), "count": 1, "label": "구조가", "detail": "구조설계부 · 책임"}
+    assert facet[str(p["id"])]["detail"] == "선체설계부 · 퇴사"
+
+    r = client.get("/api/search", params={"assignee": str(p["id"])}, headers=ho).json()
+    assert [i["entry_id"] for i in r["items"]] == [entry.entry_id]
+
+    r = client.get("/api/search", params={"group": "assignee"}, headers=ho).json()
+    groups = {g["value"]: (g["label"], g["count"]) for g in r["groups"]}
+    assert groups[str(kim)] == ("구조가", 1) and groups[None] == (None, 1)   # 담당자 없는 자료는 '없음' 묶음
+
+    b = client.get("/api/search/browse", headers=ho).json()["facets"]["assignee"]
+    assert {f["label"] for f in b} == {"구조가", "구조옛"}
+    assert other.entry_id

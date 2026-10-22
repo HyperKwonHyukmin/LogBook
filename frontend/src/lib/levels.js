@@ -54,8 +54,8 @@ export function assignableLevels(me, target) {
 
 export const ACCESS_OPTIONS = [
   { value: 'shared', label: '공유', help: 'LV1(게스트)을 포함한 모든 사용자가 봅니다.' },
-  { value: 'normal', label: '일반', help: 'LV2 이상과 올린 사람, 열람을 허락받은 사람이 봅니다.' },
-  { value: 'blocked', label: '블록', help: '관리자(LV3)와 올린 사람, 관리자가 허락한 사람만 봅니다. 관리자만 지정·해제합니다.' },
+  { value: 'normal', label: '일반', help: 'LV2 이상과 작성자, 열람을 허락받은 사람이 봅니다.' },
+  { value: 'blocked', label: '블록', help: '관리자(LV3)와 작성자, 관리자가 허락한 사람만 봅니다. 관리자만 지정·해제합니다.' },
 ];
 
 export const accessOf = (item) => (item?.access === 'shared' || item?.access === 'blocked' ? item.access : 'normal');

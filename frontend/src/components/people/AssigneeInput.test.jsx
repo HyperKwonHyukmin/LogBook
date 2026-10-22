@@ -69,4 +69,6 @@ test('읽기 목록 — 퇴사 표시와 주 담당자, 이름은 검색 링크'
   expect(screen.getByText('주')).toBeInTheDocument();
   expect(screen.getByText('퇴사')).toBeInTheDocument();
   expect(screen.getByText('선체설계부 · 수석')).toBeInTheDocument();
+  // 46 — 명부에 있는 사람은 담당자 필터로(같은 이름도 가른다)
+  expect(screen.getByRole('link', { name: '김퇴사' })).toHaveAttribute('href', '/?assignee=3');
 });

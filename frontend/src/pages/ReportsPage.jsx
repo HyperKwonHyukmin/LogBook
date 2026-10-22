@@ -282,7 +282,7 @@ function typeOptions(options, current) {
   return current && !list.includes(current) ? [...list, current] : list;
 }
 
-const NO_EDIT_TITLE = '올린 사람과 관리자만 문서 분류를 바꿀 수 있습니다';
+const NO_EDIT_TITLE = '작성자와 관리자만 문서 분류를 바꿀 수 있습니다';
 
 /** 24 — 머리행 '현재 목록 전체 선택'. 일부만 고르면 indeterminate. */
 function SelectAll({ items, selected, disabled, onChange }) {

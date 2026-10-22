@@ -40,12 +40,12 @@ test('해석 시기는 보이지 않는다(15)', async () => {
   expect(screen.queryByRole('textbox', { name: '해석 시기' })).toBeNull();
 });
 
-test('남의 자료를 보는 LV2 — 고치지 못하고 이유(올린 사람만 수정), 블록 배지가 보인다', async () => {
+test('남의 자료를 보는 LV2 — 고치지 못하고 이유(작성자만 수정), 블록 배지가 보인다', async () => {
   renderAs({ employee_id: 'M1', name: '열람자', level: 2 }, { ...ENTRY, can_edit: false, can_manage_access: false });
   expect(await screen.findByText('계류 구조 검토')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /변경하기/ })).toBeNull();
   expect(screen.queryByRole('button', { name: /파일 추가/ })).toBeNull();
-  expect(screen.getByTestId('read-only-note')).toHaveTextContent('올린 사람만 수정');
+  expect(screen.getByTestId('read-only-note')).toHaveTextContent('작성자만 수정');
   expect(screen.getAllByTestId('access-badge')[0]).toHaveTextContent('블록');
   expect(screen.queryByRole('combobox', { name: '공개 범위' })).toBeNull();
 });
