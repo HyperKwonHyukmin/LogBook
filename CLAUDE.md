@@ -17,7 +17,7 @@ Hi-TESS LogBook(구조해석 자료 창고). 무엇·어떻게 쓰는지는 `REA
 - **작업 폴더도 여러 세션이 같이 쓴다** — 커밋할 때 `git add -A` 금지, 이 세션이 고친 파일만 골라 add 하고 커밋 전에 `git status` 로 확인한다(2026-10-19 다른 세션의 39 미커밋 작업이 섞여 푸시됨).
 - 스키마를 바꾸는 테스트에는 `@pytest.mark.fresh_schema`(README '개발 PC' 끝).
 - 계획 문서는 `docs/plans/YYYY-MM-DD-logbook-NN-<주제>.md`, 번호는 `docs/plans/README.md` 표에 올린다. 다른 계획이 미리 잡아 둔 번호(예: 32 가 33·34 예약)는 건너뛴다.
-- **사용자에게 보이는 기능·개선을 끝내면 `backend/app/changelog/changelog.json` 의 `items` 맨 앞에 한 줄 더한다**(날짜·계획 번호·분류·제목·한 문장 요약). 관리자가 `/updates` 에서 본다(46, 2026-10-22).
+- **사용자에게 보이는 기능·개선을 끝내면 `backend/app/changelog/changelog.json` 의 `items` 맨 앞에 한 줄 더한다**(날짜·계획 번호·분류·제목·한 문장 요약). 관리자가 `/updates` 에서 본다(46, 2026-10-22). 사용자가 "업데이트 이력 작성해"라고 하면 커밋 기록을 보고 이 파일만 고친다(기능 단위로 묶고 문서·데모 커밋은 뺀다, 요청자가 있으면 `requester`). 커밋·푸시 → 145 Update 로 반영.
 - 개발 PC 는 사내 PLM 에 닿지 않는다 — PLM 실제 조회는 145 에서 확인한다(README '사내 PLM 선박 정보 (30)').
 - **로그인은 사번만(비밀번호 없음)으로 둔다** — WorkBench 도 사번만이라 LogBook 만 막아도 `/sso` 로 우회되고, 직접 주소 접속도 열어 둔다(2026-10-20 결정). 본인 확인을 붙이려면 Hi-TESS 전체(`hitess-core`)에서 다룬다.
 

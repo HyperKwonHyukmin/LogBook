@@ -74,6 +74,17 @@
   .toggle { display: inline-flex; align-items: center; gap: 6px; height: 30px; color: var(--n-700); font-size: 13px; cursor: pointer; }
   .toggle input { width: 14px; height: 14px; margin: 0; accent-color: var(--brand); }
   .toggle .n { color: var(--n-500); font-size: 11px; }
+  /* 기간 줄 — 전체 · 최근 7일 · 최근 30일 · 달별 */
+  .periods { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 8px; }
+  .periods .lbl { margin-right: 4px; color: var(--n-600); font-size: 12px; line-height: 18px; font-weight: 500; }
+  .periods button { height: 26px; padding: 0 9px; border: 1px solid var(--n-200); border-radius: 5px; background: var(--n-0);
+                    color: var(--n-700); font: 500 12px/18px var(--sans); cursor: pointer;
+                    transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out); }
+  .periods button:hover { background: var(--n-50); border-color: var(--n-250); }
+  .periods button[aria-pressed="true"] { background: var(--n-100); border-color: var(--n-300); color: var(--n-900); }
+  .periods button:disabled { color: var(--n-500); background: var(--n-50); cursor: default; }
+  .periods .n { margin-left: 4px; color: var(--n-500); font: 11px/18px var(--mono); }
+  .periods .sep { width: 1px; height: 16px; margin: 0 4px; background: var(--n-200); }
   .result { min-height: 20px; margin: 0 0 4px; color: var(--n-500); font-size: 12px; line-height: 18px; }
   .linkbtn { padding: 0; border: 0; background: none; color: var(--brand); font: inherit; text-decoration: underline;
              text-underline-offset: 2px; cursor: pointer; }
@@ -183,7 +194,8 @@
   var SEEN_KEY = 'logbook_updates_seen';
   var app = document.getElementById('app');
   var stats = document.getElementById('stats');
-  var state = { items: [], kind: '', q: '', pending: false, seen: '', seenAt: -1 };
+  var state = { items: [], kind: '', q: '', pending: false, period: '', seen: '', seenAt: -1 };
+  var RECENT = { d7: { days: 7, label: '최근 7일' }, d30: { days: 30, label: '최근 30일' } };
 
   // ---- 작은 도우미 ----
   function el(tag, attrs, kids) {
@@ -231,12 +243,24 @@
   function anchorOf(it, i) { return 'u-' + (it.no || 'x') + '-' + i; }
 
   // ---- 거르기 ----
-  function matches(it, withKind) {
-    if (withKind && state.kind && it.kind !== state.kind) return false;
+  function daysAgo(n) {   // 오늘(이 PC 날짜)에서 n-1 일 전 YYYY-MM-DD — 최근 7일 = 오늘 포함 7일
+    var t = new Date(); t.setDate(t.getDate() - (n - 1));
+    return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+  }
+  function inPeriod(it, period) {
+    if (!period) return true;
+    var date = it.date || '';
+    if (RECENT[period]) return date >= daysAgo(RECENT[period].days);
+    return date.slice(0, 7) === period;
+  }
+  // skip — 그 칸은 빼고 본다(분류·기간 단추의 건수 셈). true 는 옛 호출(분류 포함)과 같다
+  function matches(it, skip) {
+    if (skip !== 'kind' && skip !== false && state.kind && it.kind !== state.kind) return false;
+    if (skip !== 'period' && !inPeriod(it, state.period)) return false;
     if (state.pending && !it.status) return false;
     var q = state.q.trim().toLowerCase();
     if (!q) return true;
-    return [it.title, it.summary, it.no ? '#' + it.no : '', it.status, it.date, it.kind].concat(it.points || [])
+    return [it.title, it.summary, it.no ? '#' + it.no : '', it.status, it.date, it.kind, it.requester].concat(it.points || [])
       .join(' ').toLowerCase().indexOf(q) !== -1;
   }
   function keyOf(it) { return [it.date || '', it.no || '', it.title || ''].join('|'); }
@@ -270,6 +294,7 @@
     var id = anchorOf(it, i);
     var meta = el('div', { class: 'meta' }, [
       it.no ? el('span', { class: 'mono', text: '#' + it.no, title: '계획 문서 번호(docs/plans)' }) : null,
+      it.requester ? el('span', {}, ['요청 ', marked(it.requester, q)]) : null,
       it.path ? el('a', { class: 'open', href: it.path, target: '_blank', rel: 'noopener' },
         [(it.screen || '화면') + ' 열기', icon('open', 12)]) : null,
       el('a', { class: 'perma', href: '#' + id, title: '이 항목 주소 복사',
@@ -304,7 +329,7 @@
   function renderList(box, result) {
     var q = state.q.trim().toLowerCase();
     var rows = state.items.map(function (it, i) { return { it: it, i: i }; }).filter(function (r) { return matches(r.it, true); });
-    var filtering = state.kind || state.pending || q;
+    var filtering = state.kind || state.pending || q || state.period;
     result.textContent = '';
     if (filtering) {
       result.appendChild(document.createTextNode(rows.length + '건 · '));
@@ -313,7 +338,7 @@
     box.textContent = '';
     if (!rows.length) {
       box.appendChild(el('div', { class: 'empty' }, [icon('none', 20), el('h3', { text: '맞는 항목이 없습니다' }),
-        el('p', { text: '찾는 글자나 분류를 바꿔 보세요.' }),
+        el('p', { text: '찾는 글자·분류·기간을 바꿔 보세요.' }),
         el('div', { class: 'act' }, [el('button', { type: 'button', class: 'btn', text: '거르기 지우기', on: { click: clearFilters } })])]));
       return;
     }
@@ -338,14 +363,29 @@
   function clearFilters() {
     state.kind = ''; state.q = ''; state.pending = false;
     ui.input.value = ''; ui.pending.checked = false;
-    syncSeg(); renderList(ui.box, ui.result); ui.input.focus();
+    setPeriod(''); ui.input.focus();
   }
   function syncSeg() {
     Array.prototype.forEach.call(ui.seg.children, function (b) {
       b.setAttribute('aria-pressed', String(b.getAttribute('data-kind') === state.kind));
-      var n = state.items.filter(function (it) { return matches(it, false) && (!b.getAttribute('data-kind') || it.kind === b.getAttribute('data-kind')); }).length;
+      var n = state.items.filter(function (it) { return matches(it, 'kind') && (!b.getAttribute('data-kind') || it.kind === b.getAttribute('data-kind')); }).length;
       b.querySelector('.n').textContent = n;
     });
+    Array.prototype.forEach.call(ui.periods.querySelectorAll('button'), function (b) {
+      var p = b.getAttribute('data-period');
+      var n = state.items.filter(function (it) { return matches(it, 'period') && inPeriod(it, p); }).length;
+      b.setAttribute('aria-pressed', String(p === state.period));
+      b.querySelector('.n').textContent = n;
+      b.disabled = n === 0 && p !== state.period;   // 0건 기간은 눌러도 빈 화면 — 누를 수 없게(고른 것은 풀 수 있게 둔다)
+    });
+  }
+  function setPeriod(p) {
+    state.period = p;
+    // 고른 기간을 주소에 남긴다(?period=2026-10) — 링크로 같은 기간을 연다
+    var url = new URL(location.href);
+    if (p) url.searchParams.set('period', p); else url.searchParams.delete('period');
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+    syncSeg(); renderList(ui.box, ui.result);
   }
 
   function render() {
@@ -355,7 +395,7 @@
       notice('none', '아직 기록한 업데이트가 없습니다', '새 기능·개선을 배포하면 여기에 최근 것부터 쌓입니다.');
       return;
     }
-    var input = el('input', { type: 'search', placeholder: '제목·설명·번호로 찾기', 'aria-label': '이력 찾기', autocomplete: 'off' });
+    var input = el('input', { type: 'search', placeholder: '제목·설명·번호·요청자로 찾기', 'aria-label': '이력 찾기', autocomplete: 'off' });
     var seg = el('div', { class: 'seg', role: 'group', 'aria-label': '분류' });
     [''].concat(KINDS).forEach(function (k) {
       if (k && !state.items.some(function (it) { return it.kind === k; })) return;
@@ -365,9 +405,24 @@
     });
     var pendingCount = state.items.filter(function (it) { return it.status; }).length;
     var pending = el('input', { type: 'checkbox' });
+    var months = [];
+    state.items.forEach(function (it) { var m = (it.date || '').slice(0, 7); if (m && months.indexOf(m) < 0) months.push(m); });
+    var years = {}; months.forEach(function (m) { years[m.slice(0, 4)] = 1; });
+    var oneYear = Object.keys(years).length === 1 && months[0] && months[0].slice(0, 4) === String(new Date().getFullYear());
+    var periodBtn = function (p, label) {
+      return el('button', { type: 'button', 'data-period': p, 'aria-pressed': 'false', on: { click: function () { setPeriod(p); } } },
+        [label, el('span', { class: 'n mono' })]);
+    };
+    var periods = el('div', { class: 'periods', role: 'group', 'aria-label': '기간' }, [
+      el('span', { class: 'lbl', text: '기간' }),
+      periodBtn('', '전체'), periodBtn('d7', RECENT.d7.label), periodBtn('d30', RECENT.d30.label),
+      el('span', { class: 'sep', 'aria-hidden': 'true' }),
+    ].concat(months.map(function (m) { return periodBtn(m, oneYear ? Number(m.slice(5)) + '월' : monthLabel(m)); })));
+    var p0 = new URLSearchParams(location.search).get('period') || '';
+    if (p0 && (RECENT[p0] || months.indexOf(p0) >= 0)) state.period = p0;
     var result = el('p', { class: 'result', role: 'status' });
     var box = el('div');
-    ui = { input: input, seg: seg, pending: pending, result: result, box: box };
+    ui = { input: input, seg: seg, pending: pending, periods: periods, result: result, box: box };
     input.addEventListener('input', function () { state.q = input.value; syncSeg(); renderList(box, result); });
     input.addEventListener('keydown', function (e) { if (e.key === 'Escape' && input.value) { e.preventDefault(); clearFilters(); } });
     pending.addEventListener('change', function () { state.pending = pending.checked; syncSeg(); renderList(box, result); });
@@ -376,6 +431,7 @@
       seg,
       pendingCount ? el('label', { class: 'toggle' }, [pending, '145 확인 남음만', el('span', { class: 'n mono', text: String(pendingCount) })]) : null,
     ]));
+    app.appendChild(periods);
     app.appendChild(result);
     app.appendChild(box);
     syncSeg();
