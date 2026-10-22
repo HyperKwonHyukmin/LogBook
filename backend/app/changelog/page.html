@@ -243,7 +243,7 @@
   function monthLabel(ym) { var p = ym.split('-'); return p.length === 2 ? p[0] + '년 ' + Number(p[1]) + '월' : '날짜 없음'; }
   function anchorOf(it, i) { return 'u-' + (it.no || 'x') + '-' + i; }
 
-  // ---- 거르기 ----
+  // ---- 필터 ----
   function daysAgo(n) {   // 오늘(이 PC 날짜)에서 n-1 일 전 YYYY-MM-DD — 최근 7일 = 오늘 포함 7일
     var t = new Date(); t.setDate(t.getDate() - (n - 1));
     return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
@@ -335,13 +335,13 @@
     result.textContent = '';
     if (filtering) {
       result.appendChild(document.createTextNode(rows.length + '건 · '));
-      result.appendChild(el('button', { type: 'button', class: 'linkbtn', text: '거르기 지우기', on: { click: clearFilters } }));
+      result.appendChild(el('button', { type: 'button', class: 'linkbtn', text: '필터 초기화', on: { click: clearFilters } }));
     }
     box.textContent = '';
     if (!rows.length) {
       box.appendChild(el('div', { class: 'empty' }, [icon('none', 20), el('h3', { text: '맞는 항목이 없습니다' }),
         el('p', { text: '찾는 글자·분류·기간을 바꿔 보세요.' }),
-        el('div', { class: 'act' }, [el('button', { type: 'button', class: 'btn', text: '거르기 지우기', on: { click: clearFilters } })])]));
+        el('div', { class: 'act' }, [el('button', { type: 'button', class: 'btn', text: '필터 초기화', on: { click: clearFilters } })])]));
       return;
     }
     var groups = [], byMonth = {};
@@ -410,7 +410,7 @@
   function render() {
     renderHead();
     app.textContent = '';
-    if (!state.items.length) {   // 아직 기록이 없다 — 거르기 도구 없이 안내만
+    if (!state.items.length) {   // 아직 기록이 없다 — 필터 없이 안내만
       notice('none', '아직 기록한 업데이트가 없습니다', '새 기능·개선을 배포하면 여기에 최근 것부터 쌓입니다.');
       return;
     }
@@ -453,7 +453,7 @@
     app.appendChild(el('div', { class: 'tools' }, [
       el('label', { class: 'search' }, [icon('search', 14), input, el('span', { class: 'kbd', 'aria-hidden': 'true', text: '/' })]),
       seg,
-      pendingCount ? el('label', { class: 'toggle' }, [pending, '145 확인 남음만', el('span', { class: 'n mono', text: String(pendingCount) })]) : null,
+      pendingCount ? el('label', { class: 'toggle' }, [pending, '운영 확인 전만 보기', el('span', { class: 'n mono', text: String(pendingCount) })]) : null,
     ]));
     app.appendChild(periods);
     app.appendChild(result);
