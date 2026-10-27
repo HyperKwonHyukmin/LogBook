@@ -15,6 +15,7 @@ import { Bar } from '../components/ui/Skeleton.jsx';
 import { errorText } from '../lib/labels.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import { sizeClassOf } from '../components/hull/HullPlmLookup.jsx';
+import BackButton from '../components/ui/BackButton.jsx';
 
 /** '2026-09' → '2026년 9월' */
 const monthLabel = (m) => {
@@ -175,6 +176,7 @@ export default function HullPage() {
       <header className="flex flex-wrap items-end gap-x-6 gap-y-3 border-b border-n-200 pb-5">
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
+            <BackButton className="-ml-1.5 self-center" />
             <h1 className="font-mono text-hull font-medium tracking-[-0.03em] text-brand">{hull.hull_no}<span className="sr-only"> 호선</span></h1>
             <span aria-hidden="true" className="text-body font-medium text-n-600">호선</span>
           </div>

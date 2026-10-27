@@ -12,6 +12,7 @@ import { CompareBar, CompareBasketProvider } from '../compare/CompareBasket.jsx'
 import { FavoritesProvider } from '../favorites/Favorites.jsx';
 import usePrefsSync from '../../lib/usePrefsSync.js';
 import { flushPrefs, resetPrefs } from '../../lib/prefs.js';
+import { useMouseBack } from '../../lib/useGoBack.js';
 
 /**
  * 네이비 크롬(상단 바 + 사이드 내비, 한 면) 안에 흰 작업면 한 장을 끼운 구성. 비교 바구니(07)는 셸 전체에서 하나.
@@ -24,6 +25,7 @@ export default function AppShell() {
   const location = useLocation();
   const storage = useStorageStatus();
   usePrefsSync(user?.employee_id); // 10 — 사용자 설정(미리보기 폭 등)을 서버에서 받아 온다
+  useMouseBack();   // 마우스 뒤로·앞으로 버튼으로 화면 이동
   async function onLogout() {
     await flushPrefs();   // 보내지 못한 설정 변경을 먼저 보낸다(토큰이 지워지기 전에)
     resetPrefs();

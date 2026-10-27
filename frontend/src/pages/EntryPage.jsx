@@ -35,6 +35,7 @@ import { canWriteLevel } from '../lib/levels.js';
 import RevisionSection from '../components/revisions/RevisionSection.jsx';
 import HullPlmLookup, { HullPlmSummary } from '../components/hull/HullPlmLookup.jsx';
 import NeedsFixBadge from '../components/ui/NeedsFixBadge.jsx';
+import BackButton from '../components/ui/BackButton.jsx';
 import ModelTraits, { defaultFile } from '../components/preview/ModelTraits.jsx';
 import WbOrigins from '../components/workbench/WbOrigins.jsx';
 import AssigneeInput, { AssigneeList } from '../components/people/AssigneeInput.jsx';
@@ -624,6 +625,7 @@ export default function EntryPage() {
       )}
       <header className="border-b border-n-200 pb-5">
         <div className="flex h-7 items-center gap-3">
+          <BackButton className="-ml-1.5" />
           <EntryIdBadge entryId={entry.entry_id} onCopy={copyId} />
           <StatusDot status={entry.status} />
           {/* 13 — 비공개 자료(볼 수 있는 사람에게만 보인다) */}

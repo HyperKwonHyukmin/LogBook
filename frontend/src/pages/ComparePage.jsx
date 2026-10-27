@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { canGoBack } from '../lib/useGoBack.js';
 import { Columns2, LogOut, Plus, RotateCcw } from 'lucide-react';
 import { api } from '../api/client.js';
 import ComparePane from '../components/compare/ComparePane.jsx';
@@ -234,9 +235,7 @@ export default function ComparePage() {
 
   /** 끝내기 — 비교를 열기 전 화면으로. 바구니는 그대로 두어 다시 열 수 있다. 앱 안 이전 화면이 없으면 검색으로. */
   const exit = () => {
-    const idx = window.history.state?.idx;
-    const canBack = typeof idx === 'number' ? idx > 0 : location.key !== 'default';
-    if (canBack) navigate(-1);
+    if (canGoBack(location)) navigate(-1);
     else navigate('/');
   };
 
