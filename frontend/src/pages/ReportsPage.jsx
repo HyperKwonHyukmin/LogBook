@@ -12,6 +12,7 @@ import FilePreview from '../components/preview/FilePreview.jsx';
 import { SCOPE_LABELS, errorText, formatDateTime } from '../lib/labels.js';
 import { highlightParts } from '../lib/search.js';
 import { reportLocatorLabel } from '../lib/reportLocator.js';
+import SearchModeTabs from '../components/search/SearchModeTabs.jsx';
 import { QUICK_BULK_TYPES, bulkResultText, bulkSummary } from '../lib/reportBulk.js';
 
 /**
@@ -469,11 +470,7 @@ export default function ReportsPage() {
       <header className="border-b border-n-200 px-5 pt-4">
         <h1 className="text-title font-semibold text-n-900">문서</h1>
         <p className="mt-1 mb-3 text-ui text-n-600">호선 자료와 공용 자료의 보고서·발표자료·계산서 등을 본문(그림 속 글자 포함)까지 찾고, 관련 모델을 함께 확인합니다.</p>
-        <nav aria-label="자료 보기" className="flex gap-5 text-ui">
-          <Link to="/" className="border-b-2 border-transparent pb-2 text-n-600 hover:text-n-900">전체 자료</Link>
-          <Link to="/?unit=file&kind=model" className="border-b-2 border-transparent pb-2 text-n-600 hover:text-n-900">모델</Link>
-          <Link to="/reports" aria-current="page" className="border-b-2 border-n-900 pb-2 font-medium text-n-900">문서</Link>
-        </nav>
+        <SearchModeTabs current="reports" q={q} />
       </header>
       <div className="border-b border-n-200 px-5 py-2">
         <QuickTypes groups={typeMeta?.groups} counts={data?.document_types} selected={docTypes}
@@ -502,7 +499,7 @@ export default function ReportsPage() {
       </div>
       <div className="space-y-1 border-b border-n-200 px-5 py-2">
         <IndexStatus status={indexStatus} unavailable={statusUnavailable} />
-        <p className="text-meta text-n-500">이 화면의 검색은 그림 속 글자(OCR)까지 본문 색인으로 찾습니다. 상단 전체 자료 검색은 OCR 본문을 찾지 않아 결과가 다를 수 있습니다 — OCR 포함 본문 검색은 이 문서 화면에서 하세요. 색인 대기·실패 문서는 기존 본문 추출로 찾습니다.</p>
+        <p className="text-meta text-n-500">이 화면의 검색은 그림 속 글자(OCR)까지 본문 색인으로 찾습니다. 위 [자료] 검색은 OCR 본문을 찾지 않아 결과가 다를 수 있습니다. 색인 대기·실패 문서는 기존 본문 추출로 찾습니다.</p>
       </div>
       <div className={`grid min-h-0 flex-1 ${picked ? 'grid-cols-[minmax(300px,1fr)_minmax(420px,1.2fr)] max-[1100px]:grid-cols-1' : 'grid-cols-1'}`}>
         <section aria-label="문서 목록" className="min-w-0 p-5">

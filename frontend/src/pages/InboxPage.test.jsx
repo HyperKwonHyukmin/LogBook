@@ -30,11 +30,11 @@ function renderPage(fetchMap) {
   return mount();
 }
 
-function mount() {
+function mount(path = '/inbox') {
   const auth = { user: { employee_id: 'A100001', name: '사용자' }, isAdmin: false };
   return render(
     <AuthContext.Provider value={auth}>
-      <MemoryRouter initialEntries={['/inbox']}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes><Route path="/inbox" element={<InboxPage />} /></Routes>
       </MemoryRouter>
     </AuthContext.Provider>,
@@ -99,11 +99,11 @@ test('탭은 화살표로 옮겨 가고 탭 패널과 연결된다', async () =>
   const mine = screen.getByRole('tab', { name: '내 배치' });
   expect(document.getElementById(mine.getAttribute('aria-controls'))).toHaveAttribute('role', 'tabpanel');
   mine.focus();
-  await userEvent.keyboard('{ArrowRight}');
+  await userEvent.keyboard('{ArrowLeft}');   // 처음에서 왼쪽 = 마지막 탭
   const other = screen.getByRole('tab', { name: '주인 없는 배치' });
   expect(other).toHaveFocus();
   expect(other).toHaveAttribute('aria-selected', 'true');
-  await userEvent.keyboard('{ArrowLeft}');
+  await userEvent.keyboard('{ArrowRight}');
   expect(mine).toHaveFocus();
 });
 
@@ -153,4 +153,20 @@ test('LV1(게스트)도 올린다 — 올리기 단추·끌어 놓기 안내가 
   expect(await screen.findByText('정리할 자료가 없습니다')).toBeInTheDocument();
   expect(screen.getByText(/끌어 놓거나/)).toBeInTheDocument();
   expect(screen.queryByText(/등급은 자료를 올릴 수 없습니다/)).toBeNull();
+});
+
+test('48 — 손볼 자료 탭(/inbox?tab=fix)은 배치 대신 확정 자료 목록을 종류별로 보인다', async () => {
+  const E = (id, o) => ({ id, title: `${id} 제목`, rows: ['h:9001'], zones: ['정반'], models: 1, reports: 1, doc_linked: false,
+    model_linked: false, solve: 'pass', needs_fix: false, unsigned: false, uploaded_by: 'M1', uploader_name: '김해석', confirmed_at: '2026-09', ...o });
+  const coverage = { hulls: { 9001: 'LNGC' }, zones: ['정반'], truncated: false,
+    entries: [E('E000001'), E('E000002', { reports: 0 }), E('E000003', { reports: 0 })] };
+  vi.stubGlobal('fetch', vi.fn((url) => {
+    if (url !== '/api/coverage') throw new Error(`unexpected ${url}`);
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(coverage) });
+  }));
+  mount('/inbox?tab=fix');
+  expect(screen.getByRole('tab', { name: '손볼 자료' })).toHaveAttribute('aria-selected', 'true');
+  const kind = await screen.findByRole('tab', { name: /문서 없는 모델/ });
+  expect(kind).toHaveTextContent('문서 없는 모델 2');
+  expect(screen.getByRole('link', { name: 'E000002 제목' })).toHaveAttribute('href', '/e/E000002');
 });

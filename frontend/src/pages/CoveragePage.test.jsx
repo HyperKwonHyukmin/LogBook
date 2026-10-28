@@ -23,16 +23,16 @@ test('격자·범례·먼저 볼 칸을 그린다', async () => {
   expect(screen.getByRole('button', { name: /^갖춤 1/ })).toBeInTheDocument();
   const side = screen.getByRole('complementary', { name: '칸 상세' });
   expect(within(side).getByText('모델 1개가 모두 검증 실패')).toBeInTheDocument();
-  expect(screen.getByRole('tab', { name: /문서 없는 모델/ })).toHaveTextContent('2건');
+  // 48 — 손볼 자료 목록은 정리 대기로 옮겼다
+  expect(screen.queryByRole('tab', { name: /문서 없는 모델/ })).toBeNull();
+  expect(within(side).getByRole('link', { name: /손볼 자료를 자료 단위로 보기/ })).toHaveAttribute('href', '/inbox?tab=fix');
 });
 
-test('칸을 누르면 그 칸의 자료와 칸만 보기가 나온다', async () => {
+test('칸을 누르면 그 칸의 자료가 나온다', async () => {
   renderPage();
   await userEvent.click(await screen.findByRole('button', { name: '9002 · 정반: 문서 없음, 자료 1건' }));
   const side = screen.getByRole('complementary', { name: '칸 상세' });
   expect(within(side).getByRole('link', { name: 'E000002 제목' })).toHaveAttribute('href', '/e/E000002');
-  await userEvent.click(screen.getByRole('button', { name: '9002 · 정반만 보기' }));
-  expect(screen.getByRole('tab', { name: /문서 없는 모델/ })).toHaveTextContent('1건');
 });
 
 test('42 — 해석 종류 거르기는 없다(옛 응답에 analysis_type 이 있어도)', async () => {

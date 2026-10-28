@@ -1,18 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Grid2x2Check, X } from 'lucide-react';
+import { Grid2x2Check } from 'lucide-react';
 import { api } from '../api/client.js';
 import Button from '../components/ui/Button.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
 import { ErrorNote } from '../components/ui/Page.jsx';
 import { RowsSkeleton } from '../components/ui/Skeleton.jsx';
-import { HullChip } from '../components/ui/Status.jsx';
-import { Segmented, Tabs } from '../components/ui/Tabs.jsx';
+import { Segmented } from '../components/ui/Tabs.jsx';
+import { RowChip, SolveText, fileText } from '../components/coverage/FixList.jsx';
 import { errorText } from '../lib/labels.js';
 import { titleWithoutHull } from '../lib/similar.js';
 import {
-  buildGrid, cellKey, cellSentence, COL_AXES, DEFAULT_AXES, headerLines, LIST_TABS, listRows, ROW_AXES, sortRows, STATE_INFO, STATES,
-  todoCells,
+  buildGrid, cellKey, cellSentence, COL_AXES, DEFAULT_AXES, headerLines, ROW_AXES, sortRows, STATE_INFO, STATES, todoCells,
 } from '../lib/coverage.js';
 
 // 44 — 행 순서: 기본은 행 기준의 자연 순서(호선 번호 · 호선 많은 선종 먼저)
@@ -22,35 +21,13 @@ const sortsFor = (grid) => [
   { id: 'gaps', label: `빈 ${grid.colLabel} 많은 순` },
 ];
 const axisOf = (list, v, d) => (list.some((a) => a.id === v) ? v : d);
-const LIST_LIMIT = 12;
-
-function RowChip({ row }) {
-  if (row.kind === 'hull') {
-    if ((row.members?.length || 0) < 2) return <HullChip hull={row.label} />;
-    // 45 — 같은 시리즈 호선은 한 행: 호선 칩을 나란히(각각 호선 화면으로)
-    return (
-      <span className="inline-flex flex-wrap items-center gap-1" title={`${row.label} 시리즈 — 같은 설계 ${row.members.length}척`}>
-        {row.members.map((h) => <HullChip key={h} hull={h} />)}
-      </span>
-    );
-  }
-  return <span className="inline-flex h-5 items-center rounded-sm bg-n-100 px-1.5 text-meta font-medium text-n-800">{row.label}</span>;
-}
 
 function Swatch({ state }) {
   return <span aria-hidden="true" className={`cov-cell cov-${state}`} style={{ width: 22, height: 16 }} />;
 }
 
-function SolveText({ solve }) {
-  if (solve === 'pass') return <span className="inline-flex items-center gap-1.5 text-meta font-medium text-ok"><span className="h-1.5 w-1.5 rounded-full bg-ok" />검증 통과</span>;
-  if (solve === 'fail') return <span className="inline-flex items-center gap-1.5 text-meta font-medium text-err"><span className="h-1.5 w-1.5 rounded-full bg-err" />검증 실패</span>;
-  if (solve === 'none') return <span className="text-meta text-n-600">검증 전</span>;
-  return null;
-}
-
 // 옆에 호선 칩이 있는 자리에서는 제목 머리의 같은 호선을 뺀다
 const shortTitle = (e) => titleWithoutHull(e.title, (e.rows || []).filter((k) => k.startsWith('h:')).map((k) => k.slice(2)));
-const fileText = (e) => [e.models ? `BDF ${e.models}` : null, e.reports ? `문서 ${e.reports}` : null].filter(Boolean).join(' · ') || '파일 없음';
 
 function EntryLine({ e }) {
   return (
@@ -82,9 +59,6 @@ export default function CoveragePage() {
   const [sort, setSort] = useState('hull');
   const [focus, setFocus] = useState(null);     // 범례로 고른 상태만 남기기
   const [sel, setSel] = useState(null);         // { rowKey, colKey }
-  const [tab, setTab] = useState('no_report');
-  const [scoped, setScoped] = useState(false);
-  const [showAll, setShowAll] = useState(false);
   const [tip, setTip] = useState(null);         // { x, y, text }
   const [cursor, setCursor] = useState(null);   // 방향키 이동 위치(행·열 번호)
   const gridRef = useRef(null);
@@ -101,8 +75,6 @@ export default function CoveragePage() {
   const selRow = grid && sel ? grid.rows.find((r) => r.key === sel.rowKey) : null;
   const selCol = grid && sel ? grid.cols.find((c) => c.key === sel.colKey) : null;
   const selCell = selRow && selCol ? grid.cells.get(cellKey(selRow.key, selCol.key)) : null;
-  const lists = useMemo(() => (data ? listRows(data, scoped && selRow && selCol ? { rowKey: selRow.key, col: selCol } : null, grid?.keysOf) : null),
-    [data, grid, scoped, selRow, selCol]);
   const todos = useMemo(() => (grid ? todoCells(grid) : []), [grid]);
 
   if (error) return <div className="px-6 py-6"><ErrorNote>{error}</ErrorNote></div>;
@@ -115,13 +87,13 @@ export default function CoveragePage() {
     );
   }
 
-  const pick = (rowKey, colKey) => { setSel({ rowKey, colKey }); setShowAll(false); setTip(null); };
+  const pick = (rowKey, colKey) => { setSel({ rowKey, colKey }); setTip(null); };
   // 기준을 바꾸면 고른 칸 · 칸 거르기 · 방향키 위치를 푼다(범례 상태 거르기는 그대로)
   const setAxis = (key, v) => {
     const next = new URLSearchParams(params);
     if (v === DEFAULT_AXES[key]) next.delete(key); else next.set(key, v);
     setParams(next, { replace: true });
-    setSel(null); setScoped(false); setCursor(null); setTip(null);
+    setSel(null); setCursor(null); setTip(null);
   };
   const { rowLabel, colLabel } = grid;
   const showTip = (el, r, c, cell) => {
@@ -135,8 +107,6 @@ export default function CoveragePage() {
     requestAnimationFrame(() => gridRef.current?.querySelector(`[data-pos="${nr}:${nc}"]`)?.focus());
   };
   const cur = cursor || { r: 0, c: 0 };
-  const list = lists[tab];
-  const shown = showAll ? list : list.slice(0, LIST_LIMIT);
 
   return (
     <div className="px-6 pb-10 pt-5 min-[1441px]:px-8">
@@ -243,60 +213,6 @@ export default function CoveragePage() {
             <span>방향키로 칸을 옮기고 Enter 로 엽니다</span>
           </div>
 
-          <section className="mt-6" aria-label="손볼 자료 목록">
-            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-ui font-semibold text-n-800">손볼 자료 목록</h2>
-              {selRow && selCol && (scoped ? (
-                <span className="inline-flex h-[26px] items-center gap-1 rounded-full bg-brand-subtle pl-2.5 pr-1 text-ui text-brand">
-                  {selRow.label} · {selCol.label}만
-                  <button type="button" aria-label="칸 거르기 풀기" onClick={() => setScoped(false)}
-                          className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full hover:bg-brand-muted"><X size={13} /></button>
-                </span>
-              ) : (
-                <Button variant="secondary" size="sm" onClick={() => setScoped(true)}>{selRow.label} · {selCol.label}만 보기</Button>
-              ))}
-            </div>
-            <Tabs label="손볼 자료 종류" items={LIST_TABS.map((t) => ({ id: t.id, label: t.label, count: `${lists[t.id].length}건` }))}
-                  value={tab} onChange={(v) => { setTab(v); setShowAll(false); }} />
-            <p className="py-2.5 text-ui text-n-600">{LIST_TABS.find((t) => t.id === tab).note}</p>
-            {list.length ? (
-              <div className="overflow-auto rounded-lg border border-n-200">
-                <table className="w-full border-collapse text-ui">
-                  <thead>
-                    <tr className="h-9 bg-n-50 text-left text-meta font-medium text-n-600">
-                      {['자료', rowLabel, colLabel, '파일 · 검증', '작성자', '등록일'].map((h) => (
-                        <th key={h} className="whitespace-nowrap border-b border-n-200 px-2.5 font-medium">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {shown.map((e) => (
-                      <tr key={e.id} className="border-b border-n-100 hover:bg-n-50">
-                        <td className="px-2.5 py-2">
-                          <Link to={`/e/${e.id}`} className="font-medium text-n-900 hover:text-brand hover:underline underline-offset-2">{e.title}</Link>
-                          <div className="font-mono text-meta text-n-600">{e.id}</div>
-                        </td>
-                        <td className="px-2.5 py-2"><span className="flex flex-wrap gap-1">{grid.keysOf(e).slice(0, 3).map((k) => {
-                          const r = grid.rows.find((x) => x.key === k);
-                          return r ? <RowChip key={k} row={r} /> : null;
-                        })}</span></td>
-                        <td className="whitespace-nowrap px-2.5 py-2 text-n-700">{axes.cols === 'target' ? (e.target || '대상 없음')
-                          : <>{(e.zones[0] || '구역 없음')}{e.zones.length > 1 ? ` 외 ${e.zones.length - 1}` : ''}</>}</td>
-                        <td className="whitespace-nowrap px-2.5 py-2"><span className="mr-2 text-n-700">{fileText(e)}</span><SolveText solve={e.solve} /></td>
-                        <td className="whitespace-nowrap px-2.5 py-2 text-n-700" title={e.uploaded_by || undefined}>{e.uploader_name || e.uploaded_by || '—'}</td>
-                        <td className="whitespace-nowrap px-2.5 py-2 font-mono text-meta text-n-600">{e.confirmed_at || '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {list.length > shown.length && (
-                  <div className="border-t border-n-100 p-2 text-center">
-                    <Button variant="ghost" size="sm" onClick={() => setShowAll(true)}>나머지 {list.length - shown.length}건 더 보기</Button>
-                  </div>
-                )}
-              </div>
-            ) : <p className="py-6 text-ui text-n-600">이 조건에 해당하는 자료가 없습니다.</p>}
-          </section>
         </div>
 
         <aside aria-label="칸 상세" aria-live="polite"
@@ -305,7 +221,7 @@ export default function CoveragePage() {
             <>
               <div className="flex items-start justify-between gap-2">
                 <h2 className="flex flex-wrap items-center gap-2 text-body font-semibold text-n-900"><RowChip row={selRow} />{selCol.label}</h2>
-                <Button variant="ghost" size="sm" onClick={() => { setSel(null); setScoped(false); }}>닫기</Button>
+                <Button variant="ghost" size="sm" onClick={() => setSel(null)}>닫기</Button>
               </div>
               <p className="text-meta text-n-600">{selRow.sub}</p>
               <p className="my-3 rounded-md bg-n-50 px-3 py-2.5 text-ui text-n-700">
@@ -337,7 +253,11 @@ export default function CoveragePage() {
                 ))}
                 {!todos.length && <p className="py-4 text-ui text-n-600">손볼 칸이 없습니다.</p>}
               </div>
-              {todos.length > 9 && <p className="mt-2 text-meta text-n-600">그 밖에 {todos.length - 9}칸은 아래 목록 탭에서 자료 단위로 볼 수 있습니다.</p>}
+              {todos.length > 9 && <p className="mt-2 text-meta text-n-600">그 밖에 {todos.length - 9}칸이 더 있습니다.</p>}
+              {/* 48 — 손볼 자료 목록(문서 없는 모델 등)은 정리 대기로 옮겼다 */}
+              <Link to="/inbox?tab=fix" className="mt-3 inline-block text-meta text-n-600 underline-offset-2 hover:text-brand hover:underline">
+                손볼 자료를 자료 단위로 보기 (정리 대기)
+              </Link>
             </>
           )}
         </aside>

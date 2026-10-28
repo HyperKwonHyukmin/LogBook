@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import FacetPanel, { matchesFilter } from './FacetPanel.jsx';
 
 // 19 — 합성 값(가상 호선 9xxx). 호선 12개 = 칸 안 찾기가 생기는 수(8개 초과)
@@ -14,7 +15,7 @@ const FACETS = {
 
 function renderPanel(filters = {}, applied) {
   const onChange = vi.fn();
-  render(<FacetPanel facets={FACETS} filters={filters} applied={applied} onChange={onChange} />);
+  render(<MemoryRouter><FacetPanel facets={FACETS} filters={filters} applied={applied} onChange={onChange} /></MemoryRouter>);
   return onChange;
 }
 
@@ -70,4 +71,12 @@ test('matchesFilter — 값·라벨·동의어', () => {
   expect(matchesFilter('zone', FACETS.zone[0], 'aft body')).toBe(true);
   expect(matchesFilter('hull', HULLS[11], 'lngc')).toBe(true);
   expect(matchesFilter('zone', FACETS.zone[1], 'aft')).toBe(false);
+});
+
+test('48 — 칸마다 [값 전체 보기] 가 분류 화면의 그 속성 탭으로 간다', () => {
+  renderPanel();
+  expect(within(screen.getByRole('group', { name: '구역' })).getByRole('link', { name: '값 전체 보기' }))
+    .toHaveAttribute('href', '/browse?by=zone');
+  expect(within(screen.getByRole('group', { name: '호선' })).getByRole('link', { name: '값 전체 보기' }))
+    .toHaveAttribute('href', '/browse?by=hull');
 });

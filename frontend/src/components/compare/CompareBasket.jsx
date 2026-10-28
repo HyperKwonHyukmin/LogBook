@@ -101,11 +101,23 @@ export function CompareToggle({ file, variant = 'secondary', size = 'sm', classN
 /**
  * 바구니 띠 — 화면 아래 가운데(토스트 자리 위), 담긴 것이 있을 때만. 떠 있는 표면이라 shadow-lg.
  * z-30: 토스트(z-50)·올리기 진행 상자(z-40)보다 아래.
+ * 48 — 최근 비교 메뉴를 없앴으므로, 바구니가 비어도 [최근 비교] 단추 하나는 오른쪽 아래에 늘 둔다
+ * (가운데 아래는 검색의 '더 보기' 단추 자리라 피한다). 비교 화면·최근 비교 화면에서는 띄우지 않는다.
  */
 export function CompareBar() {
   const basket = useCompareBasket();
   const visible = useBasketBarVisible();
-  if (!visible) return null;
+  const { pathname } = useLocation();
+  if (!visible) {
+    if (pathname.startsWith('/compare')) return null;
+    return (
+      <div className="pointer-events-none fixed bottom-4 right-5 z-30">
+        <section aria-label="최근 비교 바로가기" className="pointer-events-auto rounded-lg border border-n-200 bg-n-0 p-0.5 shadow-md">
+          <RecentComparesMenu label="최근 비교" />
+        </section>
+      </div>
+    );
+  }
   const items = cleanItems(basket.items);
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-16 z-30 flex justify-center px-4">

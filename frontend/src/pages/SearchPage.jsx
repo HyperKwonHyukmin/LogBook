@@ -7,6 +7,7 @@ import EntryPreviewPanel from '../components/search/EntryPreviewPanel.jsx';
 import usePreviewWidth, { PreviewResizer } from '../components/search/usePreviewWidth.jsx';
 import ResultList, { itemKey } from '../components/search/ResultList.jsx';
 import ResultSummary from '../components/search/ResultSummary.jsx';
+import SearchModeTabs from '../components/search/SearchModeTabs.jsx';
 import GroupedResults, { slotItems } from '../components/search/GroupedResults.jsx';
 import { useBasketBarVisible } from '../components/compare/CompareBasket.jsx';
 import Button, { buttonClass } from '../components/ui/Button.jsx';
@@ -238,7 +239,10 @@ export default function SearchPage() {
   const shownCount = grouped ? grouped.groups.length : (res?.items.length || 0);
 
   return (
-    <div ref={areaRef} className="relative flex h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col">
+    {/* 48 — 자료 / 문서 본문 전환(즐겨찾기 보기에서는 숨긴다 — 즐겨찾기는 자료만) */}
+    {!state.fav && <SearchModeTabs current="entries" q={state.q} className="shrink-0 border-b border-n-200 px-5 pt-3" />}
+    <div ref={areaRef} className="relative flex min-h-0 flex-1">
       <FacetPanel ref={facetRef} {...facetProps} className={collapse ? 'hidden min-[1600px]:block' : ''} />
       {preview && filtersOpen && (
         <div role="dialog" aria-label="필터" aria-modal="true" className="absolute inset-0 z-20 flex min-[1600px]:hidden"
@@ -386,6 +390,7 @@ export default function SearchPage() {
         <EntryPreviewPanel entryId={preview.entry_id} fileId={preview.file_id} onClose={closePreview}
                            width={pane.width} panelRef={pane.panelRef} resizer={<PreviewResizer handleProps={pane.handleProps} />} />
       )}
+    </div>
     </div>
   );
 }

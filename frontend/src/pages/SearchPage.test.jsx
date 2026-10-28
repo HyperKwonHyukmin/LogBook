@@ -528,3 +528,12 @@ test('한 칸 여러 값(19) — 값마다 칩, 칩은 그 값만 해제, 동의
   await userEvent.click(await screen.findByRole('button', { name: '구역 Engine Room 필터 해제' }));
   expect(screen.getByTestId('loc').textContent).toBe('/');
 });
+
+test('48 — [자료 | 문서 본문] 전환은 검색어만 들고 문서 화면으로 간다(즐겨찾기 보기에는 없다)', async () => {
+  mockApi({ 'GET /api/search?q=9999+%EA%B0%95%EB%8F%84&hull=9998&limit=50&offset=0': RES });
+  renderAt('/?q=9999%20강도&hull=9998');
+  await screen.findByText('계류 구조 검토');
+  const tabs = screen.getByRole('navigation', { name: '검색 대상' });
+  expect(within(tabs).getByRole('link', { name: '자료' })).toHaveAttribute('aria-current', 'page');
+  expect(within(tabs).getByRole('link', { name: '문서 본문' })).toHaveAttribute('href', '/reports?q=9999+%EA%B0%95%EB%8F%84');
+});

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Check, Search, X } from 'lucide-react';
 import { FILTER_KEYS, filterValues } from '../../lib/search.js';
 import { FACET_LABELS, KIND_LABELS } from '../../lib/labels.js';
@@ -50,6 +51,11 @@ function Facet({ name, items, selected, onPick }) {
       <h3 className="mb-1 flex items-baseline gap-1.5 px-2 text-meta font-semibold text-n-700">
         {label}
         {selected.length > 1 && <span className="font-normal text-n-500">{selected.length}개 중 하나</span>}
+        {/* 48 — 분류 메뉴 대신: 이 속성의 값 전체·건수(0건 포함)는 분류 화면에서 */}
+        <Link to={`/browse?by=${name}`} title={`${label}의 모든 값과 자료 수를 봅니다`}
+              className="ml-auto shrink-0 rounded-xs text-meta font-normal text-n-500 underline-offset-2 hover:text-brand hover:underline">
+          값 전체 보기
+        </Link>
       </h3>
       {searchable && (
         <label className="mx-1 mb-1 flex h-7 items-center gap-1.5 rounded-md border border-n-200 bg-n-0 px-1.5 text-meta

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import SideNav from './SideNav.jsx';
 
@@ -9,8 +9,6 @@ const renderNav = (isAdmin, path = '/') => render(
 test('일반 사용자에게는 관리 메뉴가 없다', () => {
   renderNav(false);
   expect(screen.getByRole('link', { name: '검색', exact: true })).toBeInTheDocument();
-  // 22 — 본문 검색은 '문서'(23 전 '보고서') 화면 안의 검색 방식이다(별도 메뉴 없음). 주소는 /reports 그대로
-  expect(screen.getByRole('link', { name: '문서' })).toHaveAttribute('href', '/reports');
   expect(screen.queryByRole('link', { name: /본문 검색/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('link', { name: /관리/ })).not.toBeInTheDocument();
 });
@@ -62,12 +60,10 @@ test('일반 사용자에게는 운영 메뉴가 없다', () => {
   expect(screen.queryByRole('link', { name: 'WorkBench 연결 규칙' })).toBeNull();
 });
 
-test('태그 메뉴는 분류가 되었고, 태그 동의어 화면에서도 활성이다(09)', () => {
+test('48 — 분류·태그 동의어 화면은 검색 메뉴 아래다(분류 메뉴 없음)', () => {
   renderNav(false, '/tags/manage');
-  const browse = screen.getByRole('link', { name: '분류' });
-  expect(browse).toHaveAttribute('href', '/browse');
-  expect(browse).toHaveAttribute('aria-current', 'page');
-  expect(screen.queryByRole('link', { name: '태그' })).toBeNull();
+  expect(screen.queryByRole('link', { name: '분류' })).toBeNull();
+  expect(screen.getByRole('link', { name: '검색' })).toHaveAttribute('aria-current', 'page');
 });
 
 test('즐겨찾기 메뉴는 검색 다음에 있고 fav=1 주소에서만 활성이다(10)', () => {
@@ -86,8 +82,20 @@ test('검색 화면에서는 검색 메뉴만 활성이다(10)', () => {
   expect(screen.getByRole('link', { name: '즐겨찾기' })).not.toHaveAttribute('aria-current');
 });
 
-test('최근 비교 메뉴 — 비교 화면에서도 활성이다(11)', () => {
+test('48 — 업무별 4묶음, 찾아 쓰기는 검색·즐겨찾기·호선·선례 찾기', () => {
+  renderNav(false);
+  const nav = screen.getByRole('navigation', { name: '주 메뉴' });
+  for (const g of ['찾아 쓰기', '살펴보기', '등록·정리', '기록']) expect(within(nav).getByText(g)).toBeInTheDocument();
+  const links = screen.getAllByRole('link').map((a) => a.textContent);
+  expect(links).toEqual(['검색', '즐겨찾기', '호선', '선례 찾기', '관계 지도', '갖춤 현황', '정리 대기', '휴지통', '활동 로그']);
+});
+
+test('48 — 문서 본문 검색(/reports)에서도 검색 메뉴가 활성, 비교 화면은 어느 메뉴도 아니다', () => {
+  const { unmount } = renderNav(false, '/reports?q=abc');
+  expect(screen.getByRole('link', { name: '검색' })).toHaveAttribute('aria-current', 'page');
+  expect(screen.getByRole('link', { name: '즐겨찾기' })).not.toHaveAttribute('aria-current');
+  unmount();
   renderNav(false, '/compare?ids=1,2');
-  expect(screen.getByRole('link', { name: '최근 비교' })).toHaveAttribute('href', '/compares');
-  expect(screen.getByRole('link', { name: '최근 비교' })).toHaveAttribute('aria-current', 'page');
+  expect(screen.queryByRole('link', { name: '최근 비교' })).toBeNull();
+  expect(screen.getAllByRole('link').filter((a) => a.getAttribute('aria-current') === 'page')).toHaveLength(0);
 });

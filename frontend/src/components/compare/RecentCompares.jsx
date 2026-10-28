@@ -129,7 +129,7 @@ export function RecentCompareShortList({ limit = 5 }) {
  * 바구니 띠의 [최근] 단추 — 누르면 최근 비교 몇 개를 띄운다(열 때마다 서버에서 받는다).
  * ↑/↓ 이동, Esc·바깥 누르기로 닫는다.
  */
-export function RecentComparesMenu({ limit = 6 }) {
+export function RecentComparesMenu({ limit = 6, label = '최근' }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(null);
   const id = useId();
@@ -165,7 +165,7 @@ export function RecentComparesMenu({ limit = 6 }) {
     <div ref={rootRef} className="relative">
       <Button ref={btnRef} variant="ghost" size="sm" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
               onClick={() => setOpen((o) => !o)} title="최근에 열어 본 비교">
-        <History size={14} aria-hidden="true" />최근
+        <History size={14} aria-hidden="true" />{label}
       </Button>
       {open && (
         <div id={id} role="menu" aria-label="최근 비교" onKeyDown={onKeyDown}

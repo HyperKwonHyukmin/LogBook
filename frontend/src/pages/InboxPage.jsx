@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Inbox } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
@@ -8,6 +8,7 @@ import { ErrorNote, Page, PageHeader } from '../components/ui/Page.jsx';
 import { BlockSkeleton } from '../components/ui/Skeleton.jsx';
 import { Tabs } from '../components/ui/Tabs.jsx';
 import BatchCard from '../components/inbox/BatchCard.jsx';
+import FixList from '../components/coverage/FixList.jsx';
 import { PageDropOverlay, UploadButtons, UploadFeedback, useUploader } from '../components/inbox/UploadZone.jsx';
 import { errorText } from '../lib/labels.js';
 import { READ_ONLY_REASON } from '../lib/levels.js';
@@ -16,7 +17,13 @@ import { useConfirm } from '../components/ui/ConfirmDialog.jsx';
 import { LEAVE_TEXT, useUnsavedGuard } from '../lib/useUnsavedGuard.js';
 
 const tabId = (id) => `inbox-tab-${id}`;
-const TABS = [{ id: 'mine', label: '내 배치', tabId: tabId('mine') }, { id: 'unclaimed', label: '주인 없는 배치', tabId: tabId('unclaimed') }];
+// 48 — 손볼 자료(갖춤 현황에서 옮김)는 확정 자료 목록이라 배치를 부르지 않는다. /inbox?tab=fix 로 바로 연다
+const TABS = [
+  { id: 'mine', label: '내 배치', tabId: tabId('mine') },
+  { id: 'fix', label: '손볼 자료', tabId: tabId('fix') },
+  { id: 'unclaimed', label: '주인 없는 배치', tabId: tabId('unclaimed') },
+];
+const tabOf = (v) => (TABS.some((t) => t.id === v) ? v : 'mine');
 const PANEL_ID = 'inbox-tabpanel';
 // 올리던 중에 이 화면을 떠났다가 끝나면 셸이 띄우는 토스트(올리기는 셸 저장소에서 계속된다)
 const INBOX_AWAY = { title: '정리 대기로 올리기', message: '올렸습니다. 정리 대기에서 묶음 제안을 확인하세요.', to: '/inbox', label: '정리 대기로' };
@@ -29,7 +36,10 @@ export default function InboxPage() {
   // 15 — 올리기는 로그인한 누구나(LV1 이상). canWrite 가 거짓인 경우는 안전한 기본값으로만 남겼다
   const canWrite = ctxCanWrite !== false;
   const storage = useOutletContext()?.storage;
-  const [tab, setTab] = useState('mine');
+  // 주소는 처음 열 때만 읽는다 — 탭 전환까지 주소로 하면 저장 안 한 변경 확인(useUnsavedGuard)이 한 번 더 묻는다
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(() => tabOf(params.get('tab')));
+  const isFix = tab === 'fix';
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -54,6 +64,7 @@ export default function InboxPage() {
   // 가장 마지막 요청의 응답만 쓴다 — 탭을 빨리 바꾸면 늦게 온 이전 탭 응답이 목록을 덮을 수 있다.
   const load = useCallback(() => {
     const id = ++requestRef.current;
+    if (tab === 'fix') { setBatches([]); setLoading(false); return Promise.resolve(); }
     const latest = () => id === requestRef.current;
     return api(`/batches?scope=${tab}`)
       .then((rows) => { if (latest()) { setBatches(rows); setError(''); } })
@@ -105,9 +116,10 @@ export default function InboxPage() {
       {canWrite && <div className="mb-4 empty:hidden"><UploadFeedback u={uploader} /></div>}
       <Tabs label="배치 구분" items={TABS} value={tab} onChange={changeTab} controls={PANEL_ID} />
       <div role="tabpanel" id={PANEL_ID} aria-labelledby={tabId(tab)} className="flex flex-col gap-8 pt-5">
-        {error && <ErrorNote>{error}</ErrorNote>}
-        {loading && <BlockSkeleton className="h-32" />}
-        {!loading && batches.length === 0 && !error && (
+        {isFix && <FixList />}
+        {!isFix && error && <ErrorNote>{error}</ErrorNote>}
+        {!isFix && loading && <BlockSkeleton className="h-32" />}
+        {!isFix && !loading && batches.length === 0 && !error && (
           <EmptyState icon={Inbox} title="정리할 자료가 없습니다">
             {tab === 'mine' && !canWrite
               ? '올린 자료가 없습니다.'

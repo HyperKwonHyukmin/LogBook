@@ -180,7 +180,7 @@ test('색인 상태 띠: 완료·실패·일부 추출·갱신 대기와 의미 
   expect(screen.getByText('일부 추출 1개')).toBeInTheDocument();
   expect(screen.getByText('갱신 대기 2개')).toBeInTheDocument();
   expect(screen.getByText('본문 색인: 실패')).toBeInTheDocument();
-  expect(screen.getByText(/OCR 포함 본문 검색은 이 문서 화면에서/)).toBeInTheDocument();
+  expect(screen.getByText(/검색은 OCR 본문을 찾지 않아/)).toBeInTheDocument();
 });
 
 test('색인을 쓸 수 없으면 목록은 그대로 두고 제한을 알린다', async () => {
@@ -318,4 +318,11 @@ test('저장되지 않은 발표 파일은 발표자료(자동)로 보이고, �
   const call = fetch.mock.calls.find(([url, init]) => url === '/api/reports/12/catalog' && init.method === 'PUT');
   expect(JSON.parse(call[1].body)).toEqual({ version: 0, document_type: '발표자료', model_ids: [] });
   expect(within(screen.getByRole('complementary', { name: '문서 미리보기' })).queryByText('자동')).not.toBeInTheDocument();
+});
+
+test('48 — 문서 화면 위 [자료] 로 돌아가면 검색어를 들고 간다', async () => {
+  setup({ 'GET /api/reports?q=%EA%B0%95%EB%8F%84&sort=relevance&limit=50&offset=0': list }, '/reports?q=강도');
+  const tabs = screen.getByRole('navigation', { name: '검색 대상' });
+  expect(within(tabs).getByRole('link', { name: '문서 본문' })).toHaveAttribute('aria-current', 'page');
+  expect(within(tabs).getByRole('link', { name: '자료' })).toHaveAttribute('href', '/?q=%EA%B0%95%EB%8F%84');
 });
