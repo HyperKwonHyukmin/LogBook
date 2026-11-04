@@ -434,3 +434,12 @@ test('49 — 비슷한 기존 모델이 없으면 그렇게 알리고 묻지 않
   await vi.waitFor(() => expect(fetch.mock.calls.some(([u]) => u.endsWith('/confirm'))).toBe(true));
   expect(screen.queryByRole('alertdialog')).toBeNull();
 });
+
+test('49 — WorkBench 실행자는 담당자와 따로 실행자로 보인다', () => {
+  mockFetch({});
+  render(<DraftCard entry={{ ...READY, assignees: [], runners: [{ employee_id: 'A418404', name: '이제희', department: 'FSRU PM' }] }}
+                    siblings={[]} canEdit onChanged={() => {}} />);
+  const list = screen.getByRole('list', { name: '실행자' });
+  expect(within(list).getByText('이제희')).toBeInTheDocument();
+  expect(within(list).getByText('FSRU PM · A418404')).toBeInTheDocument();
+});

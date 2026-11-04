@@ -167,13 +167,9 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
     known = {h for (h,) in db.query(models.Hull.hull_no)}
     created = 0
     draft_hulls: set[str] = set()   # 43 — 초안에 붙은 호선은 확정을 기다리지 않고 PLM 조회
-    # 49 — WorkBench 해석 1건은 자료 1건(부모·세부 검토 작업 폴더가 갈라져 와도), 해석자(origin.owner)를 담당자로
+    # 49 — WorkBench 해석 1건은 자료 1건(부모·세부 검토 작업 폴더가 갈라져 와도). WB 에서 실행한 사람(origin.owner)은
+    # 담당자가 아니라 '실행자'로만 보인다(wb_origin.runners) — 담당자는 과제를 맡은 연구원이라 사람이 고른다
     from_wb = batch.wb_analysis_id is not None
-    owner = None
-    if from_wb and isinstance(batch.origin, dict):
-        from .. import people
-
-        owner = people.from_owner(db, batch.origin.get("owner"))
     for p in propose(infos, known, single=from_wb, hints=_wb_hints(batch) if from_wb else None):
         # 20 — 호선을 알면 제목 초안을 형식(`3496 · 구별자`)으로, 모르면 예전처럼 폴더/파일 이름. 구역·대상은
         # 사람이 정리 대기에서 고르고, 그때 (사람이 제목을 고치지 않았으면) 제목도 따라 바뀐다
@@ -194,8 +190,6 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
             entry.suggested_entry_id = _find_similar(db, p.best_hull, entry.title)
         for key in p.file_keys:
             rows[key].entry_id = entry.id
-        if owner is not None:
-            db.add(models.EntryAssignee(entry_id=entry.id, person_id=owner.id, sort_order=0))
         created += 1
 
     if draft_hulls:

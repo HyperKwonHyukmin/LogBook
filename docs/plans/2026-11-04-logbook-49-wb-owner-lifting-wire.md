@@ -1,4 +1,4 @@
-# 49 — WB 해석자를 담당자로 · Module Unit 권상 Wire 모델 함께 올리기
+# 49 — WB 실행자 표시 · Module Unit 권상 Wire 모델 함께 올리기
 
 2026-11-04. 상태: 구현·테스트 끝(LogBook + WorkBench), 145 확인은 아래 목록으로.
 
@@ -9,8 +9,9 @@
   (`<stem>_lifting.bdf`)이 함께 있어야 Module Unit Studio 같은 곳에서 이전 실적의 권상 위치를 찾는다.
 
 ## 정한 것(사용자 확인 2026-11-04)
-1. 담당자: WB 보내기 때 `origin.owner` 를 담당자로 자동 입력, 이미 들어온 WB 자료는 CLI 로 되채움(미리보기 → `--apply`),
-   검색 필터 '담당자 없음'. **'보완 필요'(needs_fix)에는 넣지 않는다** — 46 이전 자료가 모두 비어 있어 손볼 목록이 넘친다.
+1. ~~담당자: WB 보내기 때 `origin.owner` 를 담당자로 자동 입력~~ → **바꿈(같은 날, 사용자)**: WorkBench 에서 실행한 사람은
+   담당자(Module Unit 권상을 맡은 연구원)가 아니라 **실행자**다. 실행자는 자료 화면·정리 대기 카드에 '실행자'로 따로 보이고 담당자는
+   사람이 고른다. 한때 담당자로 넣은 것은 `clear-wb-runners` 로 뺀다. 검색 필터 '담당자 없음'은 그대로. **'보완 필요'(needs_fix)에는 넣지 않는다** — 46 이전 자료가 모두 비어 있어 손볼 목록이 넘친다.
 2. WB → LogBook 보내기에서 MU(`GroupModuleUnit`·`SidePassage`)는 **Wire 파일을 자동으로 묶어 한 항목에** 넣는다.
 3. 사람이 직접 올린 MU 자료는 **권상(Wire) 모델도 올려 달라고 요청**한다(정리 대기 카드 안내 + 확정 때 한 번 묻기). 확정은 막지 않는다(43 원칙).
 
@@ -33,11 +34,12 @@
   사람이 보고 같은 모델의 새 판이면 [새 판이면 이 자료에 추가](합치기 제안), 같은 것이 없으면 확정 → 새 자료. 보인 것이 있으면
   확정 때 '새 자료로 추가할까요?' 를 한 번 묻는다. 없으면 '비슷한 기존 모델이 없습니다' 한 줄. WB 자료만이 아니라 모든 초안에 보인다
   (손으로 올린 모델도 같은 확인이 필요하다). 완전 동일 BDF 는 지금처럼 17 이 받지 않는다.
-- **담당자 자동**: `process_batch` 가 초안을 만들 때 `origin.owner` → 명부 행(`people.from_owner`, 없으면 WorkBench 에서 만든다).
-  WorkBench 를 못 읽거나 없는 사번이면 비워 둔다(CLI 가 나중에 채운다).
-- **되채우기 CLI**: `python -m app.cli assign-wb-owners [--apply]` — 담당자가 빈 자료(정리 대기·확정) 중 파일의 묶음에 `origin.owner` 가
-  있는 것. 확정 자료는 `write_meta` 로 entry.json 도 다시 쓴다. 감사 `ASSIGNEE_FILL`.
-- **검색 '담당자 없음'**: 담당자 필터 값 `none`.
+- **실행자**: 자료 응답 `runners`(`wb_origin.runners` — 묶음 출처 `origin.owner`, 이름은 WorkBench 사용자 표 → LogBook 사용자 표 → 사번).
+  출처 스위치(`LOGBOOK_WB_ORIGIN_SHOW`)와 상관없이 보인다(해석 번호·여권은 싣지 않는다). 화면 '실행자'(`RunnerList`). 명부(people)에 넣지 않는다.
+- **담당자에서 빼기 CLI**: `python -m app.cli clear-wb-runners [--apply]` — 처음 배포(8f746a3)가 실행자를 담당자로 넣었다
+  (ingest 자동 + `assign-wb-owners`, 145 에서 E000054·65·66 에 적용). 담당자가 **그 실행자 한 사람뿐**인 WB 자료만 뺀다
+  (사람이 더 고른 자료는 그대로). 확정 자료는 감사 ENTRY_UPDATE·entry.json.
+- **검색 '담당자 없음'**: 담당자 필터 값 `__none__`.
 - **Wire 모델 판별**: 파일 이름이 `_lifting.bdf` 로 끝나거나, 변환 때 case control `TITLE` 에 `HiTessWorkBench Lifting Analysis` 가 있으면
   (`model_summaries.lifting`). 이름은 사람이 바꿀 수 있어 본문이 더 확실하다. 자료 상세·카드의 파일 칩 'Wire 포함'.
 - **MU 자료 판별**: 대상이 'Unit' 또는 'Module Unit'(동의어 포함) 이거나 WB 출처 프로그램이 `GroupModuleUnit`·`SidePassage`.
@@ -49,5 +51,5 @@
 
 ## 145 확인
 - Update 뒤 관리 › 분류 목록 › 대상에 'Unit'(동의어 GMU)이 있는지 확인. 없으면 'Unit' 을 더한다.
-- `python -m app.cli assign-wb-owners` 로 목록 확인 → `--apply`.
-- WorkBench 를 배포한 뒤 MU 해석 하나를 보내 정리 대기에 **한 장**으로, 담당자 = 해석자, 'Wire 포함' 파일이 보이는지.
+- `python -m app.cli clear-wb-runners` 로 목록 확인 → `--apply`(실행자를 담당자에서 뺀다).
+- WorkBench 를 배포한 뒤 MU 해석 하나를 보내 정리 대기에 **한 장**으로, '실행자'에 실행한 사람(담당자는 빈 칸), 'Wire 포함' 파일이 보이는지.

@@ -37,50 +37,61 @@ def test_propose_single_keeps_folders_together():
     assert sorted(one.file_keys) == [0, 1, 2, 3]
 
 
-def test_wb_batch_is_one_entry_with_analyst_assignee(db, storage, wb):
+def test_wb_batch_is_one_entry_runner_is_not_assignee(db, storage, wb, make_user):
+    """WB 해석 1건 = 자료 1건. 실행한 사람은 '실행자'로만 — 담당자(과제를 맡은 연구원)는 비워 둔다."""
     wb(ANALYST, name="해석가", department="구조설계부")
+    u = make_user(ADMIN, level=2)
     b = _staged(db, storage, WB_FILES, ORIGIN)
     process_batch(db, storage, b)
     db.expire_all()
     [e] = db.query(models.Entry).filter_by(batch_id=b.id).all()
     assert db.query(models.File).filter_by(entry_id=e.id).count() == 4
     assert e.uploaded_by == ADMIN   # 작성자는 보낸 관리자 그대로
-    [p] = service.entry_to_dict(db, e)["assignees"]
-    assert (p["employee_id"], p["name"]) == (ANALYST, "해석가")
+    d = service.entry_to_dict(db, e, viewer=u)
+    assert d["assignees"] == []
+    assert d["runners"] == [{"employee_id": ANALYST, "name": "해석가", "department": "구조설계부"}]
 
 
-def test_wb_owner_unknown_leaves_assignee_empty(db, storage, wb):
-    b = _staged(db, storage, WB_FILES, ORIGIN)   # WorkBench 에 없는 사번
+def test_runner_name_falls_back_to_employee_id(db, storage, make_user):
+    u = make_user(ADMIN, level=2)
+    b = _staged(db, storage, WB_FILES, ORIGIN)   # WorkBench·LogBook 사용자 표에 없는 사번
     process_batch(db, storage, b)
     [e] = db.query(models.Entry).filter_by(batch_id=b.id).all()
-    assert service.entry_to_dict(db, e)["assignees"] == []
+    assert service.entry_to_dict(db, e, viewer=u)["runners"] == [{"employee_id": ANALYST, "name": None, "department": None}]
 
 
-def test_plain_upload_still_splits_without_assignee(db, storage):
+def test_plain_upload_still_splits_without_runner(db, storage, make_user):
+    u = make_user(ADMIN, level=2)
     b = _staged(db, storage, WB_FILES)
     process_batch(db, storage, b)
     entries = db.query(models.Entry).filter_by(batch_id=b.id).all()
     assert len(entries) == 2
-    assert db.query(models.EntryAssignee).filter(models.EntryAssignee.entry_id.in_([e.id for e in entries])).count() == 0
+    assert all(service.entry_to_dict(db, e, viewer=u)["runners"] == [] for e in entries)
 
 
-def test_assign_wb_owners_cli_previews_then_fills(db, storage, wb, make_user, make_entry_file):
+def test_clear_wb_runners_cli(db, storage, wb, make_entry_file):
+    """한때 실행자를 담당자로 넣었던 WB 자료에서 그 담당자만 뺀다. 사람이 고른 담당자는 그대로."""
+    from app import people
     wb(ANALYST, name="해석가")
-    e, f = make_entry_file(title="WB 옛 자료", name="m.bdf", kind="model", uploaded_by=ADMIN)
+    wb("N490002", name="연구원")
+    auto, f = make_entry_file(title="WB 자동", name="m.bdf", kind="model", uploaded_by=ADMIN)
     wb_origin.stamp(db.get(models.Batch, f.batch_id), ORIGIN)
-    plain, _f = make_entry_file(title="손으로 올린 자료", name="x.pdf", uploaded_by=ADMIN)
+    kept, g = make_entry_file(title="WB 사람이 고름", name="n.bdf", kind="model", uploaded_by=ADMIN)
+    wb_origin.stamp(db.get(models.Batch, g.batch_id), {**ORIGIN, "analysis_id": 4902})
+    runner = people.resolve_refs(db, [{"employee_id": ANALYST}])
+    people.set_assignees(db, auto, runner)
+    people.set_assignees(db, kept, people.resolve_refs(db, [{"employee_id": "N490002"}]))
     db.commit()
 
-    rep = cli.assign_wb_owners(db, storage)
-    assert [(i["entry_id"], i["owner"]) for i in rep["items"]] == [(e.entry_id, ANALYST)]
-    assert db.query(models.EntryAssignee).count() == 0   # 미리보기는 바꾸지 않는다
+    rep = cli.clear_wb_runners(db, storage)
+    assert [(i["entry_id"], i["owner"]) for i in rep["items"]] == [(auto.entry_id, ANALYST)]
+    assert db.query(models.EntryAssignee).count() == 2   # 미리보기는 바꾸지 않는다
 
-    rep = cli.assign_wb_owners(db, storage, apply=True)
-    assert rep["filled"] == 1
+    assert cli.clear_wb_runners(db, storage, apply=True)["cleared"] == 1
     db.expire_all()
-    assert [p["employee_id"] for p in service.entry_to_dict(db, db.get(models.Entry, e.id))["assignees"]] == [ANALYST]
-    assert service.entry_to_dict(db, db.get(models.Entry, plain.id))["assignees"] == []
-    assert cli.assign_wb_owners(db, storage)["items"] == []   # 다시 돌려도 같다
+    assert service.entry_to_dict(db, db.get(models.Entry, auto.id))["assignees"] == []
+    assert [p["name"] for p in service.entry_to_dict(db, db.get(models.Entry, kept.id))["assignees"]] == ["연구원"]
+    assert cli.clear_wb_runners(db, storage)["items"] == []   # 다시 돌려도 같다
 
 
 def test_search_filter_assignee_none(client, auth_headers, make_user, make_entry_file, db, wb):
@@ -89,7 +100,7 @@ def test_search_filter_assignee_none(client, auth_headers, make_user, make_entry
     e, _f = make_entry_file(title="담당자 있음", name="a.pdf", uploaded_by=ADMIN)
     lone, _f = make_entry_file(title="담당자 없음 자료", name="b.pdf", uploaded_by=ADMIN)
     from app import people
-    people.set_assignees(db, e, [people.from_owner(db, ANALYST)])
+    people.set_assignees(db, e, people.resolve_refs(db, [{"employee_id": ANALYST}]))
     db.commit()
     h = auth_headers(ADMIN)
     r = client.get("/api/search", params={"assignee": "__none__"}, headers=h).json()

@@ -182,6 +182,9 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
         d["can_edit"] = access.can_edit_entry(viewer, entry)
         # 49 — Module Unit 권상 자료면 Wire 모델이 있는지(없으면 화면이 올려 달라고 요청한다)
         d["lifting"] = lifting.brief(db, target, files, model_rows)
+        # 49 — WorkBench 에서 실행한 사람(담당자와 따로)
+        from .. import wb_origin as _wbo
+        d["runners"] = _wbo.runners(db, files)
         # 39 — WorkBench 해석 출처(LOGBOOK_WB_ORIGIN_SHOW 가 켜졌을 때만 — Core 03-safety '기본 꺼짐')
         from ..config import settings as _settings
         if _settings.wb_origin_show:

@@ -40,7 +40,7 @@ import ModelTraits, { defaultFile } from '../components/preview/ModelTraits.jsx'
 import WbOrigins from '../components/workbench/WbOrigins.jsx';
 import WireChip from '../components/ui/WireChip.jsx';
 import { needsLiftingWire } from '../lib/inboxStatus.js';
-import AssigneeInput, { AssigneeList } from '../components/people/AssigneeInput.jsx';
+import AssigneeInput, { AssigneeList, RunnerList } from '../components/people/AssigneeInput.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
 // 21 — 프로젝트(있을 때만 기록). 29 — 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
@@ -800,6 +800,12 @@ export default function EntryPage() {
               <Prop label="담당자">
                 <AssigneeList people={entry.assignees} />
               </Prop>
+              {/* 49 — WorkBench 에서 실행한 사람(담당자와 따로) */}
+              {entry.runners?.length > 0 && (
+                <Prop label="실행자">
+                  <RunnerList runners={entry.runners} />
+                </Prop>
+              )}
               {/* 46 — 작성자(자료를 올린 사람) + 등록일. 확정한 사람이 작성자와 다를 때만(관리자 대신 확정) '확정' 줄을 따로 */}
               <Prop label="작성자">
                 {entry.uploaded_by ? (

@@ -104,6 +104,34 @@ def entry_origins(db: Session, files: list[models.File]) -> list[dict]:
     return sorted(out, key=lambda r: r["analysis_id"])
 
 
+def runners(db: Session, files: list[models.File]) -> list[dict]:
+    """49 — WorkBench 에서 해석을 실행한 사람(origin.owner) [{employee_id, name, department}] — 담당자(과제를 맡은 연구원)와 다르다.
+    출처를 보이는 스위치(LOGBOOK_WB_ORIGIN_SHOW)와 상관없이 보인다(해석 번호·여권은 싣지 않는다). 이름은 WorkBench 사용자 표,
+    읽을 수 없으면 LogBook 사용자 표, 그것도 없으면 사번만."""
+    ids = {f.batch_id for f in files if f.batch_id}
+    if not ids:
+        return []
+    rows = (db.query(models.Batch.origin).filter(models.Batch.id.in_(ids), models.Batch.wb_analysis_id.isnot(None))
+            .order_by(models.Batch.wb_analysis_id))
+    eids = list(dict.fromkeys(o["owner"].strip().upper() for (o,) in rows
+                              if isinstance(o, dict) and isinstance(o.get("owner"), str) and o["owner"].strip()))
+    if not eids:
+        return []
+    from . import wb_users
+
+    try:
+        wb = wb_users.fetch_many(db, eids)
+    except wb_users.WbUnavailable:
+        wb = {}
+    local = {u.employee_id: u for u in db.query(models.User).filter(models.User.employee_id.in_(eids))}
+    out = []
+    for e in eids:
+        w, u = wb.get(e), local.get(e)
+        out.append({"employee_id": e, "name": (w.name if w else None) or (u.name if u else None),
+                    "department": (w.department if w else None) or (u.department if u else None)})
+    return out
+
+
 def export(db: Session, files: list[models.File]) -> list[dict]:
     """entry.json `origins`(재구축 원천) — 묶음마다 출처 원본 + 파일 rel_path. 출처 없으면 []."""
     by_batch: dict[int, list[str]] = {}

@@ -21,7 +21,7 @@ import DraftAttachments from './DraftAttachments.jsx';
 import DraftSimilar from './DraftSimilar.jsx';
 import HullPlmLookup, { HullPlmSummary } from '../hull/HullPlmLookup.jsx';
 import ModelPreview from '../preview/ModelPreview.jsx';
-import AssigneeInput, { AssigneeList } from '../people/AssigneeInput.jsx';
+import AssigneeInput, { AssigneeList, RunnerList } from '../people/AssigneeInput.jsx';
 import { DROP_ZONE_ATTR, isOsFileDrag, useOsFileDragActive } from './UploadZone.jsx';
 
 const DRAG_TYPE = 'application/x-logbook-file';
@@ -383,6 +383,13 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
               : <AssigneeList people={values.assignees} />}
           </div>
         </div>
+        {/* 49 — WorkBench 에서 실행한 사람. 담당자(과제를 맡은 연구원)와 다를 수 있어 따로 보인다 */}
+        {entry.runners?.length > 0 && (
+          <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600">
+            <span>실행자 <span className="font-normal text-n-500">(WorkBench 에서 해석을 실행한 사람)</span></span>
+            <div className="text-ui font-normal text-n-800"><RunnerList runners={entry.runners} /></div>
+          </div>
+        )}
         {/* 13 — 공개 범위. 기존 자료에 추가하는 초안은 대상 자료의 범위를 따른다 */}
         {!entry.merge_into && (
           <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600">

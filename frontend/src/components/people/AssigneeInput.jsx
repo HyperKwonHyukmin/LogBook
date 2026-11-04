@@ -243,3 +243,18 @@ export default function AssigneeInput({ values, onChange, disabled = false, labe
     </div>
   );
 }
+
+/** 49 — WorkBench 에서 해석을 실행한 사람(담당자와 따로, 서버 entry.runners). 없으면 아무것도 그리지 않는다. */
+export function RunnerList({ runners }) {
+  if (!runners?.length) return null;
+  return (
+    <ul aria-label="실행자" className="flex min-w-0 flex-col gap-0.5">
+      {runners.map((r) => (
+        <li key={r.employee_id} className="min-w-0 truncate" title="WorkBench 에서 해석을 실행한 사람">
+          {r.name || r.employee_id}
+          <span className="ml-1.5 text-meta text-n-500">{[r.department, r.name ? r.employee_id : null].filter(Boolean).join(' · ')}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}

@@ -65,8 +65,9 @@ DB 백업(mysqldump → 80_Backup, 05):
 entry.json 갱신). 사용자가 '미분류'로 저장한 파일은 건너뛴다. 다시 돌려도 바뀌는 것이 없다. ⚠ 적용 전에 backup:
     .venv\\Scripts\\python.exe -m app.cli document-type-fill [--apply]
 
-WorkBench 에서 온 자료 중 담당자가 빈 것에 해석자(출처 owner)를 담당자로 채우기(49) — 기본은 대상 목록만:
-    .venv\\Scripts\\python.exe -m app.cli assign-wb-owners [--apply]
+담당자로 잘못 넣었던 WorkBench 실행자(출처 owner)를 빼기(49 — 실행자는 담당자가 아니다, 자료 화면 '실행자'로 보인다).
+담당자가 그 실행자 한 사람뿐인 WB 자료만 — 기본은 대상 목록만:
+    .venv\\Scripts\\python.exe -m app.cli clear-wb-runners [--apply]
 
 DB 와 공유 폴더 대조(리뷰 7) — 없는 파일, 중단된 이동으로 다른 자리에 있는 파일(반쯤 옮겨짐), DB 행이 없는 폴더를
 보고한다(기본은 보기만, 문제가 있으면 종료 코드 1). --fix 면 안전한 경우(staging↔vault 사이 반쯤 옮겨진 파일)만
@@ -450,22 +451,20 @@ def document_type_fill(db: Session, storage: StoragePaths, *, apply: bool = Fals
     return plan
 
 
-def assign_wb_owners(db: Session, storage: StoragePaths, *, apply: bool = False, out=None) -> dict:
-    """49 — 담당자가 빈 WorkBench 자료에 해석자(origin.owner)를 담당자로(기본은 목록만)."""
-    from .people import fill_wb_owners
+def clear_wb_runners(db: Session, storage: StoragePaths, *, apply: bool = False, out=None) -> dict:
+    """49 — 담당자로 잘못 넣었던 WorkBench 실행자를 담당자에서 뺀다(기본은 목록만)."""
+    from .people import clear_wb_runner_assignees
 
     out = out or sys.stdout
-    rep = fill_wb_owners(db, storage, apply=apply)
-    print(f"[담당자가 빈 WorkBench 자료] {len(rep['items'])}건", file=out)
+    rep = clear_wb_runner_assignees(db, storage, apply=apply)
+    print(f"[담당자가 WorkBench 실행자 한 사람뿐인 WB 자료] {len(rep['items'])}건", file=out)
     for it in rep["items"]:
         state = "확정" if it["status"] == "confirmed" else "정리 대기"
-        print(f"  {it['entry_id']}  {state}  {it['owner']} {it['name'] or '(명부에 아직 없음)'}  {it['title']}", file=out)
-    if rep["missing"]:
-        print(f"[WorkBench 에서 찾지 못한 사번 — 건너뜀] {', '.join(rep['missing'])}", file=out)
+        print(f"  {it['entry_id']}  {state}  {it['owner']} {it['name']}  {it['title']}", file=out)
     if not apply:
-        print("\n아무것도 바꾸지 않았습니다. 채우려면: assign-wb-owners --apply", file=out)
+        print("\n아무것도 바꾸지 않았습니다. 빼려면: clear-wb-runners --apply", file=out)
     else:
-        print(f"\n담당자를 채운 자료 {rep['filled']}건(확정 자료는 감사 '정보 수정', 사용자 system).", file=out)
+        print(f"\n담당자를 뺀 자료 {rep['cleared']}건(실행자는 자료 화면 '실행자'로 그대로 보입니다).", file=out)
     return rep
 
 
@@ -521,8 +520,8 @@ def main(argv: list[str]) -> int:
     df = sub.add_parser("document-type-fill",
                         help="문서 분류가 없는 확정 자료의 .ppt/.pptx 에 '발표자료'를 저장한다(23) — --apply 없으면 목록만")
     df.add_argument("--apply", action="store_true", help="실제로 저장한다(감사 REPORT_META·entry.json 갱신)")
-    aw = sub.add_parser("assign-wb-owners", help="49 — 담당자가 빈 WorkBench 자료에 해석자를 담당자로(--apply 없으면 목록만)")
-    aw.add_argument("--apply", action="store_true", help="실제로 채운다(확정 자료는 감사·entry.json 갱신)")
+    aw = sub.add_parser("clear-wb-runners", help="49 — 담당자로 잘못 넣은 WorkBench 실행자를 뺀다(--apply 없으면 목록만)")
+    aw.add_argument("--apply", action="store_true", help="실제로 뺀다(확정 자료는 감사·entry.json 갱신)")
     pf = sub.add_parser("plm-fill", help="30 — 사내 PLM 에서 호선 선박 정보를 한 번에 조회해 채운다(선종은 빈 것만)")
     pf.add_argument("--unchecked", action="store_true", help="아직 조회하지 않은 호선만(기본: 못 찾은 것·선종 빈 것도)")
     pf.add_argument("--series", action="store_true", help="45 — 이미 찾은 호선 중 시리즈가 빈 것도 다시 조회(한 번)")
@@ -598,8 +597,8 @@ def main(argv: list[str]) -> int:
         if args.cmd == "document-type-fill":
             document_type_fill(db, get_storage(), apply=args.apply)
             return 0
-        if args.cmd == "assign-wb-owners":
-            assign_wb_owners(db, get_storage(), apply=args.apply)
+        if args.cmd == "clear-wb-runners":
+            clear_wb_runners(db, get_storage(), apply=args.apply)
             return 0
         if args.cmd == "plm-fill":
             return plm_fill(db, get_storage(), only_unchecked=args.unchecked, series=args.series)
