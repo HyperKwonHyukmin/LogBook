@@ -1,6 +1,6 @@
 # 49 — WB 실행자 표시 · Module Unit 권상 Wire 모델 함께 올리기
 
-2026-11-04. 상태: 구현·테스트 끝(LogBook + WorkBench), 145 확인은 아래 목록으로.
+2026-11-04. 상태: 구현·배포 끝(LogBook 8f746a3·206a2f7·cfd9d9e·6734875·f73c3b6, WorkBench aaf9a4e·c08fd10), 145 확인은 아래 목록으로.
 
 ## 왜
 - WorkBench 에서 보낸 자료는 작성자(`uploaded_by`)가 **보낸 관리자**라, 46 의 담당자가 비어 있다. 실제 해석자 사번은
@@ -18,6 +18,8 @@
 ## WorkBench 쪽(WorkBench 저장소)
 - `POST /api/admin/projects/{id}/logbook`: 프로그램이 `GroupModuleUnit`·`SidePassage` 면 작업 폴더(부모 + Unit 구조 해석 자식)에서
   `*_lifting.bdf`·`*_lifting_meta.json`·`*_posture.json` 을 고른 파일에 자동으로 더한다(이미 골랐으면 그대로). 응답 `auto_added`(더한 파일 이름).
+  **작업 폴더 바로 아래 최종본만** — `lifting_reviews/<해시>/03_…` 같은 Studio 검토 중간본은 자동으로 넣지 않는다
+  (처음엔 하위 폴더까지 넣어 같은 Wire 모델이 여러 벌 들어갔다, WorkBench c08fd10).
 - 이유: 여권(passport)은 부모 레코드만 봐서 `_lifting.bdf` 가 role 로 오지 않는다 — LogBook 이 여권으로 판별하면 안 된다.
 - Module Unit Studio 는 BDF 가 아니라 JSON 을 읽는다 — 권상 위치는 `_posture.json`(`hoisting.groups[].nodes[]`),
   Wire 연결은 `_lifting_meta.json`(`lifting.wires[]`). 그래서 BDF 와 함께 두 JSON 도 보낸다.
@@ -60,3 +62,9 @@
 - Update 뒤 관리 › 분류 목록 › 대상에 'Unit'(동의어 GMU)이 있는지 확인. 없으면 'Unit' 을 더한다.
 - `python -m app.cli clear-wb-runners` 로 목록 확인 → `--apply`(실행자를 담당자에서 뺀다).
 - WorkBench 를 배포한 뒤 MU 해석 하나를 보내 정리 대기에 **한 장**으로, '실행자'에 실행한 사람(담당자는 빈 칸), 'Wire 포함' 파일이 보이는지.
+  (2026-11-04 확인됨: 한 장·실행자·호선 자동·Wire 포함 칩. 남은 확인 ↓)
+- WorkBench 서버 `git pull + 재시작`(c08fd10) 뒤 보내면 `lifting_reviews/` 중간본이 들어오지 않는지(그 전엔 들어와 '이번 업로드 안의 …와 같아 하나만' 문구가 뜬다).
+- E000072 카드: 허용 범위(f73c3b6) 뒤 53% 후보 셋이 사라지는지. 남으면 줄 끝 차이(크기·요소)를 보고 TOL 을 다시 맞춘다.
+- `clear-wb-runners --apply` 를 했는지(E000054·65·66 은 한때 실행자가 담당자로 들어갔다).
+- 이미 받은 자료의 `lifting_reviews` 중간본은 자료 상세 [변경하기]에서 [삭제]로 뺀다(사용자 손).
+- 정해 둔 것: `_lifting_meta.json`·`_posture.json` 은 계속 함께 보낸다(Module Unit Studio 가 JSON 만 읽고, 그룹 정보는 BDF 에 없다 — 2026-11-04 사용자 확인).
