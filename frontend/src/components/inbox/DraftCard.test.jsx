@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import DraftCard from './DraftCard.jsx';
 import { invalidateVocab } from '../../lib/vocab.js';
 
@@ -400,6 +401,35 @@ test('49 — Wire 모델이 있으면 칩만 보이고 묻지 않는다', async 
                     siblings={[]} canEdit onChanged={() => {}} />);
   expect(screen.queryByRole('region', { name: '권상 Wire 모델 요청' })).toBeNull();
   expect(screen.getByText('Wire 포함')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  await vi.waitFor(() => expect(fetch.mock.calls.some(([u]) => u.endsWith('/confirm'))).toBe(true));
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+});
+
+test('49 — 변환이 끝난 BDF 와 비슷한 기존 모델을 보이고, 확정 때 새 자료로 추가할지 묻는다', async () => {
+  const files = [{ id: 1, rel_path: 'x/a.bdf', name: 'a.bdf', kind: 'model', size: 9, duplicate_of_entry: null,
+    drm_encrypted: false, model: { state: 'done', counts: {}, bbox: null, same_model: [], same_geometry: [] } }];
+  const similar = { results: [
+    { best: 0.93, lead: { file_id: 70, entry_id: 'E000070', title: '3592 권상', file_name: 'm.bdf' } },
+    { best: 0.4, lead: { file_id: 71, entry_id: 'E000071', title: '참고만', file_name: 'o.bdf' } }] };
+  mockFetch({ 'GET /api/similar?file_id=1': similar, 'POST /api/entries/E000010/confirm': { ...ENTRY, status: 'confirmed' } });
+  render(<MemoryRouter><DraftCard entry={{ ...READY, files, suggested_entry: null }} siblings={[]} canEdit onChanged={() => {}} /></MemoryRouter>);
+  const box = await screen.findByRole('region', { name: '비슷한 기존 모델' });
+  expect(within(box).getByText('E000070')).toBeInTheDocument();
+  expect(within(box).queryByText('E000071')).toBeNull();   // 0.7 미만은 보이지 않는다
+  await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  const dialog = await screen.findByRole('alertdialog');
+  expect(within(dialog).getByText('비슷한 기존 모델이 1건 있습니다. 새 자료로 추가할까요?')).toBeInTheDocument();
+  await userEvent.click(within(dialog).getByRole('button', { name: '새 자료로 추가' }));
+  await vi.waitFor(() => expect(fetch.mock.calls.some(([u]) => u.endsWith('/confirm'))).toBe(true));
+});
+
+test('49 — 비슷한 기존 모델이 없으면 그렇게 알리고 묻지 않고 확정한다', async () => {
+  const files = [{ id: 1, rel_path: 'x/a.bdf', name: 'a.bdf', kind: 'model', size: 9, duplicate_of_entry: null,
+    drm_encrypted: false, model: { state: 'done', counts: {}, bbox: null, same_model: [], same_geometry: [] } }];
+  mockFetch({ 'GET /api/similar?file_id=1': { results: [] }, 'POST /api/entries/E000010/confirm': { ...ENTRY, status: 'confirmed' } });
+  render(<MemoryRouter><DraftCard entry={{ ...READY, files, suggested_entry: null }} siblings={[]} canEdit onChanged={() => {}} /></MemoryRouter>);
+  expect(await screen.findByText('비슷한 기존 모델이 없습니다. 확정하면 새 자료로 추가됩니다.')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '확정' }));
   await vi.waitFor(() => expect(fetch.mock.calls.some(([u]) => u.endsWith('/confirm'))).toBe(true));
   expect(screen.queryByRole('alertdialog')).toBeNull();

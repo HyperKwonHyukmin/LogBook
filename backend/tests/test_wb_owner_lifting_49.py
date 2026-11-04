@@ -141,3 +141,27 @@ def test_mu_target_unit_and_synonym(db):
     db.flush()
     assert lifting.is_mu(db, "GMU", []) and lifting.is_mu(db, "unit", []) and lifting.is_mu(db, "Module Unit", [])
     assert not lifting.is_mu(db, "블록", [])
+
+
+def test_wb_title_from_main_bdf_and_hull_from_memo(db, storage):
+    """49 — 제목 원천은 작업 폴더 이름이 아니라 대표 BDF, 호선은 메모·묶음 이름이 파일 이름보다 먼저."""
+    files = {"20261104_111146_A418404_GroupModuleUnit/m13_ini_1.bdf": b"GRID 1",
+             "20261104_111146_A418404_GroupModuleUnit/m13_ini_1_validation.bdf": b"GRID 3",
+             "20261104_120000_A418404_UnitStructuralAnalysis/m13_ini_1_lifting.bdf": b"GRID 2"}
+    b = _staged(db, storage, files, {**ORIGIN, "note": "3592"}, key="20261104-000000-memo")
+    b.original_name = "WB #7740 · GroupModuleUnit · A418404"
+    db.commit()
+    process_batch(db, storage, b)
+    [e] = db.query(models.Entry).filter_by(batch_id=b.id).all()
+    assert e.title_source == "m13_ini_1"
+    assert [h.hull_no for h in service.hulls_of(db, e)] == ["3592"]
+    assert e.hull_evidence[0]["reasons"][0].startswith("WorkBench 묶음 이름·메모")
+    assert all(c["hull_no"] != "7740" for c in e.hull_evidence)   # 해석 번호는 호선 후보가 아니다
+
+
+def test_wb_hull_from_file_name_without_memo(db, storage):
+    files = {"20261104_111146_A418404_GroupModuleUnit/3592_m13_ini_1.bdf": b"GRID 1"}
+    b = _staged(db, storage, files, ORIGIN, key="20261104-000000-file")
+    process_batch(db, storage, b)
+    [e] = db.query(models.Entry).filter_by(batch_id=b.id).all()
+    assert [h.hull_no for h in service.hulls_of(db, e)] == ["3592"] and e.title_source == "3592_m13_ini_1"

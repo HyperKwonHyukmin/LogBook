@@ -24,6 +24,15 @@
 ## LogBook 쪽
 - **한 항목으로**: WB 출처가 있는 묶음(`batches.wb_analysis_id`)은 폴더가 여러 개여도(부모·자식 작업 폴더) 초안 하나로 묶는다
   (`ingest.proposal.propose(single=True)`). WB 해석 1건 = 자료 1건.
+- **호선·제목(후속, 사용자 요청)**: WB 묶음은 관리자가 적은 **메모·묶음 이름**에서 호선을 먼저 찾고(파일 이름보다 우선, 근거
+  'WorkBench 묶음 이름·메모'), 없으면 파일 이름에서 찾는다. 기본 묶음 이름의 `WB #7740` 은 해석 번호라 뺀다. WB 프로젝트 이름은
+  쓰지 않는다('2026 FSRU' 같은 연도가 호선으로 뽑힐 수 있다). 제목 원천은 작업 폴더 이름(`20261104_111146_A418404_GroupModuleUnit`)이
+  아니라 대표 BDF 이름(`_lifting`·`_validation`·`_edited` 가 아닌 첫 BDF). WorkBench 화면은 바꾸지 않는다(메모·이름을 이미 보낸다).
+- **비슷한 기존 모델(후속, 사용자 요청)**: 정리 대기 카드가 대표 BDF(변환 끝, `_lifting`·`_validation`·`_edited` 가 아닌 첫 BDF)로
+  선례 찾기(27) `GET /api/similar?file_id=` 를 불러 '많이 비슷'(0.7) 이상 기존 확정 모델을 3건까지 보인다(`DraftSimilar.jsx`).
+  사람이 보고 같은 모델의 새 판이면 [새 판이면 이 자료에 추가](합치기 제안), 같은 것이 없으면 확정 → 새 자료. 보인 것이 있으면
+  확정 때 '새 자료로 추가할까요?' 를 한 번 묻는다. 없으면 '비슷한 기존 모델이 없습니다' 한 줄. WB 자료만이 아니라 모든 초안에 보인다
+  (손으로 올린 모델도 같은 확인이 필요하다). 완전 동일 BDF 는 지금처럼 17 이 받지 않는다.
 - **담당자 자동**: `process_batch` 가 초안을 만들 때 `origin.owner` → 명부 행(`people.from_owner`, 없으면 WorkBench 에서 만든다).
   WorkBench 를 못 읽거나 없는 사번이면 비워 둔다(CLI 가 나중에 채운다).
 - **되채우기 CLI**: `python -m app.cli assign-wb-owners [--apply]` — 담당자가 빈 자료(정리 대기·확정) 중 파일의 묶음에 `origin.owner` 가

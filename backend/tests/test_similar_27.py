@@ -122,3 +122,17 @@ def test_upload_bdf(world, client, auth_headers):
 
 def test_requires_login(client):
     assert client.get("/api/similar?file_id=1").status_code == 401
+
+
+def test_draft_file_as_base_for_inbox(world, client, auth_headers, db, make_entry_file):
+    """49 — 정리 대기 카드가 올린 사람의 초안 BDF 를 기준으로 비슷한 확정 모델을 찾는다(초안 자신·다른 초안은 대상 아님)."""
+    e, f = make_entry_file(status="draft", title="WB 초안", hulls=("9005",), name="draft.bdf", kind="model",
+                           uploaded_by="M100001")
+    db.add(models.ModelSummary(file_id=f.id, state="done", key="d" * 64, counts=FRAME, bbox=BOX_FRAME,
+                               fingerprint=FP_FRAME, sol="101", sig_version=SIG_VERSION, sig_geometry="a" * 64))
+    db.commit()
+    r = client.get(f"/api/similar?file_id={f.id}", headers=auth_headers("M100001"))
+    assert r.status_code == 200, r.text
+    first = r.json()["results"][0]
+    assert first["best"] >= 0.9 and first["lead"]["title"] in {"같은 설계 2", "기준"}
+    assert all(m["entry_id"] != e.entry_id for row in r.json()["results"] for m in row["members"])

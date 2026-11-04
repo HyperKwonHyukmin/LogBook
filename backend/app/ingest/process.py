@@ -1,6 +1,7 @@
 """배치 처리: 제외·해시·분류·DRM·중복 → 묶음 제안 → 초안 Entry (설계 §5.2~5.4)."""
 import logging
 import os
+import re
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -42,6 +43,14 @@ def _find_similar(db: Session, hull_no: str | None, title: str) -> int | None:
         if naming.jaccard(mine, theirs) >= 0.5:
             return e.id
     return None
+
+
+def _wb_hints(batch: models.Batch) -> list[str]:
+    """49 — WorkBench 보내기에서 관리자가 LogBook 에 주려고 적은 글(메모·묶음 이름). 기본 묶음 이름의 'WB #7740' 은
+    해석 번호라 뺀다. WB 프로젝트 이름은 넣지 않는다 — '2026 FSRU' 같은 연도가 호선으로 뽑힐 수 있다."""
+    o = batch.origin if isinstance(batch.origin, dict) else {}
+    name = re.sub(r"WB\s*#\s*\d+", " ", batch.original_name or "", flags=re.IGNORECASE)
+    return [t for t in (o.get("note"), name) if isinstance(t, str) and t.strip()]
 
 
 def _noop_progress(step: str, done: int = 0, total: int = 0, force: bool = False) -> None:
@@ -165,7 +174,7 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
         from .. import people
 
         owner = people.from_owner(db, batch.origin.get("owner"))
-    for p in propose(infos, known, single=from_wb):
+    for p in propose(infos, known, single=from_wb, hints=_wb_hints(batch) if from_wb else None):
         # 20 — 호선을 알면 제목 초안을 형식(`3496 · 구별자`)으로, 모르면 예전처럼 폴더/파일 이름. 구역·대상은
         # 사람이 정리 대기에서 고르고, 그때 (사람이 제목을 고치지 않았으면) 제목도 따라 바뀐다
         title = naming.title_draft(p.source, hulls=[p.best_hull] if p.best_hull else []) if p.best_hull else p.title
