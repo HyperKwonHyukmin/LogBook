@@ -389,6 +389,8 @@ class ModelSummary(Base):
     sig_other = Column(String(64), nullable=True)
     # 49 — WorkBench 권상 Wire 모델(TITLE 'HiTessWorkBench Lifting Analysis', app/lifting.py). NULL = 49 이전 변환
     lifting = Column(Boolean, nullable=True)
+    # 50 — Wire 배치 요약(bdf.wires.wire_summary). {"none": true} = 읽었지만 apex 를 못 찾음. NULL = 아직 안 읽음
+    wires = Column(JSON, nullable=True)
     updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
 
 

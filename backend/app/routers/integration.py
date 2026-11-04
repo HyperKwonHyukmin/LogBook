@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from .. import access, audit, models, roles, sessions, wb_targets, wb_users
+from .. import access, audit, lifting_refs, models, roles, sessions, wb_targets, wb_users
 from .. import wb_origin
 from ..config import settings
 from ..database import get_db
@@ -171,6 +171,32 @@ def export_content(file_id: int, request: Request, as_: str = Query(default="", 
                 yield chunk
 
     return StreamingResponse(stream(), media_type="application/octet-stream", headers=headers)
+
+
+# ---- 50 — 다른 Unit 의 권상 Wire 배치(WorkBench Module Unit Studio 참조) ----
+
+@router.get("/lifting-refs", dependencies=[Depends(require_integration)])
+def wb_lifting_refs(as_: str = Query(default="", alias="as"), q: str | None = Query(default=None, max_length=100),
+                    hull: str | None = Query(default=None, max_length=8),
+                    limit: int = Query(default=50, ge=1, le=lifting_refs.LIST_LIMIT_MAX),
+                    offset: int = Query(default=0, ge=0),
+                    db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage)):
+    """`as` 사번이 볼 수 있는 확정 자료의 Wire 모델 목록 + 요약(평면 선분 제외). 404 = 사번 없음·비활성."""
+    user = _acting_user(db, as_)
+    return lifting_refs.list_refs(db, storage, user, q=q, hull=(hull or "").strip() or None,
+                                  limit=limit, offset=offset)
+
+
+@router.get("/lifting-refs/{file_id}", dependencies=[Depends(require_integration)])
+def wb_lifting_ref(file_id: int, as_: str = Query(default="", alias="as"),
+                   db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage)):
+    """한 Wire 모델의 전체 요약(평면 선분 포함). 404 = 없음·권한 밖, 415 = Wire 모델이 아니거나 Wire 를 못 찾음."""
+    user = _acting_user(db, as_)
+    f = files_router._file(db, file_id, user)
+    out = lifting_refs.detail(db, storage, f)
+    if out is None:
+        raise HTTPException(status_code=415, detail="not_wire_model")
+    return out
 
 
 # ---- WorkBench → LogBook 보내기(WB 관리자 'All Projects') ----

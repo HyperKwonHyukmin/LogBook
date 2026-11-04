@@ -50,6 +50,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("model_summaries", "sig_load", "VARCHAR(64) NULL"),
     ("model_summaries", "sig_other", "VARCHAR(64) NULL"),
     ("model_summaries", "lifting", "TINYINT(1) NULL"),                       # 49 — 권상 Wire 모델
+    ("model_summaries", "wires", "JSON NULL"),                               # 50 — Wire 배치 요약
     ("users", "role", "VARCHAR(12) NOT NULL DEFAULT 'member'"),              # 13 — 사용자 등급
     ("entries", "access", "VARCHAR(10) NOT NULL DEFAULT 'public'"),          # 13 — 공개 범위
     ("entries", "private_min_role", "VARCHAR(12) NOT NULL DEFAULT 'viewer_all'"),

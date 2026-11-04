@@ -15,6 +15,7 @@ from ..bdf.thumbnail import render_thumbnail
 from ..config import settings
 from ..entries.files import entry_dir
 from ..entries.locate import FileUnavailable
+from ..bdf.wires import wire_summary
 from ..lifting import control_is_lifting
 from ..storage.paths import StoragePaths, long_join, to_long
 
@@ -240,6 +241,9 @@ def run_convert(db: Session, storage: StoragePaths, f: models.File) -> None:
     row.fingerprint, row.warnings = out["fingerprint"], out["warnings"][:MAX_WARNINGS]
     set_signature(row, out["signature"])
     row.lifting = bool(out.get("lifting"))   # 49
+    # 50 — Wire 요약. TITLE 이 없어 변환이 요약을 못 만든 파일(이름만 _lifting)은 요청 때 채운 값을 둔다
+    if out.get("wires") is not None:
+        row.wires = out["wires"]
     db.query(models.FileText).filter_by(file_id=f.id, locator="model").delete(synchronize_session=False)
     db.add(models.FileText(file_id=f.id, seq=0, locator="model", text=out["fingerprint"]))
     _mark_included(db, siblings, out["includes"])
@@ -282,9 +286,16 @@ def convert_deck(root: str, rel_path: str, storage_root: str, max_bytes: int) ->
     lbm_path, png_path = model_paths(StoragePaths(Path(storage_root)), key)
     _write(lbm_path, lbm)       # 실패(OSError)는 위로 — 재시도
     _write(png_path, png)
+    is_lifting = control_is_lifting(reader.control)
+    wires = None
+    if is_lifting:
+        try:
+            wires = wire_summary(model) or {"none": True}
+        except Exception as exc:   # 요약 실패가 변환을 막지 않는다 — 다음에 요청 때 다시 읽는다
+            log.warning("Wire 요약 실패: %s — %s", rel_path, exc)
     return {**out, "status": "done", "key": key, "counts": model.counts(), "bbox": model.bbox(),
             "sol": model.sol, "fingerprint": fp, "warnings": list(model.warnings), "signature": sig,
-            "lifting": control_is_lifting(reader.control)}
+            "lifting": is_lifting, "wires": wires}
 
 
 def requeue_entry_models(db: Session, entry_id: int) -> int:
