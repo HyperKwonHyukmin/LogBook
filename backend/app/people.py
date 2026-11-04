@@ -135,6 +135,66 @@ def _from_wb(db: Session, employee_id: str) -> models.Person:
     return p
 
 
+def from_owner(db: Session, employee_id) -> models.Person | None:
+    """49 — WorkBench 출처의 해석자 사번(origin.owner) → 명부 행. WorkBench 를 못 읽거나 없는 사번이면 None(비워 둔다)."""
+    if not isinstance(employee_id, str) or not employee_id.strip():
+        return None
+    try:
+        return _from_wb(db, employee_id)
+    except HTTPException:
+        return None
+
+
+def owner_of(db: Session, entry: models.Entry) -> str | None:
+    """49 — 자료 파일의 묶음 출처 중 첫 해석자 사번(해석 번호 순). 출처가 없으면 None."""
+    ids = db.query(models.File.batch_id).filter(models.File.entry_id == entry.id)
+    rows = (db.query(models.Batch).filter(models.Batch.id.in_(ids), models.Batch.wb_analysis_id.isnot(None))
+            .order_by(models.Batch.wb_analysis_id).all())
+    for b in rows:
+        owner = b.origin.get("owner") if isinstance(b.origin, dict) else None
+        if isinstance(owner, str) and owner.strip():
+            return owner
+    return None
+
+
+def fill_wb_owners(db: Session, storage: StoragePaths, *, apply: bool = False) -> dict:
+    """49 — 담당자가 빈 자료(정리 대기·확정) 중 WorkBench 출처의 해석자(origin.owner)가 있는 것에 그 사람을 담당자로.
+    돌려주는 것 {items: [{entry_id, title, status, owner, name}], missing: [WorkBench 에서 못 찾은 사번], filled}.
+    확정 자료는 감사 ENTRY_UPDATE·version +1·entry.json(다른 일괄 정리와 같은 규칙), 정리 대기는 값만."""
+    from .entries import service  # 순환 import 방지
+
+    has = db.query(models.EntryAssignee.entry_id)
+    wb_entries = (db.query(models.File.entry_id).join(models.Batch, models.Batch.id == models.File.batch_id)
+                  .filter(models.Batch.wb_analysis_id.isnot(None), models.File.entry_id.isnot(None)))
+    entries = (db.query(models.Entry).filter(models.Entry.status.in_(("draft", "confirmed")),
+                                             models.Entry.id.in_(wb_entries), models.Entry.id.notin_(has))
+               .order_by(models.Entry.id).all())
+    items, missing, filled = [], [], 0
+    for e in entries:
+        owner = owner_of(db, e)
+        if not owner:
+            continue
+        p = from_owner(db, owner) if apply else db.query(models.Person).filter_by(employee_id=owner.upper()).first()
+        if apply and p is None:
+            missing.append(owner)
+            continue
+        items.append({"entry_id": e.entry_id, "title": e.title, "status": e.status, "owner": owner,
+                      "name": p.name if p is not None else None})
+        if not apply:
+            continue
+        set_assignees(db, e, [p])
+        e.version += 1
+        db.flush()
+        if e.status == "confirmed":
+            audit.record(db, storage, actor="system", action="ENTRY_UPDATE", target_type="entry", target_id=e.entry_id,
+                         before={"assignees": []}, after={"assignees": [label(person_to_dict(p))]})
+            service._write_meta_or_queue(db, storage, e)
+        else:
+            db.commit()
+        filled += 1
+    return {"items": items, "missing": sorted(set(missing)), "filled": filled}
+
+
 def resolve_refs(db: Session, refs: list) -> list[models.Person]:
     """화면이 보낸 담당자 목록({id} 또는 {employee_id}) → 명부 행(순서 유지, 같은 사람 한 번)."""
     if len(refs) > MAX_ASSIGNEES:

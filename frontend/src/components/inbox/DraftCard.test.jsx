@@ -376,3 +376,31 @@ test('43 — 서버가 자동 조회해 둔 PLM 정보를 호선 칸 아래에 �
   render(<DraftCard entry={{ ...READY, hulls: [{ ...READY.hulls[0], plm }] }} siblings={[]} canEdit onChanged={() => {}} />);
   expect(screen.getAllByLabelText('PLM 선박 정보')[0]).toHaveTextContent('174K급 LNG');
 });
+
+test('49 — Module Unit 권상 자료에 Wire 모델이 없으면 올려 달라고 하고, 확정 때 한 번 묻는다', async () => {
+  mockFetch({ 'POST /api/entries/E000010/confirm': { ...ENTRY, status: 'confirmed' } });
+  const mu = { ...READY, target: 'Module Unit', lifting: { needed: true, has_wire: false } };
+  render(<DraftCard entry={mu} siblings={[]} canEdit onChanged={() => {}} />);
+  expect(within(screen.getByRole('region', { name: '권상 Wire 모델 요청' })).getByText('권상 Wire 모델도 함께 올려 주세요.')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  const dialog = await screen.findByRole('alertdialog');
+  expect(within(dialog).getByText('권상 Wire 모델 없이 확정할까요?')).toBeInTheDocument();
+  await userEvent.click(within(dialog).getByRole('button', { name: '취소' }));
+  expect(fetch.mock.calls.some(([u]) => u.endsWith('/confirm'))).toBe(false);
+  await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '그래도 확정' }));
+  await vi.waitFor(() => expect(fetch.mock.calls.some(([u]) => u.endsWith('/confirm'))).toBe(true));
+});
+
+test('49 — Wire 모델이 있으면 칩만 보이고 묻지 않는다', async () => {
+  mockFetch({ 'POST /api/entries/E000010/confirm': { ...ENTRY, status: 'confirmed' } });
+  const files = [...READY.files, { id: 3, rel_path: '9999_시험/a_lifting.bdf', name: 'a_lifting.bdf', kind: 'model', size: 9,
+    duplicate_of_entry: null, drm_encrypted: false, lifting: true }];
+  render(<DraftCard entry={{ ...READY, files, target: 'Module Unit', lifting: { needed: true, has_wire: true } }}
+                    siblings={[]} canEdit onChanged={() => {}} />);
+  expect(screen.queryByRole('region', { name: '권상 Wire 모델 요청' })).toBeNull();
+  expect(screen.getByText('Wire 포함')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  await vi.waitFor(() => expect(fetch.mock.calls.some(([u]) => u.endsWith('/confirm'))).toBe(true));
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+});

@@ -6,9 +6,10 @@ import VocabInput from '../ui/VocabInput.jsx';
 import { useConfirm } from '../ui/ConfirmDialog.jsx';
 import { Labeled, inputClass, selectClass } from '../ui/Field.jsx';
 import KindBadge from '../ui/KindBadge.jsx';
+import WireChip from '../ui/WireChip.jsx';
 import { api } from '../../api/client.js';
 import { errorText, formatBytes } from '../../lib/labels.js';
-import { MODEL_CONVERT_LABELS, draftChecks, modelConvertState } from '../../lib/inboxStatus.js';
+import { MODEL_CONVERT_LABELS, draftChecks, modelConvertState, needsLiftingWire } from '../../lib/inboxStatus.js';
 import Spinner from '../ui/Spinner.jsx';
 import { EntryLink, SameModelChips } from '../preview/SameModel.jsx';
 import { changedFields, editErrors, editValues, patchBody } from '../../lib/entryEdit.js';
@@ -212,6 +213,20 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
   const regenTitle = () => act(() => api(`/entries/${entry.entry_id}`,
     { method: 'PATCH', body: { version: versionRef.current, title_auto: true } }), '제목을 만들지');
   const mark = (k) => (changed.includes(k) ? <ChangedDot /> : null);
+  // 49 — Module Unit 권상 자료인데 Wire 모델이 없으면 함께 올려 달라고 요청한다(확정은 막지 않고 한 번 묻는다)
+  const wireMissing = canEdit && needsLiftingWire(entry, values.target);
+
+  async function confirmEntry() {
+    if (wireMissing) {
+      const ok = await confirm({
+        title: '권상 Wire 모델 없이 확정할까요?',
+        body: 'Module Unit 권상 자료는 Wire 를 설치한 모델(_lifting.bdf)이 있어야 나중에 이전 실적의 권상 위치를 찾을 수 있습니다. 지금 없으면 확정한 뒤에도 자료 상세에서 파일을 추가할 수 있습니다.',
+        confirmLabel: '그래도 확정',
+      });
+      if (!ok) return;
+    }
+    act(() => api(`/entries/${entry.entry_id}/confirm`, { method: 'POST' }), '확정하지');
+  }
 
   /** 초안 버리기 — 초안은 휴지통에서 복원할 수 없어 확인 대화상자를 거친다. */
   async function discard() {
@@ -273,7 +288,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
                 aria-describedby={confirmBlocked ? checksId : undefined}
                 title={confirmBlocked ? `확정할 수 없음: ${blocking.map((c) => c.text.split(': ')[0]).join(', ')}`
                   : attaching ? '파일 첨부가 끝난 뒤 확정할 수 있습니다' : dirty ? '바뀐 칸을 저장한 뒤 확정합니다' : undefined}
-                onClick={() => act(() => api(`/entries/${entry.entry_id}/confirm`, { method: 'POST' }), '확정하지')}>
+                onClick={confirmEntry}>
           <CheckCircle2 size={14} aria-hidden="true" />{dirty ? '저장하고 확정' : '확정'}
         </Button>
       </header>
@@ -421,6 +436,19 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
         </section>
       )}
 
+      {wireMissing && (
+        <section aria-label="권상 Wire 모델 요청" className="mx-4 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md bg-wait-bg px-3 py-2 text-meta text-n-800">
+          <p className="min-w-0 flex-1">
+            <span className="font-medium text-wait">권상 Wire 모델도 함께 올려 주세요.</span>{' '}
+            Module Unit 권상 자료는 Wire 를 설치한 모델(<span className="font-mono">_lifting.bdf</span>)이 있어야 나중에 이전 실적의 권상 위치를 찾을 수 있습니다.
+            {' '}<span className="font-mono">_lifting_meta.json</span> · <span className="font-mono">_posture.json</span> 이 있으면 같이 올려 주세요.
+          </p>
+          <Button variant="secondary" size="sm" disabled={disabled} onClick={() => attachRef.current?.open()}>
+            <Paperclip size={14} aria-hidden="true" />Wire 모델 추가
+          </Button>
+        </section>
+      )}
+
       <div className="border-t border-n-200">
         <div className="flex h-10 items-center gap-2 px-4 text-meta text-n-600">
           <span className="font-medium text-n-700">파일 <span className="font-mono font-normal text-n-500">{entry.files.length}</span></span>
@@ -474,6 +502,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
               )}
               {/* 12 — 내용 서명으로 찾은 동일 BDF(주의)·같은 형상(정보) */}
               <SameModelChips model={f.model} />
+              {f.lifting && <WireChip />}
               <ConvertBadge f={f} />
               {/* 43 — 분류를 고르기 전에 모델을 3D 로 본다. 첫 BDF 는 펼친 채로, 다른 BDF 는 눌러서 바꾼다 */}
               {modelConvertState(f) === 'done' && (

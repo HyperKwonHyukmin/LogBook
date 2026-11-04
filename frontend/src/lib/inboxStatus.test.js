@@ -63,3 +63,15 @@ test('43 — BDF 자료의 빈 호선은 확정을 막지 않고 보완 필요�
   const project = draftChecks({ title: '검토', hulls: [], project: '크레인 연구', zones: ['선수부'] }, entry);
   expect(project.map((x) => x.id)).toEqual(['hull']);
 });
+
+test('49 — needsLiftingWire: 대상 Module Unit 또는 WB 권상 출처인데 Wire 모델이 없을 때만', async () => {
+  const { needsLiftingWire } = await import('./inboxStatus.js');
+  const base = { merge_into: null, files: [{ kind: 'model', name: 'a.bdf' }] };
+  expect(needsLiftingWire(base, 'Module Unit')).toBe(true);
+  expect(needsLiftingWire(base, 'module unit')).toBe(true);
+  expect(needsLiftingWire(base, 'Unit')).toBe(true);
+  expect(needsLiftingWire(base, '블록')).toBe(false);
+  expect(needsLiftingWire({ ...base, lifting: { needed: true, has_wire: false } }, '')).toBe(true);
+  expect(needsLiftingWire({ ...base, files: [{ kind: 'model', lifting: true }] }, 'Module Unit')).toBe(false);
+  expect(needsLiftingWire({ ...base, merge_into: { entry_id: 'E1' } }, 'Module Unit')).toBe(false);
+});

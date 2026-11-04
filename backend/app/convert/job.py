@@ -15,6 +15,7 @@ from ..bdf.thumbnail import render_thumbnail
 from ..config import settings
 from ..entries.files import entry_dir
 from ..entries.locate import FileUnavailable
+from ..lifting import control_is_lifting
 from ..storage.paths import StoragePaths, long_join, to_long
 
 log = logging.getLogger(__name__)
@@ -238,6 +239,7 @@ def run_convert(db: Session, storage: StoragePaths, f: models.File) -> None:
     row.sol = out["sol"][:MAX_SOL_CHARS] if out["sol"] else None
     row.fingerprint, row.warnings = out["fingerprint"], out["warnings"][:MAX_WARNINGS]
     set_signature(row, out["signature"])
+    row.lifting = bool(out.get("lifting"))   # 49
     db.query(models.FileText).filter_by(file_id=f.id, locator="model").delete(synchronize_session=False)
     db.add(models.FileText(file_id=f.id, seq=0, locator="model", text=out["fingerprint"]))
     _mark_included(db, siblings, out["includes"])
@@ -281,7 +283,8 @@ def convert_deck(root: str, rel_path: str, storage_root: str, max_bytes: int) ->
     _write(lbm_path, lbm)       # 실패(OSError)는 위로 — 재시도
     _write(png_path, png)
     return {**out, "status": "done", "key": key, "counts": model.counts(), "bbox": model.bbox(),
-            "sol": model.sol, "fingerprint": fp, "warnings": list(model.warnings), "signature": sig}
+            "sol": model.sol, "fingerprint": fp, "warnings": list(model.warnings), "signature": sig,
+            "lifting": control_is_lifting(reader.control)}
 
 
 def requeue_entry_models(db: Session, entry_id: int) -> int:

@@ -387,6 +387,8 @@ class ModelSummary(Base):
     sig_material = Column(String(64), nullable=True)
     sig_load = Column(String(64), nullable=True)
     sig_other = Column(String(64), nullable=True)
+    # 49 — WorkBench 권상 Wire 모델(TITLE 'HiTessWorkBench Lifting Analysis', app/lifting.py). NULL = 49 이전 변환
+    lifting = Column(Boolean, nullable=True)
     updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
 
 

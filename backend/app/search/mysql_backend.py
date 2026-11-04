@@ -171,6 +171,9 @@ def _label_people(db: Session, facets: list[dict]) -> None:
     ids = [int(f["value"]) for f in facets if str(f["value"]).isdigit()]
     people = {str(p.id): p for p in db.query(models.Person).filter(models.Person.id.in_(ids or [0]))}
     for f in facets:
+        if f["value"] == GROUP_NONE:   # 49
+            f["label"] = "담당자 없음"
+            continue
         p = people.get(str(f["value"]))
         if p is None:
             continue
@@ -591,12 +594,18 @@ class MySqlSearch:
         v = r[key]   # uploaded_by — 값 하나
         return [v] if v else []
 
+    @classmethod
+    def _filter_have(cls, r: dict, key: str) -> list[str]:
+        """필터·건수용 값 — 49: 담당자가 없는 자료는 GROUP_NONE('담당자 없음')으로 거르고 센다."""
+        have = cls._values(r, key)
+        return have or ([GROUP_NONE] if key == "assignee" else [])
+
     def _passes(self, r: dict, filters: dict, skip: str | None = None) -> bool:
         """19 — filters = {칸: [값, …]}. 같은 칸의 값 중 하나라도 있으면 그 칸 통과(OR), 모든 칸을 통과해야 한다(AND)."""
         for key, want in filters.items():
             if key == skip:
                 continue
-            have = self._values(r, key)
+            have = self._filter_have(r, key)
             if not any(w in have for w in want):
                 return False
         return True
@@ -612,7 +621,7 @@ class MySqlSearch:
             c = Counter()
             for r in rows:
                 if self._passes(r, filters, skip=key):
-                    c.update(self._values(r, key))
+                    c.update(self._filter_have(r, key))
             ranked = sorted(c.items(), key=lambda x: (-x[1], x[0]))
             kept = ranked[:FACET_LIMIT]
             have = {v for v, _n in kept}

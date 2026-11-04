@@ -132,3 +132,16 @@ export function draftChecks(form, entry) {
   if (dup) out.push({ id: 'dup', text: `이미 보관된 파일 ${dup}개` });
   return out;
 }
+
+// 49 — Module Unit 권상 자료(백엔드 app/lifting.py 와 같은 규칙). 대상 값은 분류 목록의 대표 값으로 들어온다
+// 145 는 40 에서 구역에서 옮겨 온 대상 'Unit'(동의어 GMU)을 쓴다
+export const MU_TARGETS = ['Unit', 'Module Unit'];
+const vocabKey = (v) => String(v || '').replace(/\s+/g, '').toLowerCase();
+
+/** 권상 Wire 모델을 올려 달라고 요청할지 — MU 자료(대상 또는 WB 출처)인데 Wire 모델(_lifting.bdf)이 없을 때. 다른 자료에 추가하는 초안은 묻지 않는다. */
+export function needsLiftingWire(entry, target) {
+  if (entry.merge_into) return false;
+  const files = entry.files || [];
+  if (entry.lifting?.has_wire || files.some((f) => f.lifting)) return false;
+  return !!entry.lifting?.needed || MU_TARGETS.some((t) => vocabKey(t) === vocabKey(target));
+}

@@ -63,6 +63,12 @@ const DraftAttachments = forwardRef(function DraftAttachments({ entry, disabled,
 
   /** 카드에 끌어 놓은 파일 — [파일 추가] → 파일 선택과 같은 첨부 업로드. */
   useImperativeHandle(ref, () => ({
+    /** 49 — 다른 안내(권상 Wire 모델 요청)에서 [파일 추가] 를 펼친다. */
+    open() {
+      focusOnOpen.current = true;
+      setOpen(true);
+      panel.current?.scrollIntoView?.({ block: 'nearest' });
+    },
     drop(dataTransfer) {
       setOpen(true);
       if (disabled || busy || u.disabled) {

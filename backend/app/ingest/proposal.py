@@ -51,11 +51,15 @@ def _make(label: str, files: list[FileInfo], known: set[str]) -> Proposal:
                     hull_candidates=[c.as_dict() for c in cands], source=source[:255])
 
 
-def propose(files: list[FileInfo], known: set[str]) -> list[Proposal]:
+def propose(files: list[FileInfo], known: set[str], *, single: bool = False) -> list[Proposal]:
+    """single — 49: 묶음 전체를 초안 하나로(WorkBench 해석 1건 = 자료 1건, 부모·세부 검토 작업 폴더가 갈라져 와도)."""
     top: dict[str, list[FileInfo]] = {}
     for f in files:
         parts = PurePosixPath(f.rel_path).parts
         top.setdefault(parts[0] if len(parts) > 1 else LOOSE, []).append(f)
+    if single and files:
+        label = max(top, key=lambda k: len(top[k]))   # 파일이 가장 많은 폴더 이름을 제목 원천으로
+        return [_make(label, files, known)]
 
     proposals: list[Proposal] = []
     for label, group in top.items():

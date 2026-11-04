@@ -237,3 +237,15 @@ def test_requeue_keeps_previous_key_and_fingerprint(db, storage, make_entry_file
     s = db.get(models.ModelSummary, f.id)
     assert (s.state, s.key) == ("failed", key)
     assert db.query(models.FileText).filter_by(file_id=f.id, locator="model").count() == 1
+
+
+def test_lifting_title_marks_wire_model(db, storage, make_entry_file):
+    """49 — WorkBench 권상 Wire 모델(TITLE 'HiTessWorkBench Lifting Analysis')이면 lifting 을 켠다."""
+    _e, f = make_entry_file(name="renamed.bdf", kind="model")
+    _write(db, storage, f, "SOL 101\nCEND\nTITLE = HiTessWorkBench Lifting Analysis\nSPC = 990001\nBEGIN BULK\n" + MESH)
+    _e2, g = make_entry_file(name="plain.bdf", kind="model")
+    _write(db, storage, g, "SOL 101\nCEND\nTITLE = unit\nBEGIN BULK\n" + MESH)
+    run_convert(db, storage, f)
+    run_convert(db, storage, g)
+    assert db.get(models.ModelSummary, f.id).lifting is True
+    assert db.get(models.ModelSummary, g.id).lifting is False

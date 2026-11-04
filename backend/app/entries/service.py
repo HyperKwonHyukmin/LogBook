@@ -8,7 +8,7 @@ from pathlib import Path, PurePosixPath
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from .. import access, audit, jobs, models, people, vocab
+from .. import access, audit, jobs, lifting, models, people, vocab
 from ..storage.paths import StoragePaths, long_join, to_long
 from ..revisions.series import refresh as refresh_revisions, series_brief
 from .same_model import find_same_models
@@ -64,6 +64,7 @@ def file_to_dict(f: models.File, duplicate_entries: dict[int, str | None] | None
             "sha256": f.sha256, "drm_encrypted": f.drm_encrypted, "duplicate_of_id": f.duplicate_of_id,
             "duplicate_of_entry": (duplicate_entries or {}).get(f.duplicate_of_id),
             "location": f.location,
+            "lifting": lifting.is_wire_model(f, s),   # 49 — 권상 Wire 모델(_lifting.bdf)
             "extract": {"state": x.state, "error": x.error, "summary": x.summary} if x else None,
             # BDF 변환 상태(04a) — 모델 파일이 아니거나 변환 기록이 없으면 None
             "model": ({"state": s.state, "error": s.error, "counts": s.counts, "bbox": s.bbox,
@@ -179,6 +180,8 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
         if not merge_into:
             d["merge_into_id"] = None
         d["can_edit"] = access.can_edit_entry(viewer, entry)
+        # 49 — Module Unit 권상 자료면 Wire 모델이 있는지(없으면 화면이 올려 달라고 요청한다)
+        d["lifting"] = lifting.brief(db, target, files, model_rows)
         # 39 — WorkBench 해석 출처(LOGBOOK_WB_ORIGIN_SHOW 가 켜졌을 때만 — Core 03-safety '기본 꺼짐')
         from ..config import settings as _settings
         if _settings.wb_origin_show:

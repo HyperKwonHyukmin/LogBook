@@ -38,6 +38,8 @@ import NeedsFixBadge from '../components/ui/NeedsFixBadge.jsx';
 import BackButton from '../components/ui/BackButton.jsx';
 import ModelTraits, { defaultFile } from '../components/preview/ModelTraits.jsx';
 import WbOrigins from '../components/workbench/WbOrigins.jsx';
+import WireChip from '../components/ui/WireChip.jsx';
+import { needsLiftingWire } from '../lib/inboxStatus.js';
 import AssigneeInput, { AssigneeList } from '../components/people/AssigneeInput.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
@@ -159,6 +161,7 @@ function TreeNodes({ nodes, selectedId, onPick, entryId, removal = null, depth =
       <span className={`min-w-0 flex-1 truncate ${n.file.id === selectedId ? 'font-medium' : ''}
         ${removal?.marked.has(n.file.id) ? 'text-n-500 line-through decoration-err/60' : ''}`} title={n.file.rel_path}>{n.name}</span>
       {removal?.marked.has(n.file.id) && <span className="shrink-0 text-micro font-medium text-err">삭제 예정</span>}
+      {n.file.lifting && <WireChip />}
       {sameInfo(n.file.model)?.sameTotal > 0 && (
         <span title="동일 BDF 가 이미 있음" className="inline-flex shrink-0 items-center gap-0.5 rounded-xs bg-wait-bg px-1 text-micro font-medium text-wait">
           <Copy size={10} aria-hidden="true" />동일
@@ -709,6 +712,13 @@ export default function EntryPage() {
               </Button>
             )}
           </div>
+          {/* 49 — Module Unit 권상 자료인데 Wire 모델이 없다(확정 뒤에도 파일 추가로 채울 수 있다) */}
+          {editable && needsLiftingWire(entry, entry.target) && (
+            <p role="note" className="mb-3 rounded-md bg-wait-bg px-3 py-2 text-meta text-n-800">
+              <span className="font-medium text-wait">권상 Wire 모델이 없습니다.</span>{' '}
+              Wire 를 설치한 모델(<span className="font-mono">_lifting.bdf</span>)을 [파일 추가]로 올려 두면 나중에 이전 실적의 권상 위치를 찾을 수 있습니다.
+            </p>
+          )}
           {adding && editable && (
             <div className="mb-3 rounded-lg border border-n-200 p-3">
               <p className="mb-2 text-meta text-n-600">여기 올린 파일은 정리 대기를 거치지 않고 이 자료에 바로 추가됩니다.</p>
