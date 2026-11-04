@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client.js';
-import { WEAK, likeWord } from '../../lib/similar.js';
+import { likeWord } from '../../lib/similar.js';
 import { modelConvertState } from '../../lib/inboxStatus.js';
 import Button, { buttonClass } from '../ui/Button.jsx';
 import Spinner from '../ui/Spinner.jsx';
 import { EntryLink } from '../preview/SameModel.jsx';
 
-// 49 — 완전히 같지 않아도 '일부 비슷'(0.5) 이상이면 후보로 보인다(선례 찾기 27 의 점수, lib/similar.js)
-export const SIMILAR_MIN = WEAK;
+// 49 — 후보 = 크기 L·W·H 각 ±15%·요소 수 ±30% 안(서버 tol, 형상 서명이 같으면 늘) + '많이 비슷'(0.7) 이상
+export const SIMILAR_MIN = 0.7;
 const SHOWN = 3;
 const DERIVED = /_(lifting|validation|edited)\.[^.]+$/i;
 
@@ -16,6 +16,18 @@ const DERIVED = /_(lifting|validation|edited)\.[^.]+$/i;
 export function mainModel(files) {
   const done = (files || []).filter((f) => f.kind === 'model' && modelConvertState(f) === 'done');
   return done.find((f) => !DERIVED.test(f.name)) || done[0] || null;
+}
+
+const pct = (x) => `${x > 0 ? '+' : x < 0 ? '−' : '±'}${Math.abs(Math.round(x * 100))}%`;
+
+/** 기준 대비 차이 한 줄 — '크기 +9% · +5% · +7% · 요소 +11%'(L·W·H 순). 같은 설계면 그것만. */
+export function diffText(row) {
+  if (row.score?.shape) return '같은 설계(형상 서명 같음)';
+  const d = row.diff;
+  if (!d) return '';
+  const dims = (d.dims || []).filter((x) => x != null);
+  return [dims.length ? `크기 ${dims.map(pct).join(' · ')}` : null, d.elems != null ? `요소 ${pct(d.elems)}` : null]
+    .filter(Boolean).join(' · ');
 }
 
 /** 이 묶음에서 '이미 있는 BDF 와 똑같아' 받지 않은 BDF 가 들어 있는 기존 자료(자료마다 한 줄). */
@@ -50,7 +62,7 @@ export default function DraftSimilar({ entry, disabled, onMerge, onFound }) {
   useEffect(() => {
     if (!fileId) return undefined;
     let alive = true;
-    api(`/similar?file_id=${fileId}`)
+    api(`/similar?file_id=${fileId}&tol=true`)
       .then((d) => alive && setState({ fileId, rows: (d?.results || []).filter((r) => r.best >= SIMILAR_MIN) }))
       .catch(() => alive && setState({ fileId, rows: [] }));   // 찾지 못해도 확정은 막지 않는다
     return () => { alive = false; };
@@ -100,6 +112,7 @@ export default function DraftSimilar({ entry, disabled, onMerge, onFound }) {
             <span className="min-w-0 truncate">‘{r.lead.title}’</span>
             <span className="shrink-0 text-n-600">{r.lead.file_name}</span>
             <span className="shrink-0 font-medium text-n-700">{likeWord(r.best)} {Math.round(r.best * 100)}%</span>
+            <span className="shrink-0 font-mono text-n-600" title="기준 BDF 대비(크기 L·W·H, 요소 수)">{diffText(r)}</span>
             <div className="flex-1" />
             <Button variant="ghost" size="sm" disabled={disabled} aria-label={`${r.lead.entry_id} 에 새 판으로 추가`}
                     onClick={() => onMerge(r.lead.entry_id)}>새 판이면 이 자료에 추가</Button>

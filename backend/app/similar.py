@@ -37,6 +37,10 @@ MAX_UPLOAD_BYTES = 32 * 1024 ** 2     # 올린 BDF 는 요청 안에서 읽는�
 DRM_MAGIC = b"HHIDRMC"
 SECTION_CARDS = ("PBARL", "PBEAML", "PSHELL", "PCOMP", "PBAR", "PBEAM", "PROD")
 MM_THRESHOLD = 500
+# 49 — 정리 대기 '기존 모델과 견주기'의 허용 범위(tolerance). 크기 L·W·H 각각, 요소 수의 상대 차이.
+# 형상 서명이 같으면(같은 설계) 범위와 상관없이 후보다. 선례 찾기 화면은 범위를 걸지 않는다(넓게 둘러본다).
+TOL_DIM = .15
+TOL_ELEMS = .30
 
 
 class BdfUnreadable(ValueError):
@@ -130,6 +134,20 @@ def score(base: dict, other: dict, weights: dict | None = None) -> dict:
             "raw": {k: round(v, 4) for k, v in raw.items()}, "same_sections": sorted(A & B)}
 
 
+def diff(base: dict, other: dict) -> dict:
+    """49 — 기준 대비 상대 차이 {dims: [L, W, H], elems} (0.03 = 3% 큼, -0.08 = 8% 작음). 기준 값이 0 이면 None."""
+    dims = [round(o / b - 1, 4) if b else None for b, o in zip(base["dims"], other["dims"])]
+    elems = round(other["elems"] / base["elems"] - 1, 4) if base["elems"] else None
+    return {"dims": dims, "elems": elems}
+
+
+def within(d: dict) -> bool:
+    """diff 가 허용 범위 안인가 — 크기 세 변 각각 ±TOL_DIM, 요소 수 ±TOL_ELEMS."""
+    if d["elems"] is None or abs(d["elems"]) > TOL_ELEMS:
+        return False
+    return all(x is not None and abs(x) <= TOL_DIM for x in d["dims"])
+
+
 # ---------- 후보 ----------
 
 def _candidates(db: Session, user, exclude_file: int | None) -> list[dict]:
@@ -185,9 +203,12 @@ def _public(c: dict) -> dict:
 
 
 def find_similar(db: Session, user, base: dict, *, exclude_file: int | None = None,
-                 weights: dict | None = None, limit: int = MAX_RESULTS) -> dict:
-    """base(features + zone) 와 비슷한 선례. 같은 형상 서명은 한 줄(lead + members)."""
+                 weights: dict | None = None, limit: int = MAX_RESULTS, tolerance: bool = False) -> dict:
+    """base(features + zone) 와 비슷한 선례. 같은 형상 서명은 한 줄(lead + members).
+    tolerance(49) — 크기·요소 수가 허용 범위(TOL_DIM·TOL_ELEMS) 안이거나 형상 서명이 같은 것만."""
     cands = _candidates(db, user, exclude_file)
+    if tolerance:
+        cands = [c for c in cands if (base.get("sig") and base["sig"] == c.get("sig")) or within(diff(base, c))]
     # 같은 자료 안 여러 BDF 는 가장 닮은 하나만
     best_in_entry: dict[int, tuple[dict, dict]] = {}
     for c in cands:
@@ -205,7 +226,7 @@ def find_similar(db: Session, user, base: dict, *, exclude_file: int | None = No
         # 대표 = 거의 같은 점수 중 검증 통과한 것 → 문서 있는 것 → 가장 닮은 것
         near = [m for m in members if m[1]["total"] >= top - .03]
         lead = sorted(near, key=lambda m: (m[0]["solve"] != "pass", m[0]["reports"] == 0, -m[1]["total"]))[0]
-        rows.append({"lead": _public(lead[0]), "score": lead[1], "best": top,
+        rows.append({"lead": _public(lead[0]), "score": lead[1], "best": top, "diff": diff(base, lead[0]),
                      "members": [{**_public(m[0]), "total": m[1]["total"]} for m in members[:MAX_MEMBERS]],
                      "member_total": len(members)})
     rows.sort(key=lambda r: -r["best"])

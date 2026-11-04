@@ -1,6 +1,6 @@
 """선례 찾기 API(27) — 기준 BDF 와 비슷한 확정 모델(app/similar.py).
 
-    GET  /api/similar?file_id=N[&zone=]   LogBook 의 BDF 가 기준
+    GET  /api/similar?file_id=N[&zone=][&tol=true]   LogBook 의 BDF 가 기준(tol — 49 정리 대기, 크기·요소 수 허용 범위)
     POST /api/similar/bdf?name=…[&zone=]  본문 = BDF 바이트(저장하지 않는다, 32MB 까지)
     42 — 해석 종류(analysis_type)는 없앴다(옛 주소에 있어도 무시).
 """
@@ -31,12 +31,13 @@ def _base_out(base: dict) -> dict:
 
 @router.get("")
 def similar_to_file(file_id: int = Query(...), zone: str | None = None,
+                    tol: bool = Query(default=False),   # 49 — 정리 대기: 크기·요소 수 허용 범위 안만
                     db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
     base = base_from_file(db, user, file_id)
     if base is None:
         raise HTTPException(status_code=404, detail="similar_base_not_found")
     base = _override(base, zone)
-    return {"base": _base_out(base), **find_similar(db, user, base, exclude_file=file_id)}
+    return {"base": _base_out(base), **find_similar(db, user, base, exclude_file=file_id, tolerance=tol)}
 
 
 @router.post("/bdf")

@@ -136,3 +136,22 @@ def test_draft_file_as_base_for_inbox(world, client, auth_headers, db, make_entr
     first = r.json()["results"][0]
     assert first["best"] >= 0.9 and first["lead"]["title"] in {"같은 설계 2", "기준"}
     assert all(m["entry_id"] != e.entry_id for row in r.json()["results"] for m in row["members"])
+
+
+def test_tolerance_keeps_close_size_and_same_design(world, client, auth_headers, db, make_entry_file):
+    """49 — tol=true: 크기 L·W·H 각 ±15%, 요소 수 ±30% 안이거나 형상 서명이 같은 것만. 줄마다 diff(상대 차이)."""
+    near = _model(db, make_entry_file, hull="9006", title="조금 큰 틀", counts={"CBEAM": 1000, "RBE2": 40, "GRID": 900},
+                  bbox={"min": [0, 0, 0], "max": [24000, 8400, 1600]}, fp=FP_FRAME, sig="c" * 64)
+    far = _model(db, make_entry_file, hull="9007", title="두 배 큰 틀", counts={"CBEAM": 900, "RBE2": 40, "GRID": 800},
+                 bbox={"min": [0, 0, 0], "max": [44000, 8000, 1500]}, fp=FP_FRAME, sig="d" * 64)
+    h = auth_headers("M100001")
+    fid = world["base"][1].id
+    loose = {r["lead"]["title"] for r in client.get(f"/api/similar?file_id={fid}", headers=h).json()["results"]}
+    assert {"조금 큰 틀", "두 배 큰 틀", "판"} <= loose   # 선례 찾기 화면은 범위를 걸지 않는다
+    rows = client.get(f"/api/similar?file_id={fid}&tol=true", headers=h).json()["results"]
+    titles = {r["lead"]["title"] for r in rows}
+    assert "조금 큰 틀" in titles and "두 배 큰 틀" not in titles and "판" not in titles
+    assert any(r["score"]["shape"] for r in rows)   # 같은 설계(형상 서명)는 범위와 상관없이
+    row = next(r for r in rows if r["lead"]["title"] == "조금 큰 틀")
+    assert row["diff"]["dims"][0] == pytest.approx(24 / 22 - 1, abs=1e-3) and row["diff"]["elems"] == pytest.approx(1000 / 900 - 1, abs=1e-3)
+    assert near and far
