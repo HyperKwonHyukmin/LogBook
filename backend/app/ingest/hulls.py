@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from typing import Iterable
 
 TOKEN = re.compile(r"(?<![0-9])([0-9]{4})(?![0-9])")
+# 49 — 양쪽이 모두 영문자인 4자리(해시 'd9d4452cc' 의 4452 등)는 호선이 아니다. 한쪽만 붙은 'H3496' 같은 표기는 그대로 본다
+INSIDE_WORD = re.compile(r"[A-Za-z]")
 
 # 이 토큰 하나만 놓고 볼 때 날짜(YYYY-MM[-DD])처럼 보이는지 — 연도 자리(199x·20xx)가
 # 아니면 애초에 날짜일 수 없으므로 호선 번호(3496 등)는 이 규칙에 걸리지 않는다.
@@ -67,6 +69,8 @@ def extract_hull_candidates(names: Iterable[str], known: set[str]) -> list[HullC
         eff_start = _effective_leading_start(name)
         for t in TOKEN.finditer(name):
             no = t.group(1)
+            if INSIDE_WORD.match(name[t.start() - 1:t.start()]) and INSIDE_WORD.match(name[t.end():t.end() + 1]):
+                continue
             is_date = _is_date_like(name, t.start())
             date_flags.setdefault(no, []).append(is_date)
 

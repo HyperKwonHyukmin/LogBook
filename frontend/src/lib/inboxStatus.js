@@ -143,5 +143,7 @@ export function needsLiftingWire(entry, target) {
   if (entry.merge_into) return false;
   const files = entry.files || [];
   if (entry.lifting?.has_wire || files.some((f) => f.lifting)) return false;
+  // 똑같은 Wire 모델이 이미 LogBook 에 있어 받지 않았으면(17) 다시 올려 달라고 하지 않는다
+  if ((entry.blocked_models || []).some((b) => b.lifting)) return false;
   return !!entry.lifting?.needed || MU_TARGETS.some((t) => vocabKey(t) === vocabKey(target));
 }

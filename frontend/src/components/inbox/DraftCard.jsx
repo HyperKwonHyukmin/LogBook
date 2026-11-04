@@ -64,7 +64,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
   const [osOver, setOsOver] = useState(false);
   const attachRef = useRef(null);
   const [confirm, dialog] = useConfirm();
-  const [similarCount, setSimilarCount] = useState(0);   // 49 — 확정 전에 보인 비슷한 기존 모델 수
+  const [found, setFound] = useState({ same: 0, similar: 0 });   // 49 — 확정 전에 보인 똑같은·비슷한 기존 모델 수
   const versionRef = useRef(entry.version); // 다음 PATCH 에 실을 version — PATCH 응답으로 갱신
   const queueRef = useRef(Promise.resolve()); // 저장·동작을 한 줄로 세운다
 
@@ -219,10 +219,11 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
   const wireMissing = canEdit && needsLiftingWire(entry, values.target);
 
   async function confirmEntry() {
-    // 49 — 비슷한 기존 모델이 보이면 같은 모델이 아닌지 한 번 묻고 새 자료로 추가한다
-    if (similarCount > 0) {
+    // 49 — 똑같은·비슷한 기존 모델이 보이면 같은 모델이 아닌지 한 번 묻고 새 자료로 추가한다
+    if (found.same > 0 || found.similar > 0) {
       const ok = await confirm({
-        title: `비슷한 기존 모델이 ${similarCount}건 있습니다. 새 자료로 추가할까요?`,
+        title: found.same > 0 ? '똑같은 BDF 가 이미 있는 자료가 있습니다. 그래도 새 자료로 추가할까요?'
+          : `비슷한 기존 모델이 ${found.similar}건 있습니다. 새 자료로 추가할까요?`,
         body: '같은 모델의 새 판이면 [새 판이면 이 자료에 추가]를, 이미 있는 모델이면 [버리기]를 쓰세요.',
         confirmLabel: '새 자료로 추가',
       });
@@ -455,7 +456,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
       )}
 
       {/* 49 — 비슷한 기존 모델(선례 찾기 27 점수). 확인하고 없으면 새 자료로 확정 */}
-      {canEdit && <DraftSimilar entry={entry} disabled={disabled} onMerge={patchMerge} onFound={setSimilarCount} />}
+      {canEdit && <DraftSimilar entry={entry} disabled={disabled} onMerge={patchMerge} onFound={setFound} />}
 
       {wireMissing && (
         <section aria-label="권상 Wire 모델 요청" className="mx-4 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md bg-wait-bg px-3 py-2 text-meta text-n-800">

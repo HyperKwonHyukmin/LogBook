@@ -414,9 +414,9 @@ test('49 — 변환이 끝난 BDF 와 비슷한 기존 모델을 보이고, 확�
     { best: 0.4, lead: { file_id: 71, entry_id: 'E000071', title: '참고만', file_name: 'o.bdf' } }] };
   mockFetch({ 'GET /api/similar?file_id=1': similar, 'POST /api/entries/E000010/confirm': { ...ENTRY, status: 'confirmed' } });
   render(<MemoryRouter><DraftCard entry={{ ...READY, files, suggested_entry: null }} siblings={[]} canEdit onChanged={() => {}} /></MemoryRouter>);
-  const box = await screen.findByRole('region', { name: '비슷한 기존 모델' });
+  const box = await screen.findByRole('region', { name: '기존 모델과 견주기' });
   expect(within(box).getByText('E000070')).toBeInTheDocument();
-  expect(within(box).queryByText('E000071')).toBeNull();   // 0.7 미만은 보이지 않는다
+  expect(within(box).queryByText('E000071')).toBeNull();   // 0.5 미만은 보이지 않는다
   await userEvent.click(screen.getByRole('button', { name: '확정' }));
   const dialog = await screen.findByRole('alertdialog');
   expect(within(dialog).getByText('비슷한 기존 모델이 1건 있습니다. 새 자료로 추가할까요?')).toBeInTheDocument();
@@ -442,4 +442,24 @@ test('49 — WorkBench 실행자는 담당자와 따로 실행자로 보인다',
   const list = screen.getByRole('list', { name: '실행자' });
   expect(within(list).getByText('이제희')).toBeInTheDocument();
   expect(within(list).getByText('FSRU PM · A418404')).toBeInTheDocument();
+});
+
+test('49 — BDF 가 모두 동일 BDF 로 막힌 초안: 이미 있는 자료와 그 BDF 기준 비슷한 후보를 보이고, Wire 를 다시 달라고 하지 않는다', async () => {
+  const files = [{ id: 5, rel_path: 'x/a_posture.json', name: 'a_posture.json', kind: 'other', size: 9, duplicate_of_entry: null, drm_encrypted: false }];
+  const blocked = [
+    { name: 'x/a.bdf', lifting: false, matches: [{ file_id: 80, name: 'a.bdf', entry_id: 'E000054', entry_title: '3596 MU', entry_status: 'confirmed' }] },
+    { name: 'x/a_lifting.bdf', lifting: true, matches: [{ file_id: 81, name: 'a_lifting.bdf', entry_id: 'E000054', entry_title: '3596 MU', entry_status: 'confirmed' }] }];
+  const similar = { results: [
+    { best: 1, lead: { file_id: 81, entry_id: 'E000054', title: '3596 MU', file_name: 'a_lifting.bdf' } },
+    { best: 0.62, lead: { file_id: 90, entry_id: 'E000090', title: '3597 MU', file_name: 'b.bdf' } }] };
+  mockFetch({ 'GET /api/similar?file_id=80': similar, 'PATCH /api/entries/E000010': { ...READY, merge_into_id: 'E000054' } });
+  render(<MemoryRouter><DraftCard entry={{ ...READY, files, suggested_entry: null, target: 'Unit', lifting: { needed: true, has_wire: false },
+    blocked_models: blocked }} siblings={[]} canEdit onChanged={() => {}} /></MemoryRouter>);
+  const box = screen.getByRole('region', { name: '기존 모델과 견주기' });
+  expect(within(box).getByText('똑같은 BDF 가 이미 있음')).toBeInTheDocument();
+  expect(await within(box).findByText('일부 비슷 62%')).toBeInTheDocument();
+  expect(within(box).getAllByText('E000054')).toHaveLength(1);   // 똑같은 자료는 비슷한 후보에 다시 나오지 않는다
+  expect(screen.queryByRole('region', { name: '권상 Wire 모델 요청' })).toBeNull();
+  await userEvent.click(within(box).getByRole('button', { name: 'E000054 에 추가' }));
+  expect(bodyOf('PATCH', '/api/entries/E000010')).toMatchObject({ merge_into_id: 'E000054' });
 });

@@ -207,7 +207,33 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
         from .draft_attachments import pending_batches
         d["pending_attachments"] = [{"key": b.key, "state": b.state}
                                     for b in pending_batches(db, entry.id)]
+        if viewer is not None:
+            d["blocked_models"] = blocked_models(db, entry, files, viewer)   # 49
     return d
+
+
+def blocked_models(db: Session, entry: models.Entry, files: list[models.File], viewer) -> list[dict]:
+    """49 — 이 초안의 묶음에서 '이미 있는 BDF 와 똑같아' 받지 않은 BDF(17)와 그 BDF 가 있는 자료(보는 사람 권한으로).
+    묶음의 초안이 하나면(WorkBench 묶음 등) 모두 이 초안 몫, 여럿이면 최상위 폴더가 같은 것만.
+    정리 대기 카드가 '똑같은 모델이 이미 있음'·[그 자료에 추가]·비슷한 후보의 기준으로 쓴다."""
+    from ..ingest import duplicates
+
+    batch = db.get(models.Batch, entry.batch_id) if entry.batch_id else None
+    excluded = (batch.excluded or []) if batch is not None else []
+    recs = [r for r in excluded if isinstance(r, dict) and r.get("reason") == duplicates.REASON_MODEL]
+    if not recs:
+        return []
+    drafts = db.query(models.Entry.id).filter_by(batch_id=batch.id, status="draft").count()
+    tops = {f.rel_path.split("/", 1)[0] for f in files if "/" in f.rel_path}
+    out = []
+    for r in recs:
+        name = str(r.get("name") or "")
+        if drafts > 1 and name.split("/", 1)[0] not in tops:
+            continue
+        desc = duplicates.describe(db, r.get("same_as_files") or [], viewer)
+        out.append({"name": name, "lifting": lifting.name_is_lifting(name.rsplit("/", 1)[-1]),
+                    "matches": desc["matches"], "hidden": desc["hidden"]})
+    return out
 
 
 def snapshot(db: Session, entry: models.Entry) -> dict:

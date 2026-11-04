@@ -176,3 +176,26 @@ def test_wb_hull_from_file_name_without_memo(db, storage):
     process_batch(db, storage, b)
     [e] = db.query(models.Entry).filter_by(batch_id=b.id).all()
     assert [h.hull_no for h in service.hulls_of(db, e)] == ["3592"] and e.title_source == "3592_m13_ini_1"
+
+
+def test_blocked_models_on_draft(db, make_user, make_entry_file):
+    """49 — 묶음에서 동일 BDF 로 받지 않은 BDF 와 그것이 있는 기존 자료를 초안 응답에 싣는다(카드가 '똑같은 BDF 가 이미 있음')."""
+    u = make_user(ADMIN, level=2)
+    old, old_f = make_entry_file(title="3596 MU", name="a_lifting.bdf", kind="model", uploaded_by=ADMIN)
+    draft, _f = make_entry_file(status="draft", title="WB 다시", name="x/a_posture.json", kind="other", uploaded_by=ADMIN)
+    b = db.get(models.Batch, draft.batch_id)
+    b.excluded = [{"name": "x/a_lifting.bdf", "size": 9, "reason": "duplicate_model", "scope": "existing",
+                   "same_as_files": [old_f.id], "includes": []},
+                  {"name": "x/skip.tmp", "size": 0}]
+    db.commit()
+    [m] = service.entry_to_dict(db, draft, viewer=u)["blocked_models"]
+    assert m["name"] == "x/a_lifting.bdf" and m["lifting"] is True and m["hidden"] is False
+    assert [x["entry_id"] for x in m["matches"]] == [old.entry_id]
+    assert "blocked_models" not in service.entry_to_dict(db, old, viewer=u)   # 확정 자료에는 싣지 않는다
+
+
+def test_hash_digits_are_not_hull():
+    from app.ingest.hulls import extract_hull_candidates
+    got = [c.hull_no for c in extract_hull_candidates(
+        ["lifting_reviews/d9d4452cc533/03_3596-E22P0.bdf", "H3497_a.bdf"], set())]
+    assert "4452" not in got and {"3596", "3497"} <= set(got)
