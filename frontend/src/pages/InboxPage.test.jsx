@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthContext } from '../auth/AuthContext.jsx';
@@ -169,4 +169,55 @@ test('48 — 손볼 자료 탭(/inbox?tab=fix)은 배치 대신 확정 자료 �
   const kind = await screen.findByRole('tab', { name: /문서 없는 모델/ });
   expect(kind).toHaveTextContent('문서 없는 모델 2');
   expect(screen.getByRole('link', { name: 'E000002 제목' })).toHaveAttribute('href', '/e/E000002');
+});
+
+const inFolder = (relPath, body = 'GRID') => {
+  const f = new File([body], relPath.split('/').pop());
+  Object.defineProperty(f, 'webkitRelativePath', { value: relPath });
+  return f;
+};
+
+test('52 — 폴더째 올리기는 목록을 먼저 띄우고, 체크한 파일만 묶는 단위·공통 분류와 함께 보낸다', async () => {
+  uploadBatch.mockClear();
+  uploadBatch.mockResolvedValue({ key: 'K9', uploaded: 3, rejected: [] });
+  const vocab = { kind: 'zone', other: '기타', terms: [] };
+  renderPage({ 'GET /api/batches?scope=mine': [], 'GET /api/vocab?kind=zone': vocab,
+    'GET /api/vocab?kind=target': { ...vocab, kind: 'target' },
+    'GET /api/uploads/rules': { excluded_patterns: ['~$*'], skip_by_default: ['.op2', '.mvw'] } });
+  await screen.findByText('정리할 자료가 없습니다');
+  // 폴더 입력(webkitdirectory)은 multiple 없이도 여러 파일을 준다 — userEvent.upload 는 첫 파일만 넣어 change 로 보낸다
+  fireEvent.change(screen.getByLabelText('폴더 선택'), { target: { files: [
+    inFolder('2025/closed_chock/보고서.pdf'), inFolder('2025/closed_chock/R1/m1.bdf'), inFolder('2025/closed_chock/R1/m1.op2'),
+    inFolder('2025/manifold/doc/report.pdf'), inFolder('2025/manifold/fe/~$tmp.xlsx'),
+  ] } });
+  const dlg = await screen.findByRole('dialog', { name: /폴더 올리기/ });
+  expect(uploadBatch).not.toHaveBeenCalled();
+  // 소속 폴더별로 묶이고, op2 는 체크가 풀려 있다
+  expect(within(dlg).getByRole('group', { name: 'closed_chock/R1 폴더' })).toBeInTheDocument();
+  expect(within(dlg).getByRole('checkbox', { name: '2025/closed_chock/R1/m1.op2 올리기' })).not.toBeChecked();
+  expect(within(dlg).getByRole('checkbox', { name: '2025/closed_chock/R1/m1.bdf 올리기' })).toBeChecked();
+  expect(within(dlg).getByText(/임시 파일 1개/)).toBeInTheDocument();
+  // 보고서가 든 과제 폴더가 둘 → 하위 폴더마다 1건이 기본
+  expect(within(dlg).getByRole('radio', { name: '하위 폴더마다 자료 1건' })).toBeChecked();
+  await userEvent.click(within(dlg).getByRole('button', { name: /초안 2건으로 올리기 \(3개\)/ }));
+  expect(screen.queryByRole('dialog')).toBeNull();
+  await vi.waitFor(() => expect(uploadBatch).toHaveBeenCalledTimes(1));
+  const [items, opts] = uploadBatch.mock.calls[0];
+  expect(items.map((i) => i.relPath).sort()).toEqual([
+    '2025/closed_chock/R1/m1.bdf', '2025/closed_chock/보고서.pdf', '2025/manifold/doc/report.pdf']);
+  expect(opts).toMatchObject({ splitTop: true, preset: null });
+});
+
+test('52 — 폴더 목록에서 취소하면 올리지 않는다', async () => {
+  uploadBatch.mockClear();
+  renderPage({ 'GET /api/batches?scope=mine': [], 'GET /api/vocab?kind=zone': { kind: 'zone', terms: [] },
+    'GET /api/vocab?kind=target': { kind: 'target', terms: [] },
+    'GET /api/uploads/rules': { excluded_patterns: [], skip_by_default: ['.op2'] } });
+  await screen.findByText('정리할 자료가 없습니다');
+  fireEvent.change(screen.getByLabelText('폴더 선택'), { target: { files: [inFolder('p/a.bdf')] } });
+  const dlg = await screen.findByRole('dialog', { name: /폴더 올리기/ });
+  expect(within(dlg).queryByRole('radiogroup')).toBeNull();   // 하위 폴더가 없으면 묶는 단위를 묻지 않는다
+  await userEvent.click(within(dlg).getByRole('button', { name: '취소' }));
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(uploadBatch).not.toHaveBeenCalled();
 });

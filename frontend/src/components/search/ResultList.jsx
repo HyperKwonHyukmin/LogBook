@@ -75,7 +75,17 @@ function KindCounts({ item }) {
   );
 }
 
-function EntryRow({ item, on, terms, filters }) {
+/** 54 — 여러 자료 고르기 칸. 행을 누르면 미리보기, 이 칸을 누르면 고르기(행 동작으로 번지지 않게). */
+function PickBox({ item, picked, onPick }) {
+  return (
+    <label onClick={stop} className="-ml-1 flex h-8 w-6 shrink-0 cursor-pointer items-center justify-center">
+      <input type="checkbox" checked={picked.has(item.entry_id)} onChange={(e) => onPick(item.entry_id, e.target.checked)}
+             aria-label={`${item.title || item.entry_id} 고르기`} className="h-4 w-4 cursor-pointer accent-brand" />
+    </label>
+  );
+}
+
+function EntryRow({ item, on, terms, filters, picked, onPick }) {
   // 호선 하나로 거른 검색이면 모든 행이 그 호선이라 칩을 빼서 줄을 짧게 한다(다른 호선은 남긴다).
   // 19 — 호선 여러 개(OR)로 걸렀으면 행마다 어느 호선인지가 정보라 그대로 둔다
   const hullFilter = filterValues(filters, 'hull');
@@ -88,6 +98,7 @@ function EntryRow({ item, on, terms, filters }) {
     ...(item.ship_types || []).map((v) => ['ship_type', v])];
   return (
     <div className="flex max-w-[1080px] items-start gap-3">
+      {picked && <PickBox item={item} picked={picked} onPick={onPick} />}
       <RowThumb item={item} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
@@ -200,7 +211,8 @@ export const itemKey = (item) => item._slot || (item.file_id ? `f${item.file_id}
  * sections(11): [{ key, header, footer, items, collapsed }] — 묶음 머리 아래에 행을 둔다. 키보드는 펼친 묶음의
  * 행을 위에서 아래로 한 줄로 이어 옮겨 다닌다(묶음 머리의 단추는 Tab 으로).
  */
-export default function ResultList({ unit, items, sections, selectedKey, onSelect, onOpen, terms, filters }) {
+/** picked(Set entry_id)·onPick(entry_id, on) — 54 여러 자료 고르기(문서 보기에서만). 없으면 고르기 칸을 그리지 않는다. */
+export default function ResultList({ unit, items, sections, selectedKey, onSelect, onOpen, terms, filters, picked, onPick }) {
   const listRef = useRef(null);
   const flat = sections ? sections.flatMap((sec) => (sec.collapsed ? [] : sec.items)) : items;
   // 키보드로 고른 항목이 화면 밖이면 보이게 스크롤한다(jsdom 에는 scrollIntoView 가 없다).
@@ -232,7 +244,7 @@ export default function ResultList({ unit, items, sections, selectedKey, onSelec
           className={`group/row cursor-pointer border-b border-n-200 px-5 py-3
             ${on ? 'bg-brand-subtle hover:bg-brand-muted/60 group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-brand-ring'
               : 'hover:bg-n-50'}`}>
-        {unit === 'file' ? <FileRow item={it} on={on} /> : <EntryRow item={it} on={on} terms={terms} filters={filters} />}
+        {unit === 'file' ? <FileRow item={it} on={on} /> : <EntryRow item={it} on={on} terms={terms} filters={filters} picked={picked} onPick={onPick} />}
       </li>
     );
   };

@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { SearchX, SlidersHorizontal, Star, X } from 'lucide-react';
+import { ListChecks, SearchX, SlidersHorizontal, Star, X } from 'lucide-react';
 import { api } from '../api/client.js';
+import { AuthContext } from '../auth/AuthContext.jsx';
+import BulkClassifyDialog, { bulkDoneText } from '../components/search/BulkClassifyDialog.jsx';
 import FacetPanel, { FacetList, isMonoValue, valueLabel } from '../components/search/FacetPanel.jsx';
 import EntryPreviewPanel from '../components/search/EntryPreviewPanel.jsx';
 import usePreviewWidth, { PreviewResizer } from '../components/search/usePreviewWidth.jsx';
@@ -98,6 +100,19 @@ export default function SearchPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => new Set()); // 접은 묶음 번호(11)
   const [attempt, setAttempt] = useState(0); // '다시 시도' 로 같은 검색을 다시 보낸다
+  // 54 — 여러 자료 고르기 → 분류 한꺼번에 바꾸기. 고른 것은 검색을 바꿔도 남는다(구역 A 로 거르고 고른 뒤 B 로 거르고 더 고르기)
+  const auth = useContext(AuthContext);
+  const canWrite = !!auth?.user && auth.canWrite !== false;
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState(() => new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState(null);   // {text, warn}
+  const onPick = (id, on) => setPicked((cur) => {
+    const next = new Set(cur);
+    if (on) next.add(id); else next.delete(id);
+    return next;
+  });
+  const endPicking = () => { setPicking(false); setPicked(new Set()); setBulkMsg(null); };
   const basketBar = useBasketBarVisible();
   const reqRef = useRef(0);
   const previewTimer = useRef(null);
@@ -289,7 +304,12 @@ export default function SearchPage() {
             </label>
           )}
           {/* 11 — 보기 기준: 결과를 호선·구역·대상·올린 사람 값으로 묶는다(문서 보기에서만) */}
-          <label className="ml-auto flex items-center gap-1.5 whitespace-nowrap text-meta text-n-600"
+          {canWrite && state.unit !== 'file' && !picking && (
+            <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setPicking(true)}>
+              <ListChecks size={14} aria-hidden="true" />여러 자료 고르기
+            </Button>
+          )}
+          <label className={`${canWrite && state.unit !== 'file' && !picking ? '' : 'ml-auto '}flex items-center gap-1.5 whitespace-nowrap text-meta text-n-600`}
                  title={state.unit === 'file' ? '파일 보기에서는 묶지 않습니다' : '결과를 속성 값으로 묶어 봅니다'}>
             보기
             <select aria-label="보기 기준" value={state.unit === 'file' ? '' : state.group} disabled={state.unit === 'file'}
@@ -331,6 +351,28 @@ export default function SearchPage() {
         )}
         <AppliedFilters filters={state.filters} applied={res?.applied_filters} facets={res?.facets}
                         onClear={toggleFilter} onClearAll={() => update({ filters: {} })} />
+        {picking && (
+          <div role="region" aria-label="여러 자료 고르기" className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-n-200 bg-brand-subtle px-5 py-2 text-ui text-n-800">
+            <span>고른 자료 <span className="font-mono font-semibold">{picked.size}</span>건</span>
+            {res?.unit === 'entry' && (
+              <Button variant="ghost" size="sm" onClick={() => setPicked((cur) => new Set([...cur,
+                ...(grouped ? grouped.groups.flatMap((g) => g.items) : res.items).map((it) => it.entry_id)]))}>
+                보이는 자료 모두 고르기
+              </Button>
+            )}
+            <Button variant="primary" size="sm" disabled={!picked.size} onClick={() => { setBulkMsg(null); setBulkOpen(true); }}>
+              분류 바꾸기
+            </Button>
+            {picked.size > 0 && <Button variant="ghost" size="sm" onClick={() => setPicked(new Set())}>고른 것 비우기</Button>}
+            <Button variant="ghost" size="sm" className="ml-auto" onClick={endPicking}>고르기 끝내기</Button>
+            {bulkMsg && <p role="status" className={`w-full text-meta ${bulkMsg.warn ? 'text-wait' : 'text-n-700'}`}>{bulkMsg.text}</p>}
+          </div>
+        )}
+        {bulkOpen && (
+          <BulkClassifyDialog entryIds={[...picked]} onCancel={() => setBulkOpen(false)}
+                              onDone={(r) => { setBulkOpen(false); setBulkMsg({ text: bulkDoneText(r), warn: r.failed.length > 0 });
+                                setAttempt((n) => n + 1); }} />
+        )}
         <div className="min-h-0 flex-1 overflow-auto">
           {error && (
             <ErrorNote className="mx-5 mt-4"
@@ -362,7 +404,8 @@ export default function SearchPage() {
                   <GroupedResults by={grouped.group} groups={grouped.groups} collapsed={collapsed} onToggle={toggleGroup}
                                   onMore={moreInGroup} onFilter={(v) => setFilter(grouped.group, v)} multiValued={grouped.multi_valued}
                                   selectedKey={selected && itemKey(selected)} onSelect={select} onOpen={open}
-                                  terms={res.terms} filters={res.applied_filters || state.filters} />
+                                  terms={res.terms} filters={res.applied_filters || state.filters}
+                                  picked={picking ? picked : undefined} onPick={onPick} />
                   {grouped.groups.length < grouped.group_total && (
                     <div className="flex justify-center py-4">
                       <Button variant="secondary" onClick={moreGroups} disabled={loading} loading={more}>
@@ -373,7 +416,8 @@ export default function SearchPage() {
                 </>
               ) : (
                 <ResultList unit={res.unit} items={res.items} selectedKey={selected && itemKey(selected)}
-                            onSelect={select} onOpen={open} terms={res.terms} filters={res.applied_filters || state.filters} />
+                            onSelect={select} onOpen={open} terms={res.terms} filters={res.applied_filters || state.filters}
+                            picked={picking && res.unit === 'entry' ? picked : undefined} onPick={onPick} />
               )}
               {!grouped && res.nextOffset < res.total && (
                 <div className="flex justify-center py-4">

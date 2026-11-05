@@ -238,11 +238,18 @@ def blocked_models(db: Session, entry: models.Entry, files: list[models.File], v
     if not recs:
         return []
     drafts = db.query(models.Entry.id).filter_by(batch_id=batch.id, status="draft").count()
-    tops = {f.rel_path.split("/", 1)[0] for f in files if "/" in f.rel_path}
+    # 52 — 과제 폴더마다 나눈 묶음(split_top)은 고른 폴더 바로 아래 폴더가 초안 단위다
+    depth = 2 if batch.split_top else 1
+
+    def top(path: str) -> str:
+        parts = path.split("/")
+        return "/".join(parts[:depth]) if len(parts) > depth else parts[0]
+
+    tops = {top(f.rel_path) for f in files if "/" in f.rel_path}
     out = []
     for r in recs:
         name = str(r.get("name") or "")
-        if drafts > 1 and name.split("/", 1)[0] not in tops:
+        if drafts > 1 and top(name) not in tops:
             continue
         desc = duplicates.describe(db, r.get("same_as_files") or [], viewer)
         out.append({"name": name, "lifting": lifting.name_is_lifting(name.rsplit("/", 1)[-1]),

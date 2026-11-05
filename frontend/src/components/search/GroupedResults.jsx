@@ -22,7 +22,7 @@ function GroupValue({ group, by }) {
  * groups: [{ value|null, label, count, items, more }], collapsed: Set(묶음 번호), onMore(gi), onFilter(value).
  */
 export default function GroupedResults({ by, groups, collapsed, onToggle, onMore, onFilter, selectedKey, onSelect, onOpen,
-                                         terms, filters, multiValued }) {
+                                         terms, filters, multiValued, picked, onPick }) {
   const meta = GROUPS.find((g) => g.id === by) || { none: '없음' };
   const multiNote = {
     hull: '호선이 둘 이상인 자료', zone: '구역이 둘 이상인 자료', tag: '태그가 둘 이상인 자료',
@@ -74,7 +74,7 @@ export default function GroupedResults({ by, groups, collapsed, onToggle, onMore
         </p>
       )}
       <ResultList unit="entry" sections={sections} selectedKey={selectedKey} onSelect={onSelect} onOpen={onOpen}
-                  terms={terms} filters={filters} />
+                  terms={terms} filters={filters} picked={picked} onPick={onPick} />
     </>
   );
 }

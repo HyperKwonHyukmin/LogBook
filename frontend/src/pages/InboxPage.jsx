@@ -10,6 +10,9 @@ import { Tabs } from '../components/ui/Tabs.jsx';
 import BatchCard from '../components/inbox/BatchCard.jsx';
 import FixList from '../components/coverage/FixList.jsx';
 import { PageDropOverlay, UploadButtons, UploadFeedback, useUploader } from '../components/inbox/UploadZone.jsx';
+import FolderUploadDialog from '../components/inbox/FolderUploadDialog.jsx';
+import Spinner from '../components/ui/Spinner.jsx';
+import { FALLBACK_RULES, isFolderUpload, planFolder } from '../lib/folderPlan.js';
 import { errorText } from '../lib/labels.js';
 import { READ_ONLY_REASON } from '../lib/levels.js';
 import { hasPendingConvert } from '../lib/inboxStatus.js';
@@ -94,7 +97,26 @@ export default function InboxPage() {
     if (latestRef.current.tab === 'mine') reload();
     else setTab('mine'); // 탭이 바뀌면 effect 가 내 배치를 부른다
   }
-  const uploader = useUploader({ scope: 'inbox', onUploaded, disabled: !canWrite || storage?.reachable === false, away: INBOX_AWAY });
+  // 52 — 폴더째 올리기: 바로 보내지 않고 목록(폴더별 파일 체크·묶는 단위·공통 분류)을 먼저 띄운다. 파일만 고르면 바로 올린다
+  const [folder, setFolder] = useState(null);   // {reading: true} | {plan, items, send}
+  const reviewSeq = useRef(0);
+  const review = useCallback((collected, send) => {
+    const seq = ++reviewSeq.current;
+    setFolder({ reading: true });
+    const latest = () => seq === reviewSeq.current;
+    Promise.resolve(collected).then(async (items) => {
+      if (!latest()) return;
+      if (!items.length || !isFolderUpload(items)) { setFolder(null); if (items.length) send(items); return; }
+      const rules = await api('/uploads/rules').catch(() => FALLBACK_RULES);
+      if (latest()) setFolder({ plan: planFolder(items, rules), items, send });
+    }).catch(() => { if (latest()) setFolder(null); });
+  }, []);
+  function sendFolder({ relPaths, preset, splitTop }) {
+    const { items, send } = folder;
+    setFolder(null);
+    send(items.filter((it) => relPaths.has(it.relPath)), { preset, splitTop });
+  }
+  const uploader = useUploader({ scope: 'inbox', onUploaded, disabled: !canWrite || storage?.reachable === false, away: INBOX_AWAY, review });
 
   async function claim(key) {
     let message = '';
@@ -106,6 +128,7 @@ export default function InboxPage() {
   return (
     <Page>
       {dialog}
+      {folder?.plan && <FolderUploadDialog plan={folder.plan} onSubmit={sendFolder} onCancel={() => setFolder(null)} />}
       {canWrite && <PageDropOverlay u={uploader} />}
       <PageHeader title="정리 대기"
         description={canWrite
@@ -113,6 +136,9 @@ export default function InboxPage() {
           : READ_ONLY_REASON}
         actions={canWrite ? <UploadButtons u={uploader} /> : null} />
       {/* 올릴 수 없으면 '공유 폴더에 연결되면 올릴 수 있습니다' 같은 올리기 안내를 띄우지 않는다 */}
+      {canWrite && folder?.reading && (
+        <p role="status" className="mb-4 flex items-center gap-2 text-meta text-n-600"><Spinner size={12} />폴더를 읽는 중…</p>
+      )}
       {canWrite && <div className="mb-4 empty:hidden"><UploadFeedback u={uploader} /></div>}
       <Tabs label="배치 구분" items={TABS} value={tab} onChange={changeTab} controls={PANEL_ID} />
       <div role="tabpanel" id={PANEL_ID} aria-labelledby={tabId(tab)} className="flex flex-col gap-8 pt-5">
@@ -130,7 +156,7 @@ export default function InboxPage() {
         )}
         {batches.map((b) => (
           <BatchCard key={b.key} batch={b} me={user.employee_id} isAdmin={isAdmin} canWrite={canWrite} onChanged={reload} onClaim={claim}
-                   onDirtyChange={onDirtyChange} />
+                   onDirtyChange={onDirtyChange} dirtyIds={dirtyCards} />
         ))}
       </div>
     </Page>

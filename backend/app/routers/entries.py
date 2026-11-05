@@ -106,6 +106,28 @@ def entry_history(entry_id: str, db: Session = Depends(get_db), user: models.Use
              "action": r.action, "before": r.before, "after": r.after} for r in rows]
 
 
+class BulkClassifyBody(BaseModel):
+    """54 — 여러 자료 분류 한꺼번에. 고르지 않은 칸은 건드리지 않는다(대상은 set_target 일 때만, target 비우면 대상 지우기)."""
+    entry_ids: list[str] = Field(min_length=1, max_length=500)
+    zones_add: list[str] = []
+    zones_remove: list[str] = []
+    set_target: bool = False
+    target: str | None = None
+    assignees_add: list[dict] = []
+    assignees_remove: list[int] = []
+    no_hull: bool | None = None
+    dry_run: bool = False
+
+
+@router.post("/entries/bulk-classify")
+def bulk_classify(body: BulkClassifyBody, request: Request, db: Session = Depends(get_db),
+                  storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    from ..entries import bulk
+
+    ops = body.model_dump(exclude={"entry_ids", "dry_run"})
+    return bulk.bulk_classify(db, storage, user, body.entry_ids, ops, client_ip(request), dry_run=body.dry_run)
+
+
 @router.patch("/entries/{entry_id}")
 def patch_entry(entry_id: str, body: EntryPatch, request: Request, db: Session = Depends(get_db),
                 storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):

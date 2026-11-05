@@ -270,6 +270,10 @@ class Batch(Base):
     # note, passport{artifacts}}. 파일은 원래 batch_id 를 간직하므로 합치기·옮기기 뒤에도 출처가 파일을 따라간다
     origin = Column(JSON, nullable=True)
     wb_analysis_id = Column(Integer, nullable=True, index=True)   # 'WB #123' 검색용
+    # 52 — 폴더째 올리기: 올리기 전에 고른 공통 분류({zones, target, assignees: [명부 id]})를 모든 초안에 넣는다.
+    # split_top = 고른 폴더 바로 아래 폴더(과제 폴더)마다 초안 1건
+    preset = Column(JSON, nullable=True)
+    split_top = Column(Boolean, nullable=False, default=False, server_default="0")
     error = Column(Text, nullable=True)
     # 17 — LV3 가 '그래도 올리기' 로 올린 배치: 워커 처리·확정 재검사가 완전 동일 BDF 를 막지 않는다
     allow_duplicates = Column(Boolean, nullable=False, default=False, server_default="0")

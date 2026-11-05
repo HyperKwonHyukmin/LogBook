@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import BatchCard from './BatchCard.jsx';
@@ -57,4 +58,33 @@ test('정리 대기 — 왜 기다리는지, BDF 변환 상태, 초안마다 확
   expect(checks).toHaveTextContent('호선 없음');
   expect(within(card).getByText('3D 변환 중')).toBeInTheDocument();
   expect(within(card).getByText('3D 준비됨')).toBeInTheDocument();
+});
+
+test('52 — [이 묶음 모두 확정]: 물어야 하는 초안은 건너뛰고 나머지를 차례로 확정한다', async () => {
+  const posted = [];
+  vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
+    if (init.method === 'POST') posted.push(url);
+    const body = url.includes('/confirm') ? { ok: true } : [];
+    return { ok: true, status: 200, json: () => Promise.resolve(body) };
+  }));
+  const draft = (id, title, extra = {}) => ({ entry_id: id, status: 'draft', title, version: 1, hulls: [], zones: [],
+    hull_evidence: [], suggested_entry: null, merge_into: null, uploaded_by: 'A100001', files: [], ...extra });
+  const onChanged = vi.fn();
+  render(<BatchCard batch={{ ...base, state: 'processed', entries: [
+    draft('E000011', 'closed chock'), draft('E000012', 'manifold support'), draft('E000013', ''),
+  ] }} me="A100001" isAdmin={false} onChanged={onChanged} onClaim={() => {}} />);
+  await userEvent.click(screen.getByRole('button', { name: '이 묶음 모두 확정' }));
+  const dlg = await screen.findByRole('alertdialog');
+  expect(dlg).toHaveTextContent('초안 2건을 확정할까요?');
+  expect(dlg).toHaveTextContent('E000013(제목 없음)');
+  await userEvent.click(within(dlg).getByRole('button', { name: '2건 확정' }));
+  expect(await screen.findByText(/2건을 확정했습니다/)).toBeInTheDocument();
+  expect(posted).toEqual(['/api/entries/E000011/confirm', '/api/entries/E000012/confirm']);
+  expect(onChanged).toHaveBeenCalled();
+});
+
+test('52 — 초안이 하나면 묶음 확정 단추가 없다', () => {
+  draw({ ...base, state: 'processed', entries: [{ entry_id: 'E1', status: 'draft', title: 't', version: 1, hulls: [], zones: [],
+    hull_evidence: [], suggested_entry: null, merge_into: null, uploaded_by: 'A100001', files: [] }] });
+  expect(screen.queryByRole('button', { name: '이 묶음 모두 확정' })).toBeNull();
 });

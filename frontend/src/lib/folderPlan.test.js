@@ -1,0 +1,70 @@
+import { describe, expect, it } from 'vitest';
+import { initialChecked, isFolderUpload, planFolder, previewDrafts, skippedByExt } from './folderPlan.js';
+
+const item = (relPath, size = 10) => ({ file: { size }, relPath });
+
+// 2026-11-05 조사한 실제 구성(…\과거 과제 자료\2025) 일부
+const Y2025 = [
+  '2025/closed_chock/보고서_Closed chock 강도해석_R1.pdf',
+  '2025/closed_chock/보고서_Closed chock 강도해석_R1.pptx',
+  '2025/closed_chock/Result_M1_90ton/M1_Chock_90ton.bdf',
+  '2025/closed_chock/Result_M1_90ton/m1_chock_90ton.op2',
+  '2025/closed_chock/Result_M1_92ton/Original/m1_92ton.f06',
+  '2025/closed_chock/Result_M1_92ton/Original/Ressult_M1_92ton.mvw',
+  '2025/manifold_support_8182/doc/report.pdf',
+  '2025/manifold_support_8182/doc/calc.xlsm',
+  '2025/manifold_support_8182/fe_model/model.bdf',
+  '2025/manifold_support_8182/fe_model/~$calc.xlsm',
+].map((p) => item(p));
+
+describe('planFolder', () => {
+  it('제외 추천 형식은 처음에 체크가 풀리고, 엑셀·f06 은 체크된다', () => {
+    const plan = planFolder(Y2025);
+    const checked = initialChecked(plan);
+    expect(checked.has('2025/closed_chock/Result_M1_90ton/m1_chock_90ton.op2')).toBe(false);
+    expect(checked.has('2025/closed_chock/Result_M1_92ton/Original/Ressult_M1_92ton.mvw')).toBe(false);
+    expect(checked.has('2025/manifold_support_8182/doc/calc.xlsm')).toBe(true);
+    expect(checked.has('2025/closed_chock/Result_M1_92ton/Original/m1_92ton.f06')).toBe(true);
+    expect(skippedByExt(plan, checked)).toEqual([{ ext: '.op2', count: 1 }, { ext: '.mvw', count: 1 }]);
+  });
+
+  it('임시 파일은 목록에 넣지 않고 따로 센다', () => {
+    const plan = planFolder(Y2025);
+    expect(plan.junk).toEqual(['2025/manifold_support_8182/fe_model/~$calc.xlsm']);
+    expect(plan.files).toHaveLength(9);
+  });
+
+  it('파일은 소속 폴더별로 묶인다', () => {
+    const plan = planFolder(Y2025);
+    expect(plan.groups.map((g) => g.dir)).toEqual([
+      '2025/closed_chock', '2025/closed_chock/Result_M1_90ton', '2025/closed_chock/Result_M1_92ton/Original',
+      '2025/manifold_support_8182/doc', '2025/manifold_support_8182/fe_model',
+    ]);
+  });
+
+  it('보고서가 든 과제 폴더가 둘 이상이면 과제 폴더마다 1건이 기본', () => {
+    const plan = planFolder(Y2025);
+    expect(plan.root).toBe('2025');
+    expect(plan.defaultSplit).toBe(true);
+    expect(previewDrafts(plan, initialChecked(plan), true).map((d) => [d.name, d.count]))
+      .toEqual([['closed chock', 4], ['manifold support 8182', 3]]);
+  });
+
+  it('보고서가 맨 위에 있는 과제 폴더 하나(closed_chock)는 전체 1건이 기본', () => {
+    const one = Y2025.filter((i) => i.relPath.startsWith('2025/closed_chock/'))
+      .map((i) => item(i.relPath.replace('2025/', '')));
+    const plan = planFolder(one);
+    expect(plan.root).toBe('closed_chock');
+    expect(plan.defaultSplit).toBe(false);
+    expect(previewDrafts(plan, initialChecked(plan), false)).toEqual([{ name: 'closed chock', count: 4, size: 40 }]);
+  });
+
+  it('체크한 것이 없으면 초안도 없다', () => {
+    expect(previewDrafts(planFolder(Y2025), new Set(), true)).toEqual([]);
+  });
+
+  it('폴더에서 온 파일이 있을 때만 목록을 띄운다', () => {
+    expect(isFolderUpload([item('a.bdf')])).toBe(false);
+    expect(isFolderUpload(Y2025)).toBe(true);
+  });
+});

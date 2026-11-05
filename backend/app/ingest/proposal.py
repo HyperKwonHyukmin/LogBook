@@ -74,10 +74,26 @@ def _main_model(files: list[FileInfo]) -> FileInfo | None:
     return (plain or bdfs or [None])[0]
 
 
+def _split_top(files: list[FileInfo], known: set[str]) -> list[Proposal]:
+    """52 — 고른 폴더(경로 첫 단계) 바로 아래 폴더마다 초안 1건. 그 폴더 바로 아래 낱개 파일은 고른 폴더 이름으로 1건.
+    호선이 달라도 더 나누지 않는다(과제 폴더 = 자료 1건). 고른 폴더는 담는 그릇(예: 연도 '2025')이라
+    호선 후보를 찾을 때 그 이름은 뺀다 — 아니면 '2025' 가 모든 초안의 호선 후보가 된다."""
+    groups: dict[str, list[FileInfo]] = {}
+    for f in files:
+        parts = PurePosixPath(f.rel_path).parts
+        label = parts[1] if len(parts) > 2 else (parts[0] if len(parts) > 1 else LOOSE)
+        inner = FileInfo(key=f.key, rel_path="/".join(parts[1:]) if len(parts) > 1 else f.rel_path)
+        groups.setdefault(label, []).append(inner)
+    return [_make(label, group, known) for label, group in groups.items()]
+
+
 def propose(files: list[FileInfo], known: set[str], *, single: bool = False,
-            hints: list[str] | None = None) -> list[Proposal]:
+            hints: list[str] | None = None, split_top: bool = False) -> list[Proposal]:
     """single — 49: 묶음 전체를 초안 하나로(WorkBench 해석 1건 = 자료 1건, 부모·세부 검토 작업 폴더가 갈라져 와도).
-    제목 원천은 작업 폴더 이름(날짜_사번_프로그램)이 아니라 대표 BDF 이름. hints = 호선을 먼저 찾아볼 글(묶음 이름·메모)."""
+    제목 원천은 작업 폴더 이름(날짜_사번_프로그램)이 아니라 대표 BDF 이름. hints = 호선을 먼저 찾아볼 글(묶음 이름·메모).
+    split_top — 52: 폴더째 올리기에서 사람이 고른 '과제 폴더마다 자료 1건'."""
+    if split_top and not single and files:
+        return _split_top(files, known)
     top: dict[str, list[FileInfo]] = {}
     for f in files:
         parts = PurePosixPath(f.rel_path).parts

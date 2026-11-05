@@ -53,6 +53,24 @@ def _wb_hints(batch: models.Batch) -> list[str]:
     return [t for t in (o.get("note"), name) if isinstance(t, str) and t.strip()]
 
 
+def _apply_preset(db: Session, entry: models.Entry, preset: dict) -> None:
+    """52 — 올리기 전에 고른 공통 분류(begin 때 이미 정리됨)를 초안에 넣고, 구역·대상이 있으면 제목 초안을 그 형식으로."""
+    from ..entries import quality, service
+    from .. import people
+
+    if preset.get("zones"):
+        service.set_zones(db, entry, preset["zones"])
+    if preset.get("target"):
+        service.set_tags(db, entry, "target", [preset["target"]])
+    ids = [i for i in preset.get("assignees") or [] if isinstance(i, int)]
+    persons = [p for p in (db.get(models.Person, i) for i in ids) if p is not None]
+    if persons:
+        people.set_assignees(db, entry, persons)
+    if preset.get("zones") or preset.get("target"):
+        db.flush()
+        entry.title = quality.TitleContext(db).draft(entry, source=entry.title_source or entry.title) or entry.title
+
+
 def _noop_progress(step: str, done: int = 0, total: int = 0, force: bool = False) -> None:
     return None
 
@@ -170,7 +188,9 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
     # 49 — WorkBench 해석 1건은 자료 1건(부모·세부 검토 작업 폴더가 갈라져 와도). WB 에서 실행한 사람(origin.owner)은
     # 담당자가 아니라 '실행자'로만 보인다(wb_origin.runners) — 담당자는 과제를 맡은 연구원이라 사람이 고른다
     from_wb = batch.wb_analysis_id is not None
-    for p in propose(infos, known, single=from_wb, hints=_wb_hints(batch) if from_wb else None):
+    preset = batch.preset if isinstance(batch.preset, dict) and batch.target_entry_id is None else None
+    for p in propose(infos, known, single=from_wb, hints=_wb_hints(batch) if from_wb else None,
+                     split_top=bool(batch.split_top)):
         # 20 — 호선을 알면 제목 초안을 형식(`3496 · 구별자`)으로, 모르면 예전처럼 폴더/파일 이름. 구역·대상은
         # 사람이 정리 대기에서 고르고, 그때 (사람이 제목을 고치지 않았으면) 제목도 따라 바뀐다
         title = naming.title_draft(p.source, hulls=[p.best_hull] if p.best_hull else []) if p.best_hull else p.title
@@ -186,6 +206,8 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
         if p.best_hull:
             db.add(models.EntryHull(entry_id=entry.id, hull_no=p.best_hull, is_primary=True))
             draft_hulls.add(p.best_hull)
+        if preset:
+            _apply_preset(db, entry, preset)
         if batch.target_entry_id is None:
             entry.suggested_entry_id = _find_similar(db, p.best_hull, entry.title)
         for key in p.file_keys:

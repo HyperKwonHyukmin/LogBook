@@ -47,8 +47,10 @@ export function useOsFileDragActive() {
  * targetEntryId: 기존 Entry 에 추가로 올릴 때.
  * 17 — 서버가 완전 동일 BDF 를 받지 않으면 result.blocked 에 온다. 모두 막히면 배치가 없어 onUploaded 를 부르지 않는다.
  * LV3 는 forceBlocked() 로 막힌 파일(+ 함께 빠진 INCLUDE)을 '그래도 올리기' 한다(새 배치, 서버 감사 기록).
+ * review(collected, send): 52 — 고른·놓은 것을 바로 올리지 않고 넘긴다(정리 대기의 폴더째 올리기 목록).
+ *   collected = Promise<items>, send(items, {preset, splitTop}) 로 올린다.
  */
-export function useUploader({ scope = 'upload', onUploaded, disabled = false, targetEntryId, targetEntryStatus, away }) {
+export function useUploader({ scope = 'upload', onUploaded, disabled = false, targetEntryId, targetEntryStatus, away, review }) {
   const auth = useContext(AuthContext); // 단독 렌더(테스트)에서는 없을 수 있다
   const canForce = isAdminLevel(auth?.user);
   const shared = useUploadStore();
@@ -64,18 +66,21 @@ export function useUploader({ scope = 'upload', onUploaded, disabled = false, ta
   const fileRef = useRef(null);
   const dirRef = useRef(null);
   return uploaderView(store, scope, job, {
-    disabled, canForce, fileRef, dirRef, opts: { targetEntryId, targetEntryStatus, away },
+    disabled, canForce, fileRef, dirRef, opts: { targetEntryId, targetEntryStatus, away }, review,
   });
 }
 
 /** 저장소의 한 scope 를 화면용 객체로(useUploader 와 셸의 떠 있는 상자가 같이 쓴다). */
-export function uploaderView(store, scope, job, { disabled = false, canForce = false, fileRef = null, dirRef = null, opts = {} } = {}) {
+export function uploaderView(store, scope, job, { disabled = false, canForce = false, fileRef = null, dirRef = null, opts = {}, review = null } = {}) {
+  const send = (items, extra = {}) => store.start(scope, items, { ...opts, ...extra });
   return {
     ...job, scope, disabled, fileRef, dirRef, canForce,
-    start: (items, { force = false } = {}) => store.start(scope, items, { ...opts, force }),
+    start: (items, { force = false } = {}) => (review && !force && !job.busy
+      ? review(Promise.resolve(items), send) : send(items, { force })),
     /** 끌어 놓기 — 폴더 펼치기부터 '파일 확인 중'으로 보이고, 그동안 또 놓으면 안내만 한다. */
     onDrop: (dataTransfer) => {
       if (disabled) return;
+      if (review && !job.busy) { review(collectFromDrop(dataTransfer), send); return; }
       store.start(scope, (onCount) => collectFromDrop(dataTransfer, { onCount }), opts);
     },
     forceBlocked: canForce ? () => store.forceBlocked(scope) : null,

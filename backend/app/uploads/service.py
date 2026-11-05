@@ -44,8 +44,26 @@ def clean_rel(rel: str) -> str:
     return value
 
 
+def clean_preset(db: Session, user: models.User, preset: dict | None) -> dict | None:
+    """52 — 폴더째 올리기에서 고른 공통 분류를 초안 카드와 같은 규칙으로 정리한다(동의어 → 용어, 목록 밖 새 구역·대상은
+    관리자만 — 아니면 422). 담당자는 명부 id 로 바꿔 둔다(WorkBench 사번이면 이때 명부에 더한다)."""
+    from .. import people, vocab   # 순환 import 방지
+
+    if not preset:
+        return None
+    admin = access.is_admin(user)
+    out = {
+        "zones": vocab.normalize_inputs(db, "zone", preset.get("zones") or [], current=[], admin=admin),
+        "target": vocab.normalize_input(db, "target", preset.get("target") or None, current=None, admin=admin),
+        "assignees": [p.id for p in people.resolve_refs(db, preset.get("assignees") or [])],
+    }
+    out = {k: v for k, v in out.items() if v}
+    return out or None
+
+
 def begin(db: Session, storage: StoragePaths, user: models.User, *, name: str,
-          target_entry_id: str | None, target_status: str | None = None) -> models.Batch:
+          target_entry_id: str | None, target_status: str | None = None,
+          preset: dict | None = None, split_top: bool = False) -> models.Batch:
     if not storage.check_reachable():
         raise HTTPException(status_code=503, detail="storage_unreachable")
     target = None
@@ -62,7 +80,10 @@ def begin(db: Session, storage: StoragePaths, user: models.User, *, name: str,
     os.makedirs(to_long(storage.web_inbox / key), exist_ok=True)
     batch = models.Batch(key=key, source="web", original_name=(name or "").strip()[:255] or key,
                          uploader=user.employee_id, uploader_guess=user.employee_id, state="uploading",
-                         target_entry_id=target.id if target else None)
+                         target_entry_id=target.id if target else None,
+                         # 52 — 기존 자료에 파일 추가는 그 자료의 분류를 따르므로 공통 분류·나누기를 쓰지 않는다
+                         preset=None if target else clean_preset(db, user, preset),
+                         split_top=bool(split_top) and target is None)
     db.add(batch)
     db.commit()
     return batch

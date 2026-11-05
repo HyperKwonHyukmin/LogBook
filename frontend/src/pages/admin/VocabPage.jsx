@@ -5,6 +5,7 @@ import Button, { buttonClass } from '../../components/ui/Button.jsx';
 import { useConfirm } from '../../components/ui/ConfirmDialog.jsx';
 import { inputClass, selectClass } from '../../components/ui/Field.jsx';
 import InlineText from '../../components/ui/InlineText.jsx';
+import { FilterLink } from '../../components/ui/Status.jsx';
 import { ErrorNote, OkNote, Page, PageHeader, SectionTitle } from '../../components/ui/Page.jsx';
 import { RowsSkeleton } from '../../components/ui/Skeleton.jsx';
 import { Segmented } from '../../components/ui/Tabs.jsx';
@@ -43,7 +44,7 @@ function SynonymAdd({ term, onAdd, busy }) {
   );
 }
 
-function TermRow({ term, index, last, busy, onMove, onRename, onToggle, onDelete, onAddSynonym, onRemoveSynonym }) {
+function TermRow({ kind, term, index, last, busy, onMove, onRename, onToggle, onDelete, onAddSynonym, onRemoveSynonym }) {
   return (
     <li className={`${TERM_COLS} min-h-11 border-b border-n-200 px-3 py-1.5 text-ui last:border-0 ${term.active ? '' : 'bg-n-25'}`}>
       <span className="flex gap-0.5">
@@ -68,7 +69,10 @@ function TermRow({ term, index, last, busy, onMove, onRename, onToggle, onDelete
         ))}
         <SynonymAdd term={term} onAdd={onAddSynonym} busy={busy} />
       </span>
-      <span className="text-right font-mono text-meta text-n-600" title="쓰인 Entry 수(동의어 포함)">{term.count}</span>
+      {/* 54 — 쓰는 자료 수를 누르면 그 값으로 거른 검색 — 거기서 [여러 자료 고르기]로 분류를 한꺼번에 바꾼다 */}
+      <span className="text-right font-mono text-meta text-n-600" title="쓰인 Entry 수(동의어 포함)">
+        {term.count > 0 ? <FilterLink field={kind} value={term.value}>{term.count}</FilterLink> : term.count}
+      </span>
       <span className="flex justify-end gap-0.5">
         <Button size="sm" variant="ghost" disabled={busy} onClick={() => onToggle(term)}
                 aria-label={`${term.value} ${term.active ? '사용 중지' : '다시 사용'}`}>
@@ -209,7 +213,7 @@ export default function VocabPage() {
           {terms?.length > 0 && (
             <ul>
               {terms.map((t, i) => (
-                <TermRow key={t.id} term={t} index={i} last={i === terms.length - 1} busy={busy} onMove={move}
+                <TermRow key={t.id} kind={kind} term={t} index={i} last={i === terms.length - 1} busy={busy} onMove={move}
                          onRename={rename} onToggle={toggle} onDelete={remove} onAddSynonym={addSynonym} onRemoveSynonym={removeSynonym} />
               ))}
             </ul>

@@ -17,6 +17,11 @@ KIND_BY_EXT = {
 }
 
 
+# 52 — 폴더째 올리기 목록에서 처음에 체크를 풀어 두는 형식(사람이 다시 체크하면 올라간다 — 서버가 지우지 않는다).
+# 큰 이진 결과(BDF 로 다시 만들 수 있고 LogBook 이 읽지 않음)·HyperView 결과·세션(op2 경로에 매임)·Nastran 부산물
+SKIP_BY_DEFAULT_EXTS = (".op2", ".xdb", ".h5", ".h3d", ".mvw", ".hwsession", ".pch", ".asm", ".plt")
+
+
 def is_excluded(name: str) -> bool:
     lower = name.lower()
     return any(fnmatch.fnmatchcase(lower, pat) for pat in EXCLUDE_PATTERNS)

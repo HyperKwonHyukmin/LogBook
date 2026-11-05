@@ -147,3 +147,24 @@ export function needsLiftingWire(entry, target) {
   if ((entry.blocked_models || []).some((b) => b.lifting)) return false;
   return !!entry.lifting?.needed || MU_TARGETS.some((t) => vocabKey(t) === vocabKey(target));
 }
+
+/**
+ * 52 — [이 묶음 모두 확정]: 사람에게 물어야 하는 초안은 건너뛴다(카드에서 하나씩 확정).
+ * 건너뜀: 저장하지 않은 변경·제목 없음·똑같은 BDF 가 이미 있음·권상 Wire 모델 요청. 호선 없음은 '보완 필요'로 확정한다(43).
+ * → { go: [entry], skip: [{entry, reason}] }
+ */
+export function bulkConfirmPlan(drafts, dirtyIds = new Set()) {
+  const go = [];
+  const skip = [];
+  for (const e of drafts) {
+    const hulls = (e.hulls || []).map((h) => h.hull_no || h);
+    const blocking = draftChecks({ title: e.title, hulls, no_hull: e.no_hull }, e).some((c) => c.blocking);
+    const reason = dirtyIds.has(e.entry_id) ? '저장하지 않은 변경'
+      : blocking ? '제목 없음'
+        : (e.blocked_models || []).length ? '똑같은 BDF 가 이미 있음'
+          : needsLiftingWire(e, e.target) ? '권상 Wire 모델 확인'
+            : '';
+    if (reason) skip.push({ entry: e, reason }); else go.push(e);
+  }
+  return { go, skip };
+}

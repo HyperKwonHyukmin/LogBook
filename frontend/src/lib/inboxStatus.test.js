@@ -1,4 +1,4 @@
-import { convertCounts, draftChecks, hasPendingConvert, modelConvertState, stagedStatus } from './inboxStatus.js';
+import { bulkConfirmPlan, convertCounts, draftChecks, hasPendingConvert, modelConvertState, stagedStatus } from './inboxStatus.js';
 
 const staged = (queue, progress = null) => ({ state: 'staged', queue, progress });
 const alive = { worker_alive: true, job_state: 'queued', ahead: 0, busy_with: [], attempts: 0, last_error: null };
@@ -74,4 +74,17 @@ test('49 — needsLiftingWire: 대상 Module Unit 또는 WB 권상 출처인데 
   expect(needsLiftingWire({ ...base, lifting: { needed: true, has_wire: false } }, '')).toBe(true);
   expect(needsLiftingWire({ ...base, files: [{ kind: 'model', lifting: true }] }, 'Module Unit')).toBe(false);
   expect(needsLiftingWire({ ...base, merge_into: { entry_id: 'E1' } }, 'Module Unit')).toBe(false);
+});
+
+describe('52 — bulkConfirmPlan', () => {
+  const d = (id, extra = {}) => ({ entry_id: id, title: `t${id}`, hulls: [], files: [], merge_into: null, ...extra });
+  it('물어야 하는 초안은 이유와 함께 건너뛰고, 호선 없음은 확정한다', () => {
+    const { go, skip } = bulkConfirmPlan([
+      d('E1'), d('E2', { title: '' }), d('E3', { blocked_models: [{ name: 'a.bdf' }] }),
+      d('E4', { target: 'Module Unit' }), d('E5'),
+    ], new Set(['E5']));
+    expect(go.map((e) => e.entry_id)).toEqual(['E1']);
+    expect(skip.map((s) => [s.entry.entry_id, s.reason])).toEqual([
+      ['E2', '제목 없음'], ['E3', '똑같은 BDF 가 이미 있음'], ['E4', '권상 Wire 모델 확인'], ['E5', '저장하지 않은 변경']]);
+  });
 });

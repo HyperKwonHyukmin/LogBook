@@ -1,10 +1,14 @@
-import { AlertCircle, Check, ChevronRight, FolderInput, Globe } from 'lucide-react';
+import { useState } from 'react';
+import { AlertCircle, Check, CheckCheck, ChevronRight, FolderInput, Globe } from 'lucide-react';
+import { api } from '../../api/client.js';
 import Button from '../ui/Button.jsx';
+import { useConfirm } from '../ui/ConfirmDialog.jsx';
 import Spinner from '../ui/Spinner.jsx';
 import DraftCard from './DraftCard.jsx';
 import { DuplicateTargets } from './DuplicateBlocked.jsx';
 import { BATCH_STATE_LABELS, EXCLUDE_REASON_LABELS } from '../../lib/labels.js';
-import { MODEL_CONVERT_LABELS, convertCounts, stagedStatus } from '../../lib/inboxStatus.js';
+import { MODEL_CONVERT_LABELS, bulkConfirmPlan, convertCounts, stagedStatus } from '../../lib/inboxStatus.js';
+import { errorText } from '../../lib/labels.js';
 
 const STATE_TONE = { failed: 'text-err', staged: 'text-n-600', processed: 'text-wait', done: 'text-ok', uploading: 'text-n-600' };
 
@@ -129,9 +133,39 @@ function ProcessedDetail({ converts }) {
 }
 
 /** 한 번에 올라온 배치 = 섹션 — 머리(출처·받은 시각·상태·지금 하는 일) + 설명 + 제외 목록 + 초안들. */
-export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChanged, onClaim, onDirtyChange }) {
+export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChanged, onClaim, onDirtyChange, dirtyIds }) {
   const mine = batch.uploader === me;
   const drafts = batch.entries || [];
+  const [confirm, dialog] = useConfirm();
+  const [bulk, setBulk] = useState({ busy: false, message: '', failed: false });
+  const canBulk = canWrite && (mine || isAdmin) && batch.state === 'processed' && drafts.length >= 2 && !batch.attachment_target;
+
+  // 52 — 폴더째 올린 초안을 한 번에 확정. 물어야 하는 초안은 건너뛰고 카드에 남긴다
+  async function confirmAll() {
+    const { go, skip } = bulkConfirmPlan(drafts, dirtyIds);
+    const skipText = skip.length ? ` 건너뛰는 초안 ${skip.length}건: ${skip.map((s) => `${s.entry.title || s.entry.entry_id}(${s.reason})`).join(', ')}.` : '';
+    if (!go.length) {
+      setBulk({ busy: false, failed: true, message: `한 번에 확정할 수 있는 초안이 없습니다.${skipText} 카드에서 하나씩 확정하세요.` });
+      return;
+    }
+    const ok = await confirm({
+      title: `초안 ${go.length}건을 확정할까요?`,
+      body: `파일이 보관소로 옮겨집니다. 호선이 없는 초안은 '보완 필요'로 확정됩니다.${skipText}`,
+      confirmLabel: `${go.length}건 확정`, tone: 'primary',
+    });
+    if (!ok) return;
+    setBulk({ busy: true, message: '', failed: false });
+    const errors = [];
+    for (const e of go) {
+      try { await api(`/entries/${e.entry_id}/confirm`, { method: 'POST' }); } catch (err) {
+        errors.push(`${e.title || e.entry_id}: ${errorText(err, '확정하지 못했습니다.')}`);
+      }
+    }
+    const done = go.length - errors.length;
+    setBulk({ busy: false, failed: errors.length > 0,
+      message: [`${done}건을 확정했습니다.`, ...errors, skip.length ? `건너뛴 ${skip.length}건은 카드에서 확정하세요.` : ''].filter(Boolean).join(' ') });
+    onChanged?.();
+  }
   const SourceIcon = batch.source === 'web' ? Globe : FolderInput;
   const staged = batch.state === 'staged' ? stagedStatus(batch) : null;
   const converts = convertCounts(drafts.flatMap((d) => d.files || []));
@@ -162,7 +196,17 @@ export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChang
         )}
         <div className="flex-1" />
         {!batch.uploader && canWrite && <Button size="sm" onClick={() => onClaim(batch.key)}>내가 올렸어요</Button>}
+        {canBulk && (
+          <Button size="sm" variant="secondary" disabled={bulk.busy} onClick={confirmAll}>
+            {bulk.busy ? <Spinner size={12} /> : <CheckCheck size={14} aria-hidden="true" />}이 묶음 모두 확정
+          </Button>
+        )}
       </div>
+      {dialog}
+      {bulk.message && (
+        <p role={bulk.failed ? 'alert' : 'status'}
+           className={`rounded-md px-3 py-2 text-ui ${bulk.failed ? 'border border-wait-line bg-wait-bg text-wait' : 'bg-n-50 text-n-800'}`}>{bulk.message}</p>
+      )}
       {staged && <StagedDetail status={staged} />}
       {batch.attachment_target && <p role="status" className="text-meta text-n-600">
         <span className="font-mono">{batch.attachment_target}</span> 초안에 파일을 첨부 중입니다. 해당 초안의 파일 목록에 함께 표시됩니다.

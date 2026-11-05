@@ -151,7 +151,7 @@ export function createUploadStore({
     /**
      * 올리기 시작. source = [{file, relPath}] 또는 (onCount) => Promise<items>(끌어 놓은 폴더 펼치기).
      * ⚠ source 함수는 이 호출 안에서 바로 부른다 — drop 이벤트가 끝나면 폴더 항목을 꺼낼 수 없다.
-     * opts: { targetEntryId, targetEntryStatus, force, away } → 시작했으면 true.
+     * opts: { targetEntryId, targetEntryStatus, force, away, preset, splitTop } → 시작했으면 true.
      */
     start(scope, source, opts = {}) {
       if (getJob(scope).busy) { patch(scope, { notice: BUSY_NOTICE }); return false; }
@@ -173,6 +173,7 @@ export function createUploadStore({
         set({ checked: 0, checkTotal: items.length });
         return upload(items, {
           targetEntryId: opts.targetEntryId, targetEntryStatus: opts.targetEntryStatus, force: !!opts.force,
+          preset: opts.preset || null, splitTop: !!opts.splitTop,
           signal: ctrl.signal,
           onPhase: (p) => set(p.phase === 'checking' ? { phase: 'checking', checked: p.checked, checkTotal: p.total }
             : { phase: 'uploading' }),

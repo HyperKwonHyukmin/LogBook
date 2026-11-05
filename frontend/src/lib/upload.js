@@ -235,10 +235,11 @@ const detailCode = (err) => (typeof err?.detail === 'string' ? err.detail : err?
  * onPhase({phase:'checking', checked, total}) → DRM 확인 진행, ({phase:'uploading'}) → 보내기 시작.
  * 도중 실패·취소 오류에는 err.session 이 실린다 — continueUpload(err.session) 로 이어 올리고, 버릴 때는 cancelUpload(key).
  * sleep 은 재시도 간격 대기 함수(테스트에서 바꿔 끼운다).
+ * 52 — preset(공통 분류 {zones, target, assignees})·splitTop(과제 폴더마다 자료 1건)은 폴더째 올리기 목록에서 온다.
  */
 export async function uploadBatch(items, {
   onProgress = () => {}, onPhase = () => {}, chunkSize = CHUNK_SIZE, targetEntryId, targetEntryStatus,
-  sleep = defaultSleep, force = false, signal, parallel = SMALL_PARALLEL,
+  sleep = defaultSleep, force = false, signal, parallel = SMALL_PARALLEL, preset = null, splitTop = false,
 } = {}) {
   const { good, rejected, skipped } = await scanItems(items, {
     signal, onScan: (checked) => onPhase({ phase: 'checking', checked, total: items.length }),
@@ -250,7 +251,8 @@ export async function uploadBatch(items, {
   onPhase({ phase: 'uploading' });
   const { key } = await withRetry(() => api('/uploads', { method: 'POST', signal, body: {
     name: batchName(items), target_entry_id: targetEntryId || null,
-    ...(targetEntryStatus ? { target_status: targetEntryStatus } : {}) } }), { sleep, signal });
+    ...(targetEntryStatus ? { target_status: targetEntryStatus } : {}),
+    ...(preset ? { preset } : {}), ...(splitTop ? { split_top: true } : {}) } }), { sleep, signal });
   const session = {
     key,
     items: good,
