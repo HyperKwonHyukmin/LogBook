@@ -6,6 +6,7 @@
 
 - 백엔드: `app/windows_auth.py`(WorkBench 이식 — Negotiate 상태·NTLM 이름 읽기·사번 대응·횟수 제한), `app/login_page.py`(`/sso` 와 같이 쓰는 토큰 심기 HTML·`safe_next`), `routers/auth.py` 의 `GET /api/auth/options`·`POST /api/auth/windows`·`GET /auth/windows`, `LOGBOOK_AUTH_MODE`·`LOGBOOK_WINDOWS_LOGIN`·`LOGBOOK_AD_DOMAIN`, health 의 `storage.root` 제거.
 - 프런트: 로그인 화면이 options 를 읽어 Windows 로그인을 쓸 수 있으면 한 번 자동으로 `/auth/windows?next=<원래 경로>` 로 간다. `?windows=<사유>`(방금 실패)·로그아웃 직후(`logbook_logout_reason=logged_out`)에는 자동으로 가지 않고 [Windows 계정으로 로그인] 단추를 보인다. 사번 칸은 `employee_id_login` 일 때만.
+- **로그인 화면 단순화(2026-11-06 사용자 의견)**: 화면에는 Windows 이야기를 꺼내지 않고 "사번 칸 + [로그인]" 만 둔다. [로그인]은 `/auth/windows?employee_id=<입력한 사번>` 으로 가고, 이 PC 의 Windows 계정이 그 사번과 다르면 403 `windows_account_mismatch`(남의 PC 에서 그 PC 주인으로 들어가지 않게, WorkBench 와 같음). 처음 들어올 때의 자동 시도는 사번 없이 그대로 하고, Windows 확인을 못 쓰는 서버(`windows: false`)는 예전 사번 로그인으로 보낸다.
 - 테스트: `tests/test_windows_login_55.py`(가짜 SSPI 20건), `LoginPage.test.jsx` 7건 추가. `/sso` 이동 주소는 JSON 으로 넣게 바뀌어 18·19 테스트의 기대 문자열만 고쳤다.
 - **실제 SSPI 확인(개발 PC, 같은 PC 안)**: 시험 서버(`10.133.122.70:19095`, `LOGBOOK_AUTH_MODE=windows`, 저장소는 임시 폴더)에서
   - `curl.exe --negotiate -u : -X POST …/api/auth/windows` → A476854 토큰. 사번만 `POST /api/auth/login` → 403.

@@ -97,72 +97,81 @@ test('18 — WorkBench 로그아웃으로 끊겼으면 한 번 안내한다', ()
   sessionStorage.clear();
 });
 
-describe('55 — Windows 계정 자동 로그인', () => {
+describe('55 — 사번 확인(이 PC 의 Windows 계정)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     sessionStorage.clear();
+    localStorage.clear();
   });
 
-  test('145(사번 로그인 닫힘) — 들어오자마자 /auth/windows 로 한 번 가고, 사번 칸은 없다', async () => {
+  test('들어오자마자 한 번 자동으로 확인하러 간다(화면에 Windows 이야기는 없다)', async () => {
     const go = vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
     mockOptions({ windows: true, employee_id_login: false });
     renderPage();
-    expect(await screen.findByText('회사 PC 계정으로 들어갑니다')).toBeInTheDocument();
+    expect(await screen.findByText('로그인하는 중…')).toBeInTheDocument();
     expect(go).toHaveBeenCalledTimes(1);
     expect(go).toHaveBeenCalledWith('/');
-    expect(screen.queryByLabelText('사번')).toBeNull();
+    expect(screen.getByText('사번으로 들어갑니다')).toBeInTheDocument();
+    expect(screen.getByLabelText('사번')).toBeInTheDocument();
+    expect(screen.queryByText(/Windows/)).toBeNull();
   });
 
   test('로그인 뒤 원래 보던 화면(next)으로 돌아가게 넘긴다', async () => {
     const go = vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
     mockOptions({ windows: true, employee_id_login: false });
     renderPage('/login?next=%2Fentries%2FE000001');
-    await screen.findByText('회사 PC 계정으로 들어갑니다');
-    expect(go).toHaveBeenCalledWith('/entries/E000001');
+    await vi.waitFor(() => expect(go).toHaveBeenCalledWith('/entries/E000001'));
   });
 
-  test('방금 실패했으면(?windows=) 다시 가지 않고 사유와 [Windows 계정으로 로그인] 단추를 보인다', async () => {
-    const go = vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
-    mockOptions({ windows: true, employee_id_login: false });
-    renderPage('/login?windows=windows_account_not_employee');
-    expect(await screen.findByRole('alert')).toHaveTextContent('사번 계정(HHI\\사번)으로 로그인돼 있지 않습니다');
-    expect(go).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'Windows 계정으로 로그인' }));
-    expect(go).toHaveBeenCalledTimes(1);
-  });
-
-  test('WorkBench 쪽 사유(not_registered)도 같은 문구로 보인다', async () => {
-    vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
-    mockOptions({ windows: true, employee_id_login: false });
-    renderPage('/login?windows=not_registered');
-    expect(await screen.findByRole('alert')).toHaveTextContent('WorkBench 에 가입된 사번이 아닙니다');
-  });
-
-  test('방금 로그아웃했으면 자동으로 다시 들어가지 않는다', async () => {
+  test('[로그인]은 입력한 사번을 붙여 확인하러 가고, 사번을 기억한다', async () => {
     const go = vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
     sessionStorage.setItem('logbook_logout_reason', 'logged_out');
     mockOptions({ windows: true, employee_id_login: false });
     renderPage();
-    expect(await screen.findByRole('button', { name: 'Windows 계정으로 로그인' })).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('로그아웃했습니다.');
+    expect(await screen.findByRole('status')).toHaveTextContent('로그아웃했습니다.');
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/auth/options', expect.anything()));
+    expect(go).not.toHaveBeenCalled();   // 방금 로그아웃했으면 자동으로 다시 들어가지 않는다
+    await userEvent.clear(screen.getByLabelText('사번'));
+    await userEvent.type(screen.getByLabelText('사번'), 'a300001');
+    await userEvent.click(screen.getByRole('button', { name: '로그인' }));
+    expect(go).toHaveBeenCalledWith('/', 'A300001');
+    expect(localStorage.getItem('logbook_saved_employee_id')).toBe('A300001');
+    expect(fetch).not.toHaveBeenCalledWith('/api/auth/login', expect.anything());
+  });
+
+  test('사번이 비어 있으면 가지 않고 알린다', async () => {
+    const go = vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
+    mockOptions({ windows: true, employee_id_login: false });
+    renderPage('/login?windows=unavailable');
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/auth/options', expect.anything()));
+    await userEvent.clear(screen.getByLabelText('사번'));
+    await userEvent.click(screen.getByRole('button', { name: '로그인' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('사번을 입력해 주세요.');
     expect(go).not.toHaveBeenCalled();
   });
 
-  test('개발 PC(사번 로그인 열림)는 사번 칸도 함께 보인다', async () => {
-    vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
-    mockOptions({ windows: true, employee_id_login: true });
-    renderPage('/login?windows=unavailable');
-    expect(await screen.findByRole('button', { name: 'Windows 계정으로 로그인' })).toBeInTheDocument();
-    expect(screen.getByLabelText('사번')).toBeInTheDocument();
+  test.each([
+    ['windows_account_mismatch', '입력한 사번이 이 PC 에 로그인한 사번과 다릅니다'],
+    ['windows_account_not_employee', '이 PC 는 사번 계정으로 로그인돼 있지 않습니다'],
+    ['unavailable', '이 PC 에서 사번을 확인하지 못했습니다'],
+    ['not_registered', 'WorkBench 에 가입된 사번이 아닙니다'],
+  ])('돌아온 사유 %s 를 보이고 자동으로 다시 가지 않는다', async (reason, text) => {
+    const go = vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
+    mockOptions({ windows: true, employee_id_login: false });
+    renderPage(`/login?windows=${reason}`);
+    expect(await screen.findByRole('alert')).toHaveTextContent(text);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/auth/options', expect.anything()));
+    expect(go).not.toHaveBeenCalled();
   });
 
-  test('Windows 로그인을 못 쓰는 서버는 예전처럼 사번 화면', async () => {
+  test('확인을 못 쓰는 서버(개발 PC 등)는 예전처럼 사번만으로 로그인', async () => {
     const go = vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
     mockOptions({ windows: false, employee_id_login: true });
     renderPage();
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/auth/options', expect.anything()));
-    expect(screen.getByText('사번으로 들어갑니다')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Windows 계정으로 로그인' })).toBeNull();
+    await userEvent.type(screen.getByLabelText('사번'), 'A100001');
+    await userEvent.click(screen.getByRole('button', { name: '로그인' }));
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/auth/login', expect.anything()));
     expect(go).not.toHaveBeenCalled();
   });
 });

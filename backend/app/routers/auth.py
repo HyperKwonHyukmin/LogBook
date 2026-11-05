@@ -101,9 +101,12 @@ class WindowsAuthFailed(Exception):
         self.status, self.reason, self.headers = status, reason, headers
 
 
-def _windows_admit(request: Request, db: Session, storage: StoragePaths) -> tuple[models.User, str]:
+def _windows_admit(request: Request, db: Session, storage: StoragePaths,
+                   expected: str | None = None) -> tuple[models.User, str]:
     """Negotiate 한 걸음 → 끝났으면 사번 로그인과 같은 절차(admit). 돌려주는 값 = (사용자, 상호 인증 토큰).
 
+    expected = 화면에 입력한 사번. 있으면 Windows 계정과 같을 때만 들어온다(남의 PC 에서 그 PC 주인으로 들어가지 않게,
+    WorkBench windows_account_mismatch 와 같음).
     ⚠ 실패 응답에는 WWW-Authenticate 를 다시 붙이지 않는다 — 붙이면 브라우저가 같은 실패를 되풀이한다."""
     if not windows_auth.enabled():
         raise WindowsAuthFailed(404, "windows_login_disabled")
@@ -131,6 +134,8 @@ def _windows_admit(request: Request, db: Session, storage: StoragePaths) -> tupl
         log.warning("Windows 로그인 거절(사번 계정 아님): %s", step.account[:64])
         raise WindowsAuthFailed(403, "windows_account_not_employee")
     limiter.reset(employee_id)
+    if expected and _normalize(expected) != employee_id:
+        raise WindowsAuthFailed(403, "windows_account_mismatch")
     try:
         user = admit(db, storage, employee_id, ip)
     except HTTPException as exc:
@@ -139,11 +144,12 @@ def _windows_admit(request: Request, db: Session, storage: StoragePaths) -> tupl
 
 
 @router.post("/windows")
-def login_windows(request: Request, db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage)):
+def login_windows(request: Request, employee_id: str | None = Query(default=None, max_length=20),
+                  db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage)):
     """55 — 스크립트·관리 작업용 Windows 계정 로그인. 본문 없이 보낸다: `curl.exe --negotiate -u : -X POST <주소>`.
-    응답은 /login 과 같은 {token, user}."""
+    응답은 /login 과 같은 {token, user}. employee_id 를 주면 Windows 계정과 같아야 한다."""
     try:
-        user, out_token = _windows_admit(request, db, storage)
+        user, out_token = _windows_admit(request, db, storage, employee_id)
     except WindowsAuthFailed as exc:
         raise HTTPException(status_code=exc.status, detail=exc.reason, headers=exc.headers)
     token = sessions.create(db, user.employee_id, hours=settings.session_hours)
@@ -153,14 +159,16 @@ def login_windows(request: Request, db: Session = Depends(get_db), storage: Stor
 
 @page_router.get("/auth/windows", include_in_schema=False)
 def login_windows_page(request: Request, next: str | None = Query(default=None),
+                       employee_id: str | None = Query(default=None, max_length=20),
                        db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage)) -> HTMLResponse:
     """55 — 로그인 화면이 최상위 이동으로 보내는 경로. 크롬이 Windows 계정을 자동으로 보내면 토큰을 심고 next 로 간다.
+    employee_id = 로그인 화면에 입력한 사번(자동 시도는 없이 보낸다) — 있으면 Windows 계정과 같아야 한다.
 
     401 도전 응답의 본문도 로그인 화면으로 넘어가는 HTML 이다 — 브라우저가 계정을 보내지 못하면(도메인 밖 PC 등)
     그 본문이 보이며 `/login?windows=unavailable` 로 간다. 실패는 `/login?windows=<사유>`."""
     target = login_page.safe_next(next)
     try:
-        user, out_token = _windows_admit(request, db, storage)
+        user, out_token = _windows_admit(request, db, storage, employee_id)
     except WindowsAuthFailed as exc:
         reason = "unavailable" if exc.reason == "negotiate" else exc.reason
         path = f"/login?windows={quote(reason)}" + (f"&next={quote(target)}" if target != "/" else "")

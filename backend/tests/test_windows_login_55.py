@@ -188,6 +188,31 @@ def test_api_other_domain_or_local_account_403(sspi_world, client, make_user):
     assert res.json()["detail"] == "windows_account_not_employee"
 
 
+def test_api_typed_employee_id_must_match_windows_account(sspi_world, client, make_user, db):
+    """화면에 입력한 사번이 이 PC 의 Windows 계정과 다르면 세션을 만들지 않는다."""
+    from app import models
+
+    make_user("A300001")
+    make_user("A300002")
+    sspi_world.scenario([(0, b"")], account="HHI\\a300001")
+    res = client.post("/api/auth/windows?employee_id=A300002", headers=_neg(KERBEROS))
+    assert res.status_code == 403
+    assert res.json()["detail"] == "windows_account_mismatch"
+    assert db.query(models.UserSession).filter_by(employee_id="A300002").count() == 0
+    sspi_world.scenario([(0, b"")], account="HHI\\a300001")
+    ok = client.post("/api/auth/windows?employee_id=a300001", headers=_neg(KERBEROS))
+    assert ok.status_code == 200
+    assert ok.json()["user"]["employee_id"] == "A300001"
+
+
+def test_page_typed_employee_id_mismatch_goes_to_login(sspi_world, client, make_user):
+    make_user("A300001")
+    sspi_world.scenario([(0, b"")], account="HHI\\a300001")
+    res = client.get("/auth/windows?employee_id=A300002&next=/search", headers=_neg(KERBEROS))
+    assert res.status_code == 403
+    assert "/login?windows=windows_account_mismatch\\u0026next=/search" in res.text
+
+
 def test_api_not_in_workbench_follows_admit(sspi_world, client):
     sspi_world.scenario([(0, b"")], account="HHI\\Z999999")
     res = client.post("/api/auth/windows", headers=_neg(KERBEROS))
