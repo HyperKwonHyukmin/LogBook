@@ -22,6 +22,7 @@ from .bdf.wires import SCHEMA_VERSION, wire_summary
 from .convert.job import DRM_MAGIC, enqueue_convert
 from .entries.locate import FileUnavailable, file_path
 from .entries.service import target_of
+from .search.mysql_backend import _like
 from .storage.paths import StoragePaths, to_long
 
 log = logging.getLogger("logbook.lifting_refs")
@@ -95,7 +96,7 @@ def _candidate_ids(db: Session, user, q: str | None, hull: str | None) -> list[t
     if hull:
         query = query.filter(E.id.in_(db.query(models.EntryHull.entry_id).filter(models.EntryHull.hull_no == hull)))
     if q:
-        like = f"%{q.strip().lower()}%"
+        like = _like(q.strip().lower())   # _·% 는 글자 그대로(검색과 같은 escape)
         query = query.filter(or_(func.lower(F.name).like(like), func.lower(E.title).like(like)))
     return [(fid, eid) for fid, eid in query.order_by(E.confirmed_at.desc(), F.id.desc()).all()]
 

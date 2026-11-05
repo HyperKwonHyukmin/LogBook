@@ -35,6 +35,7 @@ function SynonymAdd({ term, onAdd, busy }) {
     <input autoFocus aria-label={`${term.value} 의 새 동의어`} value={text} disabled={busy} placeholder="동의어 입력 후 Enter"
            onChange={(e) => setText(e.target.value)} onBlur={() => { if (!text.trim()) setOpen(false); }}
            onKeyDown={(e) => {
+             if (e.nativeEvent?.isComposing) return;   // 한글 조합 중의 Enter 는 입력기 몫
              if (e.key === 'Enter') { e.preventDefault(); submit(); }
              if (e.key === 'Escape') { e.preventDefault(); setText(''); setOpen(false); }
            }}

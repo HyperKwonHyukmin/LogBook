@@ -58,6 +58,7 @@ function PersonForm({ initial, submitLabel, busy, error, onSubmit, onCancel, not
   return (
     <div role="group" aria-label={submitLabel} className="flex flex-col gap-1.5 rounded-md border border-n-200 bg-n-25 p-2"
          onKeyDown={(e) => {
+           if (e.nativeEvent?.isComposing) return;   // 한글 조합 중의 Enter 는 입력기 몫
            if (e.key === 'Enter' && e.target instanceof HTMLInputElement && e.target.type !== 'checkbox') submit(e);
            // 자료 화면의 Esc(고치기 취소)까지 가지 않게 — 이 칸만 닫는다
            if (e.key === 'Escape') { e.preventDefault(); onCancel(); }

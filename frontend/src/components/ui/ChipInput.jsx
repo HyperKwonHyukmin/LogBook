@@ -114,6 +114,7 @@ export default function ChipInput({ label, kind, values, onChange, validate, pla
                disabled={disabled} value={text} placeholder={values.length ? '' : placeholder}
                onChange={(e) => { setText(e.target.value); setError(''); }}
                onKeyDown={(e) => {
+                 if (e.nativeEvent?.isComposing) return;   // 한글 조합 중의 Enter 는 입력기 몫
                  if (e.key === 'ArrowDown' && options.length) { e.preventDefault(); setActive((i) => Math.min(i + 1, options.length - 1)); return; }
                  if (e.key === 'ArrowUp' && options.length) { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); return; }
                  if (e.key === 'Escape' && options.length) { e.preventDefault(); requestRef.current += 1; showOptions([]); return; }

@@ -120,3 +120,11 @@ def test_old_summary_is_rebuilt_and_list_hides_segments(secret, client, db, worl
     assert db.get(models.ModelSummary, fid).wires["schemaVersion"] == 2
     items = client.get(f"/api/integration/lifting-refs?as={LV2}", headers=H).json()["items"]
     assert all("segments3d" not in i["summary"] and "planSegments" not in i["summary"] for i in items)
+
+
+def test_query_treats_like_wildcards_literally(secret, client, world):
+    """검색어의 _·% 는 글자 그대로(2026-11-05 검토) — 'm0_' 가 m04·m05 를 잡지 않는다."""
+    r = client.get(f"/api/integration/lifting-refs?as={LV2}&q=m0_", headers=H)
+    assert r.json()["items"] == []
+    r = client.get(f"/api/integration/lifting-refs?as={LV2}&q=9999_m04", headers=H)
+    assert [i["name"] for i in r.json()["items"]] == ["9999_m04_lifting.bdf"]

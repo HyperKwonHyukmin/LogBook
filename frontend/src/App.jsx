@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext.jsx';
 import RequireAuth from './auth/RequireAuth.jsx';
 import AppShell from './components/shell/AppShell.jsx';
+import SectionTabs from './components/shell/SectionTabs.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import AuditLogPage from './pages/AuditLogPage.jsx';
 import BrowsePage from './pages/BrowsePage.jsx';
@@ -31,6 +32,13 @@ const GraphPage = lazy(() => import('./pages/GraphPage.jsx'));
 const CoveragePage = lazy(() => import('./pages/CoveragePage.jsx'));
 const SimilarPage = lazy(() => import('./pages/SimilarPage.jsx'));
 
+const EXPLORE_TABS = [{ to: '/coverage', label: '갖춤 현황' }, { to: '/graph', label: '관계 지도' }];
+const ADMIN_TABS = [
+  { to: '/admin/users', label: '사용자' }, { to: '/admin/ops', label: '운영' },
+  { to: '/admin/vocab', label: '분류 목록' }, { to: '/admin/wb-targets', label: 'WorkBench 연결 규칙' },
+  { to: '/admin/cleanup', label: '자료 정비' }, { to: '/admin/updates', label: '업데이트 이력' },
+];
+
 export default function App() {
   return (
     <AuthProvider>
@@ -49,8 +57,11 @@ export default function App() {
             <Route path="compare" element={<Suspense fallback={null}><ComparePage /></Suspense>} />
             {/* 11 — 최근 비교(사용자별) */}
             <Route path="compares" element={<RecentComparesPage />} />
-            <Route path="graph" element={<Suspense fallback={null}><GraphPage /></Suspense>} />
-            <Route path="coverage" element={<Suspense fallback={null}><CoveragePage /></Suspense>} />
+            {/* 살펴보기 — 갖춤 현황·관계 지도를 메뉴 하나 아래 탭으로(2026-11-05) */}
+            <Route element={<SectionTabs label="살펴보기" items={EXPLORE_TABS} />}>
+              <Route path="coverage" element={<Suspense fallback={null}><CoveragePage /></Suspense>} />
+              <Route path="graph" element={<Suspense fallback={null}><GraphPage /></Suspense>} />
+            </Route>
             <Route path="similar" element={<Suspense fallback={null}><SimilarPage /></Suspense>} />
             <Route path="inbox" element={<InboxPage />} />
             <Route path="browse" element={<BrowsePage />} />
@@ -61,12 +72,15 @@ export default function App() {
             <Route path="log" element={<AuditLogPage />} />
             <Route element={<RequireAuth adminOnly />}>
               <Route path="admin" element={<Navigate to="/admin/users" replace />} />
-              <Route path="admin/users" element={<UsersPage />} />
-              <Route path="admin/ops" element={<OpsPage />} />
-              <Route path="admin/vocab" element={<VocabPage />} />
-              <Route path="admin/wb-targets" element={<WbRulesPage />} />
-              <Route path="admin/cleanup" element={<CleanupPage />} />
-              <Route path="admin/updates" element={<UpdatesPage />} />   {/* 46 — 업데이트 이력(옛 /updates 는 서버가 넘긴다) */}
+              {/* 관리 6화면 — 사이드 메뉴 '관리' 하나 아래 탭으로(2026-11-05) */}
+              <Route element={<SectionTabs label="관리" items={ADMIN_TABS} contained />}>
+                <Route path="admin/users" element={<UsersPage />} />
+                <Route path="admin/ops" element={<OpsPage />} />
+                <Route path="admin/vocab" element={<VocabPage />} />
+                <Route path="admin/wb-targets" element={<WbRulesPage />} />
+                <Route path="admin/cleanup" element={<CleanupPage />} />
+                <Route path="admin/updates" element={<UpdatesPage />} />   {/* 46 — 업데이트 이력(옛 /updates 는 서버가 넘긴다) */}
+              </Route>
             </Route>
           </Route>
         </Route>

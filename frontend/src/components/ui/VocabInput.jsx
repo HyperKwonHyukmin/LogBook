@@ -95,6 +95,7 @@ export default function VocabInput({ kind, label, value = null, values = [], mul
     }
   }
   function onKeyDown(e) {
+    if (e.nativeEvent?.isComposing) return;   // 한글 조합 중의 Enter 는 입력기 몫
     if (e.key === 'ArrowDown' && options.length) { e.preventDefault(); setActive(Math.min(current + 1, options.length - 1)); return; }
     if (e.key === 'ArrowUp' && options.length) { e.preventDefault(); setActive(Math.max(current - 1, 0)); return; }
     if (e.key === 'Escape') {

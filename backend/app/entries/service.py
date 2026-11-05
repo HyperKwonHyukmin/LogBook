@@ -880,6 +880,27 @@ def _require_draft_owner(user: models.User, *entries: models.Entry) -> None:
             raise HTTPException(status_code=403, detail="not_uploader")
 
 
+def _carry_meta(db: Session, src: models.Entry, dst: models.Entry) -> None:
+    """쪼개기·합치기 — src 의 분류(구역·자유 태그는 합집합, 대상은 dst 에 없을 때만)·설명(dst 가 비었을 때만)·
+    열람 허락(합집합)을 dst 에 옮긴다. 합치기에서 지워지는 초안의 값이 CASCADE 로 사라지지 않게(2026-11-05 검토).
+    기존 자료에 합치는 확정(merge_into)은 '파일 추가'라 대상 자료의 분류를 건드리지 않는다."""
+    for kind in ("zone", "free", "target"):
+        have = tags_of(db, dst, kind)
+        if kind == "target" and have:
+            continue
+        extra = [v for v in tags_of(db, src, kind) if v not in have]
+        if extra:
+            set_tags(db, dst, kind, have + extra)
+    if not (dst.description or "").strip() and (src.description or "").strip():
+        dst.description = src.description
+    have_grants = {g for (g,) in db.query(models.EntryGrant.employee_id).filter_by(entry_id=dst.id)}
+    for g in db.query(models.EntryGrant).filter_by(entry_id=src.id):
+        if g.employee_id not in have_grants:
+            db.add(models.EntryGrant(entry_id=dst.id, employee_id=g.employee_id, granted_by=g.granted_by,
+                                     granted_at=g.granted_at))
+            have_grants.add(g.employee_id)
+
+
 def split(db: Session, entry: models.Entry, user: models.User, file_ids: list[int]) -> models.Entry:
     entry = _lock(db, entry)
     _require_draft_owner(user, entry)
@@ -900,6 +921,7 @@ def split(db: Session, entry: models.Entry, user: models.User, file_ids: list[in
     for f in files:
         f.entry_id = new.id
     people.copy_assignees(db, entry, new)   # 46
+    _carry_meta(db, entry, new)
     entry.version += 1
     db.commit()
     refresh_revisions(db, entry.id)   # 14 — 판 묶음은 Entry 안에서만
@@ -922,6 +944,7 @@ def merge(db: Session, entry: models.Entry, other: models.Entry, user: models.Us
         raise HTTPException(status_code=422, detail="different_batch")
     db.query(models.File).filter_by(entry_id=other.id).update({"entry_id": entry.id}, synchronize_session=False)
     people.copy_assignees(db, other, entry)   # 46
+    _carry_meta(db, other, entry)
     _clear_dangling_references(db, other.id)
     db.query(models.ModelRevision).filter_by(entry_id=other.id).delete(synchronize_session=False)
     db.delete(other)

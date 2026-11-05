@@ -46,6 +46,7 @@ export default function InlineText({ label, value, onSave, multiline = false, pl
     }
   }
   function onKeyDown(e) {
+    if (e.nativeEvent?.isComposing) return;   // 한글 조합 중의 Enter 는 입력기 몫
     if (e.key === 'Escape') { e.preventDefault(); setText(value || ''); setErr(''); stop(); }
     if (e.key === 'Enter' && (!multiline || e.ctrlKey)) { e.preventDefault(); commit(); }
   }

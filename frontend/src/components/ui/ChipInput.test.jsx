@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ChipInput from './ChipInput.jsx';
 
@@ -77,4 +77,16 @@ test('공백이 든 값(Engine Room)도 이미 고른 값으로 알아 후보에
   await userEvent.type(screen.getByRole('combobox', { name: '구역' }), 'e');
   await screen.findByRole('option', { name: 'Deck House' });
   expect(screen.queryByRole('option', { name: 'Engine Room' })).toBeNull();
+});
+
+test('한글 조합 중 Enter 는 칩을 더하지 않는다(입력기 몫)', async () => {
+  const onChange = vi.fn();
+  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) })));
+  render(<ChipInput label="태그" kind="free" values={[]} onChange={onChange} />);
+  const input = screen.getByRole('combobox', { name: '태그' });
+  fireEvent.change(input, { target: { value: '기관' } });
+  fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+  expect(onChange).not.toHaveBeenCalled();
+  fireEvent.keyDown(input, { key: 'Enter' });
+  expect(onChange).toHaveBeenLastCalledWith(['기관']);
 });

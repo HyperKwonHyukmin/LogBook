@@ -1,29 +1,23 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Activity, Anchor, ClipboardCheck, Grid2x2Check, History, Inbox, ListTree, ScanSearch, ScrollText, Search, Send, Star, Trash2, Users, Waypoints } from 'lucide-react';
+import { Anchor, Grid2x2Check, History, Inbox, ScanSearch, Search, Settings, Trash2 } from 'lucide-react';
 
-// 10 — 검색과 즐겨찾기는 같은 화면('/')이고 주소의 fav=1 로 갈린다
-const isFav = (search) => new URLSearchParams(search).get('fav') === '1';
 // 48 — 문서 본문 검색(/reports)·분류(/browse, 태그 동의어 /tags)는 검색 화면 안에서 들어가므로 '검색' 아래에서 강조한다
 const IN_SEARCH = ['/reports', '/browse', '/tags'];
 
-// 48 — 업무별 4묶음(찾기 9 → 6). 문서·분류·최근 비교는 메뉴에서 빼고 화면 안 단추로 옮겼다(옛 주소는 그대로 열린다).
+// 48 — 업무별 묶음(찾기 9 → 6). 문서·분류·최근 비교는 메뉴에서 빼고 화면 안 단추로 옮겼다(옛 주소는 그대로 열린다).
+// 2026-11-05 — 즐겨찾기는 검색 머리말의 '즐겨찾기만'(fav=1)으로, 갖춤 현황·관계 지도는 '살펴보기' 하나(위쪽 탭)로,
+// 한 항목뿐이던 '기록' 묶음은 '등록·정리' 로 합쳤다(메뉴 9 → 7).
 const GROUPS = [
   { label: '찾아 쓰기', items: [
     { to: '/', label: '검색', icon: Search,
-      match: (path, search) => (path === '/' && !isFav(search)) || IN_SEARCH.some((p) => path.startsWith(p)) },
-    { to: '/?fav=1', label: '즐겨찾기', icon: Star, match: (path, search) => path === '/' && isFav(search) },
+      match: (path) => path === '/' || IN_SEARCH.some((p) => path.startsWith(p)) },
     { to: '/hulls', label: '호선', icon: Anchor, also: ['/h/'] }, // 호선 화면(/h/9999)도 '호선' 메뉴 아래
     { to: '/similar', label: '선례 찾기', icon: ScanSearch }, // 27 — 기준 BDF 와 비슷한 확정 모델
-  ] },
-  { label: '살펴보기', items: [
-    { to: '/graph', label: '관계 지도', icon: Waypoints }, // 25 — 호선·구역과 모델 관계를 잇는 지도
-    { to: '/coverage', label: '갖춤 현황', icon: Grid2x2Check }, // 26 — 호선 × 구역 칸마다 갖춘 자료·빈 곳
+    { to: '/coverage', label: '살펴보기', icon: Grid2x2Check, also: ['/graph'] }, // 26 갖춤 현황 · 25 관계 지도
   ] },
   { label: '등록·정리', items: [
     { to: '/inbox', label: '정리 대기', icon: Inbox }, // 48 — 손볼 자료 탭 포함
     { to: '/trash', label: '휴지통', icon: Trash2 },
-  ] },
-  { label: '기록', items: [
     { to: '/log', label: '활동 로그', icon: History },
   ] },
 ];
@@ -77,14 +71,8 @@ export default function SideNav({ isAdmin, storage }) {
       {isAdmin && (
         <div className="mb-2 flex flex-col gap-0.5">
           <GroupLabel>관리</GroupLabel>
-          <Item to="/admin/users" label="사용자 관리" icon={Users} pathname={pathname} />
-          <Item to="/admin/ops" label="운영" icon={Activity} pathname={pathname} />
-          <Item to="/admin/vocab" label="분류 목록" icon={ListTree} pathname={pathname} />
-          <Item to="/admin/wb-targets" label="WorkBench 연결 규칙" icon={Send} pathname={pathname} />
-          {/* 20 — 기존 자료를 필수 분류·제목 형식에 맞추기 */}
-          <Item to="/admin/cleanup" label="자료 정비" icon={ClipboardCheck} pathname={pathname} />
-          {/* 46 — 업데이트 이력(앱 안 화면 — 사이드 메뉴가 그대로 남는다) */}
-          <Item to="/admin/updates" label="업데이트 이력" icon={ScrollText} pathname={pathname} />
+          {/* 2026-11-05 — 관리 6화면(사용자·운영·분류 목록·WorkBench 연결 규칙·자료 정비·업데이트 이력)은 위쪽 탭으로 */}
+          <Item to="/admin/users" label="관리" icon={Settings} also={['/admin/']} pathname={pathname} />
         </div>
       )}
       <div role="status" title={reachable ? '공유 폴더에 연결되어 있습니다' : '공유 폴더에 연결할 수 없습니다'}

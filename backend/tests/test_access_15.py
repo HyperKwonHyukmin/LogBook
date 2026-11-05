@@ -510,3 +510,15 @@ def test_rebuild_restores_levels_access_grants(world, db, storage):
     grants = {(eid, g) for g, eid in db.query(models.EntryGrant.employee_id, models.Entry.entry_id)
               .join(models.Entry, models.Entry.id == models.EntryGrant.entry_id)}
     assert grants == {(world["e"]["ng"], USERS["lv1"]), (world["e"]["bg"], USERS["lv2"])}
+
+
+def test_download_link_follows_workbench_change(world, client, auth_headers, wb):
+    """이미 낸 내려받기 링크도 WorkBench 관리자 해제·비활성을 바로 따른다(2026-11-05 검토 — 링크 TTL 동안 새지 않게)."""
+    h = auth_headers(USERS["wbadmin"])
+    fid = world["f"]["bl"]
+    url = client.post(f"/api/files/{fid}/link", headers=h).json()["url"]
+    wb(USERS["wbadmin"], name="WB 관리자", admin=False)      # 관리자 해제 → 블록 자료는 이제 못 본다
+    assert client.get(url).status_code == 404
+    url2 = client.post(f"/api/files/{world['f']['sh']}/link", headers=h).json()["url"]
+    wb(USERS["wbadmin"], name="WB 관리자", active=False)     # 비활성 → 공유 자료 링크도 끊긴다
+    assert client.get(url2).status_code in (401, 403)

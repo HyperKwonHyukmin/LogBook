@@ -50,6 +50,7 @@ export default function ModelPicker({ onPick, onClose, currentId }) {
   const usable = (it) => it.model_state === 'done' && it.entry_status === 'confirmed';
   function choose(it) { if (it && usable(it)) onPick(it.file_id); }
   function onKeyDown(e) {
+    if (e.nativeEvent?.isComposing) return;   // 한글 조합 중의 Enter 는 입력기 몫
     if (e.key === 'Escape') { e.preventDefault(); onClose?.(); return; }
     if (!items?.length) return;
     const step = { ArrowDown: 1, ArrowUp: -1 }[e.key];

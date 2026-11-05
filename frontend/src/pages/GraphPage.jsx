@@ -155,6 +155,7 @@ function FilterColumn({ model, pivot, onPivot, color, onColor, onGo, layer, onLa
     if (list.length) timer.current = setTimeout(() => onGo(list[0].id), 300);
   }
   function onKeyDown(e) {
+    if (e.nativeEvent?.isComposing) return;   // 한글 조합 중의 Enter 는 입력기 몫
     const { list } = hits.current;
     if (e.key !== 'Enter' || !list.length) return;
     e.preventDefault(); clearTimeout(timer.current);

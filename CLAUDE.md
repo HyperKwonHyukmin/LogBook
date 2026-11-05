@@ -15,6 +15,7 @@ Hi-TESS LogBook(구조해석 자료 창고). 무엇·어떻게 쓰는지는 `REA
 - **프런트를 고치면 `npm run build` 후 `frontend/dist` 도 커밋한다** — 145 에는 Node 가 없고 dist 를 그대로 쓴다.
 - **테스트 DB `logbook_test` 는 모든 세션이 같이 쓴다.** 다른 세션이 pytest 를 돌리는 중이면 기다린다(동시에 돌리면 잠겨서 멈춘다). 멈췄다고 중간에 끊으면 표 지우기가 반쯤 끝나 다음 실행이 `Can't DROP ...` 로 실패한다 → `SET FOREIGN_KEY_CHECKS=0` 후 `logbook_test` 의 표를 모두 DROP 하고 다시 돌린다(2026-10-19).
 - **작업 폴더도 여러 세션이 같이 쓴다** — 커밋할 때 `git add -A` 금지, 이 세션이 고친 파일만 골라 add 하고 커밋 전에 `git status` 로 확인한다(2026-10-19 다른 세션의 39 미커밋 작업이 섞여 푸시됨).
+- **사이드 메뉴를 늘리지 않는다** — 새 화면은 기존 메뉴 아래 위쪽 탭(`components/shell/SectionTabs.jsx`, 살펴보기·관리가 이 방식)이나 화면 안 단추로 넣는다. 메뉴는 7개 + 관리 1개(51, 2026-11-05).
 - 스키마를 바꾸는 테스트에는 `@pytest.mark.fresh_schema`(README '개발 PC' 끝).
 - 계획 문서는 `docs/plans/YYYY-MM-DD-logbook-NN-<주제>.md`, 번호는 `docs/plans/README.md` 표에 올린다. 다른 계획이 미리 잡아 둔 번호(예: 32 가 33·34 예약)는 건너뛴다.
 - **개발 이력(업데이트 이력)** = `backend/app/changelog/changelog.json`, 관리자가 관리 › 업데이트 이력(`/admin/updates`)에서 본다(46).

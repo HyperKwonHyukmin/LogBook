@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from .. import access, models
 from ..convert.job import SERVABLE_STATES, model_paths
 from ..database import get_db
-from ..dependencies import get_storage, require_auth
+from ..dependencies import _check_workbench, get_storage, require_auth
 from ..entries.locate import FileUnavailable, file_path
 from ..extract.xlsx import sheet_preview
 from ..solve.job import brief as solve_brief
@@ -87,6 +87,9 @@ def content(file_id: int, t: str = Query(default=""), inline: bool = False, db: 
         raise HTTPException(status_code=403, detail="link_invalid")
     # 13 — 링크를 만든 뒤 공개 범위·등급이 바뀌었을 수 있다: 링크 주인이 지금도 볼 수 있어야 한다
     owner = db.query(models.User).filter_by(employee_id=tok.employee_id, status="active").first()
+    if owner is not None:
+        # WorkBench 관리자 해제·비활성도 바로 따른다 — 일반 API(require_auth)와 같은 확인(2026-11-05 검토)
+        owner = _check_workbench(db, owner)
     f = _file(db, file_id, owner)
     path = _path(db, storage, f)
     name, ext, drm = f.name, f.ext, f.drm_encrypted
