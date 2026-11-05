@@ -14,8 +14,9 @@ import math
 
 from .model import Model
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2          # 2 = 3D 선분(segments3d) 추가 — 옛 요약은 lifting_refs 가 다시 만든다
 MAX_PLAN_SEGMENTS = 3000   # 평면 그림용 부재 선분 상한(긴 것부터)
+MAX_3D_SEGMENTS = 3000     # 3D 그림용 부재 선분 상한(긴 것부터, 공유 변은 한 번)
 
 
 def _r(v: float, nd: int = 1) -> float:
@@ -82,15 +83,22 @@ def wire_summary(m: Model) -> dict | None:
     # 구조 모델(wire·apex 제외) 경계상자와 평면 그림용 선분
     struct_nodes: set[int] = set()
     segments: list[tuple[float, list[float]]] = []
+    edges3d: dict[tuple[int, int], tuple[float, list[int]]] = {}   # 노드 쌍 → (길이, 선분) — 판끼리 공유하는 변은 한 번
     for e in (*m.beams, *m.tris, *m.quads):
         if e.eid in wire_eids:
             continue
-        pts = [m.nodes[n] for n in e.nodes if n in m.nodes]
-        struct_nodes.update(n for n in e.nodes if n in m.nodes)
-        for p, q in zip(pts, pts[1:] + pts[:1] if len(pts) > 2 else pts[1:]):
+        ids = [n for n in e.nodes if n in m.nodes]
+        pts = [m.nodes[n] for n in ids]
+        struct_nodes.update(ids)
+        pairs = list(zip(ids, ids[1:] + ids[:1] if len(ids) > 2 else ids[1:]))
+        for (na, nb), (p, q) in zip(pairs, zip(pts, pts[1:] + pts[:1] if len(pts) > 2 else pts[1:])):
             d = math.hypot(q[0] - p[0], q[1] - p[1])
             if d > 0:
                 segments.append((d, [round(p[0]), round(p[1]), round(q[0]), round(q[1])]))
+            key = (na, nb) if na < nb else (nb, na)
+            d3 = math.dist(p, q)
+            if d3 > 0 and key not in edges3d:
+                edges3d[key] = (d3, [round(p[0]), round(p[1]), round(p[2]), round(q[0]), round(q[1]), round(q[2])])
     for r in m.rigids:
         struct_nodes.update(n for n in (r.center, *r.others) if n in m.nodes)
     struct_nodes -= apexes
@@ -100,6 +108,8 @@ def wire_summary(m: Model) -> dict | None:
         bbox = {"min": [_r(min(xs)), _r(min(ys)), _r(min(zs))], "max": [_r(max(xs)), _r(max(ys)), _r(max(zs))]}
     segments.sort(key=lambda t: -t[0])
     plan = [s for _, s in segments[:MAX_PLAN_SEGMENTS]]
+    seg3 = sorted(edges3d.values(), key=lambda t: -t[0])
+    segments3d = [s for _, s in seg3[:MAX_3D_SEGMENTS]]
 
     return {
         "schemaVersion": SCHEMA_VERSION,
@@ -110,4 +120,6 @@ def wire_summary(m: Model) -> dict | None:
         "groups": out_groups,
         "planSegments": plan,
         "planSegmentsTruncated": len(segments) > MAX_PLAN_SEGMENTS,
+        "segments3d": segments3d,
+        "segments3dTruncated": len(seg3) > MAX_3D_SEGMENTS,
     }

@@ -105,3 +105,18 @@ def test_requires_secret_and_user(secret, client, world):
 
 def test_disabled_without_secret(no_secret, client, world):
     assert client.get(f"/api/integration/lifting-refs?as={LV2}", headers=H).status_code == 404
+
+
+def test_old_summary_is_rebuilt_and_list_hides_segments(secret, client, db, world):
+    # 3D 선분 이전(schemaVersion 1) 요약이 남아 있으면 상세 요청 때 다시 읽는다
+    fid = world["converted"][1].id
+    row = db.get(models.ModelSummary, fid)
+    row.wires = {"schemaVersion": 1, "groupCount": 2, "wireCount": 4, "groups": [], "planSegments": [], "bboxMm": None}
+    db.commit()
+    r = client.get(f"/api/integration/lifting-refs/{fid}?as={LV2}", headers=H)
+    s = r.json()["summary"]
+    assert s["schemaVersion"] == 2 and len(s["segments3d"]) == 4
+    db.expire_all()
+    assert db.get(models.ModelSummary, fid).wires["schemaVersion"] == 2
+    items = client.get(f"/api/integration/lifting-refs?as={LV2}", headers=H).json()["items"]
+    assert all("segments3d" not in i["summary"] and "planSegments" not in i["summary"] for i in items)

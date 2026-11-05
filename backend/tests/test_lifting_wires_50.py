@@ -79,3 +79,19 @@ def test_convert_deck_plain_has_no_wires(tmp_path):
     (tmp_path / "src" / "m.bdf").write_text(LIFTING.replace("HiTessWorkBench Lifting Analysis", "x"), encoding="utf-8")
     out = convert_deck(str(tmp_path / "src"), "m.bdf", str(tmp_path / "store"), 10 ** 7)
     assert out["status"] == "done" and out["lifting"] is False and out["wires"] is None
+
+
+def test_segments3d_keeps_height_and_vertical_edges():
+    # 판(CQUAD4) 하나를 세워 세로 변(평면 길이 0)이 생기게 한다 — 평면 선분에는 없고 3D 선분에는 있어야 한다
+    text = LIFTING.replace("$ HiTessWorkBench", "GRID,11,,0.,0.,3000.\nGRID,12,,10000.,0.,3000.\n"
+                           "CQUAD4,50,2,1,2,12,11\nPSHELL,2,1,10.\n$ HiTessWorkBench")
+    s = wire_summary(_model(text))
+    assert s["schemaVersion"] == 2
+    seg = s["segments3d"]
+    assert [0, 0, 0, 0, 0, 3000] in seg or [0, 0, 3000, 0, 0, 0] in seg      # 세로 변
+    assert not any(p[:2] == p[3:5] for p in s["planSegments"] if len(p) == 6)
+    # 보 1-2 와 판의 아래 변 1-2 는 같은 변 — 한 번만
+    assert sum(1 for p in seg if sorted([tuple(p[:3]), tuple(p[3:])]) == [(0, 0, 0), (10000, 0, 0)]) == 1
+    # Wire(CROD → apex)는 구조 선분에 넣지 않는다
+    assert not any(6000 in (p[2], p[5]) for p in seg)
+    assert not s["segments3dTruncated"]
