@@ -190,7 +190,7 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
     from_wb = batch.wb_analysis_id is not None
     preset = batch.preset if isinstance(batch.preset, dict) and batch.target_entry_id is None else None
     for p in propose(infos, known, single=from_wb, hints=_wb_hints(batch) if from_wb else None,
-                     split_top=bool(batch.split_top)):
+                     split_top=bool(batch.split_top), whole=bool(batch.whole)):
         # 20 — 호선을 알면 제목 초안을 형식(`3496 · 구별자`)으로, 모르면 예전처럼 폴더/파일 이름. 구역·대상은
         # 사람이 정리 대기에서 고르고, 그때 (사람이 제목을 고치지 않았으면) 제목도 따라 바뀐다
         title = naming.title_draft(p.source, hulls=[p.best_hull] if p.best_hull else []) if p.best_hull else p.title

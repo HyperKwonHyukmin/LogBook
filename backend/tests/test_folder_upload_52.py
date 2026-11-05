@@ -161,3 +161,36 @@ def test_blocked_models_follow_project_folder_when_split(db):
     db.commit()
     got = [len(entry_service.blocked_models(db, e, fs, None)) for e, fs in drafts]
     assert got == [1, 0]
+
+
+DIFF_HULLS = [
+    "과제/3185_Passageway/doc/report.pdf",
+    "과제/3185_Passageway/fe/a.bdf",
+    "과제/3402_Manifold/fe/b.bdf",
+]
+
+
+def test_without_whole_subfolders_with_different_hulls_split():
+    """예전 자동 규칙 — 하위 폴더 호선이 둘 이상 다르면 나눈다(사용자가 '전체 1건' 을 골랐는데 쪼개진 원인)."""
+    assert len(propose(_infos(DIFF_HULLS), {"3185", "3402"})) == 2
+
+
+def test_whole_keeps_one_draft_even_with_different_hulls():
+    [p] = propose(_infos(DIFF_HULLS), {"3185", "3402"}, whole=True)
+    assert (p.title, len(p.file_keys)) == ("과제", 3)
+
+
+def test_begin_stores_whole_and_process_makes_one_draft(client, db, storage, make_user, auth_headers):
+    make_user("A100001")
+    r = client.post("/api/uploads", headers=auth_headers("A100001"), json={"name": "과제", "whole": True})
+    assert r.status_code == 201, r.text
+    db.expire_all()
+    b = db.query(models.Batch).filter_by(key=r.json()["key"]).one()
+    assert b.whole is True and b.split_top is False
+    b.state = "staged"
+    db.commit()
+    for i, rel in enumerate(DIFF_HULLS):
+        _write(storage.staging / b.key / rel, f"GRID {i}".encode())
+    process_batch(db, storage, b)
+    db.expire_all()
+    assert db.query(models.Entry).filter_by(batch_id=b.id).count() == 1

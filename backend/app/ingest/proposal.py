@@ -88,12 +88,17 @@ def _split_top(files: list[FileInfo], known: set[str]) -> list[Proposal]:
 
 
 def propose(files: list[FileInfo], known: set[str], *, single: bool = False,
-            hints: list[str] | None = None, split_top: bool = False) -> list[Proposal]:
+            hints: list[str] | None = None, split_top: bool = False, whole: bool = False) -> list[Proposal]:
     """single — 49: 묶음 전체를 초안 하나로(WorkBench 해석 1건 = 자료 1건, 부모·세부 검토 작업 폴더가 갈라져 와도).
     제목 원천은 작업 폴더 이름(날짜_사번_프로그램)이 아니라 대표 BDF 이름. hints = 호선을 먼저 찾아볼 글(묶음 이름·메모).
-    split_top — 52: 폴더째 올리기에서 사람이 고른 '과제 폴더마다 자료 1건'."""
+    split_top — 52: 폴더째 올리기에서 사람이 고른 '과제 폴더마다 자료 1건'.
+    whole — 52: 사람이 고른 '폴더 전체를 자료 1건' — 하위 폴더 호선이 달라도 나누지 않는다(제목 원천은 고른 폴더 이름)."""
     if split_top and not single and files:
         return _split_top(files, known)
+    if whole and not single and files:
+        tops = {PurePosixPath(f.rel_path).parts[0] for f in files if len(PurePosixPath(f.rel_path).parts) > 1}
+        nested = all(len(PurePosixPath(f.rel_path).parts) > 1 for f in files)
+        return [_make(next(iter(tops)) if len(tops) == 1 and nested else LOOSE, files, known)]
     top: dict[str, list[FileInfo]] = {}
     for f in files:
         parts = PurePosixPath(f.rel_path).parts

@@ -63,7 +63,7 @@ def clean_preset(db: Session, user: models.User, preset: dict | None) -> dict | 
 
 def begin(db: Session, storage: StoragePaths, user: models.User, *, name: str,
           target_entry_id: str | None, target_status: str | None = None,
-          preset: dict | None = None, split_top: bool = False) -> models.Batch:
+          preset: dict | None = None, split_top: bool = False, whole: bool = False) -> models.Batch:
     if not storage.check_reachable():
         raise HTTPException(status_code=503, detail="storage_unreachable")
     target = None
@@ -83,7 +83,8 @@ def begin(db: Session, storage: StoragePaths, user: models.User, *, name: str,
                          target_entry_id=target.id if target else None,
                          # 52 — 기존 자료에 파일 추가는 그 자료의 분류를 따르므로 공통 분류·나누기를 쓰지 않는다
                          preset=None if target else clean_preset(db, user, preset),
-                         split_top=bool(split_top) and target is None)
+                         split_top=bool(split_top) and target is None,
+                         whole=bool(whole) and not split_top and target is None)
     db.add(batch)
     db.commit()
     return batch

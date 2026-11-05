@@ -80,6 +80,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("wb_target_rules", "targets", "JSON NULL"),   # 40 — WorkBench 보내기 규칙의 대상
     ("batches", "preset", "JSON NULL"),                                  # 52 — 폴더째 올리기 공통 분류
     ("batches", "split_top", "TINYINT(1) NOT NULL DEFAULT 0"),           # 52 — 과제 폴더마다 초안 1건
+    ("batches", "whole", "TINYINT(1) NOT NULL DEFAULT 0"),               # 52 — 폴더 전체를 초안 1건
     ("entries", "conclusion", "VARCHAR(300) NULL"),   # 53 — 결론 한 줄·주의점·검토 서명
     ("entries", "caveats", "TEXT NULL"),
     ("entries", "reviewed_by", "VARCHAR(20) NULL"),

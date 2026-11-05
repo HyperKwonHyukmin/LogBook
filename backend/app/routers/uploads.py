@@ -20,6 +20,7 @@ class BeginBody(BaseModel):
     # 52 — 폴더째 올리기: 모든 초안에 넣을 공통 분류 {zones, target, assignees: [{id}|{employee_id}]}, 과제 폴더마다 1건
     preset: dict | None = None
     split_top: bool = False
+    whole: bool = False   # '폴더 전체를 자료 1건' — 하위 폴더 호선이 달라도 나누지 않는다
 
 
 class DeclaredFile(BaseModel):
@@ -43,7 +44,8 @@ class FinishBody(BaseModel):
 def begin(body: BeginBody, db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage),
           user: models.User = Depends(require_writer)):
     b = service.begin(db, storage, user, name=body.name, target_entry_id=body.target_entry_id,
-                      target_status=body.target_status, preset=body.preset, split_top=body.split_top)
+                      target_status=body.target_status, preset=body.preset, split_top=body.split_top,
+                      whole=body.whole)
     return {"key": b.key, "state": b.state}
 
 

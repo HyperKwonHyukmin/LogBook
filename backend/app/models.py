@@ -274,6 +274,8 @@ class Batch(Base):
     # split_top = 고른 폴더 바로 아래 폴더(과제 폴더)마다 초안 1건
     preset = Column(JSON, nullable=True)
     split_top = Column(Boolean, nullable=False, default=False, server_default="0")
+    # 52 — 사람이 '폴더 전체를 자료 1건' 을 골랐다: 하위 폴더 호선이 달라도 나누지 않는다(예전 자동 나누기를 끈다)
+    whole = Column(Boolean, nullable=False, default=False, server_default="0")
     error = Column(Text, nullable=True)
     # 17 — LV3 가 '그래도 올리기' 로 올린 배치: 워커 처리·확정 재검사가 완전 동일 BDF 를 막지 않는다
     allow_duplicates = Column(Boolean, nullable=False, default=False, server_default="0")

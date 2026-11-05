@@ -76,6 +76,8 @@ describe('GlobalDrop', () => {
     fireEvent.click(within(dlg).getByRole('button', { name: /올리기 \(1개\)/ }));
     await vi.waitFor(() => expect(uploadBatch).toHaveBeenCalledTimes(1));
     expect(uploadBatch.mock.calls[0][0].map((i) => i.relPath)).toEqual(['closed_chock/a.bdf']);
+    // 기본은 '폴더 전체를 자료 1건' — 서버가 하위 폴더 호선으로 나누지 않게 분명히 보낸다
+    expect(uploadBatch.mock.calls[0][1]).toMatchObject({ whole: true, splitTop: false });
   });
 
   it('52 — 올리는 중에는 화면 가운데 카드에 몇 % 인지 크게 보인다', async () => {

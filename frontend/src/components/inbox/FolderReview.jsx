@@ -33,7 +33,8 @@ export function FolderReviewHost({ children }) {
   function submit({ relPaths, preset, splitTop }) {
     const { items, send, attach } = folder;
     setFolder(null);
-    send(items.filter((it) => relPaths.has(it.relPath)), attach ? {} : { preset, splitTop });
+    // 나누기를 고르지 않았으면 '폴더 전체를 자료 1건' 을 서버에 분명히 알린다(안 알리면 하위 폴더 호선이 다를 때 서버가 나눈다)
+    send(items.filter((it) => relPaths.has(it.relPath)), attach ? {} : { preset, splitTop, whole: !splitTop });
   }
 
   return (

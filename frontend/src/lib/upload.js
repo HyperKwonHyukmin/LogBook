@@ -239,7 +239,7 @@ const detailCode = (err) => (typeof err?.detail === 'string' ? err.detail : err?
  */
 export async function uploadBatch(items, {
   onProgress = () => {}, onPhase = () => {}, chunkSize = CHUNK_SIZE, targetEntryId, targetEntryStatus,
-  sleep = defaultSleep, force = false, signal, parallel = SMALL_PARALLEL, preset = null, splitTop = false,
+  sleep = defaultSleep, force = false, signal, parallel = SMALL_PARALLEL, preset = null, splitTop = false, whole = false,
 } = {}) {
   const { good, rejected, skipped } = await scanItems(items, {
     signal, onScan: (checked) => onPhase({ phase: 'checking', checked, total: items.length }),
@@ -252,7 +252,7 @@ export async function uploadBatch(items, {
   const { key } = await withRetry(() => api('/uploads', { method: 'POST', signal, body: {
     name: batchName(items), target_entry_id: targetEntryId || null,
     ...(targetEntryStatus ? { target_status: targetEntryStatus } : {}),
-    ...(preset ? { preset } : {}), ...(splitTop ? { split_top: true } : {}) } }), { sleep, signal });
+    ...(preset ? { preset } : {}), ...(splitTop ? { split_top: true } : {}), ...(whole ? { whole: true } : {}) } }), { sleep, signal });
   const session = {
     key,
     items: good,
