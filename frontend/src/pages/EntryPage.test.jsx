@@ -490,3 +490,25 @@ test('모델이 둘 이상이면 판 흐름이 보이고, 판 정리 중에는 [
   await userEvent.click(screen.getByRole('button', { name: '판 정리' }));
   expect(screen.getByRole('button', { name: '변경하기' })).toBeDisabled();
 });
+
+test('53 — 결론·주의점이 머리에 보이고, 다른 사람은 검토 서명을 남긴다', async () => {
+  const withConclusion = { ...ENTRY, conclusion: '선미 계류 하중으로 모델이 수렴', caveats: 'Lug 는 강체로 단순화',
+    review: null, can_review: true, can_unreview: false };
+  const fetch = renderPage({
+    'GET /api/entries/E000001': withConclusion,
+    'POST /api/entries/E000001/review': { ...withConclusion, version: 4, can_review: false, can_unreview: true,
+      review: { by: 'A100009', name: '다른 사람', at: '2026-11-05T10:00:00' } },
+  });
+  expect(await screen.findByText('선미 계류 하중으로 모델이 수렴')).toBeInTheDocument();
+  expect(screen.getByText('Lug 는 강체로 단순화')).toBeInTheDocument();
+  expect(screen.getByText('검토 전')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '검토 서명' }));
+  await waitFor(() => expect(calls(fetch).some((c) => c.startsWith('POST /api/entries/E000001/review'))).toBe(true));
+  expect(document.body.textContent).not.toContain('설명 없음');   // 빈 설명 자리 문구는 없앴다
+});
+
+test('53 — 결론이 없으면 서명 단추 대신 안내', async () => {
+  renderPage({ 'GET /api/entries/E000001': { ...ENTRY, conclusion: null, review: null, can_review: true } });
+  expect(await screen.findByText('결론이 적히면 서명할 수 있습니다')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '검토 서명' })).toBeNull();
+});

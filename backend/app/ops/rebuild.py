@@ -164,6 +164,10 @@ def _restore_entry(db: Session, storage: StoragePaths, data: dict, *, status: st
     e = models.Entry(access=acc,
         id=int(entry_id[1:]), entry_id=entry_id, title=(data.get("title") or "")[:200],
         description=data.get("description"),   # 42 — 옛 entry.json 의 analysis_type 은 읽지 않는다
+        # 53 — 결론·주의점·검토 서명(없으면 NULL — 53 이전 entry.json)
+        conclusion=(str(data["conclusion"])[:300] if data.get("conclusion") else None),
+        caveats=data.get("caveats") or None,
+        reviewed_by=data.get("reviewed_by") or None, reviewed_at=_dt(data.get("reviewed_at")),
         # 15 — 해석 시기는 화면에서 뺐지만 옛 entry.json 에 있으면 열에 그대로 둔다(값 보존)
         analysis_period=data.get("analysis_period"), status=status, batch_id=batch.id,
         uploaded_by=data.get("uploaded_by"), confirmed_by=data.get("confirmed_by"),

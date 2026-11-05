@@ -27,6 +27,8 @@ class EntryPatch(BaseModel):
     version: int
     title: str | None = Field(default=None, max_length=200)
     description: str | None = None
+    conclusion: str | None = Field(default=None, max_length=300)   # 53 — 결론 한 줄
+    caveats: str | None = Field(default=None, max_length=5000)     # 53 — 주의점
     hulls: list[str] | None = None
     zones: list[str] | None = None
     target: str | None = Field(default=None, max_length=100)   # 38 — 대상 구조물(빈 값 = 지움)
@@ -109,6 +111,22 @@ def patch_entry(entry_id: str, body: EntryPatch, request: Request, db: Session =
                 storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
     e = service.update_entry(db, storage, _entry(db, entry_id, user), user, body.model_dump(exclude_unset=True),
                              client_ip(request))
+    return _detail(db, storage, e, user)
+
+
+@router.post("/entries/{entry_id}/review")
+def review_entry(entry_id: str, request: Request, db: Session = Depends(get_db),
+                 storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    """53 — 검토 서명(확정 자료, LV2 이상, 작성자 본인 제외, 결론이 있어야). 감사 ENTRY_REVIEW."""
+    e = service.review(db, storage, _entry(db, entry_id, user), user, client_ip(request))
+    return _detail(db, storage, e, user)
+
+
+@router.delete("/entries/{entry_id}/review")
+def unreview_entry(entry_id: str, request: Request, db: Session = Depends(get_db),
+                   storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    """53 — 서명 취소(서명한 사람·LV3). 감사 ENTRY_REVIEW_CANCEL."""
+    e = service.unreview(db, storage, _entry(db, entry_id, user), user, client_ip(request))
     return _detail(db, storage, e, user)
 
 

@@ -228,6 +228,12 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry, b
     from .. import people
     if d["assignees"]:
         meta["assignees"] = people.export(d["assignees"])
+    # 53 — 결론·주의점·검토 서명(재구축 원천, 있을 때만)
+    for k in ("conclusion", "caveats"):
+        if d[k]:
+            meta[k] = d[k]
+    if d["review"]:
+        meta["reviewed_by"], meta["reviewed_at"] = d["review"]["by"], d["review"]["at"]
     # 21 — 프로젝트(자료의 소속, 있을 때만)
     meta["files"] = [{k: f[k] for k in ("rel_path", "kind", "size", "sha256")} for f in d["files"]]
     # 14 — 사용자가 정리한 판 배치(재구축 원천). 정리한 것이 없으면 쓰지 않는다(자동 추정은 다시 계산된다)
@@ -244,7 +250,9 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry, b
     os.makedirs(to_long(base), exist_ok=True)
     write_text_atomic(base / "entry.json", json.dumps(meta, ensure_ascii=False, indent=2))
     hulls = ", ".join(h["hull_no"] + (f" ({h['ship_type']})" if h["ship_type"] else "") for h in d["hulls"])
-    info = (f"{d['entry_id']}  {d['title']}\n호선: {hulls or ('공용' if d['no_hull'] else '-')}\n"
+    info = (f"{d['entry_id']}  {d['title']}\n"
+            + (f"결론: {d['conclusion']}\n" if d["conclusion"] else "")   # 53
+            + f"호선: {hulls or ('공용' if d['no_hull'] else '-')}\n"
             + f"구역: {', '.join(d['zones']) or '-'}\n"
             + (f"대상: {d['target']}\n" if d["target"] else "")
             + f"태그: {', '.join(d['tags']) or '-'}\n"

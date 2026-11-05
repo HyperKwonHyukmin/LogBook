@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import Highlight, { TermHighlight } from '../ui/Highlight.jsx';
 import KindBadge from '../ui/KindBadge.jsx';
-import { BarChart3, Box, File, FileText, PenTool } from 'lucide-react';
+import { BarChart3, Box, Check, File, FileText, PenTool } from 'lucide-react';
 import { DraftBadge, FilterLink, HullChip, TagLink } from '../ui/Status.jsx';
 import { KIND_LABELS, formatDateTime } from '../../lib/labels.js';
 import { filterValues, locatorLabel } from '../../lib/search.js';
@@ -100,7 +100,17 @@ function EntryRow({ item, on, terms, filters }) {
           <AccessBadge item={item} />
           {/* 20 — 확정 BDF 자료의 빠진 필수 분류(올린 사람·LV3 에게만 실린다) */}
           <NeedsFixBadge missing={item.needs_fix} />
+          {/* 53 — 다른 사람이 결론을 보고 서명한 자료(글자 + 아이콘, 색만으로 알리지 않는다) */}
+          {item.reviewed && (
+            <span title="검토 서명이 있는 자료" className="inline-flex shrink-0 items-center gap-0.5 text-meta text-ok">
+              <Check size={12} aria-hidden="true" />검토됨
+            </span>
+          )}
         </div>
+        {/* 53 — 결론 한 줄(자료가 알려 주는 것) */}
+        {item.conclusion && (
+          <p className="mt-1 line-clamp-1 text-ui text-n-800"><TermHighlight text={item.conclusion} terms={terms} /></p>
+        )}
         {(hulls.length > 0 || meta.length > 0 || shared) && (
           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-meta text-n-600">
             <Hulls hulls={hulls} />

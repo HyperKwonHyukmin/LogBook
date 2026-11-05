@@ -4,7 +4,7 @@ const E = { title: '제목', description: null, hulls: [{ hull_no: '9001' }, { h
   analysis_type: 'FE 해석', analysis_period: '2025-11', tags: [], version: 3, files: [] };   // 해석 시기(15)·해석 종류(42)는 쓰지 않는다
 
 test('서버 값 → 고칠 값', () => {
-  expect(editValues(E)).toEqual({ title: '제목', description: '', hulls: ['9001', '9002'], no_hull: false, zones: ['선미부'],
+  expect(editValues(E)).toEqual({ title: '제목', conclusion: '', description: '', caveats: '', hulls: ['9001', '9002'], no_hull: false, zones: ['선미부'],
     target: '', tags: [], assignees: [] });
 });
 
@@ -58,4 +58,10 @@ test('20 — 필수 분류(BDF 자료만, 서버 규칙과 같다) — 43 부터
   expect(missingRequired(v, false)).toEqual([]);
   expect(hasBdf({ files: [{ kind: 'report' }, { kind: 'model', location: 'trash' }] })).toBe(false);
   expect(hasBdf({ files: [{ kind: 'model', location: 'vault' }] })).toBe(true);
+});
+
+test('53 — 결론·주의점: 바뀐 칸만, 빈 글자는 null', () => {
+  const base = editValues({ ...E, conclusion: '수렴', caveats: '' });
+  expect(changedFields(base, { ...base, conclusion: '수렴 ' })).toEqual([]);
+  expect(patchBody(base, { ...base, conclusion: '', caveats: ' 강체 단순화 ' })).toEqual({ conclusion: null, caveats: '강체 단순화' });
 });

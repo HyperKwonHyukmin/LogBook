@@ -38,9 +38,9 @@ const hullRule = (v) => /^\d{4}$/.test(v) || '호선은 숫자 4자리입니다.
 // 15 — 해석 시기는 없앴다
 // 20 — '호선 없음(공용)'(no_hull). 29 — 프로젝트(21)는 없앴다. 42 — 해석 종류는 없앴다
 // 46 — 담당자(과제를 한 사람, 올린 사람과 따로)
-const CARD_FIELDS = ['title', 'hulls', 'no_hull', 'zones', 'target', 'description', 'assignees'];
+const CARD_FIELDS = ['title', 'hulls', 'no_hull', 'zones', 'target', 'conclusion', 'description', 'assignees'];   // 53 — 결론
 const FIELD_LABELS = { title: '제목', hulls: '호선', no_hull: '호선 없음(공용)', zones: '구역',
-  target: '대상', description: '설명', assignees: '담당자' };
+  target: '대상', conclusion: '결론', description: '설명', assignees: '담당자' };
 // 20 — 바뀌면 (사람이 고치지 않은) 초안 제목이 따라 바뀌는 칸(서버 update_entry 의 TITLE_VALUE_FIELDS 와 같다)
 const TITLE_VALUE_FIELDS = ['hulls', 'no_hull', 'zones', 'target'];
 /** 서버 쪽 내용이 실제로 바뀌었을 때만 달라지는 열쇠 — 폴링으로 같은 내용의 새 객체가 와도 입력을 지우지 않는다. */
@@ -373,6 +373,12 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
           <VocabInput kind="target" label="대상" value={values.target || null} disabled={fieldDisabled}
                       onChange={(v) => set('target')(v || '')} />
         </div>
+        {/* 53 — 결론 한 줄(선택). 확정 뒤 검색 결과 행에 보이고 검색 가산점이 제목 다음이다 */}
+        <Labeled label={<>결론 <span className="font-normal text-n-500">(선택 · 무엇을 확인했나 한 줄)</span>{mark('conclusion')}</>}>
+          <input aria-label="결론" className={inputClass()} value={values.conclusion} disabled={fieldDisabled} maxLength={300}
+                 placeholder="예: 선미 계류 하중 조건으로 모델이 수렴함을 확인"
+                 onChange={(e) => set('conclusion')(e.target.value)} />
+        </Labeled>
         <Labeled label={<>설명{mark('description')}</>}>
           <input aria-label="설명" className={inputClass()} value={values.description} disabled={fieldDisabled}
                  onChange={(e) => set('description')(e.target.value)} />

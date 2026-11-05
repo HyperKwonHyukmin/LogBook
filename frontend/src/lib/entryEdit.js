@@ -7,7 +7,8 @@
 // 29 — 프로젝트(21)는 없앴다
 // 38 — 대상 구조물(target, 하나·선택). 42 — 해석 종류(analysis_type)는 없앴다
 // 46 — 담당자(assignees, 명부 사람 목록 — 순서대로, 첫 사람이 주 담당자)
-export const EDIT_FIELDS = ['title', 'description', 'hulls', 'no_hull', 'zones', 'target', 'tags', 'assignees'];
+// 53 — 결론 한 줄(conclusion)·주의점(caveats)
+export const EDIT_FIELDS = ['title', 'conclusion', 'description', 'caveats', 'hulls', 'no_hull', 'zones', 'target', 'tags', 'assignees'];
 const LIST_FIELDS = new Set(['hulls', 'zones', 'tags']);
 const BOOL_FIELDS = new Set(['no_hull']);
 const PEOPLE_FIELDS = new Set(['assignees']);
@@ -19,7 +20,9 @@ export const personKey = (p) => (p?.id ? `p${p.id}` : `wb:${p?.employee_id}`);
 export function editValues(entry) {
   return {
     title: entry?.title || '',
+    conclusion: entry?.conclusion || '',
     description: entry?.description || '',
+    caveats: entry?.caveats || '',
     hulls: (entry?.hulls || []).map((h) => (typeof h === 'string' ? h : h.hull_no)),
     no_hull: !!entry?.no_hull,
     zones: [...(entry?.zones || [])],

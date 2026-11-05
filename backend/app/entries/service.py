@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 HULL_PATTERN = re.compile(r"^[0-9]{4}$")
 # 15 — 해석 시기(analysis_period), 42 — 해석 종류(analysis_type)는 뺐다(열은 남지만 받지도 보이지도 않는다)
-EDITABLE_FIELDS = ("title", "description")
+EDITABLE_FIELDS = ("title", "description", "conclusion", "caveats")   # 53 — 결론·주의점
+REVIEWED_FIELDS = ("conclusion", "caveats")   # 53 — 바뀌면 검토 서명이 풀린다
 
 
 def hulls_of(db: Session, entry: models.Entry) -> list[models.EntryHull]:
@@ -109,6 +110,15 @@ def grants_of(db: Session, entry: models.Entry) -> list[dict]:
     return out
 
 
+def review_of(db: Session, entry: models.Entry) -> dict | None:
+    """53 — 검토 서명 {by, name, at}(없으면 None). 이름은 LogBook 사용자 표에서."""
+    if not entry.reviewed_by:
+        return None
+    name = db.query(models.User.name).filter_by(employee_id=entry.reviewed_by).scalar()
+    return {"by": entry.reviewed_by, "name": name,
+            "at": entry.reviewed_at.isoformat() if entry.reviewed_at else None}
+
+
 def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
     """Entry 사전. viewer(요청한 사용자)를 주면 그가 볼 수 없는 다른 Entry 참조(바이트 동일 파일의 소속·
     같은 BDF·합치기 제안)를 숨기고, 공개 범위를 바꿀 수 있으면 열람 허락 목록을 싣는다(13).
@@ -142,6 +152,8 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
     d = {
         "id": entry.id, "entry_id": entry.entry_id, "status": entry.status, "title": entry.title,
         "description": entry.description, "version": entry.version,
+        "conclusion": entry.conclusion, "caveats": entry.caveats,   # 53
+        "review": review_of(db, entry),
         "hulls": [{"hull_no": h.hull_no, "ship_type": ship.get(h.hull_no), "is_primary": bool(h.is_primary)}
                   for h in hulls],
         "no_hull": bool(entry.no_hull),
@@ -180,6 +192,8 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
         if not merge_into:
             d["merge_into_id"] = None
         d["can_edit"] = access.can_edit_entry(viewer, entry)
+        d["can_review"] = access.can_review(viewer, entry) and not entry.reviewed_by   # 53
+        d["can_unreview"] = access.can_unreview(viewer, entry)
         # 49 — Module Unit 권상 자료면 Wire 모델이 있는지(없으면 화면이 올려 달라고 요청한다)
         d["lifting"] = lifting.brief(db, target, files, model_rows)
         # 49 — WorkBench 에서 실행한 사람(담당자와 따로)
@@ -241,7 +255,9 @@ def snapshot(db: Session, entry: models.Entry) -> dict:
     return {k: d[k] for k in ("title", "description", "zones", "tags")} | {
         "hulls": [h["hull_no"] for h in d["hulls"]]} | ({"no_hull": True} if d["no_hull"] else {}) | (
         {"target": d["target"]} if d["target"] else {}) | (   # 38 — 값이 있을 때만(no_hull 과 같은 방식)
-        {"assignees": [people.label(p) for p in d["assignees"]]} if d["assignees"] else {})   # 46
+        {"assignees": [people.label(p) for p in d["assignees"]]} if d["assignees"] else {}) | {   # 46
+        k: d[k] for k in REVIEWED_FIELDS if d[k]} | (   # 53 — 결론·주의점·검토자(값이 있을 때만)
+        {"reviewed_by": d["review"]["name"] or d["review"]["by"]} if d["review"] else {})
 
 
 def can_edit_draft(user: models.User, entry: models.Entry) -> bool:
@@ -366,10 +382,20 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
         patch = {**patch, "target": vocab.normalize_input(
             db, "target", patch["target"], current=target_of(db, entry), admin=admin)}
     before = snapshot(db, entry) if entry.status == "confirmed" else None
+    reviewed_before = tuple(getattr(entry, k) for k in REVIEWED_FIELDS)
     for field_name in EDITABLE_FIELDS:
         if field_name in patch:
             value = patch[field_name]
-            setattr(entry, field_name, (value or "").strip() if field_name == "title" else (value or None))
+            if field_name == "title":
+                value = (value or "").strip()
+            elif field_name in REVIEWED_FIELDS:
+                value = (value or "").strip() or None
+            else:
+                value = value or None
+            setattr(entry, field_name, value)
+    # 53 — 서명은 그 내용에 대한 것: 결론·주의점이 바뀌면 풀린다(이력에는 같은 ENTRY_UPDATE 의 '검토자' 칸으로 남는다)
+    if entry.reviewed_by and tuple(getattr(entry, k) for k in REVIEWED_FIELDS) != reviewed_before:
+        entry.reviewed_by = entry.reviewed_at = None
     if "hulls" in patch:
         set_hulls(db, entry, patch["hulls"] or [])
         if patch["hulls"]:
@@ -418,6 +444,48 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
         _write_meta_or_queue(db, storage, entry)
     else:
         db.commit()
+    return entry
+
+
+def review(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User,
+           ip: str | None = None) -> models.Entry:
+    """53 — 검토 서명. 확정 자료·LV2 이상·작성자 본인 아님·결론이 있어야 한다. 감사 ENTRY_REVIEW."""
+    entry = _lock(db, entry)
+    if entry.status != "confirmed":
+        raise HTTPException(status_code=409, detail="not_confirmed")
+    if access.is_uploader(user, entry):
+        raise HTTPException(status_code=403, detail="own_entry")
+    access.require_shared_writer(user)
+    if not (entry.conclusion or "").strip():
+        raise HTTPException(status_code=422, detail="conclusion_required")
+    if entry.reviewed_by:
+        raise HTTPException(status_code=409, detail="already_reviewed")
+    entry.reviewed_by, entry.reviewed_at = user.employee_id, _now()
+    entry.version += 1
+    db.flush()
+    audit.record(db, storage, actor=user.employee_id, action="ENTRY_REVIEW", target_type="entry",
+                 target_id=entry.entry_id, after={"conclusion": entry.conclusion}, ip=ip)
+    db.commit()
+    _write_meta_or_queue(db, storage, entry)
+    return entry
+
+
+def unreview(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User,
+             ip: str | None = None) -> models.Entry:
+    """53 — 서명 취소(서명한 사람·LV3). 감사 ENTRY_REVIEW_CANCEL."""
+    entry = _lock(db, entry)
+    if not entry.reviewed_by:
+        return entry
+    if not access.can_unreview(user, entry):
+        raise HTTPException(status_code=403, detail="not_reviewer")
+    by = entry.reviewed_by
+    entry.reviewed_by = entry.reviewed_at = None
+    entry.version += 1
+    db.flush()
+    audit.record(db, storage, actor=user.employee_id, action="ENTRY_REVIEW_CANCEL", target_type="entry",
+                 target_id=entry.entry_id, before={"reviewed_by": by}, ip=ip)
+    db.commit()
+    _write_meta_or_queue(db, storage, entry)
     return entry
 
 
@@ -891,8 +959,9 @@ def _carry_meta(db: Session, src: models.Entry, dst: models.Entry) -> None:
         extra = [v for v in tags_of(db, src, kind) if v not in have]
         if extra:
             set_tags(db, dst, kind, have + extra)
-    if not (dst.description or "").strip() and (src.description or "").strip():
-        dst.description = src.description
+    for field_name in ("description",) + REVIEWED_FIELDS:   # 53 — 결론·주의점도 설명과 같이(서명은 옮기지 않는다)
+        if not (getattr(dst, field_name) or "").strip() and (getattr(src, field_name) or "").strip():
+            setattr(dst, field_name, getattr(src, field_name))
     have_grants = {g for (g,) in db.query(models.EntryGrant.employee_id).filter_by(entry_id=dst.id)}
     for g in db.query(models.EntryGrant).filter_by(entry_id=src.id):
         if g.employee_id not in have_grants:

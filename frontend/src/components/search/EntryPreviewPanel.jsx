@@ -62,7 +62,12 @@ export default function EntryPreviewPanel({ entryId, fileId, onClose, width, pan
           <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-meta text-n-500">
             {entry.confirmed_at && <span className="tnum">확정 <span className="font-mono">{formatDateTime(entry.confirmed_at).slice(0, 10)}</span></span>}
             {entry.tags?.map((t) => <TagLink key={t} tag={t} small />)}
+            {entry.review && <span className="text-ok" title={`검토 ${formatDateTime(entry.review.at)}`}>검토 {entry.review.name || entry.review.by}</span>}
           </div>
+        )}
+        {/* 53 — 결론 한 줄 */}
+        {entry?.conclusion && (
+          <p className="mt-2 text-ui text-n-800"><span className="mr-1.5 text-meta font-medium text-n-500">결론</span>{entry.conclusion}</p>
         )}
         {/* 14 — 판 묶음 한 줄(자세한 흐름·비교는 상세에서) */}
         {entry && <RevisionBrief brief={briefFromSeries(entry.revisions)} />}

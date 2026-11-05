@@ -138,6 +138,12 @@ class Entry(Base):
     title = Column(String(200), nullable=False, default="")
     analysis_type = Column(String(50), nullable=True)   # 42 — 해석 종류는 없앴다(열만 남고 읽지 않는다)
     description = Column(Text, nullable=True)
+    # 53 — 사람이 남기는 지식: 결론 한 줄(무엇을 확인했고 무엇을 알게 됐나)·주의점(다시 쓸 때 조심할 것)·검토 서명.
+    # 판정 칸은 두지 않는다(LogBook 의 해석은 모델 유효성만 본다). 서명은 결론·주의점이 바뀌면 풀린다(service.update_entry)
+    conclusion = Column(String(300), nullable=True)
+    caveats = Column(Text, nullable=True)
+    reviewed_by = Column(String(20), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
     analysis_period = Column(String(7), nullable=True)  # YYYY-MM — 15 부터 쓰지 않는다(값 보존용으로 열만 남김)
     status = Column(String(10), nullable=False, default="draft")
     batch_id = Column(Integer, ForeignKey("batches.id"), nullable=True, index=True)

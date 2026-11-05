@@ -42,6 +42,7 @@ HULL_TERM = re.compile(r"^[0-9]{4}$")
 HULL_PREFIX_TERM = re.compile(r"^[0-9]{2,}$")
 S_ID, S_HULL, S_TITLE_EXACT, S_TITLE, S_TAG, S_TYPE, S_DESC, S_FILE, S_BODY = 100, 100, 90, 70, 50, 50, 40, 30, 10
 S_HULL_PREFIX = 60
+S_CONCLUSION = 60   # 53 — 결론 한 줄(제목 다음). 주의점은 설명과 같은 S_DESC
 S_HULL_SERIES = 95   # 45 — 같은 시리즈 다른 호선(정확 일치 바로 아래)
 _EPOCH = datetime(1970, 1, 1)
 # 결과 행의 종류별 파일 수(08) — 화면은 BDF·보고서·도면·결과를 0 이어도, 기타는 있을 때만 보인다
@@ -450,6 +451,10 @@ class MySqlSearch:
             self._property_hits(db, h, term, live, vocab)
         for (eid,) in db.query(E.id).filter(live, E.description.like(like, escape="\\")):
             h.entry(eid, S_DESC, "description")
+        for (eid,) in db.query(E.id).filter(live, E.conclusion.like(like, escape="\\")):   # 53
+            h.entry(eid, S_CONCLUSION, "conclusion")
+        for (eid,) in db.query(E.id).filter(live, E.caveats.like(like, escape="\\")):
+            h.entry(eid, S_DESC, "caveats")
         for fid, eid in (db.query(F.id, F.entry_id).join(E, E.id == F.entry_id)
                          .filter(live, F.location != "trash", F.name.like(like, escape="\\"))):
             h.entry(eid, S_FILE, "file", meta=False)
@@ -725,6 +730,7 @@ class MySqlSearch:
                 "tags": free[e.id],
                 "uploaded_by": e.uploaded_by,
                 "confirmed_at": e.confirmed_at.isoformat() if e.confirmed_at else None,
+                "conclusion": e.conclusion, "reviewed": bool(e.reviewed_by),   # 53
                 "file_count": r["file_count"], "kinds": sorted(r["kinds"]),
                 "kind_counts": {k: r["kind_counts"].get(k, 0) for k in ROW_KINDS},
                 "thumb": ({"file_id": reps[e.id]["file_id"], "model_key": reps[e.id]["model_key"]}

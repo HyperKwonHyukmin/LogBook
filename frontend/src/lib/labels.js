@@ -7,6 +7,7 @@ export const ACTION_LABELS = {
   USER_ADMIN_GRANT: '관리자 지정', USER_ADMIN_REVOKE: '관리자 해제', ADMIN_BOOTSTRAP: '관리자 초기 설정',
   BATCH_RECEIVED: '자료 받음', BATCH_CLAIM: '배치 가져감',
   ENTRY_UPDATE: '정보 수정', ENTRY_CONFIRM: '확정', ENTRY_FILES_ADDED: '파일 추가',
+  ENTRY_REVIEW: '검토 서명', ENTRY_REVIEW_CANCEL: '검토 서명 취소',   // 53
   ENTRY_FILES_REMOVED: '파일 삭제', ENTRY_FILES_RESTORED: '파일 되돌리기',   // 37
   FILES_PURGE: '뺀 파일 영구 삭제',
   ENTRY_TRASH: '휴지통으로', ENTRY_RESTORE: '복원', DRAFT_DISCARD: '초안 버림',
@@ -74,6 +75,12 @@ export const ERROR_LABELS = {
   bdf_model_error: 'BDF 를 모델로 읽지 못했습니다. 카드 형식을 확인해 주세요.',
   version_conflict: '다른 사람이 먼저 고쳤습니다. 최신 내용으로 다시 불러왔습니다.',
   not_uploader: '작성자만 할 수 있습니다.',
+  // 53 — 검토 서명
+  conclusion_required: '결론 한 줄이 있어야 검토 서명을 할 수 있습니다.',
+  own_entry: '작성자 본인은 검토 서명을 할 수 없습니다.',
+  already_reviewed: '이미 다른 사람이 검토 서명을 했습니다.',
+  not_reviewer: '서명한 사람이나 관리자만 취소할 수 있습니다.',
+  not_confirmed: '확정한 자료만 검토 서명을 할 수 있습니다.',
   storage_unreachable: '999_LogBook 공유 폴더에 연결할 수 없습니다.',
   storage_error_partial: '파일 이동 중 문제가 생겼습니다. 관리자에게 알려 주세요.',
   title_required: '제목을 입력해 주세요.',
@@ -207,6 +214,7 @@ export const MODEL_STATE_LABELS = {
 };
 
 export const MATCH_LABELS = { entry_id: 'Entry 번호', hull: '호선', title: '제목', tag: '태그',
+  conclusion: '결론', caveats: '주의점',   // 53
   target: '대상', description: '설명', file: '파일명', body: '본문',
   wb_origin: 'WorkBench 해석',   // 39 — 'WB #123' 검색
   assignee: '담당자',   // 46

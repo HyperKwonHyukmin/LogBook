@@ -47,9 +47,10 @@ import AssigneeInput, { AssigneeList, RunnerList } from '../components/people/As
 // 42 — 해석 종류도 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
 const FIELD_LABELS = { title: '제목', analysis_type: '해석 종류', description: '설명',
   hulls: '호선', no_hull: '호선 없음(공용)', project: '프로젝트', zones: '구역', target: '대상', tags: '태그',
-  assignees: '담당자' };   // 46
+  assignees: '담당자',   // 46
+  conclusion: '결론', caveats: '주의점', reviewed_by: '검토자' };   // 53
 // 감사 기록에서 '참/값일 때만' 실리는 칸 — before 에만 있으면 지운 것이다
-const OPTIONAL_KEYS = new Set(['no_hull', 'project', 'target', 'assignees']);
+const OPTIONAL_KEYS = new Set(['no_hull', 'project', 'target', 'assignees', 'conclusion', 'caveats', 'reviewed_by']);
 const hullRule = (v) => /^\d{4}$/.test(v) || '호선은 숫자 4자리입니다.';
 const show = (v) => (v === true ? '예' : (Array.isArray(v) ? v.join(', ') : v) || '(없음)');
 const HISTORY_FILES_SHOWN = 5;
@@ -361,7 +362,55 @@ function Prop({ label, changed = false, error, children }) {
   );
 }
 
-const FIELD_ORDER = ['title', 'description', 'hulls', 'no_hull', 'zones', 'target', 'tags'];
+const FIELD_ORDER = ['title', 'conclusion', 'description', 'caveats', 'hulls', 'no_hull', 'zones', 'target', 'tags'];
+
+/**
+ * 53 — 검토 서명 줄: 다른 사람(LV2 이상, 작성자 본인 제외)이 결론·주의점을 보고 서명한다.
+ * 결론·주의점이 바뀌면 서버가 서명을 푼다. '검증'(Nastran 해석 검증)과 헷갈리지 않게 '검토'라고 부른다.
+ */
+function ReviewProp({ entry, disabled, onDone }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const rev = entry.review;
+  async function act(method) {
+    setBusy(true);
+    try {
+      await api(`/entries/${encodeURIComponent(entry.entry_id)}/review`, { method });
+      toast.show({ message: method === 'POST' ? '검토 서명을 남겼습니다.' : '검토 서명을 취소했습니다.' });
+      await onDone();
+    } catch (e) {
+      toast.show({ message: errorText(e), tone: 'err' });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Prop label="검토">
+      {rev ? (
+        <span className="flex min-w-0 flex-wrap items-center gap-x-1.5">
+          <Check size={14} className="shrink-0 text-ok" aria-hidden="true" />
+          <span className="min-w-0 truncate">{rev.name || rev.by}</span>
+          {rev.at && <span className="font-mono text-meta text-n-500" title={`검토 ${formatDateTime(rev.at)}`}>{formatDateTime(rev.at).slice(0, 10)}</span>}
+          {entry.can_unreview && (
+            <button type="button" disabled={busy || disabled} onClick={() => act('DELETE')}
+                    className="text-meta text-n-500 underline underline-offset-2 hover:text-n-900 disabled:cursor-not-allowed disabled:text-n-400">서명 취소</button>
+          )}
+        </span>
+      ) : (
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2">
+          <span className="text-n-500">검토 전</span>
+          {entry.can_review && (entry.conclusion ? (
+            <Button variant="secondary" size="sm" disabled={busy || disabled} onClick={() => act('POST')}>
+              <Check size={14} aria-hidden="true" />검토 서명
+            </Button>
+          ) : (
+            <span className="text-meta text-n-500">결론이 적히면 서명할 수 있습니다</span>
+          ))}
+        </span>
+      )}
+    </Prop>
+  );
+}
 
 /** Entry 상세(설계 §6.1 `/e/{entryId}`) — 머리, 파일·미리보기, 속성 레일과 변경 이력. */
 export default function EntryPage() {
@@ -665,20 +714,41 @@ export default function EntryPage() {
               {errors.title && <span role="alert" className="text-meta text-err">{errors.title}</span>}
             </label>
             <label className="flex flex-col gap-1">
+              <span className="flex items-center gap-1.5 text-meta font-medium text-n-600">결론{isChanged('conclusion') && <ChangedMark />}<span className="font-normal text-n-500">무엇을 확인했고 무엇을 알게 됐나 한 줄</span></span>
+              <input aria-label="결론" value={draft.conclusion} onChange={(e) => set('conclusion')(e.target.value)} maxLength={300}
+                     placeholder="예: 선미 계류 하중 조건으로 모델이 수렴함을 확인"
+                     className={inputClass('h-9 w-full text-body')} />
+            </label>
+            <label className="flex flex-col gap-1">
               <span className="flex items-center gap-1.5 text-meta font-medium text-n-600">설명{isChanged('description') && <ChangedMark />}</span>
               <textarea aria-label="설명" rows={3} value={draft.description} onChange={(e) => set('description')(e.target.value)}
                         placeholder="이 자료가 무엇인지 한두 줄로"
                         className={inputClass('h-auto w-full py-1.5 text-body')} />
             </label>
+            <label className="flex flex-col gap-1">
+              <span className="flex items-center gap-1.5 text-meta font-medium text-n-600">주의점{isChanged('caveats') && <ChangedMark />}<span className="font-normal text-n-500">다시 쓸 때 조심할 것(가정·단순화·한계)</span></span>
+              <textarea aria-label="주의점" rows={2} value={draft.caveats} onChange={(e) => set('caveats')(e.target.value)}
+                        className={inputClass('h-auto w-full py-1.5 text-body')} />
+            </label>
+            {entry.review && <p className="text-meta text-n-500">결론이나 주의점을 바꾸면 {entry.review.name || entry.review.by} 님의 검토 서명이 풀립니다.</p>}
           </div>
         ) : (
           <>
             <h1 className="mt-1 text-entry font-semibold tracking-[-0.02em] text-n-900">{entry.title}</h1>
             {/* 38 — 모델 특성 줄(대표 BDF 기준, 저장하지 않고 그때그때 만든다) */}
             <ModelTraits entry={entry} />
-            <p className={`mt-1 whitespace-pre-wrap text-body ${entry.description ? 'text-n-700' : 'text-n-500'}`}>
-              {entry.description || '설명 없음'}
-            </p>
+            {/* 53 — 결론 한 줄(자료가 알려 주는 것)이 설명보다 먼저. 비었으면 고칠 수 있는 사람에게만 권한다 */}
+            {entry.conclusion ? (
+              <p className="mt-2 text-body text-n-900"><span className="mr-2 text-meta font-medium text-n-500">결론</span>{entry.conclusion}</p>
+            ) : entry.can_edit && entry.status === 'confirmed' && (
+              <p className="mt-2 text-meta text-n-500">결론 한 줄이 없습니다. [변경하기]에서 남기면 검색 결과에 보입니다.</p>
+            )}
+            {entry.description && <p className="mt-1 whitespace-pre-wrap text-body text-n-700">{entry.description}</p>}
+            {entry.caveats && (
+              <p className="mt-2 whitespace-pre-wrap rounded-md bg-n-50 px-3 py-2 text-ui text-n-700">
+                <span className="mr-2 text-meta font-medium text-n-500">주의점</span>{entry.caveats}
+              </p>
+            )}
           </>
         )}
         {entry.status === 'draft' && (
@@ -826,6 +896,7 @@ export default function EntryPage() {
               {entry.confirmed_by && entry.confirmed_by !== entry.uploaded_by && (
                 <Prop label="확정">{person(entry.confirmed_by)}</Prop>
               )}
+              {entry.status === 'confirmed' && <ReviewProp entry={entry} disabled={editing} onDone={() => reload().catch(() => {})} />}
             </dl>
           )}
           {/* 13 — 공개 범위(변경하기와 분리: 확인 후 바로 적용, 이력에 따로 남는다) */}

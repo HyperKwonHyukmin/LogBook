@@ -151,6 +151,17 @@ def is_uploader(user, entry: models.Entry) -> bool:
     return bool(user is not None and entry.uploaded_by and entry.uploaded_by == user.employee_id)
 
 
+def can_review(user, entry: models.Entry) -> bool:
+    """53 — 검토 서명: 확정 자료, LV2 이상이고 작성자 본인이 아니다(검토 = 다른 사람의 눈)."""
+    return entry.status == "confirmed" and can_write_shared(user) and not is_uploader(user, entry)
+
+
+def can_unreview(user, entry: models.Entry) -> bool:
+    """53 — 서명 취소: 서명한 사람 또는 LV3."""
+    return bool(entry.reviewed_by) and user is not None and (
+        user.employee_id == entry.reviewed_by or is_admin(user))
+
+
 def can_edit_entry(user, entry: models.Entry) -> bool:
     """Entry 수정·휴지통·복원·파일 추가·판 정리 — 올린 사람(LV1 이상) 또는 LV3."""
     if user is None or not can_write(user):
