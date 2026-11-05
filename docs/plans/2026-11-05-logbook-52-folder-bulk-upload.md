@@ -32,7 +32,7 @@
 - 처음 체크 상태: `rules.SKIP_BY_DEFAULT_EXTS` 는 체크 해제 + '제외 추천' 표시, 나머지는 체크. 요약 줄에 형식별 "op2 14개 빠짐 [포함]".
   서버가 늘 지우는 임시 파일(`EXCLUDE_PATTERNS`, `~$*` 등)은 목록에 넣지 않고 개수만.
   규칙은 `GET /api/uploads/rules` 로 받는다(못 받으면 `FALLBACK_RULES`, rules.py 와 같게 둘 것).
-- 제외 추천 형식: `.op2 .f06 .xdb .h5`(해석 결과) · `.h3d .mvw .hwsession`(HyperView) · `.pch .asm .plt`(Nastran 부산물) · `.obd`(사용자 결정). 남김: hm · inp · xlsm · xlsx · 보고서 · 도면.
+- 제외 추천 형식: `.op2 .f06 .xdb .h5`(해석 결과) · `.h3d .mvw .hwsession`(HyperView) · `.pch .asm .plt`(Nastran 부산물) · `.odb`(Abaqus 결과, 사용자 결정 — 처음에 `.obd` 로 잘못 넣었다). 남김: hm · inp · xlsm · xlsx · 보고서 · 도면.
 - 묶는 단위: 하위 폴더가 있을 때만 묻는다. **기본값은 늘 "폴더 전체를 자료 1건"**(사용자 결정 2026-11-05, 처음에는 보고서 위치로 자동 판단했으나 뺐다). 옛 자동 규칙: 고른 폴더 바로 아래 낱개 보고서가 없고, 보고서가 든 하위 폴더가 둘 이상이면 "하위 폴더마다 자료 1건"
   (2025 → 2건, closed_chock → 1건). 만들어질 초안 이름·파일 수·용량을 바로 보인다.
 - 공통 분류(선택): 구역 · 대상 · 담당자 → 모든 초안에. 초안 카드에 태그 칸이 없어 태그·공개 범위는 넣지 않았다.

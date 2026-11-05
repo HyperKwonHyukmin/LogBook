@@ -8,7 +8,7 @@
 export const FALLBACK_RULES = {
   excluded_patterns: ['~$*', 'thumbs.db', 'desktop.ini', '*.master', '*.dball', '*.scratch', '*.tmp',
     '.ds_store', '._*', '*.crdownload', '*.part'],
-  skip_by_default: ['.op2', '.f06', '.xdb', '.h5', '.h3d', '.mvw', '.hwsession', '.pch', '.asm', '.plt', '.obd'],
+  skip_by_default: ['.op2', '.f06', '.xdb', '.h5', '.h3d', '.mvw', '.hwsession', '.pch', '.asm', '.plt', '.odb'],
 };
 
 /** fnmatch 의 * 만 쓰는 무늬(대소문자 무시) — 서버 is_excluded 와 같은 판정. */
