@@ -93,3 +93,12 @@ test('IntersectionObserver 가 있으면 보일 때만 받는다', async () => {
   await act(async () => { fire(); });
   await waitFor(() => expect(img(container)).toBeTruthy());
 });
+
+test('52 — 대표 그림(cover)은 cover.png 를 받고, 못 받으면 대신 보일 것(fallback)을 그린다', async () => {
+  const fetch = mockApi({ 'GET /api/files/7/cover.png': png, 'GET /api/files/8/cover.png': { __status: 404, detail: 'no_cover' } });
+  const a = render(<ModelThumb kind="cover" fileId={7} modelKey="abc" />);
+  await waitFor(() => expect(img(a.container)).toBeTruthy());
+  expect(calls(fetch)).toContain('GET /api/files/7/cover.png');
+  const b = render(<ModelThumb kind="cover" fileId={8} modelKey="def" fallback={<span>아이콘</span>} />);
+  await waitFor(() => expect(b.getByText('아이콘')).toBeInTheDocument());
+});

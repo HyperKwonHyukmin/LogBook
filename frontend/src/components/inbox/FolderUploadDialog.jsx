@@ -27,7 +27,8 @@ function GroupCheck({ files, checked, onToggle, label }) {
 export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = false }) {
   const id = useId();
   const [checked, setChecked] = useState(() => initialChecked(plan));
-  const [split, setSplit] = useState(plan.defaultSplit);
+  // 기본은 폴더 전체를 자료 1건(사용자 결정 2026-11-05) — 하위 폴더마다 나누려면 고른다
+  const [split, setSplit] = useState(false);
   const [zones, setZones] = useState([]);
   const [target, setTarget] = useState(null);
   const [assignees, setAssignees] = useState([]);

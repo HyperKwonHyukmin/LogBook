@@ -8,10 +8,8 @@
 export const FALLBACK_RULES = {
   excluded_patterns: ['~$*', 'thumbs.db', 'desktop.ini', '*.master', '*.dball', '*.scratch', '*.tmp',
     '.ds_store', '._*', '*.crdownload', '*.part'],
-  skip_by_default: ['.op2', '.f06', '.xdb', '.h5', '.h3d', '.mvw', '.hwsession', '.pch', '.asm', '.plt'],
+  skip_by_default: ['.op2', '.f06', '.xdb', '.h5', '.h3d', '.mvw', '.hwsession', '.pch', '.asm', '.plt', '.obd'],
 };
-
-const REPORT_EXTS = new Set(['.pdf', '.ppt', '.pptx', '.doc', '.docx', '.hwp']);
 
 /** fnmatch 의 * 만 쓰는 무늬(대소문자 무시) — 서버 is_excluded 와 같은 판정. */
 function globMatch(pattern, name) {
@@ -30,11 +28,10 @@ const dirOf = (relPath) => (relPath.includes('/') ? relPath.slice(0, relPath.las
 export const isFolderUpload = (items) => items.some((it) => it.relPath.includes('/'));
 
 /**
- * items [{file, relPath}] → { root, files, junk, groups, defaultSplit }
+ * items [{file, relPath}] → { root, files, junk, groups }
  * files: [{relPath, name, size, ext, dir, skip}] — skip = 처음에 체크를 풀어 둘 형식.
  * groups: [{dir, files}] 폴더 경로 순. junk: 서버가 지울 임시 파일 경로(목록에 넣지 않음).
- * defaultSplit: 고른 폴더 바로 아래 낱개 보고서가 없고, 보고서가 든 하위 폴더가 둘 이상이면
- *   '과제 폴더마다 자료 1건'(예: 2025 › closed_chock · manifold_support). 보고서가 맨 위에 있으면(예: closed_chock) 1건.
+ * 묶는 단위 기본값은 늘 '폴더 전체를 자료 1건'(2026-11-05 사용자 결정) — 하위 폴더마다 나누기는 사람이 고른다.
  */
 export function planFolder(items, rules = FALLBACK_RULES) {
   const skipExts = new Set(rules.skip_by_default || []);
@@ -58,14 +55,7 @@ export function planFolder(items, rules = FALLBACK_RULES) {
 
   const tops = new Set(items.map((it) => it.relPath.split('/')[0]));
   const root = tops.size === 1 && items.every((it) => it.relPath.includes('/')) ? [...tops][0] : '';
-  let defaultSplit = false;
-  if (root) {
-    const parts = (f) => f.relPath.split('/');
-    const rootReport = files.some((f) => parts(f).length === 2 && REPORT_EXTS.has(f.ext));
-    const withReport = new Set(files.filter((f) => parts(f).length > 2 && REPORT_EXTS.has(f.ext)).map((f) => parts(f)[1]));
-    defaultSplit = !rootReport && withReport.size >= 2;
-  }
-  return { root, files, junk, groups, defaultSplit };
+  return { root, files, junk, groups };
 }
 
 /** 처음 체크 상태 — 제외 추천 형식만 푼다. → Set(relPath) */

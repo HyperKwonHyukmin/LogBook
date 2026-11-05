@@ -27,11 +27,11 @@ function pump() {
   }
 }
 
-/** 차례가 오면 thumb.png 를 받는다. cancel() 은 아직 시작 전일 때만 효과가 있다. */
-function enqueueFetch(fileId) {
+/** 차례가 오면 그림을 받는다(path — thumb.png 또는 52 cover.png). cancel() 은 아직 시작 전일 때만 효과가 있다. */
+function enqueueFetch(path) {
   let job;
   const promise = new Promise((resolve, reject) => {
-    job = { cancelled: false, run: () => apiBlob(`/files/${fileId}/thumb.png`).then(resolve, reject) };
+    job = { cancelled: false, run: () => apiBlob(path).then(resolve, reject) };
   });
   queue.push(job);
   pump();
@@ -63,9 +63,9 @@ function release(k) {
   evict();
 }
 
-function loadCached(k, fileId) {
+function loadCached(k, path) {
   if (!pending.has(k)) {
-    const { promise } = enqueueFetch(fileId);
+    const { promise } = enqueueFetch(path);
     pending.set(k, promise.then((blob) => {
       const url = URL.createObjectURL(blob);
       cache.set(k, { url, refs: 0 });
@@ -83,12 +83,18 @@ export const thumbTesting = {
   },
 };
 
-/** 인증이 필요한 모델 썸네일. 화면에 보일 때 받고, 못 받으면 회색 자리만 남긴다. */
-export default function ModelThumb({ fileId, modelKey, className = '', alt = '' }) {
-  const k = modelKey ? `${fileId}:${modelKey}` : null;
+/**
+ * 인증이 필요한 모델 썸네일. 화면에 보일 때 받고, 못 받으면 회색 자리만 남긴다(fallback 을 주면 그것을).
+ * 52 — kind='cover' 는 BDF 가 없는 자료의 대표 그림(PDF 첫 쪽·PPTX 썸네일·이미지, /files/{id}/cover.png).
+ */
+export default function ModelThumb({ fileId, modelKey, className = '', alt = '', kind = 'model', fallback = null }) {
+  const cover = kind === 'cover';
+  const path = `/files/${fileId}/${cover ? 'cover' : 'thumb'}.png`;
+  const k = modelKey ? `${cover ? 'c:' : ''}${fileId}:${modelKey}` : null;
   const placeholderRef = useRef(null);
   const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined');
   const [url, setUrl] = useState(null);
+  const [broken, setBroken] = useState(false);
 
   // 화면에 들어올 때까지 받지 않는다(jsdom 등 IntersectionObserver 가 없으면 바로 받는다).
   useEffect(() => {
@@ -104,27 +110,30 @@ export default function ModelThumb({ fileId, modelKey, className = '', alt = '' 
 
   useEffect(() => {
     setUrl(null);
+    setBroken(false);
     if (!visible) return undefined;
     let alive = true;
     if (k) {
-      if (failed.has(k)) return undefined;
+      if (failed.has(k)) { setBroken(true); return undefined; }
       let held = false;
       const take = () => { if (alive && cache.has(k)) { held = true; setUrl(acquire(k)); evict(); } };
       if (cache.has(k)) take();
-      else loadCached(k, fileId).then(take, () => {});
+      else loadCached(k, path).then(take, () => { if (alive) setBroken(true); });
       return () => { alive = false; if (held) release(k); };
     }
     // 열쇠가 없으면 이 마운트만 쓰고 뗄 때 해제한다.
     let own = null;
-    const job = enqueueFetch(fileId);
+    const job = enqueueFetch(path);
     job.promise.then((blob) => {
       if (!alive) return;
       own = URL.createObjectURL(blob);
       setUrl(own);
-    }, () => {});
+    }, () => { if (alive) setBroken(true); });
     return () => { alive = false; job.cancel(); if (own) URL.revokeObjectURL(own); };
-  }, [visible, k, fileId]);
+  }, [visible, k, fileId, path]);
 
+  if (broken && fallback) return fallback;
   if (!url) return <div ref={placeholderRef} aria-hidden="true" className={`bg-n-100 ${className}`} />;
-  return <img src={url} alt={alt} draggable={false} className={`bg-viewer object-contain ${className}`} />;
+  // 문서 그림은 흰 바탕(쪽 모양이 보이게), 모델 그림은 뷰어 바탕
+  return <img src={url} alt={alt} draggable={false} className={`${cover ? 'bg-n-0 ring-1 ring-n-200' : 'bg-viewer'} object-contain ${className}`} />;
 }

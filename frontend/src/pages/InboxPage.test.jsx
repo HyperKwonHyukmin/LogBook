@@ -217,8 +217,10 @@ test('52 — 폴더째 올리기는 목록을 먼저 띄우고, 체크한 파일
   expect(within(dlg).getByRole('checkbox', { name: '2025/closed_chock/R1/m1.op2 올리기' })).not.toBeChecked();
   expect(within(dlg).getByRole('checkbox', { name: '2025/closed_chock/R1/m1.bdf 올리기' })).toBeChecked();
   expect(within(dlg).getByText(/임시 파일 1개/)).toBeInTheDocument();
-  // 보고서가 든 과제 폴더가 둘 → 하위 폴더마다 1건이 기본
-  expect(within(dlg).getByRole('radio', { name: '하위 폴더마다 자료 1건' })).toBeChecked();
+  // 기본은 폴더 전체를 자료 1건(사용자 결정) — 하위 폴더마다 나누기를 고른다
+  expect(within(dlg).getByRole('radio', { name: '폴더 전체를 자료 1건' })).toBeChecked();
+  expect(within(dlg).getByRole('button', { name: '올리기 (3개)' })).toBeInTheDocument();
+  await userEvent.click(within(dlg).getByRole('radio', { name: '하위 폴더마다 자료 1건' }));
   await userEvent.click(within(dlg).getByRole('button', { name: /초안 2건으로 올리기 \(3개\)/ }));
   expect(screen.queryByRole('dialog')).toBeNull();
   await vi.waitFor(() => expect(uploadBatch).toHaveBeenCalledTimes(1));

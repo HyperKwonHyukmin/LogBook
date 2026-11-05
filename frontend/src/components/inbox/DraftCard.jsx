@@ -134,6 +134,26 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
    * 확정·나누기·합치기·옮기기 — 저장하지 않은 변경이 있으면 먼저 한 번에 저장하고 실행한다(저장이 실패하면 실행하지 않는다).
    * verb 예: '확정하지'.
    */
+  // 52 — 고른 파일을 이 초안에서 뺀다(휴지통 폴더로). 잘못 함께 올린 op2·f06·mvw 등
+  const extOfName = (name) => { const i = name.lastIndexOf('.'); return i > 0 ? name.slice(i).toLowerCase() : ''; };
+  const fileExts = Object.entries(entry.files.reduce((m, f) => {
+    const x = extOfName(f.name);
+    if (x) m[x] = (m[x] || 0) + 1;
+    return m;
+  }, {})).sort((a, b) => b[1] - a[1]);
+  async function removeSelected() {
+    const n = selected.length;
+    const ok = await confirm({
+      title: `파일 ${n}개를 이 초안에서 뺄까요?`,
+      body: '휴지통 폴더(95_Trash)로 옮겨지고 정리 대기에서는 되돌릴 수 없습니다. 다시 필요하면 [파일 추가]로 올리세요.',
+      confirmLabel: `${n}개 빼기`,
+    });
+    if (!ok) return;
+    const ids = [...selected];
+    await act(() => api(`/entries/${entry.entry_id}/files/remove`, { method: 'POST', body: { file_ids: ids, version: versionRef.current } }), '빼지');
+    setSelected((cur) => cur.filter((id) => !ids.includes(id)));
+  }
+
   function act(fn, verb) {
     if (attaching) {
       setError('파일 첨부가 끝난 뒤 다시 진행해 주세요.');
@@ -487,6 +507,21 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
               <option value="">다른 묶음과 합치기…</option>
               {siblings.map((s) => <option key={s.entry_id} value={s.entry_id}>{s.entry_id} {s.title}</option>)}
             </select>
+          )}
+          {/* 52 — 형식으로 한꺼번에 고르기(op2·f06 처럼 같은 형식이 여러 개일 때) */}
+          {canEdit && fileExts.length > 1 && (
+            <select aria-label="형식으로 고르기" disabled={disabled} value="" className={selectClass('h-7 text-meta')}
+                    onChange={(e) => e.target.value && setSelected(entry.files.filter((f) => extOfName(f.name) === e.target.value).map((f) => f.id))}>
+              <option value="">형식으로 고르기…</option>
+              {fileExts.map(([ext, n]) => <option key={ext} value={ext}>{ext.replace('.', '').toUpperCase()} {n}개</option>)}
+            </select>
+          )}
+          {canEdit && (
+            <Button variant="secondary" size="sm" disabled={disabled || selected.length === 0 || selected.length === entry.files.length}
+                    title={selected.length === entry.files.length ? '파일을 모두 빼려면 [버리기]를 쓰세요' : undefined}
+                    onClick={removeSelected}>
+              <Trash2 size={14} aria-hidden="true" />선택한 파일 빼기{selected.length > 0 && ` ${selected.length}개`}
+            </Button>
           )}
           {canEdit && (
             <Button variant="secondary" size="sm" disabled={disabled || selected.length === 0 || selected.length === entry.files.length}

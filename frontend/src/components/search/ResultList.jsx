@@ -43,12 +43,23 @@ const ROW_SNIPPETS = 2;
 // 결과 열이 좁으면(미리보기를 넓게 끌었을 때) 썸네일을 접어 글자 줄이 부서지지 않게 한다(컨테이너 질의)
 const THUMB = 'flex h-20 w-32 shrink-0 rounded-sm @max-[620px]/results:hidden';
 
-/** 왼쪽 그림(128×80) — 대표 BDF 썸네일(화면에 들어올 때 받는다), 없으면 가장 앞선 파일 종류의 아이콘. */
+/**
+ * 왼쪽 그림(128×80) — 대표 BDF 썸네일(화면에 들어올 때 받는다). 52 — 없으면 보고서 PDF 첫 쪽 → PPTX 썸네일 → 이미지,
+ * 그것도 없거나 못 만들면 가장 앞선 파일 종류의 아이콘.
+ */
 function RowThumb({ item }) {
   if (item.thumb) {
     // 장식 그림 — 제목이 바로 옆에 있다.
     return <ModelThumb fileId={item.thumb.file_id} modelKey={item.thumb.model_key} alt="" className={THUMB} />;
   }
+  if (item.cover) {
+    return <ModelThumb kind="cover" fileId={item.cover.file_id} modelKey={item.cover.key} alt="" className={THUMB}
+                       fallback={<KindIcon item={item} />} />;
+  }
+  return <KindIcon item={item} />;
+}
+
+function KindIcon({ item }) {
   const counts = item.kind_counts || {};
   const kind = [...COUNT_KINDS, 'other'].find((k) => counts[k] > 0) || item.kinds?.[0] || 'other';
   const Icon = KIND_ICONS[kind] || File;

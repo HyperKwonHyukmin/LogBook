@@ -231,6 +231,26 @@ def model_lbm(file_id: int, if_none_match: str | None = Header(default=None),
                              {"Content-Encoding": "gzip"})
 
 
+@router.get("/{file_id}/cover.png")
+def file_cover(file_id: int, if_none_match: str | None = Header(default=None),
+               db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage),
+               user: models.User = Depends(require_auth)):
+    """52 — 검색 결과 대표 그림 대체(PDF 첫 쪽·PPTX 썸네일·이미지). 만들 수 없으면 404 no_cover."""
+    from .. import covers
+
+    f = _file(db, file_id, user)
+    try:
+        data, key = covers.cover_png(db, storage, f)
+    except covers.NoCover:
+        raise HTTPException(status_code=404, detail="no_cover")
+    except FileUnavailable:
+        raise HTTPException(status_code=404, detail="no_cover")
+    headers = {"ETag": f'"c{key}"', "Cache-Control": "private, no-cache"}
+    if _etag_matches(if_none_match, headers["ETag"]):
+        return Response(status_code=304, headers=headers)
+    return Response(content=data, media_type="image/png", headers=headers)
+
+
 @router.get("/{file_id}/thumb.png")
 def model_thumb(file_id: int, if_none_match: str | None = Header(default=None),
                 db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage),

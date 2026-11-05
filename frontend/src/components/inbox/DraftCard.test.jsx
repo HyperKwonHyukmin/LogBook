@@ -464,3 +464,20 @@ test('49 — BDF 가 모두 동일 BDF 로 막힌 초안: 이미 있는 자료�
   await userEvent.click(within(box).getByRole('button', { name: 'E000054 에 추가' }));
   expect(bodyOf('PATCH', '/api/entries/E000010')).toMatchObject({ merge_into_id: 'E000054' });
 });
+
+test('52 — 형식으로 골라 선택한 파일을 이 초안에서 뺀다(확인 뒤)', async () => {
+  const entry = { ...ENTRY, files: [...ENTRY.files,
+    { id: 3, rel_path: '9999_시험/a.op2', name: 'a.op2', kind: 'result', size: 10, duplicate_of_entry: null, drm_encrypted: false },
+    { id: 4, rel_path: '9999_시험/b.op2', name: 'b.op2', kind: 'result', size: 10, duplicate_of_entry: null, drm_encrypted: false }] };
+  mockFetch({ 'POST /api/entries/E000010/files/remove': { ...entry, version: 4 } });
+  const onChanged = vi.fn();
+  render(<DraftCard entry={entry} siblings={[]} canEdit onChanged={onChanged} />);
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: '형식으로 고르기' }), '.op2');
+  expect(screen.getByRole('checkbox', { name: '9999_시험/a.op2 선택' })).toBeChecked();
+  await userEvent.click(screen.getByRole('button', { name: /선택한 파일 빼기 2개/ }));
+  const dlg = await screen.findByRole('alertdialog');
+  expect(dlg).toHaveTextContent('파일 2개를 이 초안에서 뺄까요?');
+  await userEvent.click(within(dlg).getByRole('button', { name: '2개 빼기' }));
+  await vi.waitFor(() => expect(onChanged).toHaveBeenCalled());
+  expect(bodyOf('POST', '/api/entries/E000010/files/remove')).toEqual({ file_ids: [3, 4], version: 3 });
+});

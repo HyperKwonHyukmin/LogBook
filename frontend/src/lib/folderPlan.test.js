@@ -42,20 +42,19 @@ describe('planFolder', () => {
     ]);
   });
 
-  it('보고서가 든 과제 폴더가 둘 이상이면 과제 폴더마다 1건이 기본', () => {
+  it('하위 폴더마다 나누면 과제 폴더마다 1건, 나누지 않으면 전체 1건', () => {
     const plan = planFolder(Y2025);
     expect(plan.root).toBe('2025');
-    expect(plan.defaultSplit).toBe(true);
+    expect(previewDrafts(plan, initialChecked(plan), false).map((d) => [d.name, d.count])).toEqual([['2025', 6]]);
     expect(previewDrafts(plan, initialChecked(plan), true).map((d) => [d.name, d.count]))
       .toEqual([['closed chock', 3], ['manifold support 8182', 3]]);
   });
 
-  it('보고서가 맨 위에 있는 과제 폴더 하나(closed_chock)는 전체 1건이 기본', () => {
+  it('과제 폴더 하나(closed_chock)를 전체 1건으로', () => {
     const one = Y2025.filter((i) => i.relPath.startsWith('2025/closed_chock/'))
       .map((i) => item(i.relPath.replace('2025/', '')));
     const plan = planFolder(one);
     expect(plan.root).toBe('closed_chock');
-    expect(plan.defaultSplit).toBe(false);
     expect(previewDrafts(plan, initialChecked(plan), false)).toEqual([{ name: 'closed chock', count: 3, size: 30 }]);
   });
 

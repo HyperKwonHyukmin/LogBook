@@ -50,7 +50,7 @@ def test_rules_endpoint(client, make_user, auth_headers):
     assert r.status_code == 200
     body = r.json()
     assert ".op2" in body["skip_by_default"] and ".mvw" in body["skip_by_default"]
-    assert ".f06" in body["skip_by_default"]          # 2026-11-05 사용자 결정 — f06 도 처음엔 체크 해제
+    assert ".f06" in body["skip_by_default"] and ".obd" in body["skip_by_default"]   # 2026-11-05 사용자 결정
     assert ".xlsm" not in body["skip_by_default"]
     assert "~$*" in body["excluded_patterns"]
 

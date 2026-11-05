@@ -829,7 +829,8 @@ def removed_files_of(db: Session, entry: models.Entry) -> list[dict]:
 
 def remove_files(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User, file_ids: list[int],
                  version: int | None, ip: str | None = None) -> models.Entry:
-    """확정 자료에서 파일을 뺀다 — 실제 파일은 95_Trash/<자료번호>_files_<시각>/ 로 옮기고 행은 남긴다(되돌리기).
+    """확정 자료·초안에서 파일을 뺀다 — 실제 파일은 95_Trash/<자료번호>_files_<시각>/(초안은 draft_ 앞붙임)로 옮기고
+    행은 남긴다(확정 자료는 되돌리기, 초안은 되돌리기 없음 — 휴지통 폴더에 남는다).
 
     File.entry_id 를 비우고 removed_from_id 에 원래 자료를 남긴다 — entry_id 로 파일을 고르는 모든 경로
     (검색·판 묶음·문서·관계 지도·같은 BDF)에서 저절로 빠진다. 마지막 파일은 뺄 수 없다(자료를 휴지통으로)."""
@@ -837,7 +838,8 @@ def remove_files(db: Session, storage: StoragePaths, entry: models.Entry, user: 
 
     entry = _lock(db, entry)
     ensure_editable(user, entry)
-    if entry.status != "confirmed":
+    draft = entry.status == "draft"   # 52 — 정리 대기 초안에서도 파일을 골라 뺀다(op2 등 잘못 올린 것)
+    if entry.status != "confirmed" and not draft:
         raise HTTPException(status_code=409, detail="entry_not_confirmed")
     if version is not None and version != entry.version:
         raise HTTPException(status_code=409, detail="version_conflict")
@@ -848,14 +850,24 @@ def remove_files(db: Session, storage: StoragePaths, entry: models.Entry, user: 
              .order_by(models.File.rel_path).all())
     if len(files) != len(ids):
         raise HTTPException(status_code=404, detail="file_not_found")
-    if any(f.location != "vault" for f in files):
+    if any(f.location != ("staging" if draft else "vault") for f in files):
         raise HTTPException(status_code=409, detail="file_not_in_vault")
     left = db.query(models.File.id).filter(models.File.entry_id == entry.id, ~models.File.id.in_(ids)).count()
     if left == 0:
         raise HTTPException(status_code=422, detail="last_file")
-    rel = f"{entry.entry_id}_files_{_stamp()}"
-    files_root = entry_dir(storage, entry) / "files"
-    undo = move_all(rel_move_pairs(files_root, storage.trash / rel, [(f, f.rel_path) for f in files]))
+    if draft:
+        from .draft_attachments import ensure_no_pending
+        ensure_no_pending(db, entry)   # 첨부를 받는 중이면 나중에(버리기와 같은 규칙)
+        rel = f"draft_{entry.entry_id}_files_{_stamp()}"
+        # 초안 파일은 올라온 배치의 임시 폴더(10_Vault\_staging\<배치>)에 있다 — 첨부로 들어온 파일은 배치가 다르다
+        keys = {b.id: b.key for b in db.query(models.Batch).filter(models.Batch.id.in_({f.batch_id for f in files}))}
+        pairs = [p for bid in keys for p in rel_move_pairs(storage.staging / keys[bid], storage.trash / rel,
+                                                             [(f, f.rel_path) for f in files if f.batch_id == bid])]
+        undo = move_all(pairs)
+    else:
+        rel = f"{entry.entry_id}_files_{_stamp()}"
+        files_root = entry_dir(storage, entry) / "files"
+        undo = move_all(rel_move_pairs(files_root, storage.trash / rel, [(f, f.rel_path) for f in files]))
     try:
         for f in files:
             f.entry_id, f.location, f.removed_from_id, f.trash_rel = None, "trash", entry.id, rel
@@ -870,7 +882,8 @@ def remove_files(db: Session, storage: StoragePaths, entry: models.Entry, user: 
         raise
     db.commit()
     refresh_revisions(db, entry.id)   # 14 — 판 묶음에서 빠진 모델을 뺀다
-    _write_meta_or_queue(db, storage, entry)
+    if not draft:
+        _write_meta_or_queue(db, storage, entry)
     return entry
 
 

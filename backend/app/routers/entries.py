@@ -186,7 +186,7 @@ def move_file(file_id: int, body: MoveBody, db: Session = Depends(get_db),
 @router.post("/entries/{entry_id}/files/remove")
 def remove_files(entry_id: str, body: FilesBody, request: Request, db: Session = Depends(get_db),
                  storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
-    """37 — 확정 자료에서 파일을 뺀다(휴지통 폴더로, 되돌릴 수 있다). 올린 사람·LV3. 감사 ENTRY_FILES_REMOVED."""
+    """37 — 확정 자료에서 파일을 뺀다(휴지통 폴더로, 되돌릴 수 있다). 52 — 정리 대기 초안도(되돌리기 없음). 올린 사람·LV3. 감사 ENTRY_FILES_REMOVED."""
     e = service.remove_files(db, storage, _entry(db, entry_id, user), user, body.file_ids, body.version,
                              client_ip(request))
     return _detail(db, storage, e, user)

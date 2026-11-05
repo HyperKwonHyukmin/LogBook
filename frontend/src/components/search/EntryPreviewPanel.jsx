@@ -28,7 +28,8 @@ export default function EntryPreviewPanel({ entryId, fileId, onClose, width, pan
   }, [entryId]);
   useEffect(() => { setPicked(fileId || null); }, [entryId, fileId]);
 
-  const file = entry?.files.find((f) => f.id === picked) || entry?.files.find((f) => f.kind === 'report') || entry?.files[0];
+  const file = entry?.files.find((f) => f.id === picked) || entry?.files.find((f) => f.kind === 'report' && /\.pdf$/i.test(f.name))   // 52 — 보고서는 PDF 먼저
+    || entry?.files.find((f) => f.kind === 'report') || entry?.files[0];
   const detailHref = `/e/${entryId}${file || fileId ? `?file=${file?.id ?? fileId}` : ''}`;
 
   return (

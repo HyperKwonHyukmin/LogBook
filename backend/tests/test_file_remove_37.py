@@ -149,3 +149,22 @@ def test_purge_entry_takes_removed_files(db, storage, make_user, setup_entry_wit
     assert not (storage.trash / rel).exists()
     log = db.query(models.AuditLog).filter_by(action="TRASH_PURGE").one()
     assert log.before["removed_files"] == 1
+
+
+def test_52_remove_files_from_draft(db, storage, make_user, setup_entry_with_files):
+    """52 — 정리 대기 초안에서도 파일을 골라 뺀다(임시 폴더 → 휴지통 폴더). 초안은 entry.json 이 없다."""
+    u = make_user("A100001")
+    b, e = setup_entry_with_files(rels=("p/a.bdf", "p/a.op2", "p/r.pdf"))
+    op2 = db.query(models.File).filter_by(entry_id=e.id, name="a.op2").one()
+    assert op2.location == "staging"
+    service.remove_files(db, storage, e, u, [op2.id], e.version)
+    db.expire_all()
+    f = db.get(models.File, op2.id)
+    assert (f.entry_id, f.location, f.removed_from_id) == (None, "trash", e.id)
+    assert f.trash_rel.startswith(f"draft_{e.entry_id}_files_")
+    assert (storage.trash / f.trash_rel / "p" / "a.op2").is_file()
+    assert not (storage.staging / b.key / "p" / "a.op2").exists()
+    assert sorted(x.name for x in db.query(models.File).filter_by(entry_id=e.id)) == ["a.bdf", "r.pdf"]
+    assert db.query(models.AuditLog).filter_by(action="ENTRY_FILES_REMOVED", target_id=e.entry_id).count() == 1
+    r = verify(db, storage)
+    assert not r["missing"] and not r["orphan_trash"]

@@ -711,6 +711,9 @@ class MySqlSearch:
         if reps is None:
             reps = insight.rep_models(db, ids)
         reports = insight.report_lines(db, ids)
+        # 52 — BDF 썸네일이 없는 자료의 대표 그림 대체(PDF 첫 쪽·PPTX 썸네일·이미지)
+        from ..covers import cover_files
+        covers = cover_files(db, [i for i in ids if i not in reps])
         revs = revision_counts(db, ids)   # 14 — '판 3개 · 최신 R2'(페이지당 한 번의 질의)
         wanted = set(ids)
         groups: dict[int, set[int]] = defaultdict(set)
@@ -735,6 +738,7 @@ class MySqlSearch:
                 "kind_counts": {k: r["kind_counts"].get(k, 0) for k in ROW_KINDS},
                 "thumb": ({"file_id": reps[e.id]["file_id"], "model_key": reps[e.id]["model_key"]}
                           if e.id in reps else None),
+                "cover": covers.get(e.id),
                 # 09 — 대표 모델·보고서 한 줄
                 "model": insight.model_brief(reps.get(e.id)),
                 "report": reports.get(e.id),
