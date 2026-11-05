@@ -48,6 +48,12 @@ class Settings:
     convert_timeout: int
     # 39 — WorkBench 해석 출처를 자료 화면·검색에 보인다(Hi-TESS Core 1단계). 기본 꺼짐 — 저장·entry.json 보존은 늘 한다
     wb_origin_show: bool = False
+    # 55 — 로그인 방식. employee_id = 사번만 로그인도 연다(개발 PC·테스트 기본), windows = 사번만 로그인을 닫고
+    # Windows 계정 자동 로그인(/auth/windows)과 WorkBench 자동 로그인(/sso)만 받는다(145)
+    auth_mode: str = "employee_id"
+    # 55 — Windows 계정 자동 로그인을 켤지(pywin32 sspi 가 없으면 이 값과 상관없이 꺼진다)와 받는 도메인(NetBIOS 이름)
+    windows_login: bool = True
+    ad_domain: str = "HHI"
 
 
 def load_settings() -> Settings:
@@ -80,6 +86,9 @@ def load_settings() -> Settings:
         extract_timeout=int(os.getenv("LOGBOOK_EXTRACT_TIMEOUT", "600")),
         convert_timeout=int(os.getenv("LOGBOOK_CONVERT_TIMEOUT", "1800")),
         wb_origin_show=os.getenv("LOGBOOK_WB_ORIGIN_SHOW", "").strip().lower() in ("1", "true", "yes", "on"),
+        auth_mode="windows" if os.getenv("LOGBOOK_AUTH_MODE", "").strip().lower() == "windows" else "employee_id",
+        windows_login=os.getenv("LOGBOOK_WINDOWS_LOGIN", "").strip() != "0",
+        ad_domain=(os.getenv("LOGBOOK_AD_DOMAIN", "").strip() or "HHI").upper(),
     )
 
 

@@ -109,7 +109,7 @@ def test_other_admin_cannot_write_into_batch(secret, client, make_user):
     assert r.status_code == 403
 
 
-@pytest.mark.parametrize("nxt,expected", [("inbox", "'/inbox'"), ("https://evil", "'/'"), (None, "'/'")])
+@pytest.mark.parametrize("nxt,expected", [("inbox", '"/inbox"'), ("https://evil", '"/"'), (None, '"/"')])
 def test_sso_next_allowlist(secret, client, make_user, monkeypatch, nxt, expected):
     make_user(ADMIN, wb_admin=True)
     monkeypatch.setattr(integration, "redeem_code", lambda code: {"employee_id": ADMIN})

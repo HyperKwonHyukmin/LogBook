@@ -202,7 +202,7 @@ def test_sso_success_creates_capped_session(secret, client, db, world, monkeypat
     assert r.headers["Referrer-Policy"] == "no-referrer"
     token = _token_from(r.text)
     assert token and "localStorage.setItem('logbook_token', token)" in r.text
-    assert "location.replace('/')" in r.text
+    assert 'location.replace("/")' in r.text
     assert _pick_from(r.text) == {"target": "gmu", "slot": 2}
     s = db.get(models.UserSession, token)
     assert s.employee_id == LV2 and s.wb_ref == WB_REF

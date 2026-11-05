@@ -2,13 +2,20 @@ import { vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import LoginPage from './LoginPage.jsx';
+import LoginPage, { windowsLogin } from './LoginPage.jsx';
 import { AuthProvider } from '../auth/AuthContext.jsx';
 
-function renderPage() {
+function renderPage(entry = '/login') {
   return render(
-    <MemoryRouter><AuthProvider><LoginPage /></AuthProvider></MemoryRouter>,
+    <MemoryRouter initialEntries={[entry]}><AuthProvider><LoginPage /></AuthProvider></MemoryRouter>,
   );
+}
+
+/** 55 — /api/auth/options 만 따로 답하는 fetch. 나머지는 404. */
+function mockOptions(options) {
+  vi.stubGlobal('fetch', vi.fn((url) => Promise.resolve(url === '/api/auth/options'
+    ? { ok: true, status: 200, json: () => Promise.resolve(options) }
+    : { ok: false, status: 404, json: () => Promise.resolve({ detail: 'not_found' }) })));
 }
 
 function mockFetchOnce(status, body) {
@@ -60,7 +67,7 @@ test('로그인은 /api/auth/login 으로 사번만 보낸다', async () => {
   await userEvent.clear(screen.getByLabelText('사번'));
   await userEvent.type(screen.getByLabelText('사번'), 'A100009');
   await userEvent.click(screen.getByRole('button', { name: '로그인' }));
-  const [url, init] = fetch.mock.calls[0];
+  const [url, init] = fetch.mock.calls.find(([u]) => u === '/api/auth/login');
   expect(url).toBe('/api/auth/login');
   expect(JSON.parse(init.body)).toEqual({ employee_id: 'A100009' });
 });
@@ -88,4 +95,74 @@ test('18 — WorkBench 로그아웃으로 끊겼으면 한 번 안내한다', ()
   expect(screen.getByRole('status')).toHaveTextContent('WorkBench에서 로그아웃되어 LogBook도 로그아웃되었습니다.');
   expect(sessionStorage.getItem('logbook_logout_reason')).toBeNull();
   sessionStorage.clear();
+});
+
+describe('55 — Windows 계정 자동 로그인', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    sessionStorage.clear();
+  });
+
+  test('145(사번 로그인 닫힘) — 들어오자마자 /auth/windows 로 한 번 가고, 사번 칸은 없다', async () => {
+    const go = vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
+    mockOptions({ windows: true, employee_id_login: false });
+    renderPage();
+    expect(await screen.findByText('회사 PC 계정으로 들어갑니다')).toBeInTheDocument();
+    expect(go).toHaveBeenCalledTimes(1);
+    expect(go).toHaveBeenCalledWith('/');
+    expect(screen.queryByLabelText('사번')).toBeNull();
+  });
+
+  test('로그인 뒤 원래 보던 화면(next)으로 돌아가게 넘긴다', async () => {
+    const go = vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
+    mockOptions({ windows: true, employee_id_login: false });
+    renderPage('/login?next=%2Fentries%2FE000001');
+    await screen.findByText('회사 PC 계정으로 들어갑니다');
+    expect(go).toHaveBeenCalledWith('/entries/E000001');
+  });
+
+  test('방금 실패했으면(?windows=) 다시 가지 않고 사유와 [Windows 계정으로 로그인] 단추를 보인다', async () => {
+    const go = vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
+    mockOptions({ windows: true, employee_id_login: false });
+    renderPage('/login?windows=windows_account_not_employee');
+    expect(await screen.findByRole('alert')).toHaveTextContent('사번 계정(HHI\\사번)으로 로그인돼 있지 않습니다');
+    expect(go).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Windows 계정으로 로그인' }));
+    expect(go).toHaveBeenCalledTimes(1);
+  });
+
+  test('WorkBench 쪽 사유(not_registered)도 같은 문구로 보인다', async () => {
+    vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
+    mockOptions({ windows: true, employee_id_login: false });
+    renderPage('/login?windows=not_registered');
+    expect(await screen.findByRole('alert')).toHaveTextContent('WorkBench 에 가입된 사번이 아닙니다');
+  });
+
+  test('방금 로그아웃했으면 자동으로 다시 들어가지 않는다', async () => {
+    const go = vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
+    sessionStorage.setItem('logbook_logout_reason', 'logged_out');
+    mockOptions({ windows: true, employee_id_login: false });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Windows 계정으로 로그인' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('로그아웃했습니다.');
+    expect(go).not.toHaveBeenCalled();
+  });
+
+  test('개발 PC(사번 로그인 열림)는 사번 칸도 함께 보인다', async () => {
+    vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
+    mockOptions({ windows: true, employee_id_login: true });
+    renderPage('/login?windows=unavailable');
+    expect(await screen.findByRole('button', { name: 'Windows 계정으로 로그인' })).toBeInTheDocument();
+    expect(screen.getByLabelText('사번')).toBeInTheDocument();
+  });
+
+  test('Windows 로그인을 못 쓰는 서버는 예전처럼 사번 화면', async () => {
+    const go = vi.spyOn(windowsLogin, 'go').mockImplementation(() => {});
+    mockOptions({ windows: false, employee_id_login: true });
+    renderPage();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/auth/options', expect.anything()));
+    expect(screen.getByText('사번으로 들어갑니다')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Windows 계정으로 로그인' })).toBeNull();
+    expect(go).not.toHaveBeenCalled();
+  });
 });

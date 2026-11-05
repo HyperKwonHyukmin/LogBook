@@ -113,6 +113,16 @@ SHOW GRANTS FOR '<logbook 계정>'@'<호스트>';
 자료의 변경 이력에는 자료 내용 변경만 남긴다. **열람 허락·회수는 기록하지 않는다**(2026-10-20 결정). 지금 누가 허락받았는지는 자료 화면의 허락 목록이 보여 준다.
 예전 기록은 `.venv\Scripts\python.exe -m app.cli audit-purge-grants` 로 건수를 보고 `--apply` 로 지운다. DB 와 공유 폴더 감사 파일(`90_System\audit\*.jsonl`) 둘 다 지우므로 재구축해도 돌아오지 않는다.
 
+## Windows 계정 자동 로그인 (55)
+
+크롬에서 주소를 열면 로그인 화면이 `/auth/windows` 로 넘어가고, 크롬이 PC 에 로그인한 Windows 계정(`HHI\사번`)을 자동으로 보낸다(NTLM/Kerberos, 비밀번호 없음).
+서버는 pywin32 `sspi` 로 확인하고 사번 로그인과 같은 절차(WorkBench 표 활성 확인)를 밟는다. 설계·남은 일은 `docs/plans/2026-11-06-logbook-55-windows-login.md`.
+
+- `LOGBOOK_AUTH_MODE` — 비움(기본) = 사번만 로그인도 열림(개발 PC·테스트). `windows` = 사번만 로그인을 닫는다(403 `employee_id_login_disabled`). 들어오는 길은 Windows 계정과 WorkBench(`/sso`)뿐이다.
+- `LOGBOOK_WINDOWS_LOGIN=0` 이면 Windows 계정 로그인을 끈다. `LOGBOOK_AD_DOMAIN` 기본 `HHI`.
+- 스크립트·관리 작업: `curl.exe --negotiate -u : -X POST http://10.14.42.145:9095/api/auth/windows` → `{token, user}`(본문 없이 보낸다).
+- ⚠ NTLM 상태를 프로세스 메모리에 두므로 API 는 uvicorn 하나로 돈다(`server_manager.py` `API_CMD` 에 `--workers` 를 넣지 않는다).
+
 ## WorkBench 해석 출처 (39, Hi-TESS Core 1단계)
 
 WorkBench 관리자가 All Projects 에서 해석 1건을 보내면 자료 화면 속성 칸 '출처'에 `WB #번호`·프로그램·해석자·일시와

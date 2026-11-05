@@ -4,7 +4,7 @@
  * (WorkBench 에서 비활성화되면 다음 요청에서 끊긴다 — 15). 사번만 편의를 위해 기억한다.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, tokenStore, TOKEN_KEY } from '../api/client.js';
+import { api, LOGOUT_REASON_KEY, tokenStore, TOKEN_KEY } from '../api/client.js';
 import { canWriteLevel, canWriteShared, isAdminLevel, levelOf } from '../lib/levels.js';
 
 export const SAVED_EMPLOYEE_ID_KEY = 'logbook_saved_employee_id';
@@ -64,6 +64,8 @@ export function AuthProvider({ children }) {
       // 이미 만료된 세션이어도 화면은 로그아웃 처리한다
     }
     tokenStore.clear();
+    // 55 — 로그인 화면이 Windows 계정으로 곧바로 다시 들어가지 않게 '방금 로그아웃함'을 남긴다
+    try { sessionStorage.setItem(LOGOUT_REASON_KEY, 'logged_out'); } catch { /* 저장소가 막혀도 로그아웃은 한다 */ }
     setUser(null);
   }, []);
 

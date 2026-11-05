@@ -17,7 +17,8 @@ def health(storage: StoragePaths = Depends(get_storage)):
         "ok": True,
         "version": APP_VERSION,
         # 죽은 공유 폴더에 요청이 물리지 않도록 timeout+캐시가 있는 check_reachable() 사용.
-        "storage": {"root": str(storage.root), "reachable": storage.check_reachable()},
+        # 55 — 저장소 경로(UNC·개인 폴더 이름)는 로그인 없이 보이는 응답이라 내보내지 않는다
+        "storage": {"reachable": storage.check_reachable()},
     }
 
 

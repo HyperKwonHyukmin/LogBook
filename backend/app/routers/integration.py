@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from .. import access, audit, lifting_refs, models, roles, sessions, wb_targets, wb_users
-from .. import wb_origin
+from .. import login_page, wb_origin
 from ..config import settings
 from ..database import get_db
 from ..dependencies import client_ip, get_storage
@@ -366,14 +366,8 @@ def _pick(target: str | None, slot: str | None) -> dict:
     return {"target": target, "slot": 1 if target == "truss" else n}
 
 
-def _js(value) -> str:
-    """HTML <script> 안에 넣을 JS 값 — JSON 으로 쓰고 </script>·주석·HTML 해석에 걸리는 글자를 \\u 로 바꾼다."""
-    return (json.dumps(value, ensure_ascii=True).replace("<", "\\u003c").replace(">", "\\u003e")
-            .replace("&", "\\u0026").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
-
-
-SSO_HEADERS = {"Cache-Control": "no-store", "Pragma": "no-cache", "Referrer-Policy": "no-referrer",
-               "X-Content-Type-Options": "nosniff"}
+_js = login_page.js
+SSO_HEADERS = login_page.HEADERS
 
 # 실패 사유 → (HTTP 상태, 안내 문구)
 SSO_FAILURES = {
@@ -413,28 +407,9 @@ SSO_NEXT_PATHS = {"inbox": "/inbox"}
 
 
 def _success_page(token: str, employee_id: str, pick: dict, next_path: str = "/") -> HTMLResponse:
-    if next_path not in SSO_NEXT_PATHS.values():   # 허용 목록의 상수만 스크립트에 그대로 넣는다
+    if next_path not in SSO_NEXT_PATHS.values():   # 허용 목록의 상수만
         next_path = "/"
-    # 다른 사람이 쓰던 창이면 그 사람이 보내지 못한 화면 설정(prefs)을 새 사용자에게 보내지 않게 지운다
-    body = f"""<!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="referrer" content="no-referrer">
-<title>Hi-TESS LogBook</title></head><body>
-<script>
-(function () {{
-  var token = {_js(token)}, eid = {_js(employee_id)}, pick = {_js(pick)};
-  try {{
-    if (localStorage.getItem('logbook_saved_employee_id') !== eid) localStorage.removeItem('logbook.prefsUnsent.v1');
-    localStorage.setItem('logbook_token', token);
-    localStorage.setItem('logbook_saved_employee_id', eid);
-  }} catch (e) {{}}
-  // 18-b — 새 선택 모드마다 자동 검색 필터를 다시 한 번 켠다(같은 창을 다른 대상으로 다시 열 때)
-  try {{ sessionStorage.setItem('logbook_wb', JSON.stringify(pick)); sessionStorage.removeItem('logbook_wb_filter_applied'); }} catch (e) {{}}
-  location.replace('{next_path}');
-}})();
-</script>
-<noscript>JavaScript 가 꺼져 있어 로그인할 수 없습니다. <a href="/login">사번으로 로그인</a></noscript>
-</body></html>"""
-    return HTMLResponse(body, status_code=200, headers=SSO_HEADERS)
+    return login_page.success_page(token, employee_id, pick, next_path)
 
 
 @sso_router.get("/sso", include_in_schema=False)

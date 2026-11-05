@@ -75,6 +75,7 @@ async def lifespan(app: FastAPI):
 def create_app(frontend_dist: Path | None | object = _USE_DEFAULT) -> FastAPI:
     app = FastAPI(title="Hi-TESS LogBook", version=APP_VERSION, lifespan=lifespan)
     app.include_router(auth.router)
+    app.include_router(auth.page_router)   # 55 — /auth/windows, SPA 보다 먼저
     app.include_router(users.router)
     app.include_router(system.router)
     app.include_router(batches.router)
