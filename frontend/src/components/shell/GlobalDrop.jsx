@@ -1,10 +1,8 @@
 import { useEffect } from 'react';
-import { X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { PageDropOverlay, UploadFeedback, uploaderView, useUploader } from '../inbox/UploadZone.jsx';
+import { PageDropOverlay, UploadCenterCard, UploadCenterStack, uploaderView, useUploader } from '../inbox/UploadZone.jsx';
 import { isOsFileDrag, useUploadSnapshot, useUploadStore } from '../inbox/UploadProvider.jsx';
 import { useToast } from '../ui/Toast.jsx';
-import { useBasketBarVisible } from '../compare/CompareBasket.jsx';
 import { READ_ONLY_REASON } from '../../lib/levels.js';
 
 // 자기 올리기 칸이 있는 화면 — 정리 대기는 화면 전체 덮개, Entry 는 '파일 추가' 칸이 따로 있다
@@ -25,8 +23,6 @@ export default function GlobalDrop({ storage, readOnly = false }) {
   const store = useUploadStore();
   const snap = useUploadSnapshot(store);
   const ownUpload = OWN_UPLOAD.some((re) => re.test(pathname));
-  // 비교 바구니 띠(bottom-16, 높이 48)가 떠 있으면 그 위로 올려 서로 가리지 않게 한다.
-  const basketBar = useBasketBarVisible();
 
   const uploader = useUploader({
     scope: GLOBAL_SCOPE,
@@ -71,11 +67,11 @@ export default function GlobalDrop({ storage, readOnly = false }) {
   return (
     <>
       {!ownUpload && !readOnly && <PageDropOverlay u={uploader} />}
-      {/* 진행률·오류·DRM 거부는 오른쪽 아래에 띄운다(성공은 토스트) */}
-      <div className={`pointer-events-none fixed ${basketBar ? 'bottom-32' : 'bottom-16'} right-5 z-40 flex w-[400px] max-w-[calc(100vw-2.5rem)] flex-col gap-2 empty:hidden`}>
+      {/* 진행률·오류·DRM 거부는 화면 가운데 카드로(성공은 토스트) — 52, 오른쪽 아래 작은 상자는 눈에 띄지 않았다 */}
+      <UploadCenterStack>
         {orphans.map((u) => <FloatingFeedback key={u.scope} u={u} title={store.optionsOf?.(u.scope)?.away?.title} />)}
         {showGlobal && <FloatingFeedback u={uploader} />}
-      </div>
+      </UploadCenterStack>
     </>
   );
 }
@@ -85,18 +81,5 @@ function FloatingFeedback({ u, title }) {
   const show = u.busy || u.resumable || u.info || u.error
     || u.result?.rejected?.length > 0 || u.result?.skipped?.length > 0 || u.result?.blocked?.length > 0;
   if (!show) return null;
-  // 올리는 중이거나 이어 올릴 수 있으면 닫지 않는다([취소]로 끝낸다)
-  const closable = !u.busy && !u.resumable;
-  return (
-    <div className="pointer-events-auto relative max-h-[60vh] overflow-y-auto rounded-lg border border-n-200 bg-n-0 p-3 pr-9 shadow-lg">
-      {title && <p className="mb-1.5 text-meta font-medium text-n-700">{title}</p>}
-      <UploadFeedback u={{ ...u, disabled: false }} showSuccess={false} />
-      {closable && (
-        <button type="button" aria-label="닫기" onClick={u.dismiss}
-                className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-sm text-n-500 transition-colors duration-150 ease-out hover:bg-n-100 hover:text-n-900">
-          <X size={14} aria-hidden="true" />
-        </button>
-      )}
-    </div>
-  );
+  return <UploadCenterCard u={u} title={title} />;
 }

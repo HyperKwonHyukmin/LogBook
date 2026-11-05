@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Check, CheckCheck, ChevronRight, FolderInput, Globe } from 'lucide-react';
 import { api } from '../../api/client.js';
 import Button from '../ui/Button.jsx';
@@ -7,7 +7,7 @@ import Spinner from '../ui/Spinner.jsx';
 import DraftCard from './DraftCard.jsx';
 import { DuplicateTargets } from './DuplicateBlocked.jsx';
 import { BATCH_STATE_LABELS, EXCLUDE_REASON_LABELS } from '../../lib/labels.js';
-import { MODEL_CONVERT_LABELS, bulkConfirmPlan, convertCounts, stagedStatus } from '../../lib/inboxStatus.js';
+import { MODEL_CONVERT_LABELS, bulkConfirmPlan, convertCounts, stagedStatus, stagedTiming } from '../../lib/inboxStatus.js';
 import { errorText } from '../../lib/labels.js';
 
 const STATE_TONE = { failed: 'text-err', staged: 'text-n-600', processed: 'text-wait', done: 'text-ok', uploading: 'text-n-600' };
@@ -52,21 +52,47 @@ function StepList({ steps }) {
  * 분석 중(staged) 진행 패널 — 작은 머리줄 글자만으로는 '지금 정리 중' 이 잘 보이지 않아(사용자 의견) 따로 띄운다.
  * 큰 스피너 + 제목 + 지금 하는 일 + 단계 4칸 + 진행 막대(파일 확인 단계는 n/N 만큼, 그 밖은 흐르는 막대).
  */
-function StagedPanel({ status }) {
+/** 1초마다 지금 시각 — 정리 중 경과 시간이 폴링(5초) 사이에도 흐르게. */
+function useNow(active) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [active]);
+  return now;
+}
+
+function StagedPanel({ status, timing }) {
   const running = !!status.current;
   const wait = status.tone === 'wait';
   const title = running ? '정리하는 중입니다' : wait ? '정리를 다시 시도하려고 기다리는 중입니다' : '정리를 기다리는 중입니다';
   const at = status.steps.findIndex((s) => s.state === 'current');
-  const pct = status.fraction != null && at >= 0 ? Math.round(((at + status.fraction) / status.steps.length) * 100) : null;
+  const pct = status.fraction != null && at >= 0 ? Math.round(((at + status.fraction) / status.steps.length) * 100)
+    : running && at >= 0 ? Math.round((at / status.steps.length) * 100) : null;
   return (
     <div role="status" aria-label="정리 진행"
          className={`overflow-hidden rounded-lg border ${wait ? 'border-wait-line bg-wait-bg' : 'border-brand-muted bg-brand-subtle'}`}>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-3.5">
         <Spinner size={22} className={`shrink-0 ${wait ? 'text-wait' : 'text-brand'}`} />
         <div className="min-w-0 flex-1">
-          <p className={`text-body font-semibold ${wait ? 'text-wait' : 'text-n-900'}`}>{title}</p>
+          <p className={`text-[16px] leading-6 font-semibold ${wait ? 'text-wait' : 'text-n-900'}`}>{title}</p>
           <p className="text-ui text-n-700">{status.line}</p>
         </div>
+        {pct != null && <span className="font-mono text-[24px] font-semibold leading-none text-brand">{pct}%</span>}
+      </div>
+      {/* 52 — 얼마나 걸리는지(사용자 의견): 올린 지 · 남은 시간(파일 확인 속도로 추정) */}
+      <dl className="flex flex-wrap gap-x-6 gap-y-1 px-4 pb-3 pt-2 pl-[3.25rem] text-ui">
+        {timing.elapsed && (
+          <div className="flex gap-1.5"><dt className="text-n-600">올린 지</dt><dd className="font-mono text-n-900">{timing.elapsed}</dd></div>
+        )}
+        <div className="flex gap-1.5">
+          <dt className="text-n-600">남은 시간</dt>
+          <dd className="font-medium text-n-900">{timing.remaining || (running ? '계산하는 중' : '시작하면 알려 드립니다')}</dd>
+        </div>
+        <div className="text-n-600">이 화면을 닫아도 계속 진행됩니다</div>
+      </dl>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-3 pl-[3.25rem] empty:hidden">
         {running && (
           <ol aria-label="처리 단계" className="flex flex-wrap items-center gap-x-1 gap-y-1 text-meta">
             {status.steps.map((s, i) => (
@@ -84,7 +110,7 @@ function StagedPanel({ status }) {
           </ol>
         )}
       </div>
-      <div className={`h-1 overflow-hidden ${wait ? 'bg-wait-line' : 'bg-brand-muted'}`}
+      <div className={`h-1.5 overflow-hidden ${wait ? 'bg-wait-line' : 'bg-brand-muted'}`}
            role="progressbar" aria-label="정리 진행률" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined}>
         {pct != null
           ? <div className="h-full bg-brand transition-[width] duration-300 ease-out" style={{ width: `${pct}%` }} />
@@ -95,10 +121,18 @@ function StagedPanel({ status }) {
 }
 
 /** 분석 중(staged) — 진행 패널(또는 꺼진 워커 알림) + '무엇을 하나요?' 펼침. */
-function StagedDetail({ status }) {
+function StagedDetail({ batch, status }) {
+  // 파일 확인 속도를 재려고 이 화면이 처음 본 진행(시각·개수)을 들고 있다
+  const sample = useRef(null);
+  const p = batch.progress;
+  if (status.current === 'files' && p?.total != null && (sample.current?.key !== batch.key || (p.done ?? 0) < sample.current.done)) {
+    sample.current = { key: batch.key, t: Date.now(), done: p.done ?? 0 };
+  }
+  const now = useNow(!status.workerDown);
+  const timing = stagedTiming(batch, status, sample.current, now);
   return (
     <>
-      {!status.workerDown && <StagedPanel status={status} />}
+      {!status.workerDown && <StagedPanel status={status} timing={timing} />}
       {status.workerDown && (
         <p role="status" className="flex items-start gap-1.5 rounded-md border border-wait-line bg-wait-bg px-3 py-2 text-ui text-wait">
           <AlertCircle size={14} className="mt-[3px] shrink-0" aria-hidden="true" />
@@ -207,7 +241,7 @@ export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChang
         <p role={bulk.failed ? 'alert' : 'status'}
            className={`rounded-md px-3 py-2 text-ui ${bulk.failed ? 'border border-wait-line bg-wait-bg text-wait' : 'bg-n-50 text-n-800'}`}>{bulk.message}</p>
       )}
-      {staged && <StagedDetail status={staged} />}
+      {staged && <StagedDetail batch={batch} status={staged} />}
       {batch.attachment_target && <p role="status" className="text-meta text-n-600">
         <span className="font-mono">{batch.attachment_target}</span> 초안에 파일을 첨부 중입니다. 해당 초안의 파일 목록에 함께 표시됩니다.
       </p>}

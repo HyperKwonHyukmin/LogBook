@@ -18,14 +18,14 @@ const Y2025 = [
 ].map((p) => item(p));
 
 describe('planFolder', () => {
-  it('제외 추천 형식은 처음에 체크가 풀리고, 엑셀·f06 은 체크된다', () => {
+  it('제외 추천 형식(op2·f06·mvw)은 처음에 체크가 풀리고, 엑셀은 체크된다', () => {
     const plan = planFolder(Y2025);
     const checked = initialChecked(plan);
     expect(checked.has('2025/closed_chock/Result_M1_90ton/m1_chock_90ton.op2')).toBe(false);
     expect(checked.has('2025/closed_chock/Result_M1_92ton/Original/Ressult_M1_92ton.mvw')).toBe(false);
     expect(checked.has('2025/manifold_support_8182/doc/calc.xlsm')).toBe(true);
-    expect(checked.has('2025/closed_chock/Result_M1_92ton/Original/m1_92ton.f06')).toBe(true);
-    expect(skippedByExt(plan, checked)).toEqual([{ ext: '.op2', count: 1 }, { ext: '.mvw', count: 1 }]);
+    expect(checked.has('2025/closed_chock/Result_M1_92ton/Original/m1_92ton.f06')).toBe(false);   // 2026-11-05 사용자 결정
+    expect(skippedByExt(plan, checked)).toEqual([{ ext: '.op2', count: 1 }, { ext: '.f06', count: 1 }, { ext: '.mvw', count: 1 }]);
   });
 
   it('임시 파일은 목록에 넣지 않고 따로 센다', () => {
@@ -47,7 +47,7 @@ describe('planFolder', () => {
     expect(plan.root).toBe('2025');
     expect(plan.defaultSplit).toBe(true);
     expect(previewDrafts(plan, initialChecked(plan), true).map((d) => [d.name, d.count]))
-      .toEqual([['closed chock', 4], ['manifold support 8182', 3]]);
+      .toEqual([['closed chock', 3], ['manifold support 8182', 3]]);
   });
 
   it('보고서가 맨 위에 있는 과제 폴더 하나(closed_chock)는 전체 1건이 기본', () => {
@@ -56,7 +56,7 @@ describe('planFolder', () => {
     const plan = planFolder(one);
     expect(plan.root).toBe('closed_chock');
     expect(plan.defaultSplit).toBe(false);
-    expect(previewDrafts(plan, initialChecked(plan), false)).toEqual([{ name: 'closed chock', count: 4, size: 40 }]);
+    expect(previewDrafts(plan, initialChecked(plan), false)).toEqual([{ name: 'closed chock', count: 3, size: 30 }]);
   });
 
   it('체크한 것이 없으면 초안도 없다', () => {

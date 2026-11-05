@@ -1,4 +1,4 @@
-import { bulkConfirmPlan, convertCounts, draftChecks, hasPendingConvert, modelConvertState, stagedStatus } from './inboxStatus.js';
+import { bulkConfirmPlan, formatDuration, stagedTiming, convertCounts, draftChecks, hasPendingConvert, modelConvertState, stagedStatus } from './inboxStatus.js';
 
 const staged = (queue, progress = null) => ({ state: 'staged', queue, progress });
 const alive = { worker_alive: true, job_state: 'queued', ahead: 0, busy_with: [], attempts: 0, last_error: null };
@@ -86,5 +86,22 @@ describe('52 — bulkConfirmPlan', () => {
     expect(go.map((e) => e.entry_id)).toEqual(['E1']);
     expect(skip.map((s) => [s.entry.entry_id, s.reason])).toEqual([
       ['E2', '제목 없음'], ['E3', '똑같은 BDF 가 이미 있음'], ['E4', '권상 Wire 모델 확인'], ['E5', '저장하지 않은 변경']]);
+  });
+});
+
+describe('52 — 정리 진행 시간', () => {
+  it('경과·남은 시간 글자', () => {
+    expect(formatDuration(80)).toBe('1분 20초');
+    expect(formatDuration(40, { approx: true })).toBe('1분 미만');
+    expect(formatDuration(150, { approx: true })).toBe('약 3분');
+  });
+  it('파일 확인 속도로 남은 시간을 추정하고, 처음 본 순간에는 계산 중', () => {
+    const t0 = Date.parse('2026-11-05T10:00:00');
+    const batch = { key: 'K', received_at: '2026-11-05T09:59:00', progress: { step: 'files', done: 20, total: 100 } };
+    const status = { current: 'files' };
+    expect(stagedTiming(batch, status, { key: 'K', t: t0, done: 20 }, t0)).toEqual({ elapsed: '1분 0초', remaining: null });
+    // 10초에 10개 → 남은 70개는 70초 → 약 1분
+    expect(stagedTiming({ ...batch, progress: { step: 'files', done: 30, total: 100 } }, status,
+      { key: 'K', t: t0, done: 20 }, t0 + 10_000)).toEqual({ elapsed: '1분 10초', remaining: '약 1분' });
   });
 });

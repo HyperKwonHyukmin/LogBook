@@ -21,9 +21,10 @@ function GroupCheck({ files, checked, onToggle, label }) {
 /**
  * 52 — 폴더째 올리기 목록. 파일을 소속 폴더별로 보이고, 제외 추천 형식(op2·HyperView 등)은 체크를 풀어 둔다.
  * 묶는 단위(과제 폴더마다 / 전체 1건)와 모든 초안에 넣을 공통 분류(구역·대상·담당자)를 여기서 한 번 정한다.
+ * attach — 기존 초안·자료에 파일 추가: 파일 고르기만(묶는 단위·공통 분류는 그 자료를 따른다).
  * onSubmit({ relPaths: Set, preset, splitTop }) · onCancel().
  */
-export default function FolderUploadDialog({ plan, onSubmit, onCancel }) {
+export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = false }) {
   const id = useId();
   const [checked, setChecked] = useState(() => initialChecked(plan));
   const [split, setSplit] = useState(plan.defaultSplit);
@@ -34,7 +35,7 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel }) {
   const skipped = useMemo(() => skippedByExt(plan, checked), [plan, checked]);
   const chosen = plan.files.filter((f) => checked.has(f.relPath));
   const chosenSize = chosen.reduce((s, f) => s + f.size, 0);
-  const canSplit = !!plan.root && plan.groups.some((g) => g.dir.split('/').length >= 2);
+  const canSplit = !attach && !!plan.root && plan.groups.some((g) => g.dir.split('/').length >= 2);
 
   const set = (paths, on) => setChecked((cur) => {
     const next = new Set(cur);
@@ -61,14 +62,14 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel }) {
            className="flex max-h-[92vh] w-full max-w-[880px] animate-pop flex-col gap-4 rounded-xl bg-n-0 p-5 shadow-lg">
         <div>
           <h2 id={`${id}-t`} className="text-[16px] leading-6 font-semibold text-n-900">
-            폴더 올리기{plan.root && <> · <span className="font-mono">{plan.root}</span></>}
+            {attach ? '파일 추가' : '폴더 올리기'}{plan.root && <> · <span className="font-mono">{plan.root}</span></>}
           </h2>
           <p className="mt-1 text-ui text-n-600">
-            체크한 파일만 올립니다. 결과·세션 파일(op2·mvw 등)은 체크를 풀어 두었으니, 필요하면 체크해서 함께 올리세요.
+            체크한 파일만 올립니다. 결과·세션 파일(op2·f06·mvw 등)은 체크를 풀어 두었으니, 필요하면 체크해서 함께 올리세요.
           </p>
         </div>
 
-        <section aria-label="자료 묶기" className="flex flex-col gap-2">
+        {!attach && <section aria-label="자료 묶기" className="flex flex-col gap-2">
           {canSplit && (
             <div role="radiogroup" aria-label="묶는 단위" className="flex flex-wrap gap-x-5 gap-y-1 text-ui text-n-800">
               <label className="flex cursor-pointer items-center gap-1.5">
@@ -89,9 +90,9 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel }) {
             ))}
             {!drafts.length && <li className="text-meta text-err">체크한 파일이 없습니다.</li>}
           </ul>
-        </section>
+        </section>}
 
-        <section aria-label="공통 분류" className="grid gap-3 rounded-md border border-n-200 p-3 sm:grid-cols-3">
+        {!attach && <section aria-label="공통 분류" className="grid gap-3 rounded-md border border-n-200 p-3 sm:grid-cols-3">
           <p className="text-meta text-n-600 sm:col-span-3">
             아래 값은 만들어지는 모든 초안에 같이 들어갑니다(선택). 호선은 넣지 않습니다. 초안마다 정리 대기에서 고칠 수 있습니다.
           </p>
@@ -107,7 +108,7 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel }) {
             <span>담당자</span>
             <div className="font-normal"><AssigneeInput values={assignees} onChange={setAssignees} /></div>
           </div>
-        </section>
+        </section>}
 
         <section aria-label="올릴 파일" className="flex min-h-0 flex-1 flex-col gap-2">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-n-600">
@@ -153,7 +154,7 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel }) {
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onCancel}>취소</Button>
           <Button variant="primary" disabled={!chosen.length} onClick={submit}>
-            {drafts.length > 1 ? `초안 ${drafts.length}건으로 올리기` : '올리기'} ({chosen.length}개)
+            {!attach && drafts.length > 1 ? `초안 ${drafts.length}건으로 올리기` : '올리기'} ({chosen.length}개)
           </Button>
         </div>
       </div>

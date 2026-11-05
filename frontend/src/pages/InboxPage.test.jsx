@@ -7,6 +7,7 @@ import { AuthContext } from '../auth/AuthContext.jsx';
 vi.mock('../lib/upload.js', async (orig) => ({ ...(await orig()), uploadBatch: vi.fn() }));
 import { uploadBatch } from '../lib/upload.js';
 import InboxPage from './InboxPage.jsx';
+import { UploadProvider } from '../components/inbox/UploadProvider.jsx';
 
 const DRAFT = { entry_id: 'E000010', status: 'draft', title: '9999 연결시험', version: 1, hulls: [], zones: [],
   hull_evidence: [], files: [], suggested_entry: null, merge_into: null, uploaded_by: 'A100001' };
@@ -171,6 +172,25 @@ test('48 — 손볼 자료 탭(/inbox?tab=fix)은 배치 대신 확정 자료 �
   expect(screen.getByRole('link', { name: 'E000002 제목' })).toHaveAttribute('href', '/e/E000002');
 });
 
+// 52 — 폴더 목록 창은 셸의 올리기 저장소(UploadProvider)에 있다
+function renderInShell(fetchMap) {
+  vi.stubGlobal('fetch', vi.fn((url, init = {}) => {
+    const r = fetchMap[`${init.method || 'GET'} ${url}`];
+    if (r === undefined) throw new Error(`unexpected ${init.method || 'GET'} ${url}`);
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(r) });
+  }));
+  const auth = { user: { employee_id: 'A100001', name: '사용자' }, isAdmin: false };
+  return render(
+    <AuthContext.Provider value={auth}>
+      <UploadProvider>
+        <MemoryRouter initialEntries={['/inbox']}>
+          <Routes><Route path="/inbox" element={<InboxPage />} /></Routes>
+        </MemoryRouter>
+      </UploadProvider>
+    </AuthContext.Provider>,
+  );
+}
+
 const inFolder = (relPath, body = 'GRID') => {
   const f = new File([body], relPath.split('/').pop());
   Object.defineProperty(f, 'webkitRelativePath', { value: relPath });
@@ -181,7 +201,7 @@ test('52 — 폴더째 올리기는 목록을 먼저 띄우고, 체크한 파일
   uploadBatch.mockClear();
   uploadBatch.mockResolvedValue({ key: 'K9', uploaded: 3, rejected: [] });
   const vocab = { kind: 'zone', other: '기타', terms: [] };
-  renderPage({ 'GET /api/batches?scope=mine': [], 'GET /api/vocab?kind=zone': vocab,
+  renderInShell({ 'GET /api/batches?scope=mine': [], 'GET /api/vocab?kind=zone': vocab,
     'GET /api/vocab?kind=target': { ...vocab, kind: 'target' },
     'GET /api/uploads/rules': { excluded_patterns: ['~$*'], skip_by_default: ['.op2', '.mvw'] } });
   await screen.findByText('정리할 자료가 없습니다');
@@ -210,7 +230,7 @@ test('52 — 폴더째 올리기는 목록을 먼저 띄우고, 체크한 파일
 
 test('52 — 폴더 목록에서 취소하면 올리지 않는다', async () => {
   uploadBatch.mockClear();
-  renderPage({ 'GET /api/batches?scope=mine': [], 'GET /api/vocab?kind=zone': { kind: 'zone', terms: [] },
+  renderInShell({ 'GET /api/batches?scope=mine': [], 'GET /api/vocab?kind=zone': { kind: 'zone', terms: [] },
     'GET /api/vocab?kind=target': { kind: 'target', terms: [] },
     'GET /api/uploads/rules': { excluded_patterns: [], skip_by_default: ['.op2'] } });
   await screen.findByText('정리할 자료가 없습니다');

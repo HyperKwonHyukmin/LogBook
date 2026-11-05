@@ -32,7 +32,7 @@
 - 처음 체크 상태: `rules.SKIP_BY_DEFAULT_EXTS` 는 체크 해제 + '제외 추천' 표시, 나머지는 체크. 요약 줄에 형식별 "op2 14개 빠짐 [포함]".
   서버가 늘 지우는 임시 파일(`EXCLUDE_PATTERNS`, `~$*` 등)은 목록에 넣지 않고 개수만.
   규칙은 `GET /api/uploads/rules` 로 받는다(못 받으면 `FALLBACK_RULES`, rules.py 와 같게 둘 것).
-- 제외 추천 형식: `.op2 .xdb .h5`(큰 결과) · `.h3d .mvw .hwsession`(HyperView) · `.pch .asm .plt`(Nastran 부산물). 남김: f06 · hm · inp · xlsm · xlsx · 보고서 · 도면.
+- 제외 추천 형식: `.op2 .f06 .xdb .h5`(해석 결과) · `.h3d .mvw .hwsession`(HyperView) · `.pch .asm .plt`(Nastran 부산물). 남김: hm · inp · xlsm · xlsx · 보고서 · 도면.
 - 묶는 단위: 하위 폴더가 있을 때만 묻는다. 기본값 = 고른 폴더 바로 아래 낱개 보고서가 없고, 보고서가 든 하위 폴더가 둘 이상이면 "하위 폴더마다 자료 1건"
   (2025 → 2건, closed_chock → 1건). 만들어질 초안 이름·파일 수·용량을 바로 보인다.
 - 공통 분류(선택): 구역 · 대상 · 담당자 → 모든 초안에. 초안 카드에 태그 칸이 없어 태그·공개 범위는 넣지 않았다.
@@ -55,6 +55,14 @@
 ### 테스트
 - 백엔드 `test_folder_upload_52.py`(2025 실제 구성으로 나누기·호선 후보·preset 정리·적용·막힌 BDF 배정).
 - 프런트 `folderPlan.test.js` · `InboxPage.test.jsx`(목록 → 체크한 것만·splitTop) · `BatchCard.test.jsx` · `inboxStatus.test.js`.
+
+### 후속 (2026-11-05 사용자 확인 뒤)
+- ⚠ **다른 화면에 놓은 폴더가 목록 없이 올라갔다**(op2·mvw 포함 48개 그대로). 목록 창을 정리 대기 화면에만 달아,
+  셸 전체 놓기(`GlobalDrop`)·초안/자료에 파일 추가는 거치지 않았다. → 목록 창을 셸 하나(`FolderReviewHost`, `UploadProvider` 안)로 옮기고
+  `useUploader` 가 늘 거치게 했다. 기존 초안·자료에 추가는 파일 고르기만(`attach`). 회귀 테스트 `GlobalDrop.test.jsx`.
+- `.f06` 도 제외 추천(체크 해제)에 넣음(사용자 결정).
+- 올리는 중 상자를 오른쪽 아래 작은 상자 → 화면 위쪽 가운데 카드(`UploadCenterCard`: 지금 하는 일 · 큰 %). 정리 대기 화면도 올리는 중에는 같은 카드.
+- 정리 진행 패널: 큰 % · '올린 지' 경과 · '남은 시간'(파일 확인 속도로 추정, `stagedTiming`) · 진행 막대 굵게.
 
 ## 하지 않는 것
 - 호선 자동 지정, 개정 짝 인식(위 결정).

@@ -168,3 +168,37 @@ export function bulkConfirmPlan(drafts, dirtyIds = new Set()) {
   }
   return { go, skip };
 }
+
+/** 초 → '1분 20초'·'40초'(경과), approx 면 '약 2분'·'1분 미만'(남은 시간). */
+export function formatDuration(sec, { approx = false } = {}) {
+  const s = Math.max(0, Math.round(sec));
+  if (approx) {
+    if (s < 60) return '1분 미만';
+    const m = Math.round(s / 60);
+    return m < 60 ? `약 ${m}분` : `약 ${Math.floor(m / 60)}시간 ${m % 60}분`;
+  }
+  if (s < 60) return `${s}초`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m}분 ${s % 60}초` : `${Math.floor(m / 60)}시간 ${m % 60}분`;
+}
+
+/**
+ * 52 — 정리 진행 패널의 시간 정보. sample = 이 화면이 처음 본 파일 확인 진행 {key, t(ms), done}(BatchCard 가 들고 있다).
+ * → { elapsed: '1분 20초'|null(올린 지), remaining: '약 2분'|null(파일 확인 속도로 추정, 두 번 이상 보고 움직였을 때만) }
+ */
+export function stagedTiming(batch, status, sample, now = Date.now()) {
+  const recv = batch.received_at ? Date.parse(batch.received_at) : NaN;
+  const elapsed = Number.isFinite(recv) && now >= recv ? formatDuration((now - recv) / 1000) : null;
+  let remaining = null;
+  const p = batch.progress;
+  if (status.current === 'files' && p?.total && sample?.key === batch.key && p.done > sample.done) {
+    const secs = (now - sample.t) / 1000;
+    if (secs >= 3) {
+      const rate = (p.done - sample.done) / secs;   // 파일/초
+      remaining = formatDuration((p.total - p.done) / rate, { approx: true });
+    }
+  } else if (status.current === 'propose' || status.current === 'queue') {
+    remaining = '1분 미만';
+  }
+  return { elapsed, remaining };
+}

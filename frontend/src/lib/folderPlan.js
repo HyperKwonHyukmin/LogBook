@@ -8,7 +8,7 @@
 export const FALLBACK_RULES = {
   excluded_patterns: ['~$*', 'thumbs.db', 'desktop.ini', '*.master', '*.dball', '*.scratch', '*.tmp',
     '.ds_store', '._*', '*.crdownload', '*.part'],
-  skip_by_default: ['.op2', '.xdb', '.h5', '.h3d', '.mvw', '.hwsession', '.pch', '.asm', '.plt'],
+  skip_by_default: ['.op2', '.f06', '.xdb', '.h5', '.h3d', '.mvw', '.hwsession', '.pch', '.asm', '.plt'],
 };
 
 const REPORT_EXTS = new Set(['.pdf', '.ppt', '.pptx', '.doc', '.docx', '.hwp']);

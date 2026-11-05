@@ -18,8 +18,9 @@ KIND_BY_EXT = {
 
 
 # 52 — 폴더째 올리기 목록에서 처음에 체크를 풀어 두는 형식(사람이 다시 체크하면 올라간다 — 서버가 지우지 않는다).
-# 큰 이진 결과(BDF 로 다시 만들 수 있고 LogBook 이 읽지 않음)·HyperView 결과·세션(op2 경로에 매임)·Nastran 부산물
-SKIP_BY_DEFAULT_EXTS = (".op2", ".xdb", ".h5", ".h3d", ".mvw", ".hwsession", ".pch", ".asm", ".plt")
+# 해석 결과(op2·f06·xdb·h5 — BDF 로 다시 만들 수 있다)·HyperView 결과·세션(op2 경로에 매임)·Nastran 부산물.
+# f06 도 뺀다(사용자 결정 2026-11-05) — 필요하면 목록에서 체크해 올린다
+SKIP_BY_DEFAULT_EXTS = (".op2", ".f06", ".xdb", ".h5", ".h3d", ".mvw", ".hwsession", ".pch", ".asm", ".plt")
 
 
 def is_excluded(name: str) -> bool:

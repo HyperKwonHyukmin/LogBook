@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
 import { createUploadStore } from '../../lib/uploadStore.js';
+import { FolderReviewHost } from './FolderReview.jsx';
 
 const UploadStoreContext = createContext(null);
 const NO_STORE = { subscribe: () => () => {}, getSnapshot: () => null, anyBusy: () => false };
@@ -17,7 +18,7 @@ export function UploadProvider({ children, store: given }) {
   useUploadWindowGuards(store);
   // 셸이 사라지면(로그아웃) 보내던 요청을 끊는다
   useEffect(() => () => store.abortAll(), [store]);
-  return <UploadStoreContext.Provider value={store}>{children}</UploadStoreContext.Provider>;
+  return <UploadStoreContext.Provider value={store}><FolderReviewHost>{children}</FolderReviewHost></UploadStoreContext.Provider>;
 }
 
 /** 셸의 저장소(없으면 null — 단독 렌더 테스트 등). */

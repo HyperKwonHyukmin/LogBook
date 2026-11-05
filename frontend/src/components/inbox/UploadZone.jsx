@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import { FolderUp, RotateCw, Upload, UploadCloud } from 'lucide-react';
+import { FolderUp, RotateCw, Upload, UploadCloud, X } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import Spinner from '../ui/Spinner.jsx';
 import DuplicateBlockedNotice from './DuplicateBlocked.jsx';
@@ -9,6 +9,7 @@ import { IDLE_JOB, createUploadStore } from '../../lib/uploadStore.js';
 import { formatBytes } from '../../lib/labels.js';
 import { isAdminLevel } from '../../lib/levels.js';
 import { isOsFileDrag, useUploadSnapshot, useUploadStore, useUploadWindowGuards } from './UploadProvider.jsx';
+import { useFolderReviewer } from './FolderReview.jsx';
 
 export { isOsFileDrag };
 
@@ -47,10 +48,12 @@ export function useOsFileDragActive() {
  * targetEntryId: 기존 Entry 에 추가로 올릴 때.
  * 17 — 서버가 완전 동일 BDF 를 받지 않으면 result.blocked 에 온다. 모두 막히면 배치가 없어 onUploaded 를 부르지 않는다.
  * LV3 는 forceBlocked() 로 막힌 파일(+ 함께 빠진 INCLUDE)을 '그래도 올리기' 한다(새 배치, 서버 감사 기록).
- * review(collected, send): 52 — 고른·놓은 것을 바로 올리지 않고 넘긴다(정리 대기의 폴더째 올리기 목록).
- *   collected = Promise<items>, send(items, {preset, splitTop}) 로 올린다.
+ * 52 — 고른·놓은 것은 셸의 폴더 목록 창(FolderReviewHost)을 거친다. 폴더면 목록, 파일 몇 개면 바로 올린다.
+ *   기존 초안·자료에 추가(targetEntryId)는 파일 고르기만. 셸이 없으면(단독 렌더) 바로 올린다.
  */
-export function useUploader({ scope = 'upload', onUploaded, disabled = false, targetEntryId, targetEntryStatus, away, review }) {
+export function useUploader({ scope = 'upload', onUploaded, disabled = false, targetEntryId, targetEntryStatus, away }) {
+  const reviewer = useFolderReviewer();
+  const review = reviewer ? (collected, send) => reviewer(collected, send, { attach: !!targetEntryId }) : null;
   const auth = useContext(AuthContext); // 단독 렌더(테스트)에서는 없을 수 있다
   const canForce = isAdminLevel(auth?.user);
   const shared = useUploadStore();
@@ -186,6 +189,58 @@ export function UploadFeedback({ u, showSuccess = true }) {
           <ul className="mt-1">{result.rejected.map((r) => <li key={r}>{r}</li>)}</ul>
         </div>
       )}
+    </div>
+  );
+}
+
+/** 가운데 카드의 머리 — 지금 무엇을 하는지와 몇 % 인지(작은 글자만으로는 올리는 중인지 잘 보이지 않는다). */
+function centerHeading(u) {
+  if (u.busy && u.phase === 'checking') {
+    return { text: '올릴 파일을 확인하는 중', sub: u.checkTotal != null ? `${u.checked} / ${u.checkTotal}개` : `${u.checked}개` };
+  }
+  if (u.busy && u.phase === 'canceling') return { text: '취소하는 중' };
+  if (u.busy) {
+    const pct = u.progress ? Math.floor((u.progress.sent / Math.max(u.progress.total, 1)) * 100) : 0;
+    return { text: '올리는 중', pct };
+  }
+  if (u.resumable) return { text: '올리기가 멈췄습니다' };
+  return { text: '올리기 결과' };
+}
+
+/**
+ * 52 — 올리기 상황을 화면 가운데 카드로(2026-11-05 사용자 의견: 오른쪽 아래 작은 상자는 눈에 띄지 않는다).
+ * 화면은 가리지 않는다(바깥은 그대로 누를 수 있다). 올리는 중이거나 이어 올릴 수 있으면 닫기 단추가 없다([취소]로 끝낸다).
+ */
+export function UploadCenterCard({ u, title, children }) {
+  const h = centerHeading(u);
+  const closable = !u.busy && !u.resumable;
+  return (
+    <div role="region" aria-label={title || '올리기 상황'}
+         className="pointer-events-auto relative max-h-[60vh] w-full animate-pop overflow-y-auto rounded-xl border border-n-200 bg-n-0 p-5 shadow-lg">
+      <div className="mb-3 flex items-center gap-3 pr-6">
+        {u.busy ? <Spinner size={20} className="shrink-0 text-brand" /> : <UploadCloud size={20} className="shrink-0 text-brand" aria-hidden="true" />}
+        <div className="min-w-0 flex-1">
+          {title && <p className="truncate text-meta text-n-600">{title}</p>}
+          <p className="text-body font-semibold text-n-900">{h.text}{h.sub && <span className="ml-2 font-mono text-ui font-normal text-n-600">{h.sub}</span>}</p>
+        </div>
+        {h.pct != null && <span className="font-mono text-[22px] font-semibold leading-none text-brand">{h.pct}%</span>}
+      </div>
+      {children || <UploadFeedback u={{ ...u, disabled: false }} showSuccess={false} />}
+      {closable && (
+        <button type="button" aria-label="닫기" onClick={u.dismiss}
+                className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-sm text-n-500 transition-colors duration-150 ease-out hover:bg-n-100 hover:text-n-900">
+          <X size={14} aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** 가운데 카드를 놓는 자리 — 화면 위쪽 가운데, 여러 개면 아래로 쌓는다. */
+export function UploadCenterStack({ children }) {
+  return (
+    <div className="pointer-events-none fixed left-1/2 top-[18vh] z-40 flex w-[520px] max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-col gap-3 empty:hidden">
+      {children}
     </div>
   );
 }
