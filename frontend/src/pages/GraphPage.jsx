@@ -227,7 +227,7 @@ function Stage({ model, view, setView, pivot, hl, setHl, onSelect, opts, setOpts
   const shown = pairsOf(model, opts.layer);
   const has = (t) => shown.some((p) => p.type === t);
   const showModel = opts.layer !== 'doc', showDoc = opts.layer !== 'model';
-  // 2026-10-20 — 범례는 지금 그려진 선만. 형상만 같음·사용한 모델·본문 비슷함·함께 등록은 점을 고르거나 '늘 보기'일 때만 그린다
+  // 2026-10-20 — 범례는 지금 그려진 선만. 형상만 같음·사용한 모델·보고서 다른 판(2026-11-06)·본문 비슷함·함께 등록은 점을 고르거나 '늘 보기'일 때만 그린다
   const quiet = focused || opts.alwaysPairs;
   return (
     <div ref={stageRef} className="relative min-h-0 min-w-0 overflow-hidden bg-n-0 max-[1100px]:order-1 max-[1100px]:h-[64vh] max-[1100px]:min-h-[380px]">
@@ -261,7 +261,7 @@ function Stage({ model, view, setView, pivot, hl, setHl, onSelect, opts, setOpts
         {quiet && showModel && <KeyLine style={{ borderTop: `1.5px dashed ${K.accent}` }}>형상만 같음</KeyLine>}
         {showModel && has('dup') && <KeyLine style={{ borderTop: `2px solid ${K.warn}` }}>똑같은 BDF</KeyLine>}
         {quiet && showDoc && has('uses') && <KeyLine style={{ borderTop: `1.5px solid ${K.doc}` }}>사용한 모델</KeyLine>}
-        {showDoc && has('rrev') && <KeyLine style={{ borderTop: `2.5px solid ${K.doc}` }}>보고서 다른 판</KeyLine>}
+        {quiet && showDoc && has('rrev') && <KeyLine style={{ borderTop: `2.5px solid ${K.doc}` }}>보고서 다른 판</KeyLine>}
         {quiet && showDoc && has('text') && <KeyLine style={{ borderTop: `1.5px dotted ${K.doc}` }}>본문 비슷함</KeyLine>}
         {showDoc && model.entries.some(isReportOnly) && (
           <span className="inline-flex items-center gap-1.5"><i aria-hidden="true" className="h-2 w-2 rounded-full border-[1.5px] border-n-500" />보고서만 있는 자료</span>
@@ -328,7 +328,7 @@ function ShowPop({ model, pivot, opts, setOpts, hl, setHl }) {
         <h3 className="text-meta font-semibold text-n-600">선</h3>
         <Check checked={opts.agg} onChange={(v) => set({ agg: v })}>{GROUP[pivot]} 사이 관계 곡선</Check>
         <Check checked={opts.secondary} onChange={(v) => set({ secondary: v })}>함께 등록된 자료의 둘째 {GROUP[pivot]} 선</Check>
-        <Check checked={opts.alwaysPairs} onChange={(v) => set({ alwaysPairs: v })}>형상만 같음·사용한 모델·본문 비슷함 선 늘 보기</Check>
+        <Check checked={opts.alwaysPairs} onChange={(v) => set({ alwaysPairs: v })}>형상만 같음·사용한 모델·보고서 다른 판·본문 비슷함 선 늘 보기</Check>
         <span className="pt-1 text-meta text-n-500">태그로 잇기(흐린 고리 점)</span>
         {others.map((g) => (
           <Check key={g} checked={opts.rings.includes(g)}
@@ -392,8 +392,10 @@ function DetailColumn({ model, pivot, sel, onGo, layer }) {
   const aggs = useMemo(() => aggregate(model, pivot, layer), [model, pivot, layer]);
   let body;
   if (!n) {
-    // '○○ 없음' 은 늘 맨 아래(건수가 많아도)
-    const hs = pivotHubs(model, pivot).sort((a, b) => (a.none ? 1 : 0) - (b.none ? 1 : 0) || b.cnt - a.cnt);
+    // '○○ 없음' 은 늘 맨 아래(건수가 많아도). 호선은 번호 순(찾기 쉽게, 2026-11-06), 나머지 기준은 건수 순
+    const byHull = (a, b) => a.label.localeCompare(b.label, 'ko', { numeric: true });
+    const hs = pivotHubs(model, pivot).sort((a, b) => (a.none ? 1 : 0) - (b.none ? 1 : 0)
+      || (pivot === 'hull' ? byHull(a, b) : b.cnt - a.cnt));
     body = (
       <>
         <section className="flex flex-col gap-2">

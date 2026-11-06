@@ -277,7 +277,7 @@ export function createGraphView({ canvas, stage, tip, reducedMotion = false, on 
       ctx.stroke();
     }
 
-    // 3) 자료 사이 선: 초점과 닿을 때·올렸을 때·'늘 보기'. 똑같은 BDF(주황)·보고서 다른 판(청록 실선)은 정리 신호라 늘 보인다
+    // 3) 자료 사이 선: 초점과 닿을 때·올렸을 때·'늘 보기'. 똑같은 BDF(주황)만 예외 신호라 늘 보인다(보고서 다른 판은 2026-11-06 부터 점을 고를 때만)
     for (const p of P()) {
       const touch = fid && L && lit(p.a.id) && lit(p.b.id) && (dep(p.a.id) <= 1 || dep(p.b.id) <= 1);
       const over = S.hoverLink === p;

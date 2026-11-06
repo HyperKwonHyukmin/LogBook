@@ -43,6 +43,14 @@ test('지도와 호선 목록을 그리고 모델을 엔진에 넘긴다', async
   expect(screen.getByText('내용 서명이 없는 BDF 3개는 모델 관계에서 빠졌습니다')).toBeInTheDocument();
 });
 
+test('호선별 자료는 건수가 아니라 호선 번호 순이다', async () => {
+  renderPage();   // 3508 = 2건, 3370 = 1건 — 건수 순이면 3508 이 먼저
+  await screen.findByRole('button', { name: /3370/ });
+  const detail = screen.getByRole('complementary', { name: '상세' });
+  const labels = within(detail).getAllByRole('button').map((b) => b.textContent.match(/\d{4}/)?.[0]).filter(Boolean);
+  expect(labels).toEqual(['3370', '3508']);
+});
+
 test('자료를 고르면 형상이 같은 자료·판·자료 열기가 나온다', async () => {
   renderPage();
   await screen.findByRole('button', { name: /3370/ });

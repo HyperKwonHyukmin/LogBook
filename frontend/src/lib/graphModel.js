@@ -35,8 +35,9 @@ export const PAIR_LABEL = {
 };
 const DOC_TYPES = ['uses', 'rrev', 'text'];
 export const isDocPair = (p) => DOC_TYPES.includes(p.type);
-/** 늘 그리는 선(예외·정리 신호) — 나머지는 초점에 닿을 때·올렸을 때·'늘 보기'. */
-export const isLoudPair = (p) => p.type === 'dup' || p.type === 'rrev';
+/** 늘 그리는 선(예외 신호) — 나머지는 초점에 닿을 때·올렸을 때·'늘 보기'.
+ * 2026-11-06 — 보고서 다른 판(rrev)은 지도를 가로지르는 선이 거슬려서 빼고 점을 고를 때만 그린다(정리는 관리 › 자료 정비). */
+export const isLoudPair = (p) => p.type === 'dup';
 export const pairsOf = (model, layer = 'all') => (layer === 'model' ? model.pairs
   : layer === 'doc' ? model.docPairs : [...model.pairs, ...model.docPairs]);
 /** 모델 없이 보고서만 있는 자료 — 지도에서 속이 빈 점. */

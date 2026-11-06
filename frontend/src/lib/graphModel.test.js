@@ -94,7 +94,7 @@ test('문서 층 — 층별 선, 보고서만 있는 자료, 기준 사이 집�
   expect(m.docPairs[0].from).toBe(m.entries[1]);
   expect(isReportOnly(m.entries[0])).toBe(false);
   expect(isReportOnly(m.entries[1])).toBe(true);
-  expect(isLoudPair(m.docPairs[1])).toBe(true);
+  expect(isLoudPair(m.docPairs[1])).toBe(false);   // 2026-11-06 — 보고서 다른 판도 점을 고를 때만
   expect(isLoudPair(m.docPairs[2])).toBe(false);
   const [a] = aggregate(m, 'hull', 'doc');
   expect(a).toMatchObject({ uses: 1, text: 1, rrev: 0, c: 2 });   // rrev 는 같은 호선(3508) 안이라 세지 않는다
