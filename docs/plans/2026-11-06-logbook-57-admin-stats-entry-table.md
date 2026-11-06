@@ -61,6 +61,11 @@
 - `backend/tests/test_admin_stats_57.py`: 묶음 판정, LV3 만, 묶음·월별·상위 집계(초안·휴지통 제외), 자료 목록 열·초안 포함, 일괄 공개 범위(감사 ENTRY_ACCESS), 블록은 LV3 만.
 - `frontend/src/pages/admin/Stats57.test.jsx`: 현황 펼치기·월별, 목록 빠짐 표시·거르개·골라서 공개 범위 바꾸기, 표에서 바로 고쳐 저장(PUT access·PATCH version, 되돌리면 변경 아님, 실패 줄 유지), bulkBody.
 
+## 같이 넣은 것 — 휴지통 한 번에 비우기
+
+- 휴지통 화면 머리줄에 관리자만 [휴지통 비우기 (N건)]이 보인다. 확인 창을 거친 뒤 보이는 자료를 한 건씩 기존 `DELETE /api/admin/trash/{id}` 로 영구 삭제한다. 그래서 건마다 잠금·상태 재확인·감사 기록·`95_Trash` 폴더 삭제가 그대로 이루어진다.
+- 진행은 "비우는 중 n/N" 으로 보인다. 실패한 건(예: 그사이 복원됨)은 번호와 사유를 따로 알린다. 목록이 200건까지라 더 있으면 끝난 뒤 남은 것이 다시 보인다(`frontend/src/pages/TrashPage.jsx`, 674d447).
+
 ## 배포
 
 스키마·`.env` 변경은 없다. 145 Update 만 하면 된다.
