@@ -18,10 +18,12 @@ export function bulkBody(entryIds, f) {
   const remove = f.assigneesRemove.filter((p) => p.id).map((p) => p.id);
   if (remove.length) body.assignees_remove = remove;
   if (f.noHull !== '') body.no_hull = f.noHull === 'on';
+  if (f.access) body.access = f.access;   // 57 — 공개 범위(관리 › 자료 목록에서)
   return Object.keys(body).length > 1 ? body : null;
 }
 
-const EMPTY = { zonesAdd: [], zonesRemove: [], targetMode: '', target: null, assigneesAdd: [], assigneesRemove: [], noHull: '' };
+const EMPTY = { zonesAdd: [], zonesRemove: [], targetMode: '', target: null, assigneesAdd: [], assigneesRemove: [], noHull: '',
+  access: '' };
 
 const failedText = (failed) => failed.map((f) => `${f.title || f.entry_id}(${f.reason})`).join(', ');
 
@@ -29,8 +31,9 @@ const failedText = (failed) => failed.map((f) => `${f.title || f.entry_id}(${f.r
  * 54 — 검색 결과에서 고른 자료의 분류를 한꺼번에 바꾼다. [미리보기]로 몇 건이 바뀌는지 먼저 보고 [N건 바꾸기].
  * 자료마다 한 건씩 고친 것과 같은 기록이 남고, 고칠 수 없는 자료는 건너뛴다(서버가 이유를 준다).
  * onDone(result) — 바꾼 뒤(검색을 다시 부른다), onCancel().
+ * allowAccess — 공개 범위 칸도 보인다(57 관리 › 자료 목록, LV3). 바꾸는 규칙은 한 건씩과 같다.
  */
-export default function BulkClassifyDialog({ entryIds, onDone, onCancel }) {
+export default function BulkClassifyDialog({ entryIds, onDone, onCancel, allowAccess = false }) {
   const id = useId();
   const [f, setF] = useState(EMPTY);
   const [preview, setPreview] = useState(null);   // 서버 dry_run 결과
@@ -95,6 +98,18 @@ export default function BulkClassifyDialog({ entryIds, onDone, onCancel }) {
               <option value="off">공용 표시 풀기</option>
             </select>
           </div>
+          {allowAccess && (
+            <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600 sm:col-span-2">
+              <span>공개 범위</span>
+              <select aria-label="공개 범위 바꾸기" value={f.access} onChange={(e) => set('access')(e.target.value)}
+                      className={selectClass('h-8 text-ui sm:max-w-[50%]')}>
+                <option value="">그대로</option>
+                <option value="shared">공유(LV1 이상 모두)</option>
+                <option value="normal">일반(LV2 이상, 기본)</option>
+                <option value="blocked">블록(LV3·허락받은 사람만)</option>
+              </select>
+            </div>
+          )}
           <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600">
             <span>담당자 더하기</span>
             <div className="font-normal"><AssigneeInput label="담당자 더하기" values={f.assigneesAdd} onChange={set('assigneesAdd')} /></div>

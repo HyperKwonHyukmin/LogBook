@@ -1,6 +1,8 @@
 """Entry API — 조회·수정·확정·쪼개기·합치기·파일 이동·휴지통·복원·공개 단계(13, 15 규칙).
 
 13 — 볼 수 없는 Entry 는 모든 경로에서 404(존재를 숨긴다). _entry(db, id, user) 가 그 한 곳이다."""
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -116,6 +118,8 @@ class BulkClassifyBody(BaseModel):
     assignees_add: list[dict] = []
     assignees_remove: list[int] = []
     no_hull: bool | None = None
+    # 57 — 공개 범위(공유·일반·블록). 바꾸는 규칙은 한 건씩과 같다(set_access: 공유↔일반은 올린 사람+LV3, 블록은 LV3)
+    access: Literal["shared", "normal", "blocked"] | None = None
     dry_run: bool = False
 
 

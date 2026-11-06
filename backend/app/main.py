@@ -12,7 +12,7 @@ from . import models  # noqa: F401  (테이블 등록)
 from .config import APP_VERSION, settings
 from .database import SessionLocal, init_schema
 from .dependencies import get_storage
-from .routers import admin_cleanup, admin_ops, auth, batches, compares, entries, favorites, files, hulls, integration, revisions, search, solve, suggest, system, uploads, users
+from .routers import admin_cleanup, admin_ops, admin_stats, auth, batches, compares, entries, favorites, files, hulls, integration, revisions, search, solve, suggest, system, uploads, users
 from .routers import tags as tags_router
 from .routers import coverage as coverage_router
 from .routers import graph as graph_router
@@ -99,6 +99,7 @@ def create_app(frontend_dist: Path | None | object = _USE_DEFAULT) -> FastAPI:
     app.include_router(vocab_router.router)
     app.include_router(admin_ops.router)
     app.include_router(admin_cleanup.router)   # 20 — 자료 정비(필수 분류·제목 형식)
+    app.include_router(admin_stats.router)     # 57 — 자료 현황·자료 목록(LV3)
     # 18 — WorkBench 연동: 서버 간 API(/api/integration/*) + 자동 로그인(/sso, SPA 보다 먼저)
     app.include_router(integration.router)
     app.include_router(integration.sso_router)

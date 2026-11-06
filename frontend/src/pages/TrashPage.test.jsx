@@ -91,3 +91,30 @@ test('인증 문맥이 없으면 일반 사용자로 동작한다', async () => 
   await screen.findByText('9999 연결시험');
   expect(screen.queryByRole('button', { name: '영구 삭제' })).toBeNull();
 });
+
+test('관리자는 휴지통을 한 번에 비운다 — 건마다 영구 삭제 API, 실패한 건은 알린다', async () => {
+  const rows = [...ROWS, { ...ROWS[0], entry_id: 'E000003', title: '세 번째' }];
+  mock({ 'GET /api/trash': rows, 'DELETE /api/admin/trash/E000001': {}, 'DELETE /api/admin/trash/E000002': {},
+         'DELETE /api/admin/trash/E000003': { __status: 409, detail: 'not_trashed' } });
+  asUser(true)(<TrashPage />);
+  await userEvent.click(await screen.findByRole('button', { name: /휴지통 비우기 \(3건\)/ }));
+  const dialog = screen.getByRole('alertdialog');
+  expect(dialog).toHaveTextContent('휴지통의 자료 3건을 모두 영구 삭제할까요?');
+  await userEvent.click(within(dialog).getByRole('button', { name: '3건 영구 삭제' }));
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('자료 2건을 영구 삭제했습니다'));
+  const deletes = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`).filter((c) => c.startsWith('DELETE'));
+  expect(deletes).toEqual(['DELETE /api/admin/trash/E000001', 'DELETE /api/admin/trash/E000002', 'DELETE /api/admin/trash/E000003']);
+  expect(screen.getByRole('alert')).toHaveTextContent('1건은 지우지 못했습니다: E000003');
+});
+
+test('휴지통 비우기를 취소하면 지우지 않고, 일반 사용자에게는 단추가 없다', async () => {
+  mock({ 'GET /api/trash': ROWS });
+  const { unmount } = asUser(true)(<TrashPage />);
+  await userEvent.click(await screen.findByRole('button', { name: /휴지통 비우기/ }));
+  await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '취소' }));
+  expect(fetch.mock.calls.map(([, i = {}]) => i.method || 'GET')).not.toContain('DELETE');
+  unmount();
+  asUser(false)(<TrashPage />);
+  await screen.findByText('9999 연결시험');
+  expect(screen.queryByRole('button', { name: /휴지통 비우기/ })).toBeNull();
+});

@@ -16,6 +16,7 @@ REASONS = {
     "entry_trashed": "휴지통에 있음",
     "version_conflict": "다른 사람이 막 고침",
     "has_hulls": "호선이 있어 공용으로 바꾸지 않음",
+    "level3_required": "블록 공개 범위는 관리자만",
 }
 
 
@@ -84,11 +85,19 @@ def bulk_classify(db: Session, storage: StoragePaths, user: models.User, entry_i
                 raise HTTPException(status_code=404, detail="entry_not_found")
             service.ensure_editable(user, e)
             patch = _patch_for(db, e, ops)
-            if not patch:
+            # 57 — 공개 범위는 update_entry 가 아니라 set_access(감사 ENTRY_ACCESS)로 바꾼다
+            new_access = ops.get("access")
+            access_change = bool(new_access) and new_access != access.access_of(e)
+            if not patch and not access_change:
                 same.append(eid)
                 continue
+            if access_change:
+                access.ensure_can_manage_access(user, e, new_access)
             if not dry_run:
-                service.update_entry(db, storage, e, user, {**patch, "version": e.version}, ip)
+                if patch:
+                    e = service.update_entry(db, storage, e, user, {**patch, "version": e.version}, ip)
+                if access_change:
+                    service.set_access(db, storage, e, user, new_access, e.version, ip)   # 감사 기록이 커밋한다
             changed.append(eid)
         except HTTPException as exc:
             db.rollback()

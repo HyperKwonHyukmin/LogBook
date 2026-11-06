@@ -17,6 +17,8 @@ import ReportsPage, { ReportSearchRedirect } from './pages/ReportsPage.jsx';
 import TagsPage from './pages/TagsPage.jsx';
 import TrashPage from './pages/TrashPage.jsx';
 import CleanupPage from './pages/admin/CleanupPage.jsx';
+import EntryTablePage from './pages/admin/EntryTablePage.jsx';
+import StatsPage from './pages/admin/StatsPage.jsx';
 import OpsPage from './pages/admin/OpsPage.jsx';
 import UsersPage from './pages/admin/UsersPage.jsx';
 import VocabPage from './pages/admin/VocabPage.jsx';
@@ -36,6 +38,7 @@ const EXPLORE_TABS = [{ to: '/coverage', label: '갖춤 현황' }, { to: '/graph
 const ADMIN_TABS = [
   { to: '/admin/users', label: '사용자' }, { to: '/admin/ops', label: '운영' },
   { to: '/admin/vocab', label: '분류 목록' }, { to: '/admin/wb-targets', label: 'WorkBench 연결 규칙' },
+  { to: '/admin/stats', label: '자료 현황' }, { to: '/admin/entries', label: '자료 목록' },
   { to: '/admin/cleanup', label: '자료 정비' }, { to: '/admin/updates', label: '업데이트 이력' },
 ];
 
@@ -78,6 +81,8 @@ export default function App() {
                 <Route path="admin/ops" element={<OpsPage />} />
                 <Route path="admin/vocab" element={<VocabPage />} />
                 <Route path="admin/wb-targets" element={<WbRulesPage />} />
+                <Route path="admin/stats" element={<StatsPage />} />   {/* 57 — 자료 현황 */}
+                <Route path="admin/entries" element={<EntryTablePage />} />   {/* 57 — 자료 목록 */}
                 <Route path="admin/cleanup" element={<CleanupPage />} />
                 <Route path="admin/updates" element={<UpdatesPage />} />   {/* 46 — 업데이트 이력(옛 /updates 는 서버가 넘긴다) */}
               </Route>

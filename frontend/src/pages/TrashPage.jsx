@@ -18,6 +18,7 @@ const reveal = 'opacity-0 transition-opacity duration-150 group-hover:opacity-10
 /**
  * 휴지통 — 삭제한 Entry 를 복원한다(설계 §8). 자료는 95_Trash 에 있다. 복원은 되돌릴 수 있는 동작이라 확인을 묻지 않는다.
  * 관리자는 영구 삭제도 할 수 있다(되돌릴 수 없어 위험 확인을 거친다). 인증 문맥이 없으면 일반 사용자로 본다.
+ * [휴지통 비우기]는 보이는 자료를 한 건씩 같은 영구 삭제 API 로 지운다 — 건마다 잠금·재확인·감사 기록이 그대로 남는다.
  */
 export default function TrashPage() {
   const [rows, setRows] = useState([]);
@@ -26,6 +27,8 @@ export default function TrashPage() {
   const [notice, setNotice] = useState(null);
   const [purged, setPurged] = useState('');
   const [busyId, setBusyId] = useState('');
+  // 휴지통 비우기 진행 {done, total} — 도는 동안 행 단추를 막는다
+  const [emptying, setEmptying] = useState(null);
   const isAdmin = useContext(AuthContext)?.isAdmin === true;
   const [confirm, dialog] = useConfirm();
   const cols = isAdmin ? COLS_ADMIN : COLS;
@@ -51,21 +54,52 @@ export default function TrashPage() {
     try {
       await api(`/admin/trash/${r.entry_id}`, { method: 'DELETE' });
       setRows((cur) => cur.filter((x) => x.entry_id !== r.entry_id));
-      setPurged(r.entry_id);
+      setPurged(`${r.entry_id} 을 영구 삭제했습니다. 95_Trash 폴더에서도 지웠습니다.`);
     } catch (err) { setError(errorText(err, '영구 삭제하지 못했습니다.')); } finally { setBusyId(''); }
   }
+
+  async function emptyAll() {
+    const targets = rows.slice();
+    const ok = await confirm({ title: `휴지통의 자료 ${targets.length}건을 모두 영구 삭제할까요?`,
+      body: '되돌릴 수 없습니다. 95_Trash 폴더에서도 지워집니다.', confirmLabel: `${targets.length}건 영구 삭제` });
+    if (!ok) return;
+    setError(''); setNotice(null); setPurged('');
+    const failed = [];
+    for (let i = 0; i < targets.length; i += 1) {
+      setEmptying({ done: i, total: targets.length });
+      const r = targets[i];
+      try {
+        await api(`/admin/trash/${r.entry_id}`, { method: 'DELETE' });
+        setRows((cur) => cur.filter((x) => x.entry_id !== r.entry_id));
+      } catch (err) {
+        failed.push(`${r.entry_id}(${errorText(err, '실패')})`);
+      }
+    }
+    setEmptying(null);
+    const done = targets.length - failed.length;
+    if (done) setPurged(`자료 ${done}건을 영구 삭제했습니다. 95_Trash 폴더에서도 지웠습니다.`);
+    if (failed.length) setError(`${failed.length}건은 지우지 못했습니다: ${failed.join(', ')}`);
+    load();   // 목록은 200건까지만 오므로 남은 것이 있으면 다시 보인다
+  }
+
+  const actions = isAdmin && rows.length > 0 && (
+    <Button variant="danger-solid" size="sm" disabled={!!emptying || !!busyId} loading={!!emptying} onClick={emptyAll}>
+      {!emptying && <Trash2 size={14} aria-hidden="true" />}
+      {emptying ? `비우는 중 ${emptying.done}/${emptying.total}` : `휴지통 비우기 (${rows.length}건)`}
+    </Button>
+  );
 
   return (
     <Page>
       {dialog}
-      <PageHeader title="휴지통"
+      <PageHeader title="휴지통" actions={actions}
         description={<>삭제한 자료는 <span className="font-mono">95_Trash</span> 에 보관되며 여기서 복원할 수 있습니다.</>} />
       {notice && (
         <OkNote className="mb-4">
           {notice} 을 복원했습니다. <Link to={`/e/${notice}`} className="font-medium underline underline-offset-2 hover:no-underline">열기</Link>
         </OkNote>
       )}
-      {purged && <OkNote className="mb-4">{purged} 을 영구 삭제했습니다. 95_Trash 폴더에서도 지웠습니다.</OkNote>}
+      {purged && <OkNote className="mb-4">{purged}</OkNote>}
       {error && <ErrorNote className="mb-4">{error}</ErrorNote>}
       {!loading && rows.length === 0 && !error && <EmptyState icon={Trash2} title="휴지통이 비어 있습니다">삭제한 자료가 여기에 모입니다.</EmptyState>}
       {(loading || rows.length > 0) && (
@@ -91,7 +125,7 @@ export default function TrashPage() {
                   ) : <span className="text-meta text-n-500">초안이라 복원할 수 없음</span>}
                   {isAdmin && (
                     <Button variant="danger" size="sm" className={busyId === r.entry_id ? '' : reveal}
-                            disabled={busyId === r.entry_id} onClick={() => purge(r)}>
+                            disabled={busyId === r.entry_id || !!emptying} onClick={() => purge(r)}>
                       <Trash2 size={14} aria-hidden="true" />영구 삭제
                     </Button>
                   )}
