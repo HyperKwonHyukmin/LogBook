@@ -53,6 +53,10 @@ def test_rules_endpoint(client, make_user, auth_headers):
     assert ".f06" in body["skip_by_default"] and ".odb" in body["skip_by_default"]   # 2026-11-05 사용자 결정
     assert ".xlsm" not in body["skip_by_default"]
     assert "~$*" in body["excluded_patterns"]
+    # 2026-11-06 — Abaqus 는 .inp 만 추천: 부산물은 빼고, .dat 은 같은 이름 .inp 가 있을 때만(Nastran .dat 보호)
+    assert {".prt", ".sim", ".sta", ".msg", ".ipm"} <= set(body["skip_by_default"])
+    assert ".inp" not in body["skip_by_default"] and ".dat" not in body["skip_by_default"]
+    assert body["skip_with_inp"] == [".dat"]
 
 
 def _tag(db, value, kind):
@@ -85,12 +89,13 @@ def test_begin_rejects_unlisted_zone_for_non_admin(client, db, make_user, auth_h
     assert r.status_code == 422
 
 
-def test_empty_preset_stored_as_none(client, db, make_user, auth_headers):
+def test_empty_preset_stored_as_skip_hint(client, db, make_user, auth_headers):
+    """비워 보낸 공통 분류는 넣을 값이 없고, 56 자동 채움도 하지 않는다는 표시만 남긴다."""
     make_user("A100001")
     r = client.post("/api/uploads", headers=auth_headers("A100001"),
                     json={"name": "x", "preset": {"zones": [], "target": "", "assignees": []}})
     db.expire_all()
-    assert db.query(models.Batch).filter_by(key=r.json()["key"]).one().preset is None
+    assert db.query(models.Batch).filter_by(key=r.json()["key"]).one().preset == {"skip_hint": True}
 
 
 def _write(path, data=b"GRID"):

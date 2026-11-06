@@ -16,6 +16,7 @@ from ..ingest import duplicates
 from ..ingest.inbox import new_batch_key
 from ..ingest.process import MAX_NAME, MAX_REL_PATH
 from ..storage.paths import StoragePaths, long_join, to_long, walk_root
+from . import hint
 
 log = logging.getLogger("logbook.uploads")
 
@@ -76,13 +77,17 @@ def begin(db: Session, storage: StoragePaths, user: models.User, *, name: str,
         access.ensure_can_edit(user, target)
         if target_status is not None and target.status != target_status:
             raise HTTPException(status_code=409, detail="attachment_target_changed")
+    if target is None and preset is not None:
+        # 56 — 사람이 고른 공통 분류만 남긴다. 비워 보냈으면(폴더 창에서 자동 채움을 지움) 자동 채움도 하지 않는다는 표시.
+        # 보내지 않으면(파일 끌어 놓기·하위 폴더마다 나누기) None — 처리 때 초안마다 자기 이름으로 비슷한 자료를 찾는다
+        preset = clean_preset(db, user, preset) or {hint.SKIP_KEY: True}
     key = new_batch_key()
     os.makedirs(to_long(storage.web_inbox / key), exist_ok=True)
     batch = models.Batch(key=key, source="web", original_name=(name or "").strip()[:255] or key,
                          uploader=user.employee_id, uploader_guess=user.employee_id, state="uploading",
                          target_entry_id=target.id if target else None,
                          # 52 — 기존 자료에 파일 추가는 그 자료의 분류를 따르므로 공통 분류·나누기를 쓰지 않는다
-                         preset=None if target else clean_preset(db, user, preset),
+                         preset=None if target else preset,
                          split_top=bool(split_top) and target is None,
                          whole=bool(whole) and not split_top and target is None)
     db.add(batch)
@@ -90,7 +95,9 @@ def begin(db: Session, storage: StoragePaths, user: models.User, *, name: str,
     return batch
 
 
-MAX_CHUNK = 8 * 1024 * 1024 + 1024  # 브라우저 조각 8MB + 여유
+# 브라우저 조각 32MB + 여유(2026-11-06 8MB → 32MB, frontend lib/upload.js CHUNK_SIZE 와 같이 바꾼다).
+# 요청 하나가 메모리에 이만큼 올라온다 — 큰 파일은 2개씩 함께 오므로(LARGE_PARALLEL) 사람당 약 64MB
+MAX_CHUNK = 32 * 1024 * 1024 + 1024
 DRM_MAGIC = b"HHIDRMC"
 RENAME_ATTEMPTS = 3        # 백신·색인기가 핸들을 잠깐 잡고 있으면 rename 이 PermissionError 로 실패한다
 RENAME_RETRY_DELAY = 0.5   # 초

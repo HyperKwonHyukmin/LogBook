@@ -67,3 +67,16 @@ describe('planFolder', () => {
     expect(isFolderUpload(Y2025)).toBe(true);
   });
 });
+
+describe('Abaqus 제외 추천(2026-11-06)', () => {
+  const mk = (relPath) => ({ relPath, file: { size: 1 } });
+
+  it('.inp 만 체크하고 부산물은 푼다. .dat 은 같은 폴더에 같은 이름 .inp 가 있을 때만 푼다', () => {
+    const plan = planFolder([
+      mk('job/rudder.inp'), mk('job/rudder.dat'), mk('job/rudder.sta'), mk('job/rudder.msg'), mk('job/rudder.prt'),
+      mk('job/rudder.sim'), mk('job/rudder.ipm'), mk('job/rudder.odb'),
+      mk('job/nastran/model.dat'), mk('job/other.dat'),
+    ]);
+    expect([...initialChecked(plan)].sort()).toEqual(['job/nastran/model.dat', 'job/other.dat', 'job/rudder.inp']);
+  });
+});

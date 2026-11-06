@@ -12,6 +12,7 @@ from ..entries.files import remove_empty_dirs
 from ..convert.job import enqueue_convert, set_signature
 from ..extract.job import enqueue_extract
 from ..storage.paths import StoragePaths, to_long, walk_root
+from ..uploads import hint
 from . import duplicates
 from .hashing import sha256_of
 from .proposal import FileInfo, propose
@@ -189,6 +190,14 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
     # 담당자가 아니라 '실행자'로만 보인다(wb_origin.runners) — 담당자는 과제를 맡은 연구원이라 사람이 고른다
     from_wb = batch.wb_analysis_id is not None
     preset = batch.preset if isinstance(batch.preset, dict) and batch.target_entry_id is None else None
+    # 56 — 사람이 고른 공통 분류가 없으면 초안마다 자기 폴더·파일 이름으로 비슷한 기존 자료의 구역·대상을 넣는다.
+    # 사람이 비워 보냈거나(skip_hint) WorkBench·기존 자료에 추가하는 묶음은 하지 않는다
+    chosen = preset if preset and any(preset.get(k) for k in ("zones", "target", "assignees")) else None
+    hint_user = None
+    if (chosen is None and not from_wb and batch.target_entry_id is None
+            and not (preset or {}).get(hint.SKIP_KEY)):
+        hint_user = db.query(models.User).filter_by(employee_id=batch.uploader).first()
+    hinted: dict[str, str] = {}
     for p in propose(infos, known, single=from_wb, hints=_wb_hints(batch) if from_wb else None,
                      split_top=bool(batch.split_top), whole=bool(batch.whole)):
         # 20 — 호선을 알면 제목 초안을 형식(`3496 · 구별자`)으로, 모르면 예전처럼 폴더/파일 이름. 구역·대상은
@@ -206,14 +215,21 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
         if p.best_hull:
             db.add(models.EntryHull(entry_id=entry.id, hull_no=p.best_hull, is_primary=True))
             draft_hulls.add(p.best_hull)
-        if preset:
-            _apply_preset(db, entry, preset)
+        if chosen:
+            _apply_preset(db, entry, chosen)
+        elif hint_user is not None:
+            found = hint.similar_preset(db, hint_user, [p.source or entry.title])
+            if found:
+                _apply_preset(db, entry, found)
+                hinted[entry.entry_id] = found["from_entry"]
         if batch.target_entry_id is None:
             entry.suggested_entry_id = _find_similar(db, p.best_hull, entry.title)
         for key in p.file_keys:
             rows[key].entry_id = entry.id
         created += 1
 
+    if hinted:
+        batch.preset = {**(preset or {}), hint.HINTS_KEY: hinted}   # 정리 대기 카드가 '비슷한 기존 자료 E…' 를 보인다
     if draft_hulls:
         from .. import plm_ship   # 43 — 호선 행 + PLM 일괄 조회 작업(설정돼 있을 때만, 워커가 처리)
 

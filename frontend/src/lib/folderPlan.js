@@ -2,13 +2,17 @@
  * 52 — 폴더째 올리기 목록. 올리기 전에 파일을 폴더별로 보여 주고 체크한 것만 보낸다.
  * 서버 규칙(GET /api/uploads/rules): excluded_patterns = 서버가 늘 지우는 임시 파일(목록에 넣지 않고 개수만),
  * skip_by_default = 처음에 체크를 풀어 두는 형식(사람이 체크하면 올라간다).
+ * skip_with_inp = 같은 폴더에 이름이 같은 .inp 가 있을 때만 체크를 푸는 형식(Abaqus 결과 .dat — Nastran .dat 은 그대로).
  */
 
 /** 서버가 못 줄 때 쓰는 값 — backend/app/ingest/rules.py 와 같게 둔다. */
 export const FALLBACK_RULES = {
   excluded_patterns: ['~$*', 'thumbs.db', 'desktop.ini', '*.master', '*.dball', '*.scratch', '*.tmp',
     '.ds_store', '._*', '*.crdownload', '*.part'],
-  skip_by_default: ['.op2', '.f06', '.xdb', '.h5', '.h3d', '.mvw', '.hwsession', '.pch', '.asm', '.plt', '.odb'],
+  skip_by_default: ['.op2', '.f06', '.xdb', '.h5', '.h3d', '.mvw', '.hwsession', '.pch', '.asm', '.plt', '.odb',
+    '.prt', '.sim', '.sta', '.msg', '.msp', '.ipm', '.com', '.res', '.mdl', '.stt', '.lck', '.abq', '.pac', '.sel',
+    '.fil', '.023', '.log'],
+  skip_with_inp: ['.dat'],
 };
 
 /** fnmatch 의 * 만 쓰는 무늬(대소문자 무시) — 서버 is_excluded 와 같은 판정. */
@@ -20,6 +24,10 @@ function globMatch(pattern, name) {
 export const extOf = (name) => {
   const i = name.lastIndexOf('.');
   return i > 0 ? name.slice(i).toLowerCase() : '';
+};
+const stemOf = (name) => {
+  const i = name.lastIndexOf('.');
+  return i > 0 ? name.slice(0, i) : name;
 };
 const baseName = (relPath) => relPath.slice(relPath.lastIndexOf('/') + 1);
 const dirOf = (relPath) => (relPath.includes('/') ? relPath.slice(0, relPath.lastIndexOf('/')) : '');
@@ -35,6 +43,7 @@ export const isFolderUpload = (items) => items.some((it) => it.relPath.includes(
  */
 export function planFolder(items, rules = FALLBACK_RULES) {
   const skipExts = new Set(rules.skip_by_default || []);
+  const withInp = new Set(rules.skip_with_inp || []);
   const patterns = rules.excluded_patterns || [];
   const files = [];
   const junk = [];
@@ -44,6 +53,11 @@ export function planFolder(items, rules = FALLBACK_RULES) {
     if (patterns.some((p) => globMatch(p, name))) { junk.push(it.relPath); continue; }
     const ext = extOf(name);
     files.push({ relPath: it.relPath, name, size: it.file.size || 0, ext, dir: dirOf(it.relPath), skip: skipExts.has(ext) });
+  }
+  // Abaqus 작업(job.inp)과 이름이 같은 job.dat 은 해석 결과다
+  const inpStems = new Set(files.filter((f) => f.ext === '.inp').map((f) => `${f.dir}/${stemOf(f.name)}`.toLowerCase()));
+  for (const f of files) {
+    if (!f.skip && withInp.has(f.ext) && inpStems.has(`${f.dir}/${stemOf(f.name)}`.toLowerCase())) f.skip = true;
   }
   const byDir = new Map();
   for (const f of files) {

@@ -4,6 +4,7 @@ import { Folder } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import VocabInput from '../ui/VocabInput.jsx';
 import AssigneeInput from '../people/AssigneeInput.jsx';
+import { api } from '../../api/client.js';
 import { formatBytes } from '../../lib/labels.js';
 import { initialChecked, previewDrafts, skippedByExt } from '../../lib/folderPlan.js';
 
@@ -32,6 +33,27 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = 
   const [zones, setZones] = useState([]);
   const [target, setTarget] = useState(null);
   const [assignees, setAssignees] = useState([]);
+  // 56 — 공통 분류의 기본값은 폴더 이름과 비슷한 기존 자료의 구역·대상(6_Rudder → 이미 있는 Rudder 자료).
+  // 담당자는 넣지 않는다. 사람이 먼저 고친 칸은 덮지 않는다.
+  // '하위 폴더마다'를 고르면 한 값이 모든 초안에 맞지 않으니 채우지 않는다 — 서버가 초안마다 자기 폴더 이름으로 찾는다
+  const [hint, setHint] = useState(null);
+  const touched = useRef(false);
+  useEffect(() => {
+    if (attach) return undefined;
+    let alive = true;
+    const texts = plan.root ? [plan.root] : plan.files.slice(0, 50).map((f) => f.relPath.split('/').pop());
+    api('/uploads/similar-preset', { method: 'POST', body: { texts } }).then((p) => {
+      if (alive && p?.from_entry) setHint(p);
+    }).catch(() => {});   // 기본값이 없어도 올리기는 된다
+    return () => { alive = false; };
+  }, [attach, plan]);
+  useEffect(() => {
+    if (touched.current || !hint) return;
+    setZones(split ? [] : hint.zones || []);
+    setTarget(split ? null : hint.target || null);
+  }, [hint, split]);
+  const hintShown = hint && !split && !touched.current;
+  const touch = (setter) => (v) => { touched.current = true; setter(v); };
   const drafts = useMemo(() => previewDrafts(plan, checked, split), [plan, checked, split]);
   const skipped = useMemo(() => skippedByExt(plan, checked), [plan, checked]);
   const chosen = plan.files.filter((f) => checked.has(f.relPath));
@@ -52,8 +74,11 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = 
       zones, target: target || null,
       assignees: assignees.map((p) => (p.id ? { id: p.id } : { employee_id: p.employee_id })),
     };
+    const splitTop = canSplit && split;
     const empty = !zones.length && !target && !assignees.length;
-    onSubmit({ relPaths: checked, preset: empty ? null : preset, splitTop: canSplit && split });
+    // 56 — '전체 1건' 은 비워도 보낸다({} — 자동 채움을 지운 것이니 서버도 채우지 않는다).
+    // '하위 폴더마다' 를 비워 두면 보내지 않는다 — 서버가 초안마다 자기 폴더 이름으로 비슷한 자료를 찾는다
+    onSubmit({ relPaths: checked, preset: splitTop && empty ? null : preset, splitTop });
   }
 
   return createPortal(
@@ -96,18 +121,23 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = 
         {!attach && <section aria-label="공통 분류" className="grid gap-3 rounded-md border border-n-200 p-3 sm:grid-cols-3">
           <p className="text-meta text-n-600 sm:col-span-3">
             아래 값은 만들어지는 모든 초안에 같이 들어갑니다(선택). 호선은 넣지 않습니다. 초안마다 정리 대기에서 고칠 수 있습니다.
+            {hintShown && (
+              <> 비슷한 기존 자료 <span className="font-mono">{hint.from_entry}</span>
+                {hint.from_title && <>({hint.from_title})</>}의 구역·대상을 넣었습니다. 다르면 고치세요.</>
+            )}
+            {canSplit && split && <> 비워 두면 초안마다 자기 폴더 이름으로 비슷한 기존 자료를 찾아 구역·대상을 넣습니다.</>}
           </p>
           <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600">
             <span>구역</span>
-            <VocabInput multiple kind="zone" label="구역" values={zones} onChange={setZones} />
+            <VocabInput multiple kind="zone" label="구역" values={zones} onChange={touch(setZones)} />
           </div>
           <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600">
             <span>대상</span>
-            <VocabInput kind="target" label="대상" value={target} onChange={(v) => setTarget(v || null)} />
+            <VocabInput kind="target" label="대상" value={target} onChange={touch((v) => setTarget(v || null))} />
           </div>
           <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600">
             <span>담당자</span>
-            <div className="font-normal"><AssigneeInput values={assignees} onChange={setAssignees} /></div>
+            <div className="font-normal"><AssigneeInput values={assignees} onChange={touch(setAssignees)} /></div>
           </div>
         </section>}
 

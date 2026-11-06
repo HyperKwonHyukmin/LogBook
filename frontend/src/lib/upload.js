@@ -1,5 +1,5 @@
 /**
- * 크롬 업로드 — 폴더/여러 파일을 모아 8MB 조각으로 /api/uploads 에 올린다(설계 §5.1).
+ * 크롬 업로드 — 폴더/여러 파일을 모아 32MB 조각으로 /api/uploads 에 올린다(설계 §5.1).
  * 회사 DRM 파일(첫 바이트 HHIDRMC)은 보내기 전에 거르고, 서버도 한 번 더 거른다.
  *
  * 큰 올리기를 견디게 하는 규칙:
@@ -11,13 +11,18 @@
  */
 import { api, apiBinary, ApiError } from '../api/client.js';
 
-export const CHUNK_SIZE = 8 * 1024 * 1024;
+// 2026-11-06 속도 개선 — 8MB → 32MB. 조각마다 드는 HTTP 왕복·공유 폴더(SMB) 열기·닫기 고정 비용을 1/4 로 줄인다.
+// 서버 상한(uploads.service.MAX_CHUNK)과 같이 바꾼다
+export const CHUNK_SIZE = 32 * 1024 * 1024;
 const DRM_MAGIC = 'HHIDRMC';
 /** 한 조각을 다시 보내며 기다리는 시간의 합 상한(ms). 1·2·4·8·16·16초 = 47초까지 기다린다. */
 export const RETRY_BUDGET_MS = 60_000;
 const RETRY_MAX_DELAY_MS = 16_000;
-/** 조각 하나로 끝나는 작은 파일은 이만큼 함께 보낸다(큰 파일은 하나씩). */
-export const SMALL_PARALLEL = 3;
+/** 조각 하나로 끝나는 작은 파일은 이만큼 함께 보낸다(2026-11-06 3 → 6 — 파일 하나 만드는 고정 시간이 겹친다). */
+export const SMALL_PARALLEL = 6;
+/** 큰 파일(조각 여럿)은 이만큼 함께 보낸다(2026-11-06 1 → 2 — 한 파일을 보내는 동안 다른 파일의 공유 폴더 쓰기가 겹친다).
+ * 한 파일 안의 조각은 늘 차례대로 보낸다(서버가 offset 으로 이어 쓴다). */
+export const LARGE_PARALLEL = 2;
 const RESYNC_LIMIT = 5;
 
 /** 내 PC 에서 파일을 읽지 못했다(다른 프로그램이 잠금·이동·삭제). 그 파일만 건너뛴다. */
@@ -239,7 +244,8 @@ const detailCode = (err) => (typeof err?.detail === 'string' ? err.detail : err?
  */
 export async function uploadBatch(items, {
   onProgress = () => {}, onPhase = () => {}, chunkSize = CHUNK_SIZE, targetEntryId, targetEntryStatus,
-  sleep = defaultSleep, force = false, signal, parallel = SMALL_PARALLEL, preset = null, splitTop = false, whole = false,
+  sleep = defaultSleep, force = false, signal, parallel = SMALL_PARALLEL, largeParallel = LARGE_PARALLEL, preset = null,
+  splitTop = false, whole = false,
 } = {}) {
   const { good, rejected, skipped } = await scanItems(items, {
     signal, onScan: (checked) => onPhase({ phase: 'checking', checked, total: items.length }),
@@ -265,12 +271,13 @@ export async function uploadBatch(items, {
     force,
     finishAttempts: 0,
   };
-  return continueUpload(session, { onProgress, chunkSize, sleep, signal, parallel });
+  return continueUpload(session, { onProgress, chunkSize, sleep, signal, parallel, largeParallel });
 }
 
 /** 세션(uploadBatch 가 던진 err.session)의 남은 파일을 보내고 마친다. 이어 올리기도 이것이다. */
 export async function continueUpload(session, {
   onProgress = () => {}, chunkSize = CHUNK_SIZE, sleep = defaultSleep, signal, parallel = SMALL_PARALLEL,
+  largeParallel = LARGE_PARALLEL,
 } = {}) {
   const report = () => onProgress({ sent: session.sent, total: session.total });
   const drop = (it) => {
@@ -301,7 +308,7 @@ export async function continueUpload(session, {
     const small = todo.filter((it) => it.file.size <= chunkSize && !session.offsets[it.relPath]);
     const large = todo.filter((it) => !small.includes(it));
     await runPool(small, Math.max(1, parallel), sendOne);
-    for (const it of large) await sendOne(it);
+    await runPool(large, Math.max(1, largeParallel), sendOne);
 
     const uploaded = session.items.filter((it) => session.done.has(it.relPath));
     if (!uploaded.length) {

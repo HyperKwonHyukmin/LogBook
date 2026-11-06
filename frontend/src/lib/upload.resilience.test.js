@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { cancelUpload, continueUpload, isAbortError, uploadBatch, withRetry } from './upload.js';
+import { CHUNK_SIZE, LARGE_PARALLEL, SMALL_PARALLEL, cancelUpload, continueUpload, isAbortError, uploadBatch, withRetry } from './upload.js';
 import { ApiError } from '../api/client.js';
 
 // 큰 올리기 견디기 — 재시도 간격·이어 올리기·[취소]·읽을 수 없는 파일 건너뛰기·작은 파일 함께 보내기
@@ -188,7 +188,8 @@ test('처음부터 읽을 수 없는 파일은 확인 단계에서 건너뛴다.
   expect(fetch).not.toHaveBeenCalled();
 });
 
-test('작은 파일은 셋씩 함께 보낸다', async () => {
+/** 조각 요청이 동시에 몇 개까지 떠 있었는지 센다. */
+async function peakInFlight(items, opts = {}) {
   let inFlight = 0;
   let peak = 0;
   const pending = [];
@@ -199,13 +200,32 @@ test('작은 파일은 셋씩 함께 보낸다', async () => {
     peak = Math.max(peak, inFlight);
     return new Promise((resolve) => { pending.push(() => { inFlight -= 1; resolve(ok({ size: 1 })); }); });
   }));
-  const items = ['a', 'b', 'c', 'd', 'e'].map((n) => ({ file: file(`${n}.txt`, n), relPath: `${n}.txt` }));
   let settled = false;
-  const done = uploadBatch(items, { sleep: noSleep() }).finally(() => { settled = true; });
-  for (let i = 0; i < 50 && !settled; i += 1) {
+  const done = uploadBatch(items, { sleep: noSleep(), ...opts }).finally(() => { settled = true; });
+  for (let i = 0; i < 200 && !settled; i += 1) {
     await new Promise((r) => { setTimeout(r, 0); });
     pending.splice(0).forEach((f) => f());
   }
-  await expect(done).resolves.toMatchObject({ uploaded: 5 });
-  expect(peak).toBe(3);
+  await expect(done).resolves.toMatchObject({ uploaded: items.length });
+  return peak;
+}
+
+test('작은 파일은 여섯씩 함께 보낸다(2026-11-06 3 → 6)', async () => {
+  const items = 'abcdefgh'.split('').map((n) => ({ file: file(`${n}.txt`, n), relPath: `${n}.txt` }));
+  expect(await peakInFlight(items)).toBe(SMALL_PARALLEL);
+  expect(SMALL_PARALLEL).toBe(6);
+});
+
+test('큰 파일(조각 여럿)은 둘씩 함께 보내고, 한 파일 안의 조각은 차례대로', async () => {
+  const items = ['p', 'q', 'r'].map((n) => ({ file: file(`${n}.bdf`, `${n}${n}${n}${n}`), relPath: `${n}.bdf` }));
+  expect(await peakInFlight(items, { chunkSize: 2 })).toBe(LARGE_PARALLEL);
+  expect(LARGE_PARALLEL).toBe(2);
+  // 같은 파일의 조각 offset 은 0 → 2 순서
+  const offsets = (rel) => fetch.mock.calls.map(([u]) => u).filter((u) => u.includes(`path=${rel}`))
+    .map((u) => Number(new URL(u, 'http://x').searchParams.get('offset')));
+  for (const rel of ['p.bdf', 'q.bdf', 'r.bdf']) expect(offsets(rel)).toEqual([0, 2]);
+});
+
+test('조각은 32MB(서버 MAX_CHUNK 와 같이)', () => {
+  expect(CHUNK_SIZE).toBe(32 * 1024 * 1024);
 });

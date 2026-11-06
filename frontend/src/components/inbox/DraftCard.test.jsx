@@ -481,3 +481,12 @@ test('52 — 형식으로 골라 선택한 파일을 이 초안에서 뺀다(확
   await vi.waitFor(() => expect(onChanged).toHaveBeenCalled());
   expect(bodyOf('POST', '/api/entries/E000010/files/remove')).toEqual({ file_ids: [3, 4], version: 3 });
 });
+
+test('56 — 비슷한 기존 자료의 분류를 기본값으로 넣은 초안은 그 자료 번호를 알린다', () => {
+  mockFetch({});
+  const { rerender } = render(<MemoryRouter><DraftCard entry={{ ...READY, preset_from: 'E000123' }} siblings={[]} canEdit onChanged={() => {}} /></MemoryRouter>);
+  expect(screen.getByText(/의 구역·대상을 기본값으로 넣었습니다/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'E000123' })).toHaveAttribute('href', '/e/E000123');
+  rerender(<MemoryRouter><DraftCard entry={READY} siblings={[]} canEdit onChanged={() => {}} /></MemoryRouter>);
+  expect(screen.queryByText(/기본값으로 넣었습니다/)).toBeNull();
+});

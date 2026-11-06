@@ -387,6 +387,13 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
         </div>
         <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600"><span>구역 <span className="font-normal text-n-500">(선택)</span>{mark('zones')}</span>
           <VocabInput multiple kind="zone" label="구역" values={values.zones} disabled={fieldDisabled} onChange={set('zones')} />
+          {/* 56 — 올릴 때 폴더 이름과 비슷한 기존 자료의 구역·대상을 기본값으로 넣었다(다르면 고친다) */}
+          {entry.preset_from && (
+            <span className="font-normal text-n-500">
+              비슷한 기존 자료 <EntryLink entryId={entry.preset_from} className="font-mono text-brand hover:underline">{entry.preset_from}</EntryLink>
+              의 구역·대상을 기본값으로 넣었습니다. 다르면 고치세요.
+            </span>
+          )}
         </div>
         {/* 38 — 대상 구조물(선택). 고르면 초안 제목의 구역 뒤에 붙는다 */}
         <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600"><span>대상 <span className="font-normal text-n-500">(선택)</span>{mark('target')}</span>

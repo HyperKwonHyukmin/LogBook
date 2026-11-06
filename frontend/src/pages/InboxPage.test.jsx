@@ -203,7 +203,8 @@ test('52 — 폴더째 올리기는 목록을 먼저 띄우고, 체크한 파일
   const vocab = { kind: 'zone', other: '기타', terms: [] };
   renderInShell({ 'GET /api/batches?scope=mine': [], 'GET /api/vocab?kind=zone': vocab,
     'GET /api/vocab?kind=target': { ...vocab, kind: 'target' },
-    'GET /api/uploads/rules': { excluded_patterns: ['~$*'], skip_by_default: ['.op2', '.mvw'] } });
+    'GET /api/uploads/rules': { excluded_patterns: ['~$*'], skip_by_default: ['.op2', '.mvw'] },
+    'POST /api/uploads/similar-preset': { zones: [], target: null, from_entry: null, from_title: null } });
   await screen.findByText('정리할 자료가 없습니다');
   // 폴더 입력(webkitdirectory)은 multiple 없이도 여러 파일을 준다 — userEvent.upload 는 첫 파일만 넣어 change 로 보낸다
   fireEvent.change(screen.getByLabelText('폴더 선택'), { target: { files: [
@@ -227,6 +228,7 @@ test('52 — 폴더째 올리기는 목록을 먼저 띄우고, 체크한 파일
   const [items, opts] = uploadBatch.mock.calls[0];
   expect(items.map((i) => i.relPath).sort()).toEqual([
     '2025/closed_chock/R1/m1.bdf', '2025/closed_chock/보고서.pdf', '2025/manifold/doc/report.pdf']);
+  // 56 — '하위 폴더마다' 를 비워 두면 공통 분류를 보내지 않는다(서버가 초안마다 자기 폴더 이름으로 찾는다)
   expect(opts).toMatchObject({ splitTop: true, preset: null });
 });
 

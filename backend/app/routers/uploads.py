@@ -8,7 +8,7 @@ from .. import models
 from ..database import get_db
 from ..dependencies import get_storage, require_writer
 from ..storage.paths import StoragePaths
-from ..uploads import service
+from ..uploads import hint, service
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 
@@ -52,9 +52,23 @@ def begin(body: BeginBody, db: Session = Depends(get_db), storage: StoragePaths 
 @router.get("/rules")
 def rules(_user: models.User = Depends(require_writer)):
     """52 — 폴더째 올리기 목록이 쓰는 규칙: 서버가 늘 지우는 임시 파일 무늬, 처음에 체크를 풀어 두는 형식."""
-    from ..ingest.rules import EXCLUDE_PATTERNS, SKIP_BY_DEFAULT_EXTS
+    from ..ingest.rules import EXCLUDE_PATTERNS, SKIP_BY_DEFAULT_EXTS, SKIP_WITH_INP_EXTS
 
-    return {"excluded_patterns": list(EXCLUDE_PATTERNS), "skip_by_default": list(SKIP_BY_DEFAULT_EXTS)}
+    return {"excluded_patterns": list(EXCLUDE_PATTERNS), "skip_by_default": list(SKIP_BY_DEFAULT_EXTS),
+            "skip_with_inp": list(SKIP_WITH_INP_EXTS)}
+
+
+class SimilarPresetBody(BaseModel):
+    texts: list[str] = Field(default_factory=list, max_length=hint.TEXTS_MAX)
+
+
+@router.post("/similar-preset")
+def similar_preset(body: SimilarPresetBody, db: Session = Depends(get_db), user: models.User = Depends(require_writer)):
+    """56 — 폴더 올리기 창의 공통 분류 기본값: 폴더 이름(texts)과 낱말이 겹치는 기존 확정 자료의 구역·대상. 없으면 빈 값.
+    읽기만 하지만 이름 목록이 길 수 있어 POST 로 받는다."""
+    p = hint.similar_preset(db, user, [t[:255] for t in body.texts]) or {}
+    return {"zones": p.get("zones") or [], "target": p.get("target"),
+            "from_entry": p.get("from_entry"), "from_title": p.get("from_title")}
 
 
 @router.put("/{key}/chunk")
@@ -71,7 +85,7 @@ async def chunk(key: str, request: Request, path: str = Query(...), offset: int 
         buf += part
         if len(buf) > service.MAX_CHUNK:
             raise too_large
-    # 동기 서비스(DB + 공유 폴더 8MB 쓰기)는 스레드 풀에서 — 이벤트 루프를 붙잡으면 서버 전체가 멈춘다.
+    # 동기 서비스(DB + 공유 폴더 조각 쓰기)는 스레드 풀에서 — 이벤트 루프를 붙잡으면 서버 전체가 멈춘다.
     size = await run_in_threadpool(service.write_chunk, db, storage, user, key, path, offset, bytes(buf))
     return {"size": size}
 

@@ -221,6 +221,11 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
         from .draft_attachments import pending_batches
         d["pending_attachments"] = [{"key": b.key, "state": b.state}
                                     for b in pending_batches(db, entry.id)]
+        # 56 — 구역·대상을 비슷한 기존 자료에서 가져온 초안이면 그 자료 번호(카드가 '기본값' 안내를 보인다)
+        batch = db.get(models.Batch, entry.batch_id) if entry.batch_id else None
+        preset = batch.preset if batch is not None and isinstance(batch.preset, dict) else {}
+        hints = preset.get("hints") if isinstance(preset.get("hints"), dict) else {}
+        d["preset_from"] = hints.get(entry.entry_id)
         if viewer is not None:
             d["blocked_models"] = blocked_models(db, entry, files, viewer)   # 49
     return d

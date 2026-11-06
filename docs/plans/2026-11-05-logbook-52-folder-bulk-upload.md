@@ -71,6 +71,15 @@
   `GET /api/files/{id}/cover.png`, 처음 요청 때 만들어 `20_Derived/covers/<id>_<sha12>.png` 에 둔다. DRM·휴지통 파일 제외. 못 만들면 파일 종류 아이콘.
   오른쪽 미리보기도 보고서는 PDF 를 먼저 연다.
 
+## 후속 (2026-11-06)
+- **Abaqus 제외 추천**: `.inp` 만 추천한다. 해석이 만든 파일(`.prt .sim .sta .msg .msp .ipm .com .res .mdl .stt .lck .abq .pac .sel .fil .023 .log`)은 체크를 풀어 둔다(`SKIP_BY_DEFAULT_EXTS`).
+  - `.dat` 은 Nastran 입력일 수도 있어 늘 빼지는 않는다. 같은 폴더에 이름이 같은 `.inp` 가 있을 때만(`job.inp` + `job.dat`) 체크를 푼다(`SKIP_WITH_INP_EXTS`, 응답 `skip_with_inp`).
+- **올리기 속도**: 여러 개선안 가운데 위험이 낮은 셋만 먼저 넣었다.
+  - ① 큰 파일 2개 동시에 보내기(`LARGE_PARALLEL`). 한 파일 안의 조각은 차례대로 보낸다.
+  - ② 조각 8MB → 32MB(`CHUNK_SIZE`·서버 `MAX_CHUNK`). 조각마다 드는 HTTP·SMB 고정 비용이 1/4 로 줄어든다.
+  - ③ 작은 파일 동시 3 → 6개(`SMALL_PARALLEL`).
+  - 측정 로그(조각마다 받는 시간·NAS 쓰는 시간), 텍스트 압축 전송, 145 로컬 디스크로 받은 뒤 옮기기, 서버가 NAS 경로를 직접 가져오기는 하지 않았다. 체감이 부족하면 측정부터 넣고 다시 정한다.
+
 ## 하지 않는 것
 - 호선 자동 지정, 개정 짝 인식(위 결정).
 - Inbox(탐색기 복사)·WB 보내기에는 목록이 없으므로 제외 추천 형식을 거르지 않는다(지금처럼 받음).

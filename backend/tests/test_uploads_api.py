@@ -95,7 +95,8 @@ def test_chunk_oversized_streamed_body_413_without_calling_service(client, make_
     monkeypatch.setattr(service, "write_chunk", lambda *a, **k: called.append(1) or 1)
 
     def body():
-        for _ in range(9):
+        # 한도보다 1MB 더(상한을 바꿔도 따라가게 — 2026-11-06 8MB → 32MB 때 9MB 고정값이 한도 안이 됐다)
+        for _ in range(service.MAX_CHUNK // (1024 * 1024) + 1):
             yield b"x" * (1024 * 1024)
 
     r = client.put(f"/api/uploads/{key}/chunk", params={"path": "a.bdf", "offset": 0},
