@@ -12,6 +12,7 @@ import ResultSummary from '../components/search/ResultSummary.jsx';
 import SearchModeTabs from '../components/search/SearchModeTabs.jsx';
 import GroupedResults, { slotItems } from '../components/search/GroupedResults.jsx';
 import { useBasketBarVisible } from '../components/compare/CompareBasket.jsx';
+import AutoMore from '../components/ui/AutoMore.jsx';
 import Button, { buttonClass } from '../components/ui/Button.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
 import { ErrorNote } from '../components/ui/Page.jsx';
@@ -410,11 +411,9 @@ export default function SearchPage() {
                                   terms={res.terms} filters={res.applied_filters || state.filters}
                                   picked={picking ? picked : undefined} onPick={onPick} />
                   {grouped.groups.length < grouped.group_total && (
-                    <div className="flex justify-center py-4">
-                      <Button variant="secondary" onClick={moreGroups} disabled={loading} loading={more}>
-                        묶음 더 보기 <span className="tnum text-n-500">남은 <span className="font-mono">{grouped.group_total - grouped.groups.length}</span>개</span>
-                      </Button>
-                    </div>
+                    <AutoMore onMore={moreGroups} loading={more} paused={loading || !!error}>
+                      묶음 더 보기 <span className="tnum text-n-500">남은 <span className="font-mono">{grouped.group_total - grouped.groups.length}</span>개</span>
+                    </AutoMore>
                   )}
                 </>
               ) : (
@@ -423,9 +422,8 @@ export default function SearchPage() {
                             picked={picking && res.unit === 'entry' ? picked : undefined} onPick={onPick} />
               )}
               {!grouped && res.nextOffset < res.total && (
-                <div className="flex justify-center py-4">
-                  <Button variant="secondary" onClick={loadMore} disabled={loading} loading={more}>더 보기</Button>
-                </div>
+                // 2026-11-06 — 목록 끝에 닿으면 저절로 다음 쪽(단추는 손으로 누를 때·자동이 멈췄을 때)
+                <AutoMore onMore={loadMore} loading={more} paused={loading || !!error} />
               )}
               {/* 비교 바구니 띠(07)가 마지막 행·'더 보기' 를 가리지 않게 */}
               {basketBar && <div aria-hidden="true" className="h-24" />}
