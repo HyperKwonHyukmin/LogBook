@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..database import get_db
 from ..dependencies import client_ip, get_storage, require_admin
-from ..entries import cleanup
+from ..entries import cleanup, duplicate_files
 from ..storage.paths import StoragePaths
 
 router = APIRouter(prefix="/api/admin/cleanup", tags=["admin-cleanup"])
@@ -23,6 +23,10 @@ class ApplyItem(BaseModel):
 
 class ApplyBody(BaseModel):
     items: list[ApplyItem] = Field(min_length=1, max_length=cleanup.MAX_LIMIT)
+
+
+class ResolveBody(BaseModel):
+    file_ids: list[int] = Field(min_length=1, max_length=duplicate_files.MAX_RESOLVE)
 
 
 class RevertBody(BaseModel):
@@ -59,3 +63,18 @@ def revert(body: RevertBody, request: Request, db: Session = Depends(get_db),
            storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_admin)):
     e = cleanup.revert_title(db, storage, body.entry_id, user=user, ip=client_ip(request))
     return {"entry_id": e.entry_id, "title": e.title, "version": e.version}
+
+
+@router.get("/duplicates")
+def duplicates(category: str | None = None, same: str | None = None, q: str | None = None,
+               offset: int = 0, limit: int = 100, db: Session = Depends(get_db),
+               user: models.User = Depends(require_admin)):
+    """58 — 파일명이 같은 보고서·엑셀·모델(서로 다른 자료 2건 이상)."""
+    return duplicate_files.duplicate_list(db, category=category, same=same, q=q, offset=offset, limit=limit)
+
+
+@router.post("/duplicates/resolve")
+def resolve_duplicates(body: ResolveBody, request: Request, db: Session = Depends(get_db),
+                       storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_admin)):
+    """58 — 고른 파일을 자료에서 빼거나(다른 파일이 남을 때) 자료를 휴지통으로(마지막 파일일 때). 복원 가능."""
+    return duplicate_files.resolve(db, storage, body.file_ids, user=user, ip=client_ip(request))

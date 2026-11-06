@@ -7,6 +7,7 @@ import { useConfirm } from '../../components/ui/ConfirmDialog.jsx';
 import { inputClass, selectClass } from '../../components/ui/Field.jsx';
 import { ErrorNote, OkNote, Page, PageHeader } from '../../components/ui/Page.jsx';
 import { Tabs } from '../../components/ui/Tabs.jsx';
+import DuplicateFilesView from './DuplicateFilesView.jsx';
 import { REQUIRED_LABELS, errorText, formatDateTime, requiredText } from '../../lib/labels.js';
 
 const th = 'h-9 border-b border-n-200 bg-n-50 px-3 text-left text-meta font-medium text-n-600';
@@ -17,6 +18,7 @@ const VIEWS = [
   { id: 'missing', label: '빠진 필수 분류' },
   { id: 'titles', label: '제목 형식' },
   { id: 'applied', label: '바꾼 기록' },
+  { id: 'duplicates', label: '중복 파일' },
 ];
 const SKIP_REASONS = {
   version_conflict: '그사이 다른 사람이 고침', proposal_changed: '제안 제목이 바뀜(다시 미리보기)',
@@ -312,11 +314,12 @@ export default function CleanupPage() {
   return (
     <Page>
       <PageHeader title="자료 정비"
-                  description="BDF 자료의 필수 분류(호선 또는 공용)가 빠진 확정 자료를 찾고, 제목을 새 형식(호선 · 구역 · 대상 · 구별자)으로 맞춥니다. 확정 자료를 숨기거나 상태를 바꾸지 않습니다." />
+                  description="BDF 자료의 필수 분류(호선 또는 공용)가 빠진 확정 자료를 찾고, 제목을 새 형식(호선 · 구역 · 대상 · 구별자)으로 맞추고, 파일명이 같은 중복 파일을 정리합니다. 중복 정리만 파일을 휴지통으로 옮기고(복원 가능), 나머지는 확정 자료를 숨기거나 상태를 바꾸지 않습니다." />
       <Tabs label="정비 보기" items={VIEWS} value={view} onChange={setView} className="mb-4" />
       {view === 'missing' && <MissingView />}
       {view === 'titles' && <TitlesView onApplied={() => setStamp((n) => n + 1)} />}
       {view === 'applied' && <AppliedView stamp={stamp} />}
+      {view === 'duplicates' && <DuplicateFilesView />}
     </Page>
   );
 }
