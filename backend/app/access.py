@@ -11,13 +11,16 @@
     normal   일반 — LV2 이상(기본). 알 수 없는 값(13 의 public/private 가 남은 행)도 일반으로 다룬다
     blocked  블록 — LV3 만
     올린 사람은 자기 자료를 늘 본다(블록돼도). 개별 허락(entry_grants)은 단계와 무관하게 그 사람에게 보인다.
+    60 — WorkBench 해석 실행자(묶음 출처 origin.owner)도 그 해석에서 온 **확정** 자료를 늘 본다(등급·단계 무관).
+    WB 보내기는 관리자만 해서 올린 사람이 관리자가 되므로, 실행자 본인이 LogBook·WB 가져오기에서 못 보던 것을 푼다.
+    초안(관리자가 정리 중)·휴지통은 넣지 않는다.
 
 **볼 수 없는 Entry 는 존재 자체를 숨긴다** — 상세·파일·이력은 404, 목록·건수에서는 빠진다.
 목록 질의는 visible_entries_filter() 를 SQL 조건으로 끼워 쓴다(파이썬 후처리로 쪽 건수가 틀어지지 않게).
 쓰기 금지는 숨김과 별개라 403 이다.
 """
 from fastapi import HTTPException
-from sqlalchemy import and_, false, or_, select, true
+from sqlalchemy import and_, false, func, or_, select, true
 from sqlalchemy.orm import Session
 
 from . import models
@@ -86,10 +89,29 @@ def visible_entries_filter(user):
         # ~visible_entries_filter() (감사 로그·배치 가져가기의 '숨은 것' 조건)가 그 행을 놓친다 — NULL 안전하게
         and_(E.uploaded_by.isnot(None), E.uploaded_by == user.employee_id),
         E.id.in_(select(models.EntryGrant.entry_id).where(models.EntryGrant.employee_id == user.employee_id)),
+        and_(E.status == "confirmed", E.id.in_(_wb_runner_entry_ids(user.employee_id))),
     ]
     if lv >= 2:
         conds.append(E.access != "blocked")
     return or_(*conds)
+
+
+def _wb_runner_entry_ids(employee_id):
+    """60 — 이 사번이 WorkBench 에서 실행한 해석(묶음 origin.owner)의 파일이 든 Entry id(SQL 부분 질의).
+    WB 묶음(wb_analysis_id 있음, 색인)만 보므로 가볍다. owner 는 wb_origin.clean 이 대문자로 남긴다."""
+    F, B = models.File, models.Batch
+    owner = func.upper(func.json_unquote(func.json_extract(B.origin, "$.owner")))
+    return (select(F.entry_id).join(B, B.id == F.batch_id)
+            .where(B.wb_analysis_id.isnot(None), F.entry_id.isnot(None), F.location != "trash",
+                   owner == (employee_id or "").strip().upper()))
+
+
+def is_wb_runner(db: Session, user, entry: models.Entry) -> bool:
+    """60 — 이 사용자가 이 확정 Entry 의 WorkBench 해석 실행자인가(visible_entries_filter 의 같은 조건)."""
+    if user is None or entry is None or entry.status != "confirmed" or db is None:
+        return False
+    sub = _wb_runner_entry_ids(user.employee_id).where(models.File.entry_id == entry.id).limit(1)
+    return db.execute(sub).first() is not None
 
 
 def _grant_holders(db: Session, entry: models.Entry) -> set[str]:
@@ -112,7 +134,7 @@ def can_view_entry(user, entry: models.Entry | None, grants=None, db: Session | 
         return True
     if grants is None:
         grants = _grant_holders(db, entry) if db is not None else set()
-    return user.employee_id in grants
+    return user.employee_id in grants or is_wb_runner(db, user, entry)
 
 
 def ensure_visible(db: Session, user, entry: models.Entry | None, detail: str = "entry_not_found") -> models.Entry:
