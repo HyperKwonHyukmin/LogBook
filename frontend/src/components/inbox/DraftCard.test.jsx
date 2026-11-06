@@ -491,3 +491,37 @@ test('56 — 비슷한 기존 자료의 분류를 기본값으로 넣은 초안�
   rerender(<MemoryRouter><DraftCard entry={READY} siblings={[]} canEdit onChanged={() => {}} /></MemoryRouter>);
   expect(screen.queryByText(/기본값으로 넣었습니다/)).toBeNull();
 });
+
+// 2026-11-06 — 호선 없이 확정하면 공용인지 묻는다
+const NO_HULL = { ...READY, hulls: [], hull_evidence: [], no_hull: false };
+const callKeys = () => fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`).filter((k) => !k.startsWith('GET '));
+
+test('호선 없이 확정 — [공용으로 확정]이면 no_hull 을 켜고 확정한다', async () => {
+  mockFetch({ 'PATCH /api/entries/E000010': { ...NO_HULL, no_hull: true, version: 4 },
+              'POST /api/entries/E000010/confirm': { ...NO_HULL, status: 'confirmed' } });
+  render(<DraftCard entry={NO_HULL} siblings={[]} canEdit onChanged={() => {}} />);
+  await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  const dlg = await screen.findByRole('alertdialog', { name: '호선 없이 확정합니다. 공용 자료인가요?' });
+  await userEvent.click(within(dlg).getByRole('button', { name: '공용으로 확정' }));
+  await vi.waitFor(() => expect(callKeys()).toEqual(['PATCH /api/entries/E000010', 'POST /api/entries/E000010/confirm']));
+  expect(bodyOf('PATCH', '/api/entries/E000010')).toEqual({ version: 3, no_hull: true });
+});
+
+test('호선 없이 확정 — [보완 필요로 확정]은 공용으로 바꾸지 않고, [취소]는 확정하지 않는다', async () => {
+  mockFetch({ 'POST /api/entries/E000010/confirm': { ...NO_HULL, status: 'confirmed' } });
+  render(<DraftCard entry={NO_HULL} siblings={[]} canEdit onChanged={() => {}} />);
+  await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '취소' }));
+  expect(callKeys().some((k) => k.endsWith('/confirm'))).toBe(false);
+  await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '보완 필요로 확정' }));
+  await vi.waitFor(() => expect(callKeys()).toEqual(['POST /api/entries/E000010/confirm']));
+});
+
+test('호선이 있거나 이미 공용이면 묻지 않는다', async () => {
+  mockFetch({ 'POST /api/entries/E000010/confirm': { ...READY, status: 'confirmed' } });
+  render(<DraftCard entry={{ ...NO_HULL, no_hull: true }} siblings={[]} canEdit onChanged={() => {}} />);
+  await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  await vi.waitFor(() => expect(callKeys()).toEqual(['POST /api/entries/E000010/confirm']));
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+});

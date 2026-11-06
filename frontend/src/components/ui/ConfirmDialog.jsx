@@ -6,7 +6,7 @@ import Button from './Button.jsx';
  * 되돌릴 수 없는 동작에만 쓰는 확인 대화상자(window.confirm 대신).
  * Esc·바깥 누르기 = 취소, 포커스는 대화상자 안에 가둔다, 닫히면 원래 자리로 돌려준다.
  */
-function ConfirmDialog({ title, body, confirmLabel, cancelLabel = '취소', tone = 'danger', onConfirm, onCancel }) {
+function ConfirmDialog({ title, body, confirmLabel, cancelLabel = '취소', altLabel, tone = 'danger', onConfirm, onCancel, onAlt }) {
   const id = useId();
   const boxRef = useRef(null);
   const cancelRef = useRef(null);
@@ -32,6 +32,7 @@ function ConfirmDialog({ title, body, confirmLabel, cancelLabel = '취소', tone
         {body && <p id={`${id}-d`} className="mt-1.5 text-ui text-n-600">{body}</p>}
         <div className="mt-5 flex justify-end gap-2">
           <Button ref={cancelRef} variant="secondary" onClick={onCancel}>{cancelLabel}</Button>
+          {altLabel && <Button variant="secondary" onClick={onAlt}>{altLabel}</Button>}
           <Button variant={tone === 'danger' ? 'danger-solid' : 'primary'} onClick={onConfirm}>{confirmLabel}</Button>
         </div>
       </div>
@@ -40,13 +41,14 @@ function ConfirmDialog({ title, body, confirmLabel, cancelLabel = '취소', tone
   );
 }
 
-/** const [confirm, dialog] = useConfirm(); if (await confirm({ title, body, confirmLabel })) … ; {dialog} 을 그린다. */
+/** const [confirm, dialog] = useConfirm(); if (await confirm({ title, body, confirmLabel })) … ; {dialog} 을 그린다.
+ * altLabel 을 주면 세 번째 단추가 생기고 그 단추는 'alt' 로 끝난다(2026-11-06 — 호선 없이 확정: 공용 / 보완 필요 / 취소). */
 export function useConfirm() {
   const [state, setState] = useState(null);
   const confirm = useCallback((opts) => new Promise((resolve) => setState({ ...opts, resolve })), []);
   const close = (v) => { state?.resolve(v); setState(null); };
   const dialog = state
-    ? <ConfirmDialog {...state} onConfirm={() => close(true)} onCancel={() => close(false)} />
+    ? <ConfirmDialog {...state} onConfirm={() => close(true)} onCancel={() => close(false)} onAlt={() => close('alt')} />
     : null;
   return [confirm, dialog];
 }

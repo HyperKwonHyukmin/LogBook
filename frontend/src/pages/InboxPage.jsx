@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
-import { Inbox } from 'lucide-react';
+import { ChevronRight, Inbox } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
@@ -41,6 +41,10 @@ export default function InboxPage() {
   const [tab, setTab] = useState(() => tabOf(params.get('tab')));
   const isFix = tab === 'fix';
   const [batches, setBatches] = useState([]);
+  // 끝났고 초안도 없는 묶음(같은 BDF 뿐) = 할 일 없음 — 아래 접힌 줄로 모은다
+  const isSettled = (b) => b.state === 'done' && !(b.entries || []).length;
+  const active = batches.filter((b) => !isSettled(b));
+  const settled = batches.filter(isSettled);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -123,7 +127,7 @@ export default function InboxPage() {
         {isFix && <FixList />}
         {!isFix && error && <ErrorNote>{error}</ErrorNote>}
         {!isFix && loading && <BlockSkeleton className="h-32" />}
-        {!isFix && !loading && batches.length === 0 && !error && (
+        {!isFix && !loading && active.length === 0 && !error && (
           <EmptyState icon={Inbox} title="정리할 자료가 없습니다">
             {tab === 'mine' && !canWrite
               ? '올린 자료가 없습니다.'
@@ -132,10 +136,26 @@ export default function InboxPage() {
               : '주인을 찾지 못한 배치가 없습니다.'}
           </EmptyState>
         )}
-        {batches.map((b) => (
+        {active.map((b) => (
           <BatchCard key={b.key} batch={b} me={user.employee_id} isAdmin={isAdmin} canWrite={canWrite} onChanged={reload} onClaim={claim}
                    onDirtyChange={onDirtyChange} dirtyIds={dirtyCards} />
         ))}
+        {/* 2026-11-06 — 같은 BDF 뿐이라 초안 없이 끝난 묶음(서버가 3일 보인다, 17)은 할 일이 아니라 맨 아래 접힌 한 줄로 */}
+        {!isFix && settled.length > 0 && (
+          <details className="group rounded-lg border border-n-200">
+            <summary className="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-lg px-3 text-ui text-n-700 hover:bg-n-50 [&::-webkit-details-marker]:hidden">
+              <ChevronRight size={14} aria-hidden="true" className="text-n-500 transition-transform duration-150 group-open:rotate-90" />
+              같은 BDF 뿐이라 초안 없이 끝난 묶음 <span className="font-mono text-n-500">{settled.length}</span>개
+              <span className="text-meta text-n-500">· 이미 있는 자료와 같아 올리지 않았습니다. 3일 뒤 사라집니다</span>
+            </summary>
+            <div className="flex flex-col gap-5 border-t border-n-200 p-3">
+              {settled.map((b) => (
+                <BatchCard key={b.key} batch={b} me={user.employee_id} isAdmin={isAdmin} canWrite={canWrite} onChanged={reload} onClaim={claim}
+                           onDirtyChange={onDirtyChange} dirtyIds={dirtyCards} />
+              ))}
+            </div>
+          </details>
+        )}
       </div>
     </Page>
   );

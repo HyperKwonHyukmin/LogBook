@@ -257,7 +257,24 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
       });
       if (!ok) return;
     }
-    act(() => api(`/entries/${entry.entry_id}/confirm`, { method: 'POST' }), '확정하지');
+    // 2026-11-06 — 호선이 비었으면 '공용(호선 없는 자료)인지' 묻는다. 공용이면 no_hull 을 켜고 확정, 아니면 지금처럼 '보완 필요'
+    let shared = false;
+    if (!entry.merge_into && !(values.hulls || []).length && !values.no_hull) {
+      const pick = await confirm({
+        title: '호선 없이 확정합니다. 공용 자료인가요?',
+        body: '여러 호선에 두루 쓰는 자료면 [공용으로 확정]을 누르세요. 호선이 있는데 아직 모르면 [보완 필요로 확정]을 누르면 손볼 자료에 남아 나중에 호선을 채울 수 있습니다.',
+        confirmLabel: '공용으로 확정', altLabel: '보완 필요로 확정', tone: 'primary',
+      });
+      if (!pick) return;
+      shared = pick === true;
+    }
+    act(async () => {
+      if (shared) {
+        const res = await api(`/entries/${entry.entry_id}`, { method: 'PATCH', body: { version: versionRef.current, no_hull: true } });
+        takeVersion(res);
+      }
+      return api(`/entries/${entry.entry_id}/confirm`, { method: 'POST' });
+    }, '확정하지');
   }
 
   /** 초안 버리기 — 초안은 휴지통에서 복원할 수 없어 확인 대화상자를 거친다. */

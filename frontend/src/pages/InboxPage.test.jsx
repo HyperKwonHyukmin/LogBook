@@ -245,3 +245,25 @@ test('52 — 폴더 목록에서 취소하면 올리지 않는다', async () => 
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(uploadBatch).not.toHaveBeenCalled();
 });
+
+test('같은 BDF 뿐이라 초안 없이 끝난 묶음은 맨 아래 접힌 한 줄로 모은다', async () => {
+  const SETTLED = { key: 'K9', source: 'web', original_name: 'WB #6784 · GroupModuleUnit', state: 'done', uploader: 'A100001',
+    received_at: '2026-11-04T14:31:00', error: null, entries: [],
+    excluded: [{ name: 'a.bdf', size: 0, reason: 'duplicate_model', targets: [] }] };
+  renderPage({ 'GET /api/batches?scope=mine': [MINE[0], SETTLED] });
+  expect(await screen.findByRole('heading', { name: '9999_연결시험' })).toBeInTheDocument();
+  const fold = screen.getByText(/같은 BDF 뿐이라 초안 없이 끝난 묶음/).closest('details');
+  expect(fold).not.toHaveAttribute('open');
+  expect(fold).toHaveTextContent('1개');
+  expect(within(fold).getByRole('region', { name: /WB #6784/, hidden: true })).toBeInTheDocument();
+  // 접힌 줄 밖(위쪽 할 일 목록)에는 없다
+  expect(screen.getAllByRole('region', { name: /배치 /, hidden: true }).filter((r) => !fold.contains(r))).toHaveLength(1);
+});
+
+test('할 일이 없고 끝난 묶음만 있으면 빈 화면 안내와 접힌 줄이 함께 보인다', async () => {
+  const SETTLED = { key: 'K9', source: 'web', original_name: '같은 것만', state: 'done', uploader: 'A100001',
+    received_at: '2026-11-04T14:31:00', error: null, entries: [], excluded: [{ name: 'a.bdf', size: 0, reason: 'duplicate_model' }] };
+  renderPage({ 'GET /api/batches?scope=mine': [SETTLED] });
+  expect(await screen.findByText('정리할 자료가 없습니다')).toBeInTheDocument();
+  expect(screen.getByText(/같은 BDF 뿐이라 초안 없이 끝난 묶음/)).toBeInTheDocument();
+});
