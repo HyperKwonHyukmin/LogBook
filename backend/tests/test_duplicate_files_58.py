@@ -1,5 +1,6 @@
 """58 — 파일명이 같은 보고서·엑셀·모델 찾기와 정리(관리 › 자료 정비 › 중복 파일)."""
 from app import models
+from app.bdf.signature import VERSION as SIG_VERSION
 from app.entries import duplicate_files, service
 
 
@@ -75,3 +76,48 @@ def test_api_admin_only(client, db, storage, make_user, auth_headers, setup_entr
     fb = db.query(models.File).filter_by(entry_id=b.id).one().id
     res = client.post("/api/admin/cleanup/duplicates/resolve", json={"file_ids": [fb]}, headers=h)
     assert res.status_code == 200 and res.json()["done"] == 1
+
+
+def _model_pair(db, storage, make_user, setup_entry_with_files):
+    admin = make_user("A100001", is_admin=True)
+    a = _confirmed(db, storage, setup_entry_with_files, admin, ("x/m.bdf", "x/r.pdf"), "20260929-000000-aaaa")
+    b = _confirmed(db, storage, setup_entry_with_files, admin, ("y/m.bdf",), "20260929-000000-bbbb")
+    fa = db.query(models.File).filter_by(entry_id=a.id, name="m.bdf").one()
+    fb = db.query(models.File).filter_by(entry_id=b.id).one()
+    fb.sha256 = "b" * 64          # 바이트는 다르다
+    sig = dict(sig_version=SIG_VERSION, sig_geometry="g" * 64, sig_property="p" * 64, sig_material="m" * 64,
+               sig_load="l" * 64, state="done")
+    for f in (fa, fb):   # 확정이 변환 대기 행을 만든다 — 변환이 끝난 것처럼 채운다
+        row = db.get(models.ModelSummary, f.id) or models.ModelSummary(file_id=f.id)
+        for k, v in (sig | {"counts": {"GRID": 100, "CBEAM": 90}}).items():
+            setattr(row, k, v)
+        db.add(row)
+    db.commit()
+    return fa, fb
+
+
+def test_model_same_signature_counts_as_same(db, storage, make_user, setup_entry_with_files):
+    _model_pair(db, storage, make_user, setup_entry_with_files)
+    r = duplicate_files.duplicate_list(db, category="model")
+    g = r["items"][0]
+    assert (g["same_content"], g["same_model"]) == (False, True)   # 주석·줄 형식만 다른 같은 모델
+    assert g["files"][1]["compare"] == {"same_model": True, "diff": [], "same": list(duplicate_files.SIG_KINDS),
+                                        "counts": {}}
+    assert r["same_counts"] == {"content": 1, "name": 0}
+
+
+def test_model_different_signature_shows_diff(db, storage, make_user, setup_entry_with_files):
+    _, fb = _model_pair(db, storage, make_user, setup_entry_with_files)
+    s = db.get(models.ModelSummary, fb.id)
+    s.sig_geometry, s.counts = "h" * 64, {"GRID": 90, "CBEAM": 90, "RBE2": 3}
+    db.commit()
+    g = duplicate_files.duplicate_list(db, category="model")["items"][0]
+    assert g["same_model"] is False
+    c = g["files"][1]["compare"]
+    assert c["diff"] == ["geometry"] and c["counts"] == {"GRID": -10, "RBE2": 3}
+    assert g["files"][0]["compare"] is None    # 남길 것은 기준
+    # 서명이 없으면(변환 전·옛 규칙) 비교하지 않는다
+    s.sig_version = SIG_VERSION - 1
+    db.commit()
+    g = duplicate_files.duplicate_list(db, category="model")["items"][0]
+    assert g["files"][1]["compare"] is None and g["same_model"] is False

@@ -19,6 +19,27 @@ const SKIP_REASONS = {
   not_uploader: '권한 없음', file_not_in_vault: '파일 자리가 맞지 않음', entry_trashed: '이미 휴지통',
 };
 
+const SIG_LABELS = { geometry: '형상', property: '속성', material: '재료', load: '하중' };
+const num = (n) => n.toLocaleString('ko-KR');
+const signed = (n) => (n > 0 ? `+${num(n)}` : `−${num(-n)}`);
+const safe = (g) => g.same_content || g.same_model;   // 정리해도 되는 묶음
+
+/** 모델 파일의 '남길 것' 과 비교 한 줄 — 범주별 같음/다름 · 카드 개수 차. */
+function CompareLine({ c }) {
+  if (c.same_model) return <div className="mt-1 text-meta font-medium text-ok">남길 것과 모델 내용 같음(주석·줄 형식만 다름)</div>;
+  const counts = Object.entries(c.counts).map(([k, v]) => `${k} ${signed(v)}`);
+  return (
+    <div className="mt-1 text-meta text-n-600">
+      남길 것과 비교: {Object.keys(SIG_LABELS).map((k, i) => (
+        <span key={k}>{i > 0 && ' · '}
+          <span className={c.diff.includes(k) ? 'font-medium text-wait' : ''}>{SIG_LABELS[k]} {c.diff.includes(k) ? '다름' : '같음'}</span>
+        </span>
+      ))}
+      {counts.length > 0 && <span className="font-mono"> · {counts.join(' · ')}</span>}
+    </div>
+  );
+}
+
 /** 한 파일이 정리되면 어떻게 되는지 — 자료의 마지막 파일이면 자료째 휴지통. */
 function outcome(f, pickedInEntry) {
   return f.entry_file_count - pickedInEntry <= 0 ? '자료째 휴지통' : '이 파일만 빼기';
@@ -67,10 +88,10 @@ export default function DuplicateFilesView() {
   const toggle = (id) => setPicked((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const reset = (fn) => (v) => { fn(v); setLimit(PAGE); setPicked(new Set()); };
 
-  /** 내용까지 같은 묶음에서 '남길 것' 이외를 모두 고른다(이름만 같은 묶음은 사람이 본다). */
+  /** 내용까지 같은 묶음(모델은 서명까지 같음)에서 '남길 것' 이외를 모두 고른다(이름만 같은 묶음은 사람이 본다). */
   function pickSameContent() {
     const n = new Set(picked);
-    for (const g of data?.items || []) if (g.same_content) for (const f of g.files) if (!f.keep) n.add(f.file_id);
+    for (const g of data?.items || []) if (safe(g)) for (const f of g.files) if (!f.keep) n.add(f.file_id);
     setPicked(n);
   }
 
@@ -107,8 +128,8 @@ export default function DuplicateFilesView() {
     <section aria-label="중복 파일">
       {dialog}
       <p className="mb-3 text-meta text-n-600">
-        파일 이름(대소문자 무시)이 같은 보고서·엑셀·모델이 서로 다른 자료에 있는 것입니다. ‘내용도 같음’ 은 파일 내용(sha256)까지 같아
-        한쪽을 지워도 되는 경우가 많고, ‘이름만 같음’ 은 판이 다른 자료일 수 있어 열어 보고 정하세요. ‘남길 것’ 은 확정 자료 중 먼저 올린 쪽입니다.
+        파일 이름(대소문자 무시)이 같은 보고서·엑셀·모델이 서로 다른 자료에 있는 것입니다. ‘내용도 같음’ 은 파일 내용(sha256)까지 같고, 모델은
+        형상·속성·재료·하중 서명이 모두 같으면(주석·줄 형식만 다름) 같은 것으로 봅니다. 한쪽을 지워도 되는 경우가 많고, ‘이름만 같음’ 은 판이 다른 자료일 수 있어 열어 보고 정하세요. ‘남길 것’ 은 확정 자료 중 먼저 올린 쪽입니다.
       </p>
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <Tabs label="종류로 거르기" items={catTabs} value={category} onChange={reset(setCategory)} />
@@ -121,7 +142,7 @@ export default function DuplicateFilesView() {
         </label>
       </div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="ghost" disabled={busy || !(data?.items || []).some((g) => g.same_content)} onClick={pickSameContent}>
+        <Button size="sm" variant="ghost" disabled={busy || !(data?.items || []).some(safe)} onClick={pickSameContent}>
           <Wand2 size={14} aria-hidden="true" />내용도 같은 것 고르기(남길 것 빼고)
         </Button>
         {picked.size > 0 && <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>고른 것 풀기</Button>}
@@ -140,8 +161,8 @@ export default function DuplicateFilesView() {
           <div key={g.key} className="overflow-x-auto rounded-lg border border-n-200" role="group" aria-label={g.name}>
             <div className="flex flex-wrap items-center gap-2 border-b border-n-200 bg-n-50 px-3 py-2">
               <span className="break-all font-mono text-ui font-medium text-n-900">{g.name}</span>
-              <span className={`rounded-xs px-1.5 text-micro font-semibold ${g.same_content ? 'bg-ok-bg text-ok' : 'bg-wait-bg text-wait'}`}>
-                {g.same_content ? '내용도 같음' : '이름만 같음(내용 다름)'}
+              <span className={`rounded-xs px-1.5 text-micro font-semibold ${safe(g) ? 'bg-ok-bg text-ok' : 'bg-wait-bg text-wait'}`}>
+                {g.same_content ? '내용도 같음' : g.same_model ? '모델 내용 같음(형식만 다름)' : '이름만 같음(내용 다름)'}
               </span>
               <span className="text-meta text-n-500">자료 <span className="font-mono">{new Set(g.files.map((f) => f.entry_id)).size}</span>건</span>
             </div>
@@ -167,10 +188,16 @@ export default function DuplicateFilesView() {
                         {f.keep && <span className="rounded-xs bg-brand/10 px-1.5 text-micro font-semibold text-brand">남길 것</span>}
                       </div>
                       <div className="min-w-0 break-words text-n-900">{f.title}</div>
+                      {f.compare && <CompareLine c={f.compare} />}
                     </td>
                     <td className={`${td} break-all text-meta text-n-600`}>{f.rel_path}</td>
                     <td className={`${td} whitespace-nowrap text-meta text-n-600`}>
                       {formatBytes(f.size)} · <span className="font-mono" title={f.sha256}>{f.sha256.slice(0, 8)}</span>
+                      {f.counts && (
+                        <div className="font-mono text-micro text-n-500">
+                          {Object.entries(f.counts).map(([k, v]) => `${k} ${num(v)}`).join(' · ')}
+                        </div>
+                      )}
                     </td>
                     <td className={`${td} text-meta text-n-700`}>
                       {f.uploader_name || f.uploaded_by || '—'}

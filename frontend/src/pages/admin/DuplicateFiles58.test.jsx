@@ -68,3 +68,39 @@ test('중복 파일 — 내용도 같은 것만 자동으로 고르고 확인 �
   expect(JSON.parse(post[1].body)).toEqual({ file_ids: [2] });
   expect(screen.queryByRole('group', { name: 'r.pdf' })).toBeNull();
 });
+
+const MODELS = {
+  total: 2, all: 2, counts: { report: 0, excel: 0, model: 2 }, same_counts: { content: 1, name: 1 },
+  items: [
+    { key: 'a.bdf', name: 'a.bdf', category: 'model', same_content: false, same_model: true, files: [
+      file({ file_id: 11, entry_id: 'E000011', title: '원본', rel_path: 'a/a.bdf', entry_file_count: 2, keep: true,
+             counts: { GRID: 100 }, compare: null }),
+      file({ file_id: 12, entry_id: 'E000012', title: '주석만 다름', rel_path: 'b/a.bdf', entry_file_count: 2,
+             sha256: 'd'.repeat(64), counts: { GRID: 100 },
+             compare: { same_model: true, diff: [], same: ['geometry', 'property', 'material', 'load'], counts: {} } }),
+    ] },
+    { key: 'm.bdf', name: 'm.bdf', category: 'model', same_content: false, same_model: false, files: [
+      file({ file_id: 13, entry_id: 'E000013', title: '1차', rel_path: 'a/m.bdf', entry_file_count: 2, keep: true,
+             counts: { GRID: 10086 }, compare: null }),
+      file({ file_id: 14, entry_id: 'E000014', title: '2차', rel_path: 'c/m.bdf', entry_file_count: 2,
+             sha256: 'e'.repeat(64), counts: { GRID: 9667 },
+             compare: { same_model: false, diff: ['geometry', 'load'], same: ['property', 'material'], counts: { GRID: -419 } } }),
+    ] },
+  ],
+};
+
+test('중복 파일 — 모델은 남길 것과 범주별 비교, 서명이 같으면 자동 고르기에 든다', async () => {
+  renderPage({ 'GET /api/admin/cleanup/duplicates?limit=50': MODELS });
+  await userEvent.click(screen.getByRole('tab', { name: '중복 파일' }));
+  const same = await screen.findByRole('group', { name: 'a.bdf' });
+  expect(same).toHaveTextContent('모델 내용 같음(형식만 다름)');
+  expect(same).toHaveTextContent('남길 것과 모델 내용 같음(주석·줄 형식만 다름)');
+  const diff = screen.getByRole('group', { name: 'm.bdf' });
+  const row = within(diff).getByRole('link', { name: 'E000014' }).closest('tr');
+  expect(row).toHaveTextContent('형상 다름 · 속성 같음 · 재료 같음 · 하중 다름');
+  expect(row).toHaveTextContent('GRID −419');
+  expect(row).toHaveTextContent('GRID 9,667');
+  await userEvent.click(screen.getByRole('button', { name: /내용도 같은 것 고르기/ }));
+  expect(screen.getByRole('checkbox', { name: 'E000012 b/a.bdf 고르기' })).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'E000014 c/m.bdf 고르기' })).not.toBeChecked();
+});

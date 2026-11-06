@@ -5,6 +5,8 @@
 - 종류: 보고서(pdf·ppt·doc 등) · 엑셀(xls·xlsx·xlsm·csv) · 모델(BDF 류 + Abaqus .inp).
 - 묶음마다 내용까지 같은지(sha256 모두 같음)를 표시한다 — 이름만 같고 내용이 다르면 판이 다른 자료일 수 있다.
 - 남길 것 추천: 확정 자료 먼저, 그다음 먼저 올린 것.
+- 모델 묶음은 변환 때 저장한 서명(12)·카드 개수로 '남길 것' 과 비교한다(model_compare) — 형상·속성·재료·하중이
+  모두 같으면 '모델 내용 같음'(주석·줄 형식만 다름, 17 의 완전 동일 BDF 와 같은 기준). 보고서·엑셀은 비교하지 않는다.
 
 정리(resolve)는 기존 경로만 쓴다(감사 기록·entry.json·되돌리기가 그대로 남는다):
     자료에 다른 파일이 있으면 그 파일만 뺀다(service.remove_files, 37 — 휴지통 폴더, 확정 자료는 되돌리기 가능).
@@ -18,6 +20,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models
+from ..bdf.signature import VERSION as SIG_VERSION
 from ..storage.paths import StoragePaths
 from . import naming
 
@@ -30,6 +33,28 @@ CATEGORY_LABELS = {"report": "보고서", "excel": "엑셀", "model": "모델"}
 MAX_LIMIT = 500
 MAX_RESOLVE = 200
 _STATES = ("confirmed", "draft")
+SIG_KINDS = ("geometry", "property", "material", "load")
+SIG_LABELS = {"geometry": "형상", "property": "속성", "material": "재료", "load": "하중"}
+
+
+def _sig(row) -> dict | None:
+    """비교할 수 있는 서명(현재 규칙 버전, 요소 있음)만. 없으면 None."""
+    if row is None or row.sig_version != SIG_VERSION or not row.sig_geometry:
+        return None
+    return {k: getattr(row, f"sig_{k}") for k in SIG_KINDS}
+
+
+def model_compare(base, other) -> dict | None:
+    """모델 파일 둘(ModelSummary)을 비교 — 범주별 같음/다름과 카드 개수 차(other - base). 서명이 없으면 None."""
+    a, b = _sig(base), _sig(other)
+    if a is None or b is None:
+        return None
+    ca, cb = base.counts or {}, other.counts or {}
+    counts = {k: (cb.get(k) or 0) - (ca.get(k) or 0) for k in sorted(set(ca) | set(cb))
+              if (cb.get(k) or 0) != (ca.get(k) or 0)}
+    diff = [k for k in SIG_KINDS if a[k] != b[k]]
+    return {"same_model": not diff, "diff": diff, "same": [k for k in SIG_KINDS if k not in diff],
+            "counts": counts}
 
 
 def category_of(name: str) -> str | None:
@@ -54,6 +79,9 @@ def _groups(db: Session) -> list[dict]:
     counts: dict[int, int] = defaultdict(int, db.query(models.File.entry_id, func.count(models.File.id))
                                          .filter(models.File.entry_id.isnot(None))
                                          .group_by(models.File.entry_id).all())
+    model_ids = [f.id for items in by_name.values() for f, _ in items if category_of(f.name) == "model"]
+    summaries = {r.file_id: r for r in db.query(models.ModelSummary)
+                 .filter(models.ModelSummary.file_id.in_(model_ids or [0]))} if model_ids else {}
     groups = []
     for key, items in by_name.items():
         if len({e.id for _, e in items}) < 2:
@@ -61,34 +89,48 @@ def _groups(db: Session) -> list[dict]:
         # 남길 것 추천 — 확정 먼저, 그다음 먼저 올린 자료
         items.sort(key=lambda x: (x[1].status != "confirmed", x[1].created_at, x[1].id, x[0].id))
         shas = {f.sha256 for f, _ in items}
+        cat = category_of(items[0][0].name)
+        base = summaries.get(items[0][0].id)
+        compares = [None] + [model_compare(base, summaries.get(f.id)) if cat == "model" else None
+                             for f, _ in items[1:]]
+        same_content = len(shas) == 1
+        # 바이트는 다르지만 모델 서명이 모두 같다 — 주석·줄 형식만 다른 같은 모델
+        same_model = (not same_content and cat == "model"
+                      and all(c is not None and c["same_model"] for c in compares[1:]))
         groups.append({
-            "key": key, "name": items[0][0].name, "category": category_of(items[0][0].name),
-            "same_content": len(shas) == 1,
+            "key": key, "name": items[0][0].name, "category": cat,
+            "same_content": same_content, "same_model": same_model,
             "files": [{"file_id": f.id, "name": f.name, "rel_path": f.rel_path, "size": f.size, "sha256": f.sha256,
                        "entry_id": e.entry_id, "title": e.title, "status": e.status, "version": e.version,
                        "uploaded_by": e.uploaded_by,
                        "created_at": e.created_at.isoformat() if e.created_at else None,
-                       "entry_file_count": counts[e.id], "keep": i == 0}
+                       "entry_file_count": counts[e.id], "keep": i == 0, "compare": compares[i],
+                       "counts": (summaries[f.id].counts if f.id in summaries else None)}
                       for i, (f, e) in enumerate(items)],
         })
-    groups.sort(key=lambda g: (not g["same_content"], -len(g["files"]), g["key"]))
+    groups.sort(key=lambda g: (not _same(g), -len(g["files"]), g["key"]))
     return groups
+
+
+def _same(g: dict) -> bool:
+    """정리해도 되는 묶음 — 바이트가 같거나, 모델 서명이 모두 같다('내용도 같음' 거르기에 함께 든다)."""
+    return g["same_content"] or g["same_model"]
 
 
 def duplicate_list(db: Session, *, category: str | None = None, same: str | None = None,
                    q: str | None = None, offset: int = 0, limit: int = 100) -> dict:
-    """파일명이 같은 묶음 — category(report|excel|model)·same(content: 내용도 같음 | name: 이름만 같음)·q(파일명·자료)."""
+    """파일명이 같은 묶음 — category(report|excel|model)·same(content: 내용도 같음(모델 서명 같음 포함) | name: 이름만 같음)·q."""
     groups = _groups(db)
     counts = {c: sum(1 for g in groups if g["category"] == c) for c in CATEGORY_EXTS}
     all_count = len(groups)
     if category in CATEGORY_EXTS:
         groups = [g for g in groups if g["category"] == category]
-    same_counts = {"content": sum(1 for g in groups if g["same_content"]),
-                   "name": sum(1 for g in groups if not g["same_content"])}
+    same_counts = {"content": sum(1 for g in groups if _same(g)),
+                   "name": sum(1 for g in groups if not _same(g))}
     if same == "content":
-        groups = [g for g in groups if g["same_content"]]
+        groups = [g for g in groups if _same(g)]
     elif same == "name":
-        groups = [g for g in groups if not g["same_content"]]
+        groups = [g for g in groups if not _same(g)]
     if q and q.strip():
         k = naming.key(q)
         groups = [g for g in groups if k in naming.key(g["name"])
