@@ -20,6 +20,9 @@ Studio 의 구조 해석 결과 화면 그대로 보이려 한다. WorkBench 관
 - 목록·상세 항목에 `hasResult`.
 - 테스트 `test_lifting_refs_50.py` 끝 3건(편집본 우선·목록 hasResult · 없음/깨짐/권한 · 다른 폴더는 짝 아님).
 
+- 정리 대기 카드 머리 칩(2026-11-06 추가): MU 자료면 'Wire 없음 / Wire 포함 / Wire · 결과 포함' — 자료 응답 `lifting.has_result`(위와 같은 짝 규칙).
+  WorkBench 여러 건 보내기가 Wire 없는(검증만 한) 모델도 함께 보내서, 카드를 펼치지 않고 구분하게.
+
 ## 하지 않은 것
 
 - F06 내용은 내주지 않는다(Studio 결과 화면에 필요 없음, 파일 정보만).

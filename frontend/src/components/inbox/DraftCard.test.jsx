@@ -400,7 +400,8 @@ test('49 — Wire 모델이 있으면 칩만 보이고 묻지 않는다', async 
   render(<DraftCard entry={{ ...READY, files, target: 'Module Unit', lifting: { needed: true, has_wire: true } }}
                     siblings={[]} canEdit onChanged={() => {}} />);
   expect(screen.queryByRole('region', { name: '권상 Wire 모델 요청' })).toBeNull();
-  expect(screen.getByText('Wire 포함')).toBeInTheDocument();
+  // 카드 머리(자료 요약) + 파일 줄 — 2026-11-06 머리 칩 추가
+  expect(screen.getAllByText('Wire 포함')).toHaveLength(2);
   await userEvent.click(screen.getByRole('button', { name: '확정' }));
   await vi.waitFor(() => expect(fetch.mock.calls.some(([u]) => u.endsWith('/confirm'))).toBe(true));
   expect(screen.queryByRole('alertdialog')).toBeNull();

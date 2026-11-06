@@ -6,7 +6,7 @@ import VocabInput from '../ui/VocabInput.jsx';
 import { useConfirm } from '../ui/ConfirmDialog.jsx';
 import { Labeled, inputClass, selectClass } from '../ui/Field.jsx';
 import KindBadge from '../ui/KindBadge.jsx';
-import WireChip from '../ui/WireChip.jsx';
+import WireChip, { LiftingSetChip } from '../ui/WireChip.jsx';
 import { api } from '../../api/client.js';
 import { errorText, formatBytes } from '../../lib/labels.js';
 import { MODEL_CONVERT_LABELS, draftChecks, modelConvertState, needsLiftingWire } from '../../lib/inboxStatus.js';
@@ -302,6 +302,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
           <span className="h-1.5 w-1.5 rounded-full bg-wait" aria-hidden="true" />미확정
         </span>
         <span className="font-mono text-meta text-n-500">{entry.entry_id}</span>
+        <LiftingSetChip lifting={entry.lifting} />
         {dropTarget && (
           <span role="status" className="inline-flex min-w-0 items-center gap-1.5 text-meta font-medium text-brand">
             <Paperclip size={13} className="shrink-0" aria-hidden="true" />

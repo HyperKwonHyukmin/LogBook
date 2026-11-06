@@ -121,14 +121,14 @@ def test_entry_lifting_brief(db, storage, make_user, make_entry_file):
     service.set_tags(db, e, "target", ["Unit"])
     db.commit()
     d = service.entry_to_dict(db, e, viewer=u)
-    assert d["lifting"] == {"needed": True, "has_wire": False}
+    assert d["lifting"] == {"needed": True, "has_wire": False, "has_result": False}
 
     make_entry_file(entry=e, name="unit_renamed.bdf", kind="model")
     w = db.query(models.File).filter_by(entry_id=e.id, name="unit_renamed.bdf").one()
     db.add(models.ModelSummary(file_id=w.id, state="done", lifting=True))   # 이름을 바꿔도 본문 표시로 안다
     db.commit()
     d = service.entry_to_dict(db, e, viewer=u)
-    assert d["lifting"] == {"needed": True, "has_wire": True}
+    assert d["lifting"] == {"needed": True, "has_wire": True, "has_result": False}
     assert {x["name"]: x["lifting"] for x in d["files"]} == {"unit.bdf": False, "unit_renamed.bdf": True}
 
     other, _f = make_entry_file(title="일반 자료", name="o.bdf", kind="model", uploaded_by=ADMIN)
@@ -140,7 +140,11 @@ def test_wb_program_marks_mu(db, make_entry_file, make_user):
     e, f = make_entry_file(title="WB MU", name="9999_unit_lifting.bdf", kind="model", uploaded_by=ADMIN)
     wb_origin.stamp(db.get(models.Batch, f.batch_id), ORIGIN)
     db.commit()
-    assert service.entry_to_dict(db, e, viewer=u)["lifting"] == {"needed": True, "has_wire": True}
+    assert service.entry_to_dict(db, e, viewer=u)["lifting"] == {"needed": True, "has_wire": True, "has_result": False}
+    # 59 — 같은 폴더에 결과 JSON + 모델 JSON 이 함께 오면 결과 포함
+    make_entry_file(entry=e, name="9999_unit_lifting_nastranResult.json", kind="other")
+    make_entry_file(entry=e, name="9999_unit_edited.json", kind="other")
+    assert service.entry_to_dict(db, e, viewer=u)["lifting"]["has_result"] is True
 
 
 def test_mu_target_unit_and_synonym(db):

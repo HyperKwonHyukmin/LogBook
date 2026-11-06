@@ -60,6 +60,9 @@ def programs_of(db: Session, files: list[models.File]) -> list[str]:
 
 
 def brief(db: Session, target: str | None, files: list[models.File], model_rows: dict) -> dict:
-    """자료 응답 `lifting` — {needed: MU 자료인가, has_wire: Wire 모델이 있는가}."""
-    has_wire = any(is_wire_model(f, model_rows.get(f.id)) for f in files)
-    return {"needed": is_mu(db, target, programs_of(db, files)), "has_wire": has_wire}
+    """자료 응답 `lifting` — {needed: MU 자료인가, has_wire: Wire 모델이 있는가, has_result: 그 Wire 모델의 구조 해석 결과 세트가 함께 있는가}.
+    has_result 는 59(실적 결과 화면)와 같은 짝 규칙 — 정리 대기 카드가 'Wire · 결과 포함 / Wire 포함 / Wire 없음' 을 보인다."""
+    from .lifting_refs import _pick_result   # lifting_refs 가 이 모듈을 import 한다 — 순환을 피해 함수 안에서
+    wires = [f for f in files if is_wire_model(f, model_rows.get(f.id))]
+    return {"needed": is_mu(db, target, programs_of(db, files)), "has_wire": bool(wires),
+            "has_result": any(_pick_result(f, files) is not None for f in wires)}
