@@ -175,16 +175,24 @@ def export_content(file_id: int, request: Request, as_: str = Query(default="", 
 
 # ---- 50 — 다른 Unit 의 권상 Wire 배치(WorkBench Module Unit Studio 참조) ----
 
+def _reference_file(db: Session, file_id: int, user: models.User) -> models.File:
+    """권상 참조용 파일 — 레벨과 무관하게 확정 Wire 모델을 보여 주는 범위(lifting_refs.reference_visible).
+    없거나 휴지통이거나 차단 자료면 404(존재를 숨기는 것은 files._file 과 같다)."""
+    f = db.get(models.File, file_id)
+    if f is None or not lifting_refs.reference_visible(db, user, f):
+        raise HTTPException(status_code=404, detail="file_not_found")
+    return f
+
 @router.get("/lifting-refs", dependencies=[Depends(require_integration)])
 def wb_lifting_refs(as_: str = Query(default="", alias="as"), q: str | None = Query(default=None, max_length=100),
                     hull: str | None = Query(default=None, max_length=8),
                     limit: int = Query(default=50, ge=1, le=lifting_refs.LIST_LIMIT_MAX),
-                    offset: int = Query(default=0, ge=0),
+                    offset: int = Query(default=0, ge=0), mine: bool = Query(default=False),
                     db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage)):
-    """`as` 사번이 볼 수 있는 확정 자료의 Wire 모델 목록 + 요약(평면 선분 제외). 404 = 사번 없음·비활성."""
+    """확정 자료의 Wire 모델 목록 + 요약(평면 선분 제외) — 레벨과 무관, 차단 자료만 뺀다(lifting_refs.reference_visible_filter). 404 = 사번 없음·비활성."""
     user = _acting_user(db, as_)
     return lifting_refs.list_refs(db, storage, user, q=q, hull=(hull or "").strip() or None,
-                                  limit=limit, offset=offset)
+                                  limit=limit, offset=offset, mine=mine)
 
 
 @router.get("/lifting-refs/{file_id}", dependencies=[Depends(require_integration)])
@@ -192,7 +200,7 @@ def wb_lifting_ref(file_id: int, as_: str = Query(default="", alias="as"),
                    db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage)):
     """한 Wire 모델의 전체 요약(평면 선분 포함). 404 = 없음·권한 밖, 415 = Wire 모델이 아니거나 Wire 를 못 찾음."""
     user = _acting_user(db, as_)
-    f = files_router._file(db, file_id, user)
+    f = _reference_file(db, file_id, user)
     out = lifting_refs.detail(db, storage, f)
     if out is None:
         raise HTTPException(status_code=415, detail="not_wire_model")
@@ -206,7 +214,7 @@ def wb_lifting_ref_result(file_id: int, as_: str = Query(default="", alias="as")
     404 = 없음·권한 밖 / no_result(결과 세트 없음) · 415 = Wire 모델 아님 · 422 = 읽을 수 없음(drm·bad_json·too_large·file_missing)
     · 503 = 공유 폴더 오류."""
     user = _acting_user(db, as_)
-    f = files_router._file(db, file_id, user)
+    f = _reference_file(db, file_id, user)
     if not lifting_refs.is_reference(db, f):
         raise HTTPException(status_code=415, detail="not_wire_model")
     try:

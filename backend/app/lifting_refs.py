@@ -2,7 +2,8 @@
 
 계획: WorkBench 저장소 docs/plans/2026-11-04-mu-studio-logbook-wire-reference.md.
 
-- 대상 = 확정된 자료(보관소)의 Wire 모델 파일(lifting.is_wire_model) 중 `as` 사번이 볼 수 있는 것.
+- 대상 = 확정된 자료(보관소)의 Wire 모델 파일(lifting.is_wire_model). 레벨과 무관하게 모두, 차단(blocked) 자료만 뺀다
+  (2026-11-06 — reference_visible_filter. 자료 화면·파일 받기 권한은 그대로).
   WorkBench 권상 Wire 모델이면 MU·Side Passage 자료라 대상 태그(Unit)로 다시 거르지 않는다 — 태그가 빠진 자료도 찾게.
 - 요약은 변환 때 model_summaries.wires 에 쓰고(convert.job), 없으면(50 이전 변환·이름으로만 판별된 파일) 처음
   요청 때 BDF 를 읽어 채운다. 읽었는데 apex 가 없으면 {"none": true} 를 남겨 다시 읽지 않는다.
@@ -12,7 +13,7 @@ import json
 import logging
 import os
 
-from sqlalchemy import func, or_
+from sqlalchemy import false, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -86,19 +87,45 @@ def ensure_wires(db: Session, storage: StoragePaths, f: models.File) -> dict | N
     return summary
 
 
+# ---- 권상 참조 열람 범위 (2026-11-06 사용자 결정) ----
+# 권상 Wire 배치는 다른 Unit 의 권상을 잡을 때 참고하는 사내 실적이라, 레벨(LV1 포함)과 무관하게 확정된 Wire 모델을
+# 모두 보여 준다. 소유자·관리자가 일부러 '차단(blocked)' 한 자료만 빼되, 원래 볼 수 있던 사람(올린 사람·허락받은 사람·LV3)은
+# 그대로 본다. 이 범위는 이 모듈의 목록·상세·결과에만 쓴다 — 자료 화면·파일 받기의 권한(access.*)은 바꾸지 않는다.
+
+def reference_visible_filter(user):
+    """SQL 조건 — 권상 참조로 이 사용자에게 보일 Entry. 사용자 없음(비활성 등)은 아무것도 안 보인다."""
+    if user is None:
+        return false()
+    E = models.Entry
+    return or_(access.visible_entries_filter(user), E.access.is_(None), E.access != "blocked")
+
+
+def reference_visible(db: Session, user, f: models.File) -> bool:
+    """reference_visible_filter 와 같은 규칙(한 파일). 휴지통·Entry 없는 파일은 안 보인다."""
+    if user is None or f is None or f.location == "trash" or f.entry_id is None:
+        return False
+    e = db.get(models.Entry, f.entry_id)
+    if e is None:
+        return False
+    return access.access_of(e) != "blocked" or access.can_view_entry(user, e, db=db)
+
+
 def _candidate_ids(db: Session, user, q: str | None, hull: str | None) -> list[tuple[int, int]]:
     """(file id, entry id) — 작은 칸만 골라 정렬한다. JSON·TEXT(요약·지문·설명)를 실은 채 ORDER BY 하면
     MySQL 정렬 버퍼가 넘친다(1038, WorkBench v1.5.8 과 같은 유형)."""
     E, F, S = models.Entry, models.File, models.ModelSummary
     query = (db.query(F.id, E.id).join(E, F.entry_id == E.id).outerjoin(S, S.file_id == F.id)
              .filter(E.status == "confirmed", F.location == "vault", F.kind == "model",
-                     access.visible_entries_filter(user),
+                     reference_visible_filter(user),
                      or_(S.lifting.is_(True), func.lower(F.name).like(f"%{lifting.NAME_SUFFIX}.%"))))
     if hull:
         query = query.filter(E.id.in_(db.query(models.EntryHull.entry_id).filter(models.EntryHull.hull_no == hull)))
     if q:
+        # 검색어 하나로 파일 이름·자료 제목·자료 코드·자료에 붙은 호선을 함께 찾는다(Studio 칸 = '호선·이름')
         like = _like(q.strip().lower())   # _·% 는 글자 그대로(검색과 같은 escape)
-        query = query.filter(or_(func.lower(F.name).like(like), func.lower(E.title).like(like)))
+        hull_ids = db.query(models.EntryHull.entry_id).filter(func.lower(models.EntryHull.hull_no).like(like))
+        query = query.filter(or_(func.lower(F.name).like(like), func.lower(E.title).like(like),
+                                 func.lower(E.entry_id).like(like), E.id.in_(hull_ids)))
     return [(fid, eid) for fid, eid in query.order_by(E.confirmed_at.desc(), F.id.desc()).all()]
 
 
@@ -115,6 +142,31 @@ def _candidates(db: Session, user, q: str | None, hull: str | None):
         f, s = files[fid], rows.get(fid)
         if lifting.is_wire_model(f, s):
             out.append((f, entries[eid], s))
+    return out
+
+
+def _only_mine(db: Session, user, rows: list) -> list:
+    """'내 모델' (2026-11-06 사용자 결정) — WorkBench All Projects 로 보낸 자료(묶음에 WB 해석 번호가 있음) 중
+    그 해석을 실행한 사람(origin.owner)·올린 사람(entry.uploaded_by)·담당자(entry_assignees) 가 나인 것.
+    출처가 JSON 칸이라(MySQL·SQLite 문법이 다름) 후보를 거른 뒤 파이썬에서 맞춘다."""
+    if user is None or not rows:
+        return []
+    me = (user.employee_id or "").strip().upper()
+    batch_ids = {f.batch_id for f, _e, _s in rows if f.batch_id}
+    origins = dict(db.query(models.Batch.id, models.Batch.origin)
+                   .filter(models.Batch.id.in_(batch_ids), models.Batch.wb_analysis_id.isnot(None))) if batch_ids else {}
+    entry_ids = {e.id for _f, e, _s in rows}
+    assigned = {eid for (eid,) in db.query(models.EntryAssignee.entry_id)
+                .join(models.Person, models.Person.id == models.EntryAssignee.person_id)
+                .filter(models.EntryAssignee.entry_id.in_(entry_ids), func.upper(models.Person.employee_id) == me)}
+    out = []
+    for f, e, s in rows:
+        if f.batch_id not in origins:
+            continue   # All Projects 로 보낸 것이 아님
+        origin = origins[f.batch_id]
+        owner = str(origin.get("owner") or "").strip().upper() if isinstance(origin, dict) else ""
+        if owner == me or (e.uploaded_by or "").strip().upper() == me or e.id in assigned:
+            out.append((f, e, s))
     return out
 
 
@@ -239,11 +291,14 @@ def _item(db: Session, f: models.File, e: models.Entry, summary: dict | None, *,
 
 
 def list_refs(db: Session, storage: StoragePaths, user, *, q: str | None = None, hull: str | None = None,
-              limit: int = 50, offset: int = 0) -> dict:
-    """요약을 읽을 수 있는 것만 센다 — apex 를 못 찾은 파일(none)은 목록에서 뺀다."""
+              limit: int = 50, offset: int = 0, mine: bool = False) -> dict:
+    """요약을 읽을 수 있는 것만 센다 — apex 를 못 찾은 파일(none)은 목록에서 뺀다. mine = '내 모델'(_only_mine)."""
     limit = max(1, min(limit, LIST_LIMIT_MAX))
     items, lazy = [], 0
-    for f, e, s in _candidates(db, user, q, hull):
+    rows = _candidates(db, user, q, hull)
+    if mine:
+        rows = _only_mine(db, user, rows)
+    for f, e, s in rows:
         summary = s.wires if s is not None else None
         if (summary is None or is_stale(summary)) and lazy < MAX_LAZY_PER_LIST:
             lazy += 1
@@ -253,7 +308,10 @@ def list_refs(db: Session, storage: StoragePaths, user, *, q: str | None = None,
         items.append((f, e, summary))
     page = items[offset:offset + limit]
     flags = has_result_map(db, [f for f, _e, _s in page])
-    return {"total": len(items), "items": [_item(db, f, e, s, full=False, has_result=flags[f.id]) for f, e, s in page]}
+    out = {"total": len(items), "items": [_item(db, f, e, s, full=False, has_result=flags[f.id]) for f, e, s in page]}
+    if mine:
+        out["mine"] = True   # '내 모델' 조건을 실제로 적용했다는 표시 — 옛 LogBook 은 mine 을 버리므로 Studio 가 이걸로 가린다
+    return out
 
 
 def detail(db: Session, storage: StoragePaths, f: models.File) -> dict | None:
@@ -266,4 +324,28 @@ def detail(db: Session, storage: StoragePaths, f: models.File) -> dict | None:
     summary = ensure_wires(db, storage, f)
     if summary is None or summary.get("none"):
         return None
-    return _item(db, f, e, summary, full=True)
+    out = _item(db, f, e, summary, full=True)
+    out["resultBrief"] = result_brief(db, storage, f)
+    return out
+
+
+def result_brief(db: Session, storage: StoragePaths, f: models.File) -> dict | None:
+    """실적 카드의 결과 요약 한 줄용(2026-11-06) — 결과 JSON 의 판정에 필요한 칸만. Studio 가 결과 화면과 같은 규칙
+    (referenceVerdictLabel)으로 판정 문구를 만든다. 결과 세트 없음 = None · 읽지 못함 = {"unavailable": 사유}.
+    공유 폴더가 잠깐 안 보이면 None(상세 자체는 실패시키지 않는다)."""
+    files = result_files(db, f)
+    if files is None:
+        return None
+    try:
+        body = _read_json(db, storage, files["result"])
+    except ResultUnavailable as exc:
+        return {"unavailable": exc.code}
+    except OSError:
+        return None
+    meta = body.get("meta") if isinstance(body.get("meta"), dict) else {}
+    ev = body.get("evaluation") if isinstance(body.get("evaluation"), dict) else {}
+    warnings = body.get("warnings") if isinstance(body.get("warnings"), list) else []
+    return {"summary": body.get("summary") if isinstance(body.get("summary"), dict) else {},
+            "warnings": [str(w)[:300] for w in warnings[:50]],
+            "meta": {"hasFatal": bool(meta.get("hasFatal"))},
+            "evaluation": {"structuralAllowableMPa": ev.get("structuralAllowableMPa")}}

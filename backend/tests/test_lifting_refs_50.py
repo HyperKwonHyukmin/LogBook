@@ -180,3 +180,107 @@ def test_result_bundle_pairs_only_same_folder(secret, client, db, storage, make_
     _sibling(db, storage, make_entry_file, e, "B/9999_m06_lifting_nastranResult.json", b"{}")
     _sibling(db, storage, make_entry_file, e, "B/9999_m06.json", b"{}")
     assert client.get(f"/api/integration/lifting-refs/{f.id}/result?as={LV2}", headers=H).status_code == 404
+
+
+# ---- 2026-11-06 — 권상 참조는 레벨과 무관(LV1 포함), 차단 자료만 뺀다 ----
+LV1 = "M500003"
+
+
+def test_lv1_sees_every_unblocked_wire_model(secret, client, db, make_user, world):
+    make_user(LV1, name="손님", level=1)
+    db.commit()
+    r = client.get(f"/api/integration/lifting-refs?as={LV1}", headers=H)
+    assert r.status_code == 200, r.text
+    # 남(LV2)이 올린 일반 자료도 보인다 — 차단 자료(hidden)는 빠진다
+    assert sorted(i["name"] for i in r.json()["items"]) == ["9999_m04_lifting.bdf", "9999_m05_lifting.bdf"]
+    fid = world["converted"][1].id
+    assert client.get(f"/api/integration/lifting-refs/{fid}?as={LV1}", headers=H).status_code == 200
+    hid = world["hidden"][1].id
+    assert client.get(f"/api/integration/lifting-refs/{hid}?as={LV1}", headers=H).status_code == 404
+    assert client.get(f"/api/integration/lifting-refs/{hid}/result?as={LV1}", headers=H).status_code == 404
+
+
+def test_lv1_reference_does_not_open_file_download(secret, client, db, make_user, world):
+    """참조 범위는 권상 요약에만 — BDF 원본 받기는 원래 권한(LV1 은 남의 일반 자료 못 봄) 그대로."""
+    make_user(LV1, name="손님", level=1)
+    db.commit()
+    fid = world["converted"][1].id
+    assert client.get(f"/api/integration/files/{fid}/content?as={LV1}", headers=H).status_code == 404
+
+
+def test_blocked_owner_still_sees_own(secret, client, world):
+    r = client.get(f"/api/integration/lifting-refs?as={OTHER}", headers=H)
+    assert "9999_h_lifting.bdf" in [i["name"] for i in r.json()["items"]]
+
+
+def test_query_matches_hull_and_entry_code(secret, client, db, storage, make_entry_file, world):
+    e, f = make_entry_file(title="M07 권상", name="m07_lifting.bdf", kind="model", uploaded_by=LV2, hulls=("8888",))
+    db.add(models.ModelSummary(file_id=f.id, state="done", key="b" * 64, includes=[], missing=[], lifting=True))
+    _put(storage, e, f, LIFTING.encode())
+    db.commit()
+    # 이름·제목에 없는 호선으로 찾는다
+    r = client.get(f"/api/integration/lifting-refs?as={LV2}&q=8888", headers=H)
+    assert [i["name"] for i in r.json()["items"]] == ["m07_lifting.bdf"]
+    r = client.get(f"/api/integration/lifting-refs?as={LV2}&q={e.entry_id.lower()}", headers=H)
+    assert [i["name"] for i in r.json()["items"]] == ["m07_lifting.bdf"]
+
+
+# ---- 2026-11-06 — '내 모델'(All Projects 로 보낸 것 중 실행자·올린 사람·담당자) · 실적 카드 결과 요약 ----
+ANALYST = "M500004"
+
+
+def _wb_wire(db, storage, make_entry_file, *, title, name, uploaded_by, owner, analysis_id):
+    from app import wb_origin
+    e, f = make_entry_file(title=title, name=name, kind="model", uploaded_by=uploaded_by)
+    db.add(models.ModelSummary(file_id=f.id, state="done", key=str(analysis_id) * 8, includes=[], missing=[], lifting=True))
+    wb_origin.stamp(db.get(models.Batch, f.batch_id), {"analysis_id": analysis_id, "owner": owner.lower()})
+    _put(storage, e, f, LIFTING.encode())
+    db.commit()
+    return e, f
+
+
+def test_mine_lists_only_my_all_projects_models(secret, client, db, storage, make_user, make_entry_file, world):
+    from app import people
+    make_user(ANALYST, name="해석가", level=1)
+    _wb_wire(db, storage, make_entry_file, title="내가 실행", name="9999_r1_lifting.bdf", uploaded_by=LV2, owner=ANALYST, analysis_id=11)
+    _wb_wire(db, storage, make_entry_file, title="남이 실행", name="9999_r2_lifting.bdf", uploaded_by=LV2, owner=OTHER, analysis_id=12)
+    e3, _f3 = _wb_wire(db, storage, make_entry_file, title="담당", name="9999_r3_lifting.bdf", uploaded_by=LV2, owner=OTHER,
+                       analysis_id=13)
+    db.add(models.Person(employee_id=ANALYST, name="해석가", source="wb"))
+    db.flush()
+    people.set_assignees(db, e3, people.resolve_refs(db, [{"employee_id": ANALYST}]))
+    db.commit()
+
+    url = f"/api/integration/lifting-refs?as={ANALYST}"
+    every = {i["name"] for i in client.get(url, headers=H).json()["items"]}
+    assert {"9999_r1_lifting.bdf", "9999_r2_lifting.bdf", "9999_m04_lifting.bdf"} <= every
+    mine = client.get(url + "&mine=true", headers=H).json()
+    assert sorted(i["name"] for i in mine["items"]) == ["9999_r1_lifting.bdf", "9999_r3_lifting.bdf"]
+    assert mine["total"] == 2 and mine["mine"] is True
+    assert "mine" not in client.get(url, headers=H).json()   # 전체 목록에는 표시 없음
+    # 보낸 관리자(LV2) = 올린 사람 → All Projects 로 보낸 3건이 모두 '내 모델'. 직접 올린 자료(m04·m05)는 빠진다
+    sender = client.get(f"/api/integration/lifting-refs?as={LV2}&mine=true", headers=H).json()
+    assert sorted(i["name"] for i in sender["items"]) == ["9999_r1_lifting.bdf", "9999_r2_lifting.bdf", "9999_r3_lifting.bdf"]
+
+
+def test_detail_carries_result_brief(secret, client, db, storage, make_entry_file, world):
+    e, f = world["converted"]
+    result = (b'{"summary": {"memberExceedCount": 3, "memberElementCount": 40, "memberMaxStressMPa": 301.5},'
+              b' "warnings": ["w1"], "meta": {"hasFatal": false}, "evaluation": {"structuralAllowableMPa": 220},'
+              b' "members": [{"elementId": 1}]}')
+    _sibling(db, storage, make_entry_file, e, "9999_M04_lifting_nastranResult.json", result)
+    _sibling(db, storage, make_entry_file, e, "9999_M04.json", b'{"nodes": []}')
+    brief = client.get(f"/api/integration/lifting-refs/{f.id}?as={LV2}", headers=H).json()["resultBrief"]
+    assert brief["summary"]["memberExceedCount"] == 3 and brief["warnings"] == ["w1"]
+    assert brief["evaluation"]["structuralAllowableMPa"] == 220 and brief["meta"]["hasFatal"] is False
+    assert "members" not in brief
+    # 결과 세트 없는 실적 = None
+    assert client.get(f"/api/integration/lifting-refs/{world['lazy'][1].id}?as={LV2}", headers=H).json()["resultBrief"] is None
+
+
+def test_detail_result_brief_unreadable(secret, client, db, storage, make_entry_file, world):
+    e, f = world["converted"]
+    _sibling(db, storage, make_entry_file, e, "9999_M04_lifting_nastranResult.json", b"{broken")
+    _sibling(db, storage, make_entry_file, e, "9999_M04.json", b'{"nodes": []}')
+    r = client.get(f"/api/integration/lifting-refs/{f.id}?as={LV2}", headers=H)
+    assert r.status_code == 200 and r.json()["resultBrief"] == {"unavailable": "bad_json"}
