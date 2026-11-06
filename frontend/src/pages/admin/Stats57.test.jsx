@@ -61,7 +61,9 @@ test('57 자료 목록 — 빠진 칸 표시와 거르개, 골라서 공개 범�
   // 공용 표시 자료는 호선 칸이 '공용', 공용도 아니고 호선도 없으면 빠짐
   const crane = screen.getByText('공용 · crane jungban').closest('tr');
   expect(within(crane).getByText('공용')).toBeInTheDocument();
-  expect(within(crane).getAllByText('빠짐')).toHaveLength(3);   // 구역·대상·담당자
+  expect(within(crane).queryByText('빠짐')).toBeNull();          // 공용이면 호선은 빠진 것이 아니다
+  expect(within(crane).getAllByText('추가').length).toBeGreaterThanOrEqual(2);   // 빈 구역·대상 칸은 바로 [추가]
+  expect(within(screen.getByText('호선 빠짐').closest('tr')).getByText('빠짐')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '구역 없음 1' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '호선 없음(공용 아님) 1' })).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '호선 없음(공용 아님) 1' }));
@@ -90,4 +92,36 @@ test('57 — 검색의 일괄 분류에는 공개 범위가 없고, bulkBody 는
   const f = { zonesAdd: [], zonesRemove: [], targetMode: '', target: null, assigneesAdd: [], assigneesRemove: [], noHull: '', access: '' };
   expect(bulkBody(['E1'], f)).toBeNull();
   expect(bulkBody(['E1'], { ...f, access: 'blocked' })).toEqual({ entry_ids: ['E1'], access: 'blocked' });
+});
+
+test('57 자료 목록 — 표에서 바로 고치고 [변경 N건 저장]: 공개 범위는 PUT access, 담당자는 PATCH(version)', async () => {
+  let table = { rows: ROWS, limit: 5000, categories: [] };
+  const fetch = mockApi({
+    'GET /api/admin/entry-table': () => table,
+    'PUT /api/entries/E000036/access': { entry_id: 'E000036', version: 2 },
+    'PATCH /api/entries/E000040': { __status: 409, detail: 'version_conflict' },
+  });
+  inRouter(<EntryTablePage />);
+  await screen.findByText('공용 · crane jungban');
+  expect(screen.getByRole('button', { name: '변경 0건 저장' })).toBeDisabled();
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'E000036 공개 범위' }), 'normal');
+  const row = screen.getByText('공용 · crane jungban').closest('tr');
+  expect(within(row).getByText('고침')).toBeInTheDocument();
+  // 되돌려 놓으면 변경이 아니다
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'E000036 공개 범위' }), 'shared');
+  expect(screen.getByRole('button', { name: '변경 0건 저장' })).toBeDisabled();
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'E000036 공개 범위' }), 'normal');
+  // E000040 담당자 빼기(칩의 빼기 단추)
+  const r40 = screen.getByText('호선 빠짐').closest('tr');
+  await userEvent.click(within(r40).getByRole('button', { name: /이영희.*(빼기|삭제|제거)/ }));
+  table = { ...table, rows: ROWS.map((r) => (r.entry_id === 'E000036' ? { ...r, access: 'normal', version: 2 } : r)) };
+  await userEvent.click(screen.getByRole('button', { name: '변경 2건 저장' }));
+  expect(await screen.findByText('1건을 저장했습니다.')).toBeInTheDocument();
+  const sent = fetch.mock.calls.filter(([, i = {}]) => i.method === 'PUT' || i.method === 'PATCH')
+    .map(([u, i]) => [i.method, u, JSON.parse(i.body)]);
+  expect(sent).toContainEqual(['PUT', '/api/entries/E000036/access', { access: 'normal', version: 1 }]);
+  expect(sent).toContainEqual(['PATCH', '/api/entries/E000040', { assignees: [], version: 1 }]);
+  // 실패한 줄은 사유와 함께 고친 값이 남는다
+  expect(within(screen.getByText('호선 빠짐').closest('tr')).getByRole('alert')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '변경 1건 저장' })).toBeEnabled();
 });
