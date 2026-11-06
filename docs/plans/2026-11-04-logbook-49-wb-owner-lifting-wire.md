@@ -65,6 +65,10 @@
   자료 응답 `lifting: {needed, has_wire}`.
 
 ## 145 확인
+- (2026-11-06, `6cb244b`) Update 뒤 Server Manager 창을 X 로 닫고 다시 연 다음 `python -m app.cli enqueue-convert --wire-check` —
+  정리 대기 MU 초안의 'Wire 없음' 이 'Wire 포함' 으로 바뀌고 안내가 사라지는지. **145 실제 파일로는 아직 시험 안 함**(개발 PC 는 공유 폴더 원본을 못 읽음).
+  안 바뀌는 초안이 있으면 그 BDF 의 꼭짓점·CROD 구성을 보고 `summary_has_wires` 조건을 다시 맞춘다.
+- (2026-11-06) WB Unit 해석을 Update 뒤 새로 보내 대상 'Unit' 이 미리 골라지는지(그 전에 받은 11건은 사용자가 휴지통으로 보냄).
 - Update 뒤 관리 › 분류 목록 › 대상에 'Unit'(동의어 GMU)이 있는지 확인. 없으면 'Unit' 을 더한다.
 - `python -m app.cli clear-wb-runners` 로 목록 확인 → `--apply`(실행자를 담당자에서 뺀다).
 - WorkBench 를 배포한 뒤 MU 해석 하나를 보내 정리 대기에 **한 장**으로, '실행자'에 실행한 사람(담당자는 빈 칸), 'Wire 포함' 파일이 보이는지.
