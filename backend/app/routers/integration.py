@@ -199,6 +199,27 @@ def wb_lifting_ref(file_id: int, as_: str = Query(default="", alias="as"),
     return out
 
 
+@router.get("/lifting-refs/{file_id}/result", dependencies=[Depends(require_integration)])
+def wb_lifting_ref_result(file_id: int, as_: str = Query(default="", alias="as"),
+                          db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage)):
+    """59 — 그 Wire 모델과 함께 온 구조 해석 결과(결과 JSON + 모델 JSON 내용). Studio 가 결과 화면을 그린다.
+    404 = 없음·권한 밖 / no_result(결과 세트 없음) · 415 = Wire 모델 아님 · 422 = 읽을 수 없음(drm·bad_json·too_large·file_missing)
+    · 503 = 공유 폴더 오류."""
+    user = _acting_user(db, as_)
+    f = files_router._file(db, file_id, user)
+    if not lifting_refs.is_reference(db, f):
+        raise HTTPException(status_code=415, detail="not_wire_model")
+    try:
+        out = lifting_refs.result_bundle(db, storage, f)
+    except lifting_refs.ResultUnavailable as exc:
+        raise HTTPException(status_code=422, detail=exc.code)
+    except OSError:
+        raise HTTPException(status_code=503, detail="storage_unreachable")
+    if out is None:
+        raise HTTPException(status_code=404, detail="no_result")
+    return out
+
+
 # ---- WorkBench → LogBook 보내기(WB 관리자 'All Projects') ----
 # 19 — WB 관리자가 고른 해석 입력·결과 파일을 그 관리자의 '정리 대기' 묶음으로 올린다.
 # 크롬 업로드(uploads.service)와 같은 시작 → 조각 → 마치기 흐름이고, 올린 사람 = `as` 사번이다.

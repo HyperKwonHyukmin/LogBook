@@ -128,3 +128,55 @@ def test_query_treats_like_wildcards_literally(secret, client, world):
     assert r.json()["items"] == []
     r = client.get(f"/api/integration/lifting-refs?as={LV2}&q=9999_m04", headers=H)
     assert [i["name"] for i in r.json()["items"]] == ["9999_m04_lifting.bdf"]
+
+
+# ---- 59 — Wire 모델과 함께 온 구조 해석 결과 세트 ----
+
+def _sibling(db, storage, make_entry_file, entry, rel, data: bytes, kind="other"):
+    _e, f = make_entry_file(entry=entry, name=rel, kind=kind)
+    vf = storage.vault / "2026" / entry.entry_id / "files"
+    os.makedirs(to_long(os.path.dirname(str(vf / rel))), exist_ok=True)
+    with open(to_long(vf / rel), "wb") as fh:
+        fh.write(data)
+    return f
+
+
+def test_result_bundle_returns_result_and_model(secret, client, db, storage, make_entry_file, world):
+    e, f = world["converted"]
+    _sibling(db, storage, make_entry_file, e, "9999_M04_lifting_nastranResult.json", b'{"members": [{"elementId": 1}]}')
+    _sibling(db, storage, make_entry_file, e, "9999_M04.json", b'{"nodes": [], "which": "original"}')
+    _sibling(db, storage, make_entry_file, e, "9999_M04_edited.json", b'\xef\xbb\xbf{"nodes": [], "which": "edited"}')
+    _sibling(db, storage, make_entry_file, e, "9999_m04_lifting.f06", b"F06", kind="result")
+    r = client.get(f"/api/integration/lifting-refs/{f.id}/result?as={LV2}", headers=H)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["result"]["members"][0]["elementId"] == 1
+    assert body["model"]["which"] == "edited"          # 편집본이 있으면 그것(해석에 쓴 모델)
+    assert body["files"]["f06"]["name"] == "9999_m04_lifting.f06"
+    # 목록에도 결과 있음이 보인다
+    items = client.get(f"/api/integration/lifting-refs?as={LV2}", headers=H).json()["items"]
+    assert {i["fileId"]: i["hasResult"] for i in items}[f.id] is True
+
+
+def test_result_bundle_missing_and_rejects(secret, client, db, storage, make_entry_file, world):
+    e, f = world["lazy"]
+    r = client.get(f"/api/integration/lifting-refs/{f.id}/result?as={LV2}", headers=H)
+    assert r.status_code == 404 and r.json()["detail"] == "no_result"
+    # 모델 JSON 없이 결과만 — 결과 화면을 못 그리므로 결과 없음
+    _sibling(db, storage, make_entry_file, e, "9999_m05_lifting_nastranResult.json", b"{}")
+    assert client.get(f"/api/integration/lifting-refs/{f.id}/result?as={LV2}", headers=H).status_code == 404
+    # 깨진 JSON → 422
+    _sibling(db, storage, make_entry_file, e, "9999_m05.json", b"{not json")
+    r = client.get(f"/api/integration/lifting-refs/{f.id}/result?as={LV2}", headers=H)
+    assert r.status_code == 422 and r.json()["detail"] == "bad_json"
+    assert client.get(f"/api/integration/lifting-refs/{world['plain'][1].id}/result?as={LV2}", headers=H).status_code == 415
+    assert client.get(f"/api/integration/lifting-refs/{world['hidden'][1].id}/result?as={LV2}", headers=H).status_code == 404
+
+
+def test_result_bundle_pairs_only_same_folder(secret, client, db, storage, make_entry_file):
+    e, f = make_entry_file(title="폴더", name="A/9999_m06_lifting.bdf", kind="model", uploaded_by=LV2)
+    db.add(models.ModelSummary(file_id=f.id, state="done", key="b" * 64, includes=[], missing=[], lifting=True))
+    db.commit()
+    _sibling(db, storage, make_entry_file, e, "B/9999_m06_lifting_nastranResult.json", b"{}")
+    _sibling(db, storage, make_entry_file, e, "B/9999_m06.json", b"{}")
+    assert client.get(f"/api/integration/lifting-refs/{f.id}/result?as={LV2}", headers=H).status_code == 404
