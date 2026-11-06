@@ -241,7 +241,8 @@ export default function SearchPage() {
   const open = (it) => navigate(detailPath(it));
   const sug = res?.hull_suggestion;
   const curHulls = filterValues(state.filters, 'hull');
-  const facetProps = { facets: res?.facets, filters: state.filters, applied: res?.applied_filters, onChange: toggleFilter };
+  const facetProps = { facets: res?.facets, filters: state.filters, applied: res?.applied_filters, onChange: toggleFilter,
+                       total: res?.unit === 'entry' && !res.favorites_only ? res.total : undefined };
   const filterCount = FILTER_KEYS.reduce((n, k) => n + filterValues(state.filters, k).length, 0);
   // 미리보기가 열리면 1600px 미만에서는 필터 열을 접고 머리말의 '필터' 단추로 펼친다(1366 에서 결과 열 확보).
   const collapse = !!preview;

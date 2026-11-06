@@ -42,7 +42,10 @@ test('주소로 검색하고 결과·발췌·필터 건수를 보인다', async 
   expect(within(screen.getByText('초안 자료').closest('li')).getByText('미확정')).toBeInTheDocument();
   const hullFacet = screen.getByRole('group', { name: '호선' });
   expect(within(hullFacet).getByText('9998')).toBeInTheDocument();
-  expect(screen.getByRole('group', { name: '작성자' })).toHaveTextContent('홍길동');
+  // 작성자는 처음엔 접혀 있다(2026-11-06) — 펼치면 이름이 보인다
+  const author = screen.getByRole('group', { name: '작성자' });
+  await userEvent.click(within(author).getByRole('button', { name: /작성자/ }));
+  expect(author).toHaveTextContent('홍길동');
   expect(calls(fetch)).toHaveLength(1);
 });
 
