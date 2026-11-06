@@ -34,7 +34,7 @@ const GraphPage = lazy(() => import('./pages/GraphPage.jsx'));
 const CoveragePage = lazy(() => import('./pages/CoveragePage.jsx'));
 const SimilarPage = lazy(() => import('./pages/SimilarPage.jsx'));
 
-const EXPLORE_TABS = [{ to: '/coverage', label: '갖춤 현황' }, { to: '/graph', label: '관계 지도' }];
+const EXPLORE_TABS = [{ to: '/graph', label: '관계 지도' }, { to: '/coverage', label: '갖춤 현황' }];
 const ADMIN_TABS = [
   { to: '/admin/users', label: '사용자' }, { to: '/admin/ops', label: '운영' },
   { to: '/admin/vocab', label: '분류 목록' }, { to: '/admin/wb-targets', label: 'WorkBench 연결 규칙' },

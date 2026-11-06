@@ -13,7 +13,7 @@ const GROUPS = [
       match: (path) => path === '/' || IN_SEARCH.some((p) => path.startsWith(p)) },
     { to: '/hulls', label: '호선', icon: Anchor, also: ['/h/'] }, // 호선 화면(/h/9999)도 '호선' 메뉴 아래
     { to: '/similar', label: '선례 찾기', icon: ScanSearch }, // 27 — 기준 BDF 와 비슷한 확정 모델
-    { to: '/coverage', label: '살펴보기', icon: Grid2x2Check, also: ['/graph'] }, // 26 갖춤 현황 · 25 관계 지도
+    { to: '/graph', label: '살펴보기', icon: Grid2x2Check, also: ['/coverage'] }, // 25 관계 지도 · 26 갖춤 현황(첫 탭이 관계 지도, 2026-11-06)
   ] },
   { label: '등록·정리', items: [
     { to: '/inbox', label: '정리 대기', icon: Inbox }, // 48 — 손볼 자료 탭 포함
