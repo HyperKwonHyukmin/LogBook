@@ -374,7 +374,9 @@ export default function SearchPage() {
                               onDone={(r) => { setBulkOpen(false); setBulkMsg({ text: bulkDoneText(r), warn: r.failed.length > 0 });
                                 setAttempt((n) => n + 1); }} />
         )}
-        <div className="min-h-0 flex-1 overflow-auto">
+        {/* relative — 안쪽 absolute 요소(행마다의 sr-only '요소 구성' 글)의 기준을 이 스크롤 틀로 둔다. 없으면 기준이 바깥
+            section 이라 잘리지 않고 수천 px 넘쳐 main 이 스크롤되고, 필터 끝에서 더 굴리면 화면 전체가 밀린다(2026-11-06) */}
+        <div className="relative min-h-0 flex-1 overflow-auto">
           {error && (
             <ErrorNote className="mx-5 mt-4"
                        action={<Button variant="ghost" size="sm" className="-my-1" onClick={() => setAttempt((n) => n + 1)}>다시 시도</Button>}>
