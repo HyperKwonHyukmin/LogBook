@@ -87,7 +87,7 @@ export default function GraphPage() {
         )}
       </header>
       {error && <ErrorNote className="m-6">{error}</ErrorNote>}
-      {!model && !error && <div className="p-6"><RowsSkeleton rows={5} label="관계 지도를 불러오는 중" /></div>}
+      {!model && !error && <div className="p-6"><SlowNote /><RowsSkeleton rows={5} label="관계 지도를 불러오는 중" /></div>}
       {model && model.entries.length === 0 && (
         <div className="p-6"><EmptyState icon={Waypoints} title="볼 수 있는 확정 자료가 없습니다">자료를 확정하면 호선·구역별로 이어져 여기에 나타납니다.</EmptyState></div>
       )}
@@ -105,6 +105,32 @@ export default function GraphPage() {
 }
 
 /** 문서 관계가 덜 그려진 이유 — 본문 색인을 열 수 없거나, 색인 전 보고서가 있을 때. */
+/**
+ * 2026-11-06 — 145 를 업데이트(재시작)한 뒤 처음 여는 관계 지도는 30초 가까이 걸린다. 회색 막대만 오래 보이면
+ * 오류로 여기므로, 3초가 넘으면 이유와 경과 초를 보인다(초는 낭독하지 않는다 — 매초 읽히면 시끄럽다).
+ */
+export const SLOW_AFTER_SEC = 3;
+function SlowNote() {
+  const [sec, setSec] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setSec((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  if (sec < SLOW_AFTER_SEC) return null;
+  return (
+    <div role="status" className="mb-4 max-w-[640px] rounded-lg border border-n-200 bg-n-50 px-4 py-3 animate-fade">
+      <p className="flex items-baseline gap-2 text-ui font-semibold text-n-900">
+        관계 지도를 만드는 중입니다
+        <span aria-hidden="true" className="font-mono text-meta font-normal text-n-500">{sec}초</span>
+      </p>
+      <p className="mt-1 text-meta text-n-600">
+        서버를 업데이트한 뒤 처음 열 때는 자료 사이 관계를 새로 모으느라 30초쯤 걸릴 수 있습니다. 오류가 아니니 잠시 기다려 주세요.
+        한 번 열리면 다음부터는 바로 뜹니다.
+      </p>
+    </div>
+  );
+}
+
 function DocIndexNote({ index, layer, isAdmin }) {
   if (!index || layer === 'model' || !index.reports) return null;
   if (!index.available) {

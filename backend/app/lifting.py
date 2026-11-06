@@ -33,6 +33,18 @@ def name_is_lifting(name: str) -> bool:
     return os.path.splitext(name or "")[0].lower().endswith(NAME_SUFFIX)
 
 
+def summary_has_wires(summary) -> bool:
+    """2026-11-06 — 내용으로 본 Wire 모델: wire_summary 결과에 꼭짓점 하나에 Wire 2개 이상이 모인 묶음이 있고,
+    모든 Wire 가 위로 올라간다(꼭짓점이 lug 보다 높다). WorkBench 가 제목 표식 없이·원래 이름으로 보낸 권상 모델을
+    알아보려는 것이다. 지지점 하나를 CROD 하나로 땅에 묶은 일반 모델은 꼭짓점마다 CROD 가 하나라 걸리지 않는다."""
+    groups = (summary or {}).get("groups") if isinstance(summary, dict) else None
+    if not groups:
+        return False
+    wires = [w for g in groups for w in g.get("wires") or []]
+    return (any(len(g.get("wires") or []) >= 2 for g in groups)
+            and all((w.get("slingAngleDeg") or 0) > 0 for w in wires))
+
+
 def is_wire_model(f: models.File, summary: models.ModelSummary | None) -> bool:
     if f.kind != "model" or f.location == "trash":
         return False

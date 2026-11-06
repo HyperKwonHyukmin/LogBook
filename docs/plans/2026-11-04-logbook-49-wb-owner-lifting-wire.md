@@ -51,6 +51,12 @@
 - **검색 '담당자 없음'**: 담당자 필터 값 `__none__`.
 - **Wire 모델 판별**: 파일 이름이 `_lifting.bdf` 로 끝나거나, 변환 때 case control `TITLE` 에 `HiTessWorkBench Lifting Analysis` 가 있으면
   (`model_summaries.lifting`). 이름은 사람이 바꿀 수 있어 본문이 더 확실하다. 자료 상세·카드의 파일 칩 'Wire 포함'.
+  2026-11-06 — **내용으로도** 판별한다: 표식이 없어도 꼭짓점(SPC 123 + CROD 만 닿는 노드) 하나에 Wire 2개 이상이 모이고
+  모든 Wire 가 위로 올라가면 Wire 모델(`lifting.summary_has_wires`). WorkBench 가 원래 이름(`hydro5.bdf`)·표식 없이 보낸 권상 모델에
+  'Wire 모델도 올려 주세요' 가 잘못 뜨던 문제(145 초안 8건). 지지점마다 CROD 하나인 일반 모델은 걸리지 않는다.
+  이미 변환된 모델은 145 에서 `python -m app.cli enqueue-convert --wire-check`(CROD 가 있고 아직 Wire 아님인 모델만 다시 변환).
+- **WB Unit 해석의 대상**(2026-11-06): 받은 묶음의 출처 프로그램이 `GroupModuleUnit` 이면 초안 대상을 'Unit' 으로 미리 고른다
+  (`ingest/process.py` `WB_PROGRAM_TARGETS`). `SidePassage` 는 대상 이름이 정해지지 않아 비워 둔다.
 - **MU 자료 판별**: 대상이 'Unit' 또는 'Module Unit'(동의어 포함) 이거나 WB 출처 프로그램이 `GroupModuleUnit`·`SidePassage`.
   145 는 40 에서 구역에서 옮겨 온 **대상 'Unit'(동의어 GMU)**이 이미 Module Unit 을 뜻한다 — 새 용어를 만들지 않는다.
   처음엔 기본 목록에 'Module Unit'(동의어 GMU)을 더했는데 40 의 'Unit' 과 GMU 가 겹쳐 같은 개념이 둘로 갈라져서 되돌렸다

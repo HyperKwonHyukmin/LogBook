@@ -54,6 +54,22 @@ def _wb_hints(batch: models.Batch) -> list[str]:
     return [t for t in (o.get("note"), name) if isinstance(t, str) and t.strip()]
 
 
+# 2026-11-06 — WorkBench 프로그램(origin.program)으로 대상을 미리 고른다. Unit 해석(GroupModuleUnit)은 늘 대상 'Unit'.
+# SidePassage 는 대상 이름이 정해지지 않아 넣지 않는다(사람이 고른다)
+WB_PROGRAM_TARGETS = {"GroupModuleUnit": "Unit"}
+
+
+def _wb_preset(db: Session, batch: models.Batch) -> dict | None:
+    """WorkBench 묶음의 기본 분류 — 지금은 대상만. 목록에 동의어로 있으면 대표 값으로."""
+    from .. import vocab
+
+    o = batch.origin if isinstance(batch.origin, dict) else {}
+    target = WB_PROGRAM_TARGETS.get(o.get("program"))
+    if not target:
+        return None
+    return {"target": vocab.Vocab(db, "target").canon(target) or target}
+
+
 def _apply_preset(db: Session, entry: models.Entry, preset: dict) -> None:
     """52 — 올리기 전에 고른 공통 분류(begin 때 이미 정리됨)를 초안에 넣고, 구역·대상이 있으면 제목 초안을 그 형식으로."""
     from ..entries import quality, service
@@ -197,6 +213,8 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
     if (chosen is None and not from_wb and batch.target_entry_id is None
             and not (preset or {}).get(hint.SKIP_KEY)):
         hint_user = db.query(models.User).filter_by(employee_id=batch.uploader).first()
+    if chosen is None and from_wb and batch.target_entry_id is None:
+        chosen = _wb_preset(db, batch)
     hinted: dict[str, str] = {}
     for p in propose(infos, known, single=from_wb, hints=_wb_hints(batch) if from_wb else None,
                      split_top=bool(batch.split_top), whole=bool(batch.whole)):

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
@@ -41,6 +41,22 @@ test('지도와 호선 목록을 그리고 모델을 엔진에 넘긴다', async
   expect(engine.last.setModel).toHaveBeenCalledTimes(1);
   expect(engine.last.setModel.mock.calls[0][0].entries).toHaveLength(2);
   expect(screen.getByText('내용 서명이 없는 BDF 3개는 모델 관계에서 빠졌습니다')).toBeInTheDocument();
+});
+
+test('불러오기가 3초를 넘기면 오류가 아니라는 안내와 경과 초를 보인다', async () => {
+  vi.useFakeTimers();
+  try {
+    mockApi({ 'GET /api/graph': () => new Promise(() => {}) });   // 업데이트 직후처럼 오래 걸림
+    render(<MemoryRouter><GraphPage /></MemoryRouter>);
+    expect(screen.queryByText('관계 지도를 만드는 중입니다')).toBeNull();   // 짧으면 안내 없이 막대만
+    await act(() => vi.advanceTimersByTimeAsync(3000));
+    expect(screen.getByText('관계 지도를 만드는 중입니다')).toBeInTheDocument();
+    expect(screen.getByText(/오류가 아니니 잠시 기다려 주세요/)).toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(9000));
+    expect(screen.getByText('12초')).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('호선별 자료는 건수가 아니라 호선 번호 순이다', async () => {

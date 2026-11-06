@@ -148,6 +148,22 @@ def test_cli_enqueue_convert_outdated(db, make_entry_file):
     assert enqueue_convert_all(db, outdated=True) == 0      # 이미 대기 중이면 또 넣지 않는다
 
 
+def test_cli_enqueue_convert_wire_check(db, make_entry_file, capsys):
+    """2026-11-06 — --wire-check 는 변환이 끝난 모델 중 CROD 가 있고 아직 Wire 모델이 아닌 것만 다시 넣는다."""
+    from app.cli import enqueue_convert_all, main
+
+    a, b, c, d = [make_entry_file(name=f"{n}.bdf", kind="model")[1] for n in "abcd"]
+    db.add_all([models.ModelSummary(file_id=a.id, state="done", key="k" * 64, counts={"CROD": 10}, lifting=False),
+                models.ModelSummary(file_id=b.id, state="done", key="k" * 64, counts={"CROD": 10}, lifting=True),
+                models.ModelSummary(file_id=c.id, state="done", key="k" * 64, counts={"CQUAD4": 4}, lifting=False),
+                models.ModelSummary(file_id=d.id, state="failed", error="x", counts={"CROD": 2})])
+    db.commit()
+    assert main(["enqueue-convert", "--wire-check"]) == 0
+    assert "1건" in capsys.readouterr().out
+    assert {j.target_id for j in db.query(models.Job).filter_by(type="convert_model")} == {a.id}
+    assert enqueue_convert_all(db, wire_check=True) == 0      # 이미 대기 중
+
+
 def test_cli_main_enqueue_convert_outdated(db, make_entry_file, capsys):
     from app.cli import main
 

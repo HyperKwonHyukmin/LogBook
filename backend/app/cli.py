@@ -16,7 +16,7 @@ LogBook 등급 바꾸기(15 — 1 게스트 | 2 일반 | 3 관리자. WorkBench 
     .venv\\Scripts\\python.exe -m app.cli enqueue-extract [--force]
 
 기존 BDF(04a 이전에 올라온 것)를 변환 대기열에 넣기:
-    .venv\\Scripts\\python.exe -m app.cli enqueue-convert [--force | --outdated | --missing-signature]
+    .venv\\Scripts\\python.exe -m app.cli enqueue-convert [--force | --outdated | --missing-signature | --wire-check]
     (--outdated: 변환은 끝났지만 lbm 형식이 옛 버전인 모델만 — 04c 형식 v2 로 다시 변환)
     (--missing-signature: 변환은 끝났지만 내용 서명(12)이 없거나 옛 규칙인 모델만 — '같은 BDF' 찾기용)
 
@@ -159,12 +159,13 @@ def enqueue_extract_all(db: Session, *, force: bool = False) -> int:
 
 
 def enqueue_convert_all(db: Session, *, force: bool = False, outdated: bool = False,
-                        missing_signature: bool = False) -> int:
+                        missing_signature: bool = False, wire_check: bool = False) -> int:
     """변환 기록이 없거나 실패·휴지통에서 나온 모델을 변환 작업에 넣는다(force 면 휴지통 밖 전부).
 
     DRM·크기 초과·요소 없음으로 건너뛴 것, 이미 끝났거나(done·include) 대기 중인 것은 둔다.
     outdated: 변환이 끝난(done) 모델 중 lbm 형식 버전이 현재(bdf.lbm.VERSION)보다 낮은 것(NULL = v1)만.
-    missing_signature: 변환이 끝난(done) 모델 중 내용 서명이 없거나 규칙 버전(bdf.signature.VERSION)이 다른 것만."""
+    missing_signature: 변환이 끝난(done) 모델 중 내용 서명이 없거나 규칙 버전(bdf.signature.VERSION)이 다른 것만.
+    wire_check: 변환이 끝난(done) 모델 중 CROD 가 있는데 Wire 모델로 표시되지 않은 것만(2026-11-06 내용으로 Wire 판정)."""
     from .bdf.lbm import VERSION
     from .bdf.signature import VERSION as SIG_VERSION
     from .convert.job import enqueue_convert
@@ -184,6 +185,9 @@ def enqueue_convert_all(db: Session, *, force: bool = False, outdated: bool = Fa
                 n += enqueue_convert(db, f)
         elif missing_signature:
             if r is not None and r.state == "done" and (r.sig_geometry is None or r.sig_version != SIG_VERSION):
+                n += enqueue_convert(db, f)
+        elif wire_check:
+            if r is not None and r.state == "done" and not r.lifting and (r.counts or {}).get("CROD"):
                 n += enqueue_convert(db, f)
         elif force or r is None or r.state == "failed" or (r.state == "skipped" and r.error == "trashed"):
             n += enqueue_convert(db, f)
@@ -483,6 +487,8 @@ def main(argv: list[str]) -> int:
     cg.add_argument("--outdated", action="store_true", help="lbm 형식이 옛 버전(현재보다 낮음)인 변환 완료 모델만 다시")
     cg.add_argument("--missing-signature", action="store_true",
                     help="내용 서명(같은 BDF 찾기)이 없거나 옛 규칙인 변환 완료 모델만 다시")
+    cg.add_argument("--wire-check", action="store_true",
+                    help="CROD 가 있는데 권상 Wire 모델로 표시되지 않은 변환 완료 모델만 다시(내용으로 Wire 판정)")
     v = sub.add_parser("enqueue-solve-check", help="변환이 끝난 모델을 해석 검증(Nastran) 작업에 넣는다")
     v.add_argument("--all", action="store_true", help="이미 검증한 모델도 다시(검증 중인 것은 제외)")
     sub.add_parser("backup", help="mysqldump 로 DB 를 80_Backup 에 백업하고 오래된 백업을 정리한다")
@@ -632,8 +638,9 @@ def main(argv: list[str]) -> int:
             return 0
         if args.cmd == "enqueue-convert":
             n = enqueue_convert_all(db, force=args.force, outdated=args.outdated,
-                                    missing_signature=args.missing_signature)
-            note = " (옛 형식 모델)" if args.outdated else " (내용 서명 없는 모델)" if args.missing_signature else ""
+                                    missing_signature=args.missing_signature, wire_check=args.wire_check)
+            note = (" (옛 형식 모델)" if args.outdated else " (내용 서명 없는 모델)" if args.missing_signature
+                    else " (Wire 다시 판정)" if args.wire_check else "")
             print(f"변환 작업 {n}건을 넣었습니다." + note)
             return 0
         u = create_admin(db, get_storage(), args.employee_id, args.name, args.department)

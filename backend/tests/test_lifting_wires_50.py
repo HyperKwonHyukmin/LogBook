@@ -73,12 +73,44 @@ def test_convert_deck_stores_wires(tmp_path):
     assert out["wires"]["wireCount"] == 4
 
 
-def test_convert_deck_plain_has_no_wires(tmp_path):
+def _convert(tmp_path, text, name="m.bdf"):
     from app.convert.job import convert_deck
-    (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "m.bdf").write_text(LIFTING.replace("HiTessWorkBench Lifting Analysis", "x"), encoding="utf-8")
-    out = convert_deck(str(tmp_path / "src"), "m.bdf", str(tmp_path / "store"), 10 ** 7)
+    (tmp_path / "src").mkdir(exist_ok=True)
+    (tmp_path / "src" / name).write_text(text, encoding="utf-8")
+    return convert_deck(str(tmp_path / "src"), name, str(tmp_path / "store"), 10 ** 7)
+
+
+def test_convert_deck_finds_wires_without_title(tmp_path):
+    """2026-11-06 — WorkBench 가 표식 없이·원래 이름(hydro5.bdf)으로 보낸 권상 모델도 내용으로 Wire 모델이다."""
+    out = _convert(tmp_path, LIFTING.replace("HiTessWorkBench Lifting Analysis", "x"))
+    assert out["status"] == "done" and out["lifting"] is True and out["wires"]["wireCount"] == 4
+
+
+def test_convert_deck_plain_has_no_wires(tmp_path):
+    plain = LIFTING.split("$ HiTessWorkBench")[0].replace("HiTessWorkBench Lifting Analysis", "x") + "SPC1,1,123456,1\nENDDATA\n"
+    out = _convert(tmp_path, plain)
     assert out["status"] == "done" and out["lifting"] is False and out["wires"] is None
+
+
+def test_single_crod_anchors_are_not_wires(tmp_path):
+    # 지지점마다 CROD 하나로 땅에 묶은 일반 모델 — 꼭짓점에 2개 이상 모이지 않아 Wire 모델이 아니다
+    text = (LIFTING.replace("HiTessWorkBench Lifting Analysis", "x")
+            .replace("GRID,101,,0.,2000.,6000.\nGRID,102,,10000.,2000.,6000.\n",
+                     "GRID,101,,0.,0.,-500.\nGRID,102,,0.,4000.,-500.\nGRID,103,,10000.,0.,-500.\nGRID,104,,10000.,4000.,-500.\n")
+            .replace("CROD,201,132,1,101\nCROD,202,132,4,101\nCROD,203,132,2,102\nCROD,204,132,3,102\n",
+                     "CROD,201,132,1,101\nCROD,202,132,4,102\nCROD,203,132,2,103\nCROD,204,132,3,104\n")
+            .replace("SPC1,990001,123456,101,102", "SPC1,990001,123456,101,102,103,104"))
+    out = _convert(tmp_path, text)
+    assert out["lifting"] is False and out["wires"] is None
+
+
+def test_summary_has_wires_needs_upward_wires():
+    from app.lifting import summary_has_wires
+    s = wire_summary(_model(LIFTING))
+    assert summary_has_wires(s)
+    down = {**s, "groups": [{**g, "wires": [{**w, "slingAngleDeg": -30.0} for w in g["wires"]]} for g in s["groups"]]}
+    assert not summary_has_wires(down)          # 꼭짓점이 구조보다 아래 — 매단 것이 아니다
+    assert not summary_has_wires(None) and not summary_has_wires({"none": True})
 
 
 def test_segments3d_keeps_height_and_vertical_edges():

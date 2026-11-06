@@ -15,7 +15,7 @@ const STATE_TONE = { failed: 'text-err', staged: 'text-n-600', processed: 'text-
 /** 접어 두는 설명 — 머리줄만 보이고, 누르면 펼친다(카드를 기본으로 키우지 않는다). */
 function Explain({ summary, children }) {
   return (
-    <details className="group rounded-md border border-n-200 text-meta text-n-600">
+    <details className="group rounded-md border border-n-200 bg-n-0 text-meta text-n-600">
       <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 px-3 hover:bg-n-50 [&::-webkit-details-marker]:hidden">
         <ChevronRight size={14} className="text-n-400 transition-transform duration-150 group-open:rotate-90" aria-hidden="true" />
         {summary}
@@ -205,10 +205,11 @@ export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChang
   const converts = convertCounts(drafts.flatMap((d) => d.files || []));
   const dupCount = (batch.excluded || []).filter((x) => x.reason === 'duplicate_model').length;
   return (
-    <section aria-label={`배치 ${batch.original_name}`} className="flex flex-col gap-3">
-      <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1">
-        <SourceIcon size={14} className="text-n-400" aria-hidden="true" title={batch.source === 'web' ? '웹에서 올림' : '00_Inbox 에서 받음'} />
-        <h2 className="text-ui font-semibold text-n-900">{batch.original_name}</h2>
+    // 2026-11-06 — 묶음 하나 = 회색 틀 하나. 초안 카드(흰 면)가 그 안에 앉아, 긴 3D 화면 뒤에서도 어디까지가 한 세트인지 보인다
+    <section aria-label={`배치 ${batch.original_name}`} className="flex flex-col gap-3 rounded-xl border border-n-200 bg-n-50 p-3 min-[900px]:p-4">
+      <div className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1 px-1">
+        <SourceIcon size={14} className="text-n-500" aria-hidden="true" title={batch.source === 'web' ? '웹에서 올림' : '00_Inbox 에서 받음'} />
+        <h2 className="text-body font-semibold text-n-900">{batch.original_name}</h2>
         <span className="font-mono text-meta text-n-500">{batch.received_at ? batch.received_at.replace('T', ' ').slice(0, 16) : '—'}</span>
         <span className={`inline-flex items-center gap-1.5 text-meta font-medium ${STATE_TONE[batch.state] || 'text-n-600'}`}>
           {batch.state === 'staged' ? <Spinner size={12} /> : <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />}
@@ -239,7 +240,7 @@ export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChang
       {dialog}
       {bulk.message && (
         <p role={bulk.failed ? 'alert' : 'status'}
-           className={`rounded-md px-3 py-2 text-ui ${bulk.failed ? 'border border-wait-line bg-wait-bg text-wait' : 'bg-n-50 text-n-800'}`}>{bulk.message}</p>
+           className={`rounded-md px-3 py-2 text-ui ${bulk.failed ? 'border border-wait-line bg-wait-bg text-wait' : 'border border-n-200 bg-n-0 text-n-800'}`}>{bulk.message}</p>
       )}
       {staged && <StagedDetail batch={batch} status={staged} />}
       {batch.attachment_target && <p role="status" className="text-meta text-n-600">
@@ -257,7 +258,7 @@ export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChang
       )}
       {batch.excluded?.length > 0 && (
         // 17 — 동일 BDF 로 뺀 파일이 있으면 펼쳐 둔다(왜 초안에 없는지 바로 보이게). 대상은 서버가 권한으로 거른 것
-        <details open={dupCount > 0 || undefined} className="group rounded-md border border-n-200 text-meta text-n-600">
+        <details open={dupCount > 0 || undefined} className="group rounded-md border border-n-200 bg-n-0 text-meta text-n-600">
           <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 px-3 hover:bg-n-50 [&::-webkit-details-marker]:hidden">
             <ChevronRight size={14} className="text-n-400 transition-transform duration-150 group-open:rotate-90" aria-hidden="true" />
             제외된 파일 <span className="font-mono">{batch.excluded.length}</span>개

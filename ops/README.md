@@ -196,6 +196,7 @@ Start-ScheduledTask -TaskName 'Logbook Report Index' -ErrorAction SilentlyContin
    cd C:\Coding\Logbook\backend
    .venv\Scripts\python.exe -m app.cli enqueue-convert --outdated
    .venv\Scripts\python.exe -m app.cli enqueue-convert --missing-signature
+   .venv\Scripts\python.exe -m app.cli enqueue-convert --wire-check        # CROD 가 있는데 Wire 모델로 안 잡힌 모델만(2026-11-06)
    .venv\Scripts\python.exe -m app.cli revisions-refresh
    .venv\Scripts\python.exe -m app.cli vocab-report            # 보고 → 필요하면 vocab-normalize --apply
    .venv\Scripts\python.exe -m app.cli report-catalog-migrate  # 보고 → --apply

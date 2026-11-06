@@ -16,7 +16,7 @@ from ..config import settings
 from ..entries.files import entry_dir
 from ..entries.locate import FileUnavailable
 from ..bdf.wires import wire_summary
-from ..lifting import control_is_lifting
+from ..lifting import control_is_lifting, summary_has_wires
 from ..storage.paths import StoragePaths, long_join, to_long
 
 log = logging.getLogger(__name__)
@@ -288,9 +288,14 @@ def convert_deck(root: str, rel_path: str, storage_root: str, max_bytes: int) ->
     _write(png_path, png)
     is_lifting = control_is_lifting(reader.control)
     wires = None
-    if is_lifting:
+    # 2026-11-06 — 제목 표식이 없어도 Wire 를 찾아본다. WorkBench 가 원래 이름(hydro5.bdf)·표식 없이 보낸 권상 모델을
+    # 내용으로 알아본다(summary_has_wires). CROD 가 없는 모델은 요약을 건너뛴다(대부분의 모델 — 비용 없음)
+    if is_lifting or model.counts().get("CROD"):
         try:
-            wires = wire_summary(model) or {"none": True}
+            found = wire_summary(model)
+            if found and not is_lifting and summary_has_wires(found):
+                is_lifting = True
+            wires = found if is_lifting and found else ({"none": True} if is_lifting else None)
         except Exception as exc:   # 요약 실패가 변환을 막지 않는다 — 다음에 요청 때 다시 읽는다
             log.warning("Wire 요약 실패: %s — %s", rel_path, exc)
     return {**out, "status": "done", "key": key, "counts": model.counts(), "bbox": model.bbox(),
