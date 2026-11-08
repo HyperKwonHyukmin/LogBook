@@ -10,7 +10,15 @@ def fmt(v) -> str:
     return f"{float(v):.6g}"
 
 
+def abaqus_label(p: dict) -> str:
+    """Abaqus 단면(61) — '묶음이름 형상 원값' (예: LINE1 PIPE 36.5,14 · SKIN SHELL 12)."""
+    data = ",".join(fmt(v) for v in p.get("data") or [])
+    return " ".join(x for x in (p.get("name"), p.get("section") or p.get("kind"), data) if x)
+
+
 def section_label(p: dict) -> str:
+    if p.get("abaqus"):
+        return abaqus_label(p)
     card = p.get("card", "")
     if card in ("PBARL", "PBEAML") and p.get("dims"):
         return f"{card} {p.get('type', '')} " + "x".join(fmt(d) for d in p["dims"])
@@ -30,7 +38,8 @@ def fingerprint(m: Model) -> str:
         dims = [box["max"][k] - box["min"][k] for k in range(3)]
         parts.append("크기 " + "x".join(fmt(d) for d in dims))
     parts += sorted({section_label(p) for p in m.properties.values()} - {""})[:MAX_SECTIONS]
-    parts += sorted({f"MAT1 E{fmt(x['E'])}" for x in m.materials.values() if x.get("card") == "MAT1" and x.get("E")})
+    parts += sorted({f"{'MAT1' if x.get('card') == 'MAT1' else x.get('name') or 'MAT'} E{fmt(x['E'])}"
+                     for x in m.materials.values() if x.get("card") in ("MAT1", "MATERIAL") and x.get("E")})
     if m.sol:
         parts.append(f"SOL {m.sol}")
     return " · ".join(parts)

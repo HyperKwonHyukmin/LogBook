@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw, Rotate3d, ScanSearch } from 'lucide-react';
 import { api } from '../../api/client.js';
+import { isAbaqusInput } from '../../lib/files.js';
 import { MODEL_STATE_LABELS, errorText } from '../../lib/labels.js';
 import { isModelPending, modelStaleNote, modelStateMessage } from '../../lib/modelState.js';
 import Button, { buttonClass } from '../ui/Button.jsx';
@@ -52,6 +53,8 @@ function SummaryLine({ summary }) {
 const INITIAL = { data: null, error: '', errors: 0, fatal: false, polls: 0, seq: 0 };
 
 function ModelPreviewBody({ file, inline, compare }) {
+  // 61 Abaqus .inp — 보기만 한다. 해석 검증(Nastran 실행)·선례 찾기(BDF 내용 서명)는 BDF 전용이라 숨긴다
+  const nastran = !isAbaqusInput(file.name);
   const [st, setSt] = useState(INITIAL);
   const [tick, setTick] = useState(0);
 
@@ -133,8 +136,8 @@ function ModelPreviewBody({ file, inline, compare }) {
         {compare}
       </div>
       {/* 해석 검증(06) — 다시 변환되면(key) 새 모델 기준으로 카드를 새로 시작한다. */}
-      <SolveCheckCard key={data.key || 'solve'} fileId={file.id} fileName={file.name} initial={data.solve || null}
-                      ready={data.state === 'done'} />
+      {nastran && <SolveCheckCard key={data.key || 'solve'} fileId={file.id} fileName={file.name} initial={data.solve || null}
+                      ready={data.state === 'done'} />}
       {warnings.length > 0 && (
         <details className="group text-meta">
           <summary className="w-fit cursor-pointer select-none rounded-sm text-n-600 hover:text-n-900">{`경고 ${warnings.length}`}</summary>
@@ -143,7 +146,7 @@ function ModelPreviewBody({ file, inline, compare }) {
           </ul>
         </details>
       )}
-      {inline && (
+      {inline && nastran && (
         // 27 — 이 BDF 를 기준으로 비슷한 확정 모델 찾기(전체 화면 뷰어 위 줄)
         <Link to={`/similar?file=${file.id}`} className={buttonClass('ghost', 'sm', 'self-start')}>
           <ScanSearch size={14} aria-hidden="true" />이 BDF 로 선례 찾기
@@ -170,9 +173,11 @@ function ModelPreviewBody({ file, inline, compare }) {
               <Rotate3d size={14} aria-hidden="true" />3D 로 보기
             </Link>
             {/* 27 — 이 BDF 를 기준으로 비슷한 확정 모델 찾기 */}
-            <Link to={`/similar?file=${file.id}`} className={buttonClass('ghost', 'sm')}>
-              <ScanSearch size={14} aria-hidden="true" />선례 찾기
-            </Link>
+            {nastran && (
+              <Link to={`/similar?file=${file.id}`} className={buttonClass('ghost', 'sm')}>
+                <ScanSearch size={14} aria-hidden="true" />선례 찾기
+              </Link>
+            )}
           </div>
         </div>
       )}
@@ -186,6 +191,7 @@ function ModelPreviewBody({ file, inline, compare }) {
  * hull = 소속 자료의 대표 호선(비교 바구니 칩에 쓴다).
  */
 export default function ModelPreview({ file, inline = true, hull = '' }) {
-  const compare = <CompareToggle file={{ id: file.id, name: file.name, hull }} />;
+  // 비교 화면은 BDF 끼리만 연다(ComparePane 이 kind 'model' 만 그린다)
+  const compare = isAbaqusInput(file.name) ? null : <CompareToggle file={{ id: file.id, name: file.name, hull }} />;
   return <ModelPreviewBody key={file.id} file={file} inline={inline} compare={compare} />;
 }

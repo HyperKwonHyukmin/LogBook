@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Copy, Download, FileWarning } from 'lucide-react';
 import { api } from '../../api/client.js';
-import { copyText, downloadFile, fileLink, uncPath } from '../../lib/files.js';
+import { copyText, downloadFile, fileLink, hasModelView, uncPath } from '../../lib/files.js';
 import { EXTRACT_LABELS, errorText, formatBytes } from '../../lib/labels.js';
 import Button from '../ui/Button.jsx';
 import { Bar } from '../ui/Skeleton.jsx';
@@ -231,7 +231,7 @@ export default function FilePreview({ file, vaultUnc, trashed = false, toolbar =
   const { inTrash } = fileState(file, { vaultUnc, trashed });
   const View = !blocked && !inTrash && VIEWS[ext];
   // 모델 파일은 추출 요약이 없어 SummaryCard 대신 변환 요약을 ModelPreview 가 보인다.
-  const model = file.kind === 'model' && !blocked && !inTrash;
+  const model = hasModelView(file) && !blocked && !inTrash;
 
   return (
     <div className="flex flex-col gap-3">

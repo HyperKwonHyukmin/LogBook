@@ -170,7 +170,9 @@ def enqueue_convert_all(db: Session, *, force: bool = False, outdated: bool = Fa
     from .bdf.signature import VERSION as SIG_VERSION
     from .convert.job import enqueue_convert
 
-    files = (db.query(models.File).filter(models.File.kind == "model", models.File.location != "trash")
+    from .convert.job import model_file_filter
+
+    files = (db.query(models.File).filter(model_file_filter(), models.File.location != "trash")
              .order_by(models.File.id).all())
     rows = {r.file_id: r for r in db.query(models.ModelSummary)
             .filter(models.ModelSummary.file_id.in_([f.id for f in files] or [0]))}

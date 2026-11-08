@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Box, X } from 'lucide-react';
 import { api } from '../api/client.js';
+import { hasModelView } from '../lib/files.js';
 import { errorText } from '../lib/labels.js';
 import { modelStaleNote, modelStateMessage } from '../lib/modelState.js';
 import ModelNote from '../components/preview/ModelNote.jsx';
@@ -33,7 +34,7 @@ export default function ViewerPage() {
         const file = await api(`/files/${encodeURIComponent(fileId)}`);
         if (!alive) return;
         setRes({ id: fileId, file, summary: null, error: '' });
-        if (file.kind !== 'model' || file.drm_encrypted) return;
+        if (!hasModelView(file) || file.drm_encrypted) return;
         const summary = await api(`/files/${encodeURIComponent(fileId)}/model`);
         if (alive) setRes({ id: fileId, file, summary, error: '' });
       } catch (err) {
@@ -44,7 +45,7 @@ export default function ViewerPage() {
   }, [fileId]);
 
   const { file, summary, error } = res.id === fileId ? res : { file: null, summary: null, error: '' };
-  const isModel = file?.kind === 'model';
+  const isModel = hasModelView(file);
   const msg = isModel ? modelStateMessage(summary, file) : null;
   const stale = isModel && !msg ? modelStaleNote(summary) : '';
   const viewable = isModel && summary && !msg;
@@ -71,7 +72,7 @@ export default function ViewerPage() {
           </>
         ) : !error && <Bar className="h-3.5 w-60" />}
         {stale && <span className="hidden shrink-0 text-meta text-n-500 md:inline">{stale}</span>}
-        {isModel && <CompareToggle file={{ id: file.id, name: file.name }} className="ml-auto" />}
+        {file?.kind === 'model' && <CompareToggle file={{ id: file.id, name: file.name }} className="ml-auto" />}
         {isModel && <SendToWorkbenchButton file={file} entryId={file.entry_id} />}
         <Button variant="ghost" size="sm" className={isModel ? '' : 'ml-auto'} onClick={close}>
           <X size={14} aria-hidden="true" />닫기

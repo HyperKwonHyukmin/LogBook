@@ -950,9 +950,9 @@ def _reenqueue_extract(db: Session, entry: models.Entry) -> None:
 def _reenqueue_convert(db: Session, entry: models.Entry) -> None:
     """복원한 Entry 의 모델 파일 중 변환한 적이 없거나 휴지통에 있어 건너뛴 것을 다시 변환한다
     (이미 끝난 변환 결과는 휴지통에서도 지우지 않으므로 그대로 둔다)."""
-    from ..convert.job import enqueue_convert
+    from ..convert.job import enqueue_convert, model_file_filter
 
-    files = db.query(models.File).filter_by(entry_id=entry.id, kind="model").all()
+    files = db.query(models.File).filter(models.File.entry_id == entry.id, model_file_filter()).all()
     if not files:
         return
     rows = {r.file_id: r for r in db.query(models.ModelSummary)

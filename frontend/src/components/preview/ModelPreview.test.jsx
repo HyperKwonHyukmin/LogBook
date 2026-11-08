@@ -128,3 +128,23 @@ test('해석 검증 배지는 /model 의 solve 요약으로 시작하고, 변환
   expect(screen.getByRole('button', { name: '다시 검증' })).toBeDisabled();
   expect(calls(fetch)).toContain('GET /api/files/7/solve-check');
 });
+
+test('61 — Abaqus .inp 는 보기만: 해석 검증·선례 찾기·비교 담기를 숨긴다', async () => {
+  const fetch = mockApi({
+    'GET /api/files/8/model': { state: 'done', has_lbm: true, key: 'k', counts: { B32: 234, ELBOW31B: 442 }, bbox: null,
+      sol: 'STATIC', warnings: [], missing: [], solve: { state: null, error_types: [], stale: false } },
+    'GET /api/files/8/thumb.png': { __blob: new Blob(['png']) },
+  });
+  globalThis.URL.createObjectURL = vi.fn(() => 'blob:thumb');
+  globalThis.URL.revokeObjectURL = vi.fn();
+  render(
+    <ViewerEngineContext.Provider value={async () => ({ setModel() {}, dispose() {} })}>
+      <MemoryRouter><ModelPreview file={{ id: 8, name: 'pipe.inp', kind: 'other', rel_path: 'pipe.inp', size: 10 }} inline={false} /></MemoryRouter>
+    </ViewerEngineContext.Provider>,
+  );
+  expect(await screen.findByText(/ELBOW31B 442/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '3D 로 보기' })).toHaveAttribute('href', '/v/8');
+  expect(screen.queryByRole('link', { name: '선례 찾기' })).toBeNull();
+  expect(screen.queryByRole('button', { name: /검증/ })).toBeNull();
+  expect(calls(fetch)).not.toContain('GET /api/files/8/solve-check');
+});

@@ -29,3 +29,9 @@ test('CONROD 와 속성 없는 요소', () => {
   expect(info.section).toBe('CONROD A25');
   expect(sectionLabel(undefined)).toBe('');
 });
+
+test('61 — Abaqus 단면 라벨은 묶음이름·형상·원값', () => {
+  expect(sectionLabel({ abaqus: true, card: 'BEAM SECTION', name: 'LINE1', section: 'PIPE', kind: 'BEAM', data: [36.5, 14] }))
+    .toBe('LINE1 PIPE 36.5,14');
+  expect(sectionLabel({ abaqus: true, card: 'ELSET', name: 'SP', kind: 'ELSET' })).toBe('SP ELSET');
+});

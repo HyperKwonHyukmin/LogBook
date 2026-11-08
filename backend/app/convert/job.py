@@ -3,6 +3,7 @@ import logging
 import os
 from pathlib import Path
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .. import isolated, jobs, models
@@ -16,6 +17,8 @@ from ..config import settings
 from ..entries.files import entry_dir
 from ..entries.locate import FileUnavailable
 from ..bdf.wires import wire_summary
+from ..abaqus.inp import InpReader, build_inp_model
+from ..ingest.rules import VIEWER_EXTS, has_model_view, is_abaqus_input
 from ..lifting import control_is_lifting, summary_has_wires
 from ..storage.paths import StoragePaths, long_join, to_long
 
@@ -48,10 +51,15 @@ def model_paths(storage: StoragePaths, key: str, version: int | None = LBM_VERSI
     return lbm, base / f"{key}.png"
 
 
+def model_file_filter():
+    """3D 변환 대상 파일(BDF 류 + Abaqus .inp, 61) — 쿼리 조건."""
+    return or_(models.File.kind == "model", models.File.ext.in_(VIEWER_EXTS))
+
+
 def enqueue_convert(db: Session, f: models.File) -> bool:
     """변환 작업을 넣는다. 이전 결과(key·지문 FileText)는 지우지 않는다 — 재변환이 끝날 때까지 뷰어·검색이
     이전 결과를 계속 쓴다."""
-    if f.kind != "model":
+    if not has_model_view(f.kind, f.name):
         return False
     row = db.get(models.ModelSummary, f.id)
     if row is None:
@@ -105,7 +113,7 @@ def _root(db: Session, storage: StoragePaths, f: models.File) -> Path:
 
 
 def _siblings(db: Session, f: models.File) -> list[models.File]:
-    q = db.query(models.File).filter(models.File.kind == "model", models.File.id != f.id,
+    q = db.query(models.File).filter(model_file_filter(), models.File.id != f.id,
                                      models.File.location == f.location)
     q = q.filter(models.File.batch_id == f.batch_id) if f.location == "staging" \
         else q.filter(models.File.entry_id == f.entry_id)
@@ -250,9 +258,48 @@ def run_convert(db: Session, storage: StoragePaths, f: models.File) -> None:
     db.commit()
 
 
+def convert_inp(root: str, rel_path: str, storage_root: str, max_bytes: int) -> dict:
+    """Abaqus .inp(61) — convert_deck 과 같은 결과 모양. 내용 서명·권상 판정은 BDF 전용이라 비운다."""
+    reader = InpReader(_opener(Path(root), max_bytes), max_bytes=max_bytes)
+    try:
+        blocks = reader.read(rel_path)
+    except EncryptedFile:
+        return {"status": "drm"}
+    except DeckTooLarge:
+        return {"status": "too_large"}
+    except MemoryError:
+        reader = None
+        return {"status": "read_memory_error"}
+    out = {"includes": list(reader.includes), "missing": list(reader.missing), "warnings": []}
+    try:
+        model = build_inp_model(blocks, warnings=reader.warnings, includes=reader.includes, missing=reader.missing)
+        del blocks
+        if model.element_total() == 0:
+            return {**out, "status": "no_elements", "warnings": list(model.warnings)}
+        lbm = write_lbm(model)
+        png = render_thumbnail(model)
+        fp = fingerprint(model)
+    except ModelError as exc:
+        return {**out, "status": "model_error", "error": exc.code}
+    except MemoryError:
+        model = None
+        return {**out, "status": "memory_error"}
+    except Exception as exc:
+        return {**out, "status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+    lbm_path, png_path = model_paths(StoragePaths(Path(storage_root)), reader.digest)
+    _write(lbm_path, lbm)
+    _write(png_path, png)
+    return {**out, "status": "done", "key": reader.digest, "counts": model.counts(), "bbox": model.bbox(),
+            "sol": model.sol, "fingerprint": fp, "warnings": list(model.warnings), "signature": None,
+            "lifting": False, "wires": None}
+
+
 def convert_deck(root: str, rel_path: str, storage_root: str, max_bytes: int) -> dict:
     """BDF 를 읽어 모델을 만들고 lbm·썸네일을 공유 폴더(20_Derived)에 쓴다 — 자식 프로세스에서 돈다(app.isolated).
-    DB 는 만지지 않는다. 결과는 status 와 DB 에 적을 값의 dict. 읽기 OSError·파생물 쓰기 OSError 는 그대로 던진다."""
+    DB 는 만지지 않는다. 결과는 status 와 DB 에 적을 값의 dict. 읽기 OSError·파생물 쓰기 OSError 는 그대로 던진다.
+    Abaqus .inp(61)는 convert_inp 로 넘긴다."""
+    if is_abaqus_input(rel_path):
+        return convert_inp(root, rel_path, storage_root, max_bytes)
     reader = DeckReader(_opener(Path(root), max_bytes), max_bytes=max_bytes)
     try:
         cards = reader.read(rel_path)
@@ -306,7 +353,7 @@ def convert_deck(root: str, rel_path: str, storage_root: str, max_bytes: int) ->
 def requeue_entry_models(db: Session, entry_id: int) -> int:
     """파일이 더해진 Entry 에서 INCLUDE 를 못 찾았던·실패했던 모델을 다시 변환한다(설계 §7.7)."""
     n = 0
-    files = db.query(models.File).filter_by(entry_id=entry_id, kind="model").all()
+    files = db.query(models.File).filter(models.File.entry_id == entry_id, model_file_filter()).all()
     rows = {r.file_id: r for r in db.query(models.ModelSummary)
             .filter(models.ModelSummary.file_id.in_([x.id for x in files] or [0]))}
     for f in files:

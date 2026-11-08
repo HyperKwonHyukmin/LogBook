@@ -33,7 +33,21 @@ def _finite_f4(rows, width: int) -> np.ndarray:
     return a
 
 
-def build_blocks(m: Model) -> dict[str, np.ndarray]:
+def card_lists(m: Model) -> dict[str, list[str]]:
+    """요소 종류 이름표. Nastran 카드 순서는 그대로 두고(번호가 같아 옛 lbm 과 맞는다), 그 밖의 이름(Abaqus
+    S4R·B32 등, 61)은 처음 나온 순서로 뒤에 붙인다. 뷰어는 머리말의 이 목록으로 번호를 이름으로 바꾼다."""
+    out = {}
+    for key, base, items in (("beam", BEAM_CARDS, m.beams), ("tri", TRI_CARDS, m.tris), ("quad", QUAD_CARDS, m.quads)):
+        names = list(base)
+        names += [c for c in dict.fromkeys(e.card for e in items) if c not in base]
+        out[key] = names
+    out["rigid"] = list(RIGID_CARDS)
+    return out
+
+
+def build_blocks(m: Model, cards: dict[str, list[str]] | None = None) -> dict[str, np.ndarray]:
+    cards = cards or card_lists(m)
+    pos = {k: {c: i for i, c in enumerate(v)} for k, v in cards.items()}
     ids = sorted(m.nodes)
     idx = {nid: i for i, nid in enumerate(ids)}
     rigid_lines, rigid_kinds = [], []
@@ -45,13 +59,13 @@ def build_blocks(m: Model) -> dict[str, np.ndarray]:
         "node_ids": _arr(ids, "<i4", 1),
         "node_xyz": _arr([m.nodes[n] for n in ids], "<f4", 3),
         "beams": _arr([(e.eid, e.pid, idx[e.nodes[0]], idx[e.nodes[1]]) for e in m.beams], "<i4", 4),
-        "beam_cards": _arr([BEAM_CARDS.index(e.card) for e in m.beams], "|u1", 1),
+        "beam_cards": _arr([pos["beam"][e.card] for e in m.beams], "|u1", 1),
         "beam_orient": _finite_f4([e.v or _ZERO3 for e in m.beams], 3),
         "beam_offsets": _finite_f4([e.off or _ZERO6 for e in m.beams], 6),
         "tris": _arr([(e.eid, e.pid, *(idx[n] for n in e.nodes)) for e in m.tris], "<i4", 5),
-        "tri_cards": _arr([TRI_CARDS.index(e.card) for e in m.tris], "|u1", 1),
+        "tri_cards": _arr([pos["tri"][e.card] for e in m.tris], "|u1", 1),
         "quads": _arr([(e.eid, e.pid, *(idx[n] for n in e.nodes)) for e in m.quads], "<i4", 6),
-        "quad_cards": _arr([QUAD_CARDS.index(e.card) for e in m.quads], "|u1", 1),
+        "quad_cards": _arr([pos["quad"][e.card] for e in m.quads], "|u1", 1),
         "rigid_lines": _arr(rigid_lines, "<i4", 3),
         "rigid_kinds": _arr(rigid_kinds, "|u1", 1),
         "masses": _arr([(eid, idx[g]) for eid, g, _ in m.masses], "<i4", 2),
@@ -61,7 +75,8 @@ def build_blocks(m: Model) -> dict[str, np.ndarray]:
 
 
 def write_lbm(m: Model) -> bytes:
-    blocks = build_blocks(m)
+    cards = card_lists(m)
+    blocks = build_blocks(m, cards)
     body = bytearray()
     metas = {}
     for name, arr in blocks.items():
@@ -75,8 +90,7 @@ def write_lbm(m: Model) -> bytes:
         "properties": {str(k): v for k, v in sorted(m.properties.items())},
         "materials": {str(k): v for k, v in sorted(m.materials.items())},
         "conrods": {str(k): v for k, v in sorted(m.conrods.items())},
-        "cards": {"beam": list(BEAM_CARDS), "tri": list(TRI_CARDS), "quad": list(QUAD_CARDS),
-                  "rigid": list(RIGID_CARDS)},
+        "cards": cards,
         "blocks": metas,
     }
     # allow_nan=False — NaN/Infinity 는 브라우저 JSON.parse 가 못 읽는다(parse_float 가 막지만 마지막 방어선)

@@ -6,6 +6,8 @@ const fmt = (v) => `${Number(Number(v).toPrecision(6))}`;
 /** 단면 라벨 — 백엔드 지문과 같은 형식(PBEAML L 100x100x10x10, PSHELL t12, PROD A50). */
 export function sectionLabel(p) {
   if (!p) return '';
+  // 61 Abaqus — '묶음이름 형상 원값'(백엔드 fingerprint.abaqus_label 과 같은 형식)
+  if (p.abaqus) return [p.name, p.section || p.kind, (p.data || []).map(fmt).join(',')].filter(Boolean).join(' ');
   if ((p.card === 'PBARL' || p.card === 'PBEAML') && p.dims?.length) return `${p.card} ${p.type} ${p.dims.map(fmt).join('x')}`;
   if ((p.card === 'PSHELL' || p.card === 'PCOMP') && p.t) return `${p.card} t${fmt(p.t)}`;
   if ((p.card === 'PBAR' || p.card === 'PBEAM' || p.card === 'PROD') && p.A) return `${p.card} A${fmt(p.A)}`;
@@ -14,6 +16,7 @@ export function sectionLabel(p) {
 
 function materialLabel(m) {
   if (!m) return '';
+  if (m.abaqus) return [m.name, m.E != null && `E${fmt(m.E)}`, m.nu != null && `ν${fmt(m.nu)}`].filter(Boolean).join(' ');
   if (m.card === 'MAT1') return ['MAT1', m.E != null && `E${fmt(m.E)}`, m.nu != null && `ν${fmt(m.nu)}`].filter(Boolean).join(' ');
   return m.card || '';
 }

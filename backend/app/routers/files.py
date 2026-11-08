@@ -15,6 +15,7 @@ from ..database import get_db
 from ..dependencies import _check_workbench, get_storage, require_auth
 from ..entries.locate import FileUnavailable, file_path
 from ..extract.xlsx import sheet_preview
+from ..ingest.rules import has_model_view
 from ..solve.job import brief as solve_brief
 from ..storage.paths import StoragePaths, to_long
 
@@ -56,7 +57,7 @@ def file_meta(file_id: int, db: Session = Depends(get_db), user: models.User = D
     """파일 메타(04b 전체 화면 뷰어 머리줄) — 이름·경로·종류와 소속 Entry. 휴지통 파일은 _file() 이 404."""
     f = _file(db, file_id, user)
     e = db.get(models.Entry, f.entry_id) if f.entry_id else None
-    s = db.get(models.ModelSummary, f.id) if f.kind == "model" else None
+    s = db.get(models.ModelSummary, f.id) if has_model_view(f.kind, f.name) else None
     return {"id": f.id, "name": f.name, "rel_path": f.rel_path, "kind": f.kind, "size": f.size,
             "entry_id": e.entry_id if e else None, "entry_title": e.title if e else None,
             "entry_status": e.status if e else None, "drm_encrypted": bool(f.drm_encrypted),

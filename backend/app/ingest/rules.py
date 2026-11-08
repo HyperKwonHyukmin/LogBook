@@ -27,6 +27,20 @@ SKIP_BY_DEFAULT_EXTS = (".op2", ".f06", ".xdb", ".h5", ".h3d", ".mvw", ".hwsessi
 SKIP_WITH_INP_EXTS = (".dat",)
 
 
+# 61 — 3D 뷰어로 여는 Abaqus 입력. kind 는 other 그대로 둔다 — kind 'model' 은 Nastran 실행·WorkBench 보내기·
+# 내용 서명(같은 모델·판 비교)·권상 판정이 BDF 로 읽기 때문이다. 변환·뷰어만 이 확장자도 받는다.
+VIEWER_EXTS = (".inp",)
+
+
+def is_abaqus_input(name: str) -> bool:
+    return os.path.splitext(name)[1].lower() in VIEWER_EXTS
+
+
+def has_model_view(kind: str, name: str) -> bool:
+    """3D 변환·뷰어 대상인가 — BDF 류(kind 'model') 또는 Abaqus .inp."""
+    return kind == "model" or is_abaqus_input(name)
+
+
 def is_excluded(name: str) -> bool:
     lower = name.lower()
     return any(fnmatch.fnmatchcase(lower, pat) for pat in EXCLUDE_PATTERNS)
