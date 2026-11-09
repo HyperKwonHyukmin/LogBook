@@ -1,8 +1,15 @@
 # LogBook 설명회 시연 자료
 
-## 소개 발표자료(HTML 덱) — 2026-10-20 기준 v12
+## 소개 발표자료(HTML 덱) — 2026-11-09 기준 v13
 
-- 위치: `C:\Coding\ClaudeCode\Huashu_Design\huashu-design\Results\LogBook-Deck-v12.html` / `.pdf` (20쪽, v1~v11도 같은 폴더). huashu-design 장부(帳簿) 문법 디자인.
+- 위치: `C:\Coding\ClaudeCode\Huashu_Design\huashu-design\Results\LogBook-Deck-v13.html` / `.pdf` / `-standalone.html` (20쪽, v1~v12도 같은 폴더). huashu-design 장부(帳簿) 문법 디자인.
+- **v13(2026-11-09)** — v12 뒤 기능(43~61)을 쪽 수 · 순서 그대로 반영: 07 올리기(폴더째 · 비슷한 자료의 분류 미리 채움 · PLM 선종 · 담당자,
+  캡처 = 145 E000233 상세) · 08 찾기(시리즈 호선 · 담당자 필터 · 여러 자료 분류 · 3D부터 미리보기, 캡처 = 145 검색 구역 「선미부」 + 미리보기) ·
+  09 3D 뷰어 Nastran · Abaqus · 11 「5 결론 · 검토 서명」 신설 · 12/14 갖춤 현황 행(호선 · 선종 · 크기급) × 열(구역 · 대상) ·
+  16 MU Studio 권상 실적 참조 · 실행자. 빌드 원본 `Results\LogBook-deck-src\v13\build13.py`(v12 → v13 치환), 넘침 점검 `view13.js`.
+  **회사 PC 에서는 Playwright 가 브라우저를 못 띄워** Chrome 을 먼저 띄우고(`chrome --headless=new --remote-debugging-port=9333 --user-data-dir=<임시>`)
+  `view13.js` · `export_pdf_cdp.mjs`(huashu-design PDF 스크립트의 CDP 판)가 거기에 붙는다. 회사 PC 에서 만든 PDF 는 사내 DRM 으로 암호화된다
+  (회사 PC 에서만 열림 — 밖으로 보낼 땐 HTML 한 파일 판). 한 파일 판은 시스템 Python(fontTools 있음)으로 `make_standalone.py` 를 돌린다.
 - 16쪽(Ⅴ 확장 첫 쪽) WorkBench와 LogBook — 함께도, 따로도(v12): ① LogBook → WorkBench(모델을 골라 GMU 권상 · Truss 입력으로, 같은 사번) · ② WorkBench → LogBook(수행한 해석을 보관, 출처 함께) + 아래 'LogBook 혼자서도' 띠(올리기 07 · 찾기 08·10 · 확인 09 · 활용 13~15 · 문서 10쪽). 처음엔 6쪽(Ⅱ)에 넣었으나 기능을 보기 전이라 옮겼다. **쪽 사이 원칙**: 앞 쪽에서 설명한 것에만 기대고, 같은 이야기는 한 쪽에서만 — WorkBench 주고받기는 16쪽, 5쪽은 역할 소개('주고받기 → 16쪽'), 6쪽 목표 칸은 '다시 가져다 쓰기(선례 15 · WorkBench 16쪽)', 17쪽은 가족 · Core · 계획. 12쪽 '따로 입력할 것 없음 → 07쪽 분류'. 13 · 14 · 15쪽 캡처는 통합 데모(예시 388건)로 교체(`LogBook-assets/*-v12.*`, 찍는 스크립트는 세션 임시 — 다시 찍을 땐 데모를 열어 같은 화면).
 - 7쪽 올리기 아래 「자료 올리기 시, 유의 사항」 띠(v11): 호선 · 구역 · 대상 · 태그 · 설명을 최대한 자세히 → 관계 지도 등에서 자료 사이 맥락이 됨. 같은 이유로 WorkBench Model Builder 등도 호선을 받아 PLM 에서 선종 등을 찾도록 바꿨다는 사실 한 줄. 3단계 설명에도 '대상'을 넣었다(캡처 설명 ②는 화면에 대상 칸이 없어 그대로). 자리를 내려고 활동 로그 그림은 위 4줄만 보이게 잘랐다(`height:102px`).
 - 구성: 표지 → 序 이름(왜 LogBook인가) → Ⅰ 필요성 → Ⅱ LogBook(정의 · 세 가지 지식자산 · 4대 목표) → Ⅲ 사용성(올리기 · 찾기 · 확인 · 문서 · 신뢰) → Ⅳ 활용(관계 지도 · 갖춤 현황 · 선례 찾기) → Ⅴ 확장(Hi-TESS 그림 · 모델링 AI) → 跋 맺으며(개발 소회, v10) → 마무리.
