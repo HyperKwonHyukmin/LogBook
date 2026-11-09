@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, X } from 'lucide-react';
 import { api } from '../../api/client.js';
+import { sortForPreview } from '../../lib/files.js';
 import { errorText, formatBytes, formatDateTime } from '../../lib/labels.js';
 import FilePreview, { FileActions } from '../preview/FilePreview.jsx';
 import { buttonClass } from '../ui/Button.jsx';
@@ -28,8 +29,9 @@ export default function EntryPreviewPanel({ entryId, fileId, onClose, width, pan
   }, [entryId]);
   useEffect(() => { setPicked(fileId || null); }, [entryId, fileId]);
 
-  const file = entry?.files.find((f) => f.id === picked) || entry?.files.find((f) => f.kind === 'report' && /\.pdf$/i.test(f.name))   // 52 — 보고서는 PDF 먼저
-    || entry?.files.find((f) => f.kind === 'report') || entry?.files[0];
+  // 1순위 BDF(3D) → INP(3D) → 보고서(PDF 먼저) → 나머지. 목록도 이 순서로 보인다(lib/files.previewRank)
+  const files = useMemo(() => sortForPreview(entry?.files), [entry]);
+  const file = files.find((f) => f.id === picked) || files[0];
   const detailHref = `/e/${entryId}${file || fileId ? `?file=${file?.id ?? fileId}` : ''}`;
 
   return (
@@ -81,7 +83,7 @@ export default function EntryPreviewPanel({ entryId, fileId, onClose, width, pan
       )}
       {entry && entry.files.length > 0 && (
         <ul aria-label="파일" className="flex flex-col gap-px border-b border-n-200 px-2 py-2">
-          {entry.files.map((f) => {
+          {files.map((f) => {
             const on = f.id === file?.id;
             return (
               <li key={f.id}>

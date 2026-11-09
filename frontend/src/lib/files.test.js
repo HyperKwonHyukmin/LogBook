@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 import { mockApi } from '../test/mockApi.js';
-import { copyText, fileLink, hasModelView, isAbaqusInput, uncPath } from './files.js';
+import { copyText, fileLink, hasModelView, isAbaqusInput, previewRank, sortForPreview, uncPath } from './files.js';
 
 test('UNC 경로를 만든다', () => {
   expect(uncPath('\\\\srv\\999_LogBook\\10_Vault\\2026\\E000001', 'a/b c.pdf'))
@@ -27,4 +27,21 @@ test('61 — Abaqus .inp 도 3D 뷰어 대상(kind 는 other)', () => {
   expect(hasModelView({ kind: 'model', name: 'a.bdf' })).toBe(true);
   expect(hasModelView({ kind: 'report', name: 'r.pdf' })).toBe(false);
   expect(hasModelView(null)).toBe(false);
+});
+
+test('검색 미리보기 순서 — 3D BDF → 3D INP → PDF 보고서 → 그 밖의 보고서 → 나머지', () => {
+  const done = { state: 'done', format_version: 2 };
+  const files = [
+    { id: 1, kind: 'report', name: 'r.docx' },
+    { id: 2, kind: 'other', name: 'a.xyz' },
+    { id: 3, kind: 'report', name: 'r.pdf' },
+    { id: 4, kind: 'other', name: 'm.inp', model: done },
+    { id: 5, kind: 'model', name: 'inc.bdf', model: { state: 'include', format_version: null } },
+    { id: 6, kind: 'model', name: 'main.bdf', model: done },
+    { id: 7, kind: 'other', name: 'q.inp', model: { state: 'queued', format_version: null } },
+  ];
+  expect(sortForPreview(files).map((f) => f.id)).toEqual([6, 5, 4, 7, 3, 1, 2]);
+  // 다시 변환 대기 중이어도 이전 결과(format_version)가 있으면 볼 수 있는 모델
+  expect(previewRank({ kind: 'model', name: 'a.bdf', model: { state: 'queued', format_version: 2 } })).toBe(0);
+  expect(sortForPreview(undefined)).toEqual([]);
 });
