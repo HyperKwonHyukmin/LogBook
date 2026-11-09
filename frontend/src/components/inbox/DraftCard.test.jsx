@@ -525,3 +525,25 @@ test('호선이 있거나 이미 공용이면 묻지 않는다', async () => {
   await vi.waitFor(() => expect(callKeys()).toEqual(['POST /api/entries/E000010/confirm']));
   expect(screen.queryByRole('alertdialog')).toBeNull();
 });
+
+test('62 — 확정하는 동안 단추가 「확정하는 중」이고, 끝나면 onConfirmed 로 번호·제목을 알린다', async () => {
+  const q = deferredFetch();
+  const onConfirmed = vi.fn();
+  render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={() => {}} onConfirmed={onConfirmed} />);
+  await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  expect(await screen.findByRole('button', { name: /확정하는 중/ })).toBeDisabled();
+  await vi.waitFor(() => expect(q.map((c) => c.key)).toContain('POST /api/entries/E000010/confirm'));
+  q.find((c) => c.key === 'POST /api/entries/E000010/confirm').resolve({ ...ENTRY, status: 'confirmed' });
+  await vi.waitFor(() => expect(onConfirmed).toHaveBeenCalledWith({ entry_id: 'E000010', title: '9999 연결시험', merged: false }));
+  expect(screen.getByRole('button', { name: '확정' })).toBeInTheDocument();
+});
+
+test('62 — 확정이 실패하면 onConfirmed 를 부르지 않는다', async () => {
+  mockFetch({ 'POST /api/entries/E000010/confirm': { __status: 500, detail: 'boom' } });
+  const onConfirmed = vi.fn();
+  render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={() => {}} onConfirmed={onConfirmed} />);
+  await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  await vi.waitFor(() => expect(fetch.mock.calls.some(([u]) => u.endsWith('/confirm'))).toBe(true));
+  await vi.waitFor(() => expect(screen.getByRole('button', { name: '확정' })).not.toBeDisabled());
+  expect(onConfirmed).not.toHaveBeenCalled();
+});

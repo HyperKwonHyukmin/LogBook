@@ -189,3 +189,19 @@ def test_unreadable_file_is_recorded_as_excluded_with_reason(db, storage, monkey
     excluded = db.get(models.Batch, b.id).excluded
     assert any(x["name"] == "bad.bdf" and "reason" in x for x in excluded)
     assert db.get(models.Batch, b.id).state == "processed"
+
+
+def test_duplicate_flag_against_other_draft(db, storage):
+    """62 — 확정 전에 같은 보고서를 다시 올리면 앞 초안의 파일을 '이미 있음' 으로 가리킨다(자기 묶음 안끼리는 아님)."""
+    first = _batch(db, storage, key="20260101-000000-frst")
+    _write(storage.staging / first.key / "3496_검토" / "r.pdf", b"%PDF-same")
+    process_batch(db, storage, first)
+    db.expire_all()
+    [orig] = db.query(models.File).filter_by(batch_id=first.id).all()
+    assert orig.duplicate_of_id is None and orig.location == "staging"
+    again = _batch(db, storage, key="20260101-000001-scnd")
+    _write(storage.staging / again.key / "3496_검토" / "r.pdf", b"%PDF-same")
+    process_batch(db, storage, again)
+    db.expire_all()
+    [dup] = db.query(models.File).filter_by(batch_id=again.id).all()
+    assert dup.duplicate_of_id == orig.id

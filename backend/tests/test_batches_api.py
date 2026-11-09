@@ -66,3 +66,24 @@ def test_get_one_batch(client, db, make_user, auth_headers):
     assert r.status_code == 200 and r.json()["key"] == "k-one" and r.json()["state"] == "processed"
     assert client.get("/api/batches/nope", headers=h).status_code == 404
     assert client.get("/api/batches/k-one").status_code == 401
+
+
+def test_summary_counts_my_drafts_and_in_flight(client, db, make_user, auth_headers):
+    """62 — 메뉴 배지·다른 창 안내·같은 이름 경고용 요약. 남의 것·오래된 올리기·확정만 남은 묶음은 세지 않는다."""
+    from datetime import datetime, timedelta
+    make_user("A100001")
+    _batch(db, "k-mine", "A100001")                       # 초안 1
+    b2, e2 = _batch(db, "k-done", "A100001")              # 초안을 확정해 할 일 없음
+    e2.status = "confirmed"
+    _batch(db, "k-other", "B200002")
+    db.add(models.Batch(key="k-staged", source="web", original_name="6_Rudder", uploader="A100001", state="staged"))
+    db.add(models.Batch(key="k-up", source="web", original_name="7_Skeg", uploader="A100001", state="uploading"))
+    db.add(models.Batch(key="k-old", source="web", original_name="old", uploader="A100001", state="uploading",
+                        received_at=datetime.now() - timedelta(hours=30)))
+    db.commit()
+    r = client.get("/api/batches/summary", headers=auth_headers("A100001"))
+    assert r.status_code == 200
+    d = r.json()
+    assert (d["drafts"], d["staged"], d["uploading"]) == (1, 1, 1)
+    assert sorted(n["name"] for n in d["names"]) == ["6_Rudder", "7_Skeg", "k-mine"]
+    assert client.get("/api/batches/summary").status_code == 401

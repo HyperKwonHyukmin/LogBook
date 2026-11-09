@@ -75,6 +75,11 @@ def batch_to_dict(db: Session, b: models.Batch, ctx: dict | None = None, viewer=
             for f in e["files"]:
                 if f.get("model") is not None:
                     f["model"]["running"] = f["id"] in converting
+    if b.target_entry_id and b.state == "done":
+        # 62 — [파일 추가]가 실제로 붙인 파일(대상 자료 안 경로). 화면이 '추가한 파일 N개'·'새 파일' 표시에 쓴다
+        d["added"] = [{"id": i, "rel_path": r} for i, r in db.query(models.File.id, models.File.rel_path)
+                      .filter(models.File.batch_id == b.id, models.File.entry_id == b.target_entry_id)
+                      .order_by(models.File.rel_path)]
     if b.target_entry_id and b.state in ("staged", "processed"):
         target = db.get(models.Entry, b.target_entry_id)
         if target is not None and target.status == "draft" and (viewer is None or access.can_view_entry(viewer, target, db=db)):
@@ -123,6 +128,37 @@ def _has_unseen_drafts(db: Session, b: models.Batch, user: models.User) -> bool:
         return False
     return (db.query(models.Entry.id).filter(models.Entry.batch_id == b.id, models.Entry.status == "draft",
                                              ~access.visible_entries_filter(user)).first()) is not None
+
+
+SUMMARY_NAMES = 50   # 62 — 같은 이름 경고에 쓰는 내 진행 중 묶음 수 상한
+
+
+@router.get("/summary")
+def batch_summary(db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
+    """62 — 내 정리 대기 요약(메뉴 배지·다른 창에서 올리는 중 안내·폴더 창의 같은 이름 경고).
+    drafts = 확정하지 않은 내 초안 수, staged = 서버가 정리 중인 묶음 수, uploading = 브라우저가 아직 보내는 중인 묶음 수
+    (STALE_AFTER 가 지나면 cleanup_stale 이 지우므로 그 안의 것만), names = 진행 중 묶음 [{name, state, received_at}]."""
+    from ..uploads.service import STALE_AFTER
+    me = user.employee_id
+    drafts = (db.query(models.Entry.id).join(models.Batch, models.Batch.id == models.Entry.batch_id)
+              .filter(models.Entry.status == "draft", models.Batch.uploader == me).count())
+    fresh = datetime.now() - STALE_AFTER
+    rows = (db.query(models.Batch.original_name, models.Batch.state, models.Batch.received_at)
+            .filter(models.Batch.uploader == me, or_(
+                models.Batch.state.in_(("staged", "processed")),
+                and_(models.Batch.state == "uploading", models.Batch.received_at >= fresh)))
+            .order_by(models.Batch.received_at.desc()).all())
+    # processed 인데 초안이 모두 확정·버려진 묶음은 이름 경고에서 뺀다(정리 대기 목록에도 할 일이 없다)
+    open_names = {n for (n,) in db.query(models.Batch.original_name)
+                  .join(models.Entry, models.Entry.batch_id == models.Batch.id)
+                  .filter(models.Batch.uploader == me, models.Batch.state == "processed",
+                          models.Entry.status == "draft").distinct()}
+    names = [{"name": n, "state": s, "received_at": r.isoformat() if r else None}
+             for n, s, r in rows if s != "processed" or n in open_names][:SUMMARY_NAMES]
+    return {"drafts": drafts,
+            "staged": sum(1 for _n, s, _r in rows if s == "staged"),
+            "uploading": sum(1 for _n, s, _r in rows if s == "uploading"),
+            "names": names}
 
 
 @router.get("/{key}")

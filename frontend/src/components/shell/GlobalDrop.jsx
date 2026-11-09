@@ -4,6 +4,7 @@ import { PageDropOverlay, UploadCenterCard, UploadCenterStack, uploaderView, use
 import { isOsFileDrag, useUploadSnapshot, useUploadStore } from '../inbox/UploadProvider.jsx';
 import { useToast } from '../ui/Toast.jsx';
 import { READ_ONLY_REASON } from '../../lib/levels.js';
+import { useInboxSummary } from './InboxSummary.jsx';
 
 // 자기 올리기 칸이 있는 화면 — 정리 대기는 화면 전체 덮개, Entry 는 '파일 추가' 칸이 따로 있다
 const OWN_UPLOAD = [/^\/inbox\/?$/, /^\/e\/[^/]+\/?$/];
@@ -23,6 +24,10 @@ export default function GlobalDrop({ storage, readOnly = false }) {
   const store = useUploadStore();
   const snap = useUploadSnapshot(store);
   const ownUpload = OWN_UPLOAD.some((re) => re.test(pathname));
+  // 62 — 이 창의 올리기가 시작·끝날 때 정리 대기 요약(메뉴 배지·다른 창 안내)을 바로 맞춘다
+  const { refresh: refreshSummary } = useInboxSummary();
+  const localUploads = snap ? Object.values(snap.jobs).filter((j) => j.busy || j.resumable).length : 0;
+  useEffect(() => { refreshSummary(); }, [localUploads, refreshSummary]);
 
   const uploader = useUploader({
     scope: GLOBAL_SCOPE,

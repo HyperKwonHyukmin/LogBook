@@ -102,11 +102,11 @@ test('파일 추가 — 워커가 합치면 목록을 새로 부르고 알린다
   let entryCalls = 0;
   const fetch = renderPage({
     'GET /api/entries/E000001': () => { entryCalls += 1; return ENTRY; },
-    'GET /api/batches/K': { key: 'K', state: 'done', excluded: [] },
+    'GET /api/batches/K': { key: 'K', state: 'done', excluded: [], added: [{ id: 99, rel_path: '보고서.pdf' }] },
   });
   await userEvent.click(await screen.findByRole('button', { name: '파일 추가' }));
   await userEvent.upload(screen.getByLabelText('파일 선택'), new File(['%PDF'], '보고서.pdf', { type: 'application/pdf' }));
-  expect(await screen.findByText('파일을 이 자료에 추가했습니다.', {}, { timeout: 4000 })).toBeInTheDocument();
+  expect(await screen.findByText('파일 1개를 이 자료에 추가했습니다.', {}, { timeout: 4000 })).toBeInTheDocument();
   expect(calls(fetch)).toContain('GET /api/batches/K');
   await waitFor(() => expect(entryCalls).toBeGreaterThanOrEqual(2));
 });
@@ -511,4 +511,33 @@ test('53 — 결론이 없으면 서명 단추 대신 안내', async () => {
   renderPage({ 'GET /api/entries/E000001': { ...ENTRY, conclusion: null, review: null, can_review: true } });
   expect(await screen.findByText('결론이 적히면 서명할 수 있습니다')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '검토 서명' })).toBeNull();
+});
+
+test('62 — 파일 추가 결과: 이름 바뀜·이미 있어 건너뜀을 알리고, 붙은 파일에 「새 파일」 표시', async () => {
+  let n = 0;
+  renderPage({
+    'GET /api/entries/E000001': () => {
+      n += 1;
+      return n === 1 ? ENTRY : { ...ENTRY, version: 4, files: [...FILES, { id: 3, name: 'r (2).pdf', rel_path: 'r (2).pdf', kind: 'report', size: 5, extract: null }] };
+    },
+    'GET /api/batches/K': { key: 'K', state: 'done', added: [{ id: 3, rel_path: 'r (2).pdf' }], excluded: [
+      { name: 'r.pdf', to: 'r (2).pdf', reason: 'renamed' },
+      { name: 'same.pdf', of: 'same.pdf', reason: 'duplicate_in_entry' }] },
+  });
+  await userEvent.click(await screen.findByRole('button', { name: '파일 추가' }));
+  await userEvent.upload(screen.getByLabelText('파일 선택'), new File(['%PDF'], 'r.pdf', { type: 'application/pdf' }));
+  expect(await screen.findByText('파일 1개를 이 자료에 추가했습니다.', {}, { timeout: 4000 })).toBeInTheDocument();
+  expect(screen.getByText(/같은 이름이 있어 새 이름으로 저장/).parentElement).toHaveTextContent('r.pdf → r (2).pdf');
+  expect(screen.getByText(/이 자료에 이미 있어 건너뜀/).parentElement).toHaveTextContent('same.pdf');
+  expect(screen.queryByText(/제외된 파일/)).not.toBeInTheDocument();   // 이름 바뀜·건너뜀은 '제외'로 세지 않는다
+  expect(await screen.findByRole('treeitem', { name: 'r (2).pdf' })).toHaveTextContent('새 파일');
+});
+
+test('62 — 서버가 아직 붙이는 중인 [파일 추가]가 있으면 패널을 열고 이어 따라간다(닫을 수 없다)', async () => {
+  renderPage({
+    'GET /api/entries/E000001': { ...ENTRY, pending_additions: [{ key: 'K9', state: 'staged' }] },
+    'GET /api/batches/K9': { key: 'K9', state: 'staged', excluded: [], queue: { worker_alive: true, ahead: 2 } },
+  });
+  expect(await screen.findByText(/앞의 배치 2개를 먼저 처리하고 있습니다/, {}, { timeout: 4000 })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /파일 추가 중/ })).toBeDisabled();
 });

@@ -129,7 +129,8 @@ export function draftChecks(form, entry) {
   const drm = files.filter((f) => f.drm_encrypted).length;
   if (drm) out.push({ id: 'drm', text: `암호화 파일 ${drm}개: 본문·3D 를 읽지 못합니다` });
   const dup = files.filter((f) => f.duplicate_of_entry).length;
-  if (dup) out.push({ id: 'dup', text: `이미 보관된 파일 ${dup}개` });
+  // 62 — 다른 초안(정리 대기)에 있는 같은 파일도 센다 — 같은 폴더를 두 번 올린 것일 수 있다
+  if (dup) out.push({ id: 'dup', text: `이미 올라온 파일 ${dup}개: 같은 파일이 다른 자료·초안에 있습니다` });
   return out;
 }
 

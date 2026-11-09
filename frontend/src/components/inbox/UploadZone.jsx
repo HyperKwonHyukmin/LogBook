@@ -51,9 +51,10 @@ export function useOsFileDragActive() {
  * 52 — 고른·놓은 것은 셸의 폴더 목록 창(FolderReviewHost)을 거친다. 폴더면 목록, 파일 몇 개면 바로 올린다.
  *   기존 초안·자료에 추가(targetEntryId)는 파일 고르기만. 셸이 없으면(단독 렌더) 바로 올린다.
  */
-export function useUploader({ scope = 'upload', onUploaded, disabled = false, targetEntryId, targetEntryStatus, away }) {
+export function useUploader({ scope = 'upload', onUploaded, disabled = false, targetEntryId, targetEntryStatus, away, existingPaths }) {
   const reviewer = useFolderReviewer();
-  const review = reviewer ? (collected, send) => reviewer(collected, send, { attach: !!targetEntryId }) : null;
+  // 62 — existingPaths: 파일을 더할 자료가 이미 가진 파일 경로(폴더 창이 겹칠 이름을 미리 알린다)
+  const review = reviewer ? (collected, send) => reviewer(collected, send, { attach: !!targetEntryId, existing: existingPaths }) : null;
   const auth = useContext(AuthContext); // 단독 렌더(테스트)에서는 없을 수 있다
   const canForce = isAdminLevel(auth?.user);
   const shared = useUploadStore();
@@ -310,8 +311,8 @@ export function PageDropOverlay({ u }) {
  * 기본 올리기 칸(기존 Entry 에 파일 추가 등) — 단추 한 줄 + 이 칸에 끌어 놓기.
  * showSuccess=false 면 성공 문구를 부모가 대신 보인다.
  */
-export default function UploadZone({ onUploaded, disabled = false, targetEntryId, showSuccess = true, scope = 'zone', away }) {
-  const u = useUploader({ scope, onUploaded, disabled, targetEntryId, away });
+export default function UploadZone({ onUploaded, disabled = false, targetEntryId, showSuccess = true, scope = 'zone', away, existingPaths }) {
+  const u = useUploader({ scope, onUploaded, disabled, targetEntryId, away, existingPaths });
   const [over, setOver] = useState(false);
   return (
     <section aria-label="자료 올리기" className="flex flex-col gap-2">

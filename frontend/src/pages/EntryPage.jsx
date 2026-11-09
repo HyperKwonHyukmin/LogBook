@@ -28,6 +28,7 @@ import { ACTION_LABELS, errorText, formatBytes, formatDateTime } from '../lib/la
 import { buildTree } from '../lib/tree.js';
 import { useEntry } from '../lib/useEntry.js';
 import { useAddFilesWatch } from '../lib/useAddFilesWatch.js';
+import { useUploadSnapshot, useUploadStore } from '../components/inbox/UploadProvider.jsx';
 import { changedFields, editErrors, editValues, patchBody, sameEditable } from '../lib/entryEdit.js';
 import { useUnsavedGuard } from '../lib/useUnsavedGuard.js';
 import AccessPanel, { AccessBadge } from '../components/access/AccessPanel.jsx';
@@ -147,7 +148,7 @@ function RemoveToggle({ file, marked, disabled, onToggle }) {
  * 로빙 tabindex — 고른 파일만 0, 나머지는 -1 이라 Tab 한 번으로 트리에 들어온다.
  * removal(37) — 고치는 중일 때만 { marked: Set, toggle, lastLeft } — 파일마다 삭제 표시 단추가 붙는다.
  */
-function TreeNodes({ nodes, selectedId, onPick, entryId, removal = null, depth = 0 }) {
+function TreeNodes({ nodes, selectedId, onPick, entryId, removal = null, depth = 0, newIds = null }) {
   const [closed, setClosed] = useState({});
   const toggle = (path) => setClosed((c) => ({ ...c, [path]: !c[path] }));
   return nodes.map((n) => (n.file ? (
@@ -162,6 +163,8 @@ function TreeNodes({ nodes, selectedId, onPick, entryId, removal = null, depth =
       <span className={`min-w-0 flex-1 truncate ${n.file.id === selectedId ? 'font-medium' : ''}
         ${removal?.marked.has(n.file.id) ? 'text-n-500 line-through decoration-err/60' : ''}`} title={n.file.rel_path}>{n.name}</span>
       {removal?.marked.has(n.file.id) && <span className="shrink-0 text-micro font-medium text-err">삭제 예정</span>}
+      {/* 62 — 방금 [파일 추가]로 붙은 파일(이 화면에 있는 동안) */}
+      {newIds?.has(n.file.id) && <span className="shrink-0 rounded-xs bg-brand-subtle px-1 text-micro font-medium text-brand">새 파일</span>}
       {n.file.lifting && <WireChip />}
       {sameInfo(n.file.model)?.sameTotal > 0 && (
         <span title="동일 BDF 가 이미 있음" className="inline-flex shrink-0 items-center gap-0.5 rounded-xs bg-wait-bg px-1 text-micro font-medium text-wait">
@@ -183,7 +186,7 @@ function TreeNodes({ nodes, selectedId, onPick, entryId, removal = null, depth =
         {closed[n.path] ? <ChevronRight size={14} className="text-n-400" aria-hidden="true" /> : <ChevronDown size={14} className="text-n-400" aria-hidden="true" />}
         <Folder size={14} className="text-n-400" aria-hidden="true" />{n.name}
       </div>
-      {!closed[n.path] && <ul role="group"><TreeNodes nodes={n.children} selectedId={selectedId} onPick={onPick} entryId={entryId} removal={removal} depth={depth + 1} /></ul>}
+      {!closed[n.path] && <ul role="group"><TreeNodes nodes={n.children} selectedId={selectedId} onPick={onPick} entryId={entryId} removal={removal} depth={depth + 1} newIds={newIds} /></ul>}
     </li>
   )));
 }
@@ -237,9 +240,24 @@ function useHistory(entryId, reloadKey) {
   return { rows, failed };
 }
 
-/** [파일 추가] 뒤 진행 — 워커가 파일을 확인해 이 자료에 붙일 때까지. */
-function AddFilesStatus({ watch }) {
-  const { state, excluded = 0, message, workerDown, duplicates = [] } = watch;
+/** 62 — 결과 목록 한 덩어리(접지 않고 5개까지, 나머지는 '외 N개'). */
+function NoteList({ title, items, render }) {
+  if (!items?.length) return null;
+  return (
+    <div className="mt-1.5">
+      <p className="font-medium text-n-800">{title} <span className="font-mono font-normal text-n-600">{items.length}</span></p>
+      <ul className="mt-0.5 flex flex-col gap-0.5">
+        {items.slice(0, 5).map((x, i) => <li key={i} className="break-all text-n-700">{render(x)}</li>)}
+        {items.length > 5 && <li className="text-n-500">외 {items.length - 5}개</li>}
+      </ul>
+    </div>
+  );
+}
+const baseName = (p) => String(p || '').split('/').pop();
+
+/** [파일 추가] 뒤 진행 — 워커가 파일을 확인해 이 자료에 붙일 때까지, 그리고 무엇이 붙었는지. */
+function AddFilesStatus({ watch, onRecheck }) {
+  const { state, excluded = 0, message, workerDown, duplicates = [], added = [], renamed = [], same = [] } = watch;
   if (state === 'idle') return null;
   // 17 — 서버가 이어서 확인한(큰 파일 등) 완전 동일 BDF 는 추가하지 않았다
   const dupNote = duplicates.length > 0 && (state === 'done' || state === 'inbox') ? (
@@ -257,19 +275,29 @@ function AddFilesStatus({ watch }) {
   const skipped = excluded > 0 ? ` (제외된 파일 ${excluded}개)` : '';
   if (state === 'working') {
     return (
-      <p role="status" className="mt-2 flex items-center gap-1.5 text-meta text-n-600">
-        <Spinner size={12} />
-        {workerDown ? '처리 프로그램(워커)이 꺼져 있어 기다리는 중입니다 — 관리자에게 알려 주세요.'
-          : '파일을 확인하고 이 자료에 붙이는 중입니다…'}
+      <p role="status" className={`mt-2 flex items-start gap-1.5 text-meta ${watch.wait || workerDown ? 'text-wait' : 'text-n-600'}`}>
+        <Spinner size={12} className="mt-[3px] shrink-0" />
+        <span>
+          {workerDown ? '처리 프로그램(워커)이 꺼져 있어 기다리는 중입니다 — 관리자에게 알려 주세요.'
+            : <>파일을 확인하고 이 자료에 붙이는 중입니다{watch.line ? `: ${watch.line}` : '…'}</>}
+          <span className="block text-n-500">이 화면을 떠나도 계속 진행되고, 돌아오면 여기서 이어 보입니다.</span>
+        </span>
       </p>
     );
   }
   if (state === 'done') {
     return (
       <>
-        <p role="status" className="mt-2 text-meta text-ok">
-          {duplicates.length > 0 ? '파일 확인을 마쳤습니다. 동일 BDF 가 아닌 파일은 이 자료에 추가했습니다.' : '파일을 이 자료에 추가했습니다.'}{skipped}
-        </p>
+        <div role="status" className="mt-2 rounded-md border border-n-200 bg-n-25 px-3 py-2 text-meta">
+          <p className="font-semibold text-ok">
+            {added.length ? `파일 ${added.length}개를 이 자료에 추가했습니다.` : '추가한 파일이 없습니다.'}{skipped}
+            {added.length > 0 && <span className="font-normal text-n-600"> 아래 목록에 「새 파일」로 표시했습니다.</span>}
+          </p>
+          <NoteList title="같은 이름이 있어 새 이름으로 저장" items={renamed}
+                    render={(x) => <><span className="font-mono">{baseName(x.name)}</span> → <span className="font-mono font-medium">{baseName(x.to)}</span></>} />
+          <NoteList title="이 자료에 이미 있어 건너뜀(내용이 똑같은 파일)" items={same}
+                    render={(x) => <span className="font-mono">{x.name}</span>} />
+        </div>
         {dupNote}
       </>
     );
@@ -285,7 +313,12 @@ function AddFilesStatus({ watch }) {
     );
   }
   if (state === 'slow') {
-    return <p role="status" className="mt-2 text-meta text-wait">처리가 오래 걸리고 있습니다. 잠시 뒤 새로 고쳐 확인해 주세요.</p>;
+    return (
+      <p role="status" className="mt-2 flex flex-wrap items-center gap-2 text-meta text-wait">
+        처리가 30분 넘게 끝나지 않았습니다. 관리자에게 알려 주시거나 잠시 뒤 다시 확인해 주세요.
+        {onRecheck && <Button variant="ghost" size="sm" onClick={onRecheck}>다시 확인</Button>}
+      </p>
+    );
   }
   return <p role="alert" className="mt-2 text-meta text-err">{message}</p>;
 }
@@ -423,7 +456,20 @@ export default function EntryPage() {
   const toast = useToast();
   const [confirm, dialog] = useConfirm();
   const { entry, status, error, setError, commit, reload } = useEntry(entryId);
-  const adder = useAddFilesWatch({ onMerged: () => { reload().catch(() => {}); } });
+  // 62 — 붙은 파일을 목록에 '새 파일'로 표시하고, 패널이 화면 밖이어도 알 수 있게 토스트로도 알린다
+  const [addedIds, setAddedIds] = useState(() => new Set());
+  const adder = useAddFilesWatch({ onMerged: (r) => {
+    reload().catch(() => {});
+    setAddedIds((cur) => new Set([...cur, ...(r?.added || []).map((a) => a.id)]));
+    const n = r?.added?.length || 0;
+    toast.show({ tone: 'ok', duration: 8000,
+      message: n ? `파일 ${n}개를 이 자료에 추가했습니다${r.renamed?.length ? ` (이름 바꿈 ${r.renamed.length})` : ''}`
+        : '이 자료에 이미 있는 파일이라 추가하지 않았습니다' });
+  } });
+  // 62 — 이 자료로 올리는 중(셸 저장소)이거나 서버가 붙이는 중이면 패널을 닫지 않는다(닫으면 결과를 못 따라갔다)
+  const uploadSnap = useUploadSnapshot(useUploadStore());
+  const uploadJob = uploadSnap?.jobs?.[`entry:${entryId}`];
+  const addBusy = !!(uploadJob?.busy || uploadJob?.resumable) || adder.watch.state === 'working';
   // 14 — 판 정리는 version 을 올리지 않는다(이력 한 줄) — 저장 횟수(revSaved)를 이력 다시 읽기 기준에 넣는다
   const [revSaved, setRevSaved] = useState(0);
   const [revEditing, setRevEditing] = useState(false);
@@ -450,8 +496,19 @@ export default function EntryPage() {
 
   useEffect(() => {
     stopEditing();
-    setPicked(fileParam); setAdding(false); setNotice(''); adder.reset();
+    setPicked(fileParam); setAdding(false); setNotice(''); adder.reset(); setAddedIds(new Set());
+    resumedRef.current = false;
   }, [entryId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 62 — 화면을 떠났다 돌아왔을 때 서버가 아직 붙이는 중인 [파일 추가]가 있으면 패널을 열고 이어서 따라간다
+  const resumedRef = useRef(false);
+  const pendingKey = entry?.pending_additions?.[0]?.key;
+  useEffect(() => {
+    if (!pendingKey || resumedRef.current || adder.watch.state !== 'idle') return;
+    resumedRef.current = true;
+    setAdding(true);
+    adder.start(pendingKey);
+  }, [pendingKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 고치는 동안 파일 추가 등으로 Entry 를 다시 불러왔다 — 고칠 칸의 서버 값이 그대로면 새 version 으로 갈아탄다
   useEffect(() => {
@@ -777,8 +834,9 @@ export default function EntryPage() {
             <SectionTitle>파일 <span className="font-mono font-normal text-n-500">{entry.files.length}</span></SectionTitle>
             {editing && <span className="text-meta text-n-500">지울 파일은 줄 오른쪽 [삭제] — 변경 완료 때 반영</span>}
             {editable && (
-              <Button variant="ghost" size="sm" onClick={() => setAdding(!adding)} aria-expanded={adding} className="ml-auto">
-                <Upload size={14} aria-hidden="true" />파일 추가
+              <Button variant="ghost" size="sm" onClick={() => setAdding(!adding)} aria-expanded={adding || addBusy} className="ml-auto"
+                      disabled={addBusy} title={addBusy ? '추가가 끝나면 닫을 수 있습니다' : undefined}>
+                {addBusy ? <><Spinner size={12} />파일 추가 중…</> : <><Upload size={14} aria-hidden="true" />파일 추가</>}
               </Button>
             )}
           </div>
@@ -789,20 +847,25 @@ export default function EntryPage() {
               Wire 를 설치한 모델(<span className="font-mono">_lifting.bdf</span>)을 [파일 추가]로 올려 두면 나중에 이전 실적의 권상 위치를 찾을 수 있습니다.
             </p>
           )}
-          {adding && editable && (
+          {(adding || addBusy) && editable && (
             <div className="mb-3 rounded-lg border border-n-200 p-3">
-              <p className="mb-2 text-meta text-n-600">여기 올린 파일은 정리 대기를 거치지 않고 이 자료에 바로 추가됩니다.</p>
+              <p className="mb-2 text-meta text-n-600">
+                여기 올린 파일은 정리 대기를 거치지 않고 이 자료에 바로 추가됩니다. 이름이 같은 파일이 있으면 바꾸지 않고
+                <span className="font-mono"> 이름 (2)</span>처럼 새 이름으로 더하고, 내용까지 똑같은 파일은 건너뜁니다.
+              </p>
               <UploadZone targetEntryId={entry.entry_id} disabled={offline} showSuccess={false} scope={`entry:${entry.entry_id}`}
+                          existingPaths={entry.files.map((f) => f.rel_path)}
                           away={{ title: `${entry.entry_id} 파일 추가`, message: '파일을 올렸습니다. 자료에 추가되는 대로 파일 목록에 나타납니다.',
                             to: `/e/${entry.entry_id}`, label: '자료 열기' }}
                           onUploaded={(key) => adder.start(key)} />
-              <AddFilesStatus watch={adder.watch} />
+              <AddFilesStatus watch={adder.watch} onRecheck={adder.watch.key ? () => adder.start(adder.watch.key) : null} />
               {notice && <p role="status" className="mt-2 text-meta text-ok">{notice}</p>}
             </div>
           )}
           <ul role="tree" aria-label="파일" onKeyDown={onTreeKeyDown} className="flex flex-col gap-px">
             <TreeNodes nodes={buildTree(entry.files)} selectedId={file?.id} onPick={setPicked} entryId={entry.entry_id}
-                       removal={editing ? { marked: removing, toggle: toggleRemove, lastLeft: entry.files.length - removeIds.length <= 1 } : null} />
+                       removal={editing ? { marked: removing, toggle: toggleRemove, lastLeft: entry.files.length - removeIds.length <= 1 } : null}
+                       newIds={addedIds} />
           </ul>
           {editable && <RemovedFiles files={entry.removed_files} busy={restoring || editing} onRestore={restoreFiles} />}
           <div className="mt-4">

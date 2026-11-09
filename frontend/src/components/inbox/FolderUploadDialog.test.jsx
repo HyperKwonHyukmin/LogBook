@@ -72,3 +72,32 @@ test("56 — '하위 폴더마다' 를 고르면 자동 채움을 비우고, 비
   fireEvent.click(screen.getByRole('button', { name: /초안 2건으로 올리기/ }));
   expect(onSubmit.mock.calls[0][0]).toMatchObject({ preset: null, splitTop: true });
 });
+
+test('62 — 같은 이름의 묶음이 정리 대기에 있으면 경고한다(막지는 않는다)', async () => {
+  mockApi({ 'POST /api/uploads/similar-preset': {} });
+  const { InboxSummaryContextForTest } = await import('../shell/InboxSummary.jsx');
+  const summary = { drafts: 1, staged: 0, uploading: 0, names: [{ name: '6_rudder', state: 'processed', received_at: '2026-11-09T10:20:00' }] };
+  render(
+    <InboxSummaryContextForTest.Provider value={{ summary, refresh: () => {} }}>
+      <FolderUploadDialog plan={plan} onSubmit={() => {}} onCancel={() => {}} />
+    </InboxSummaryContextForTest.Provider>,
+  );
+  const warn = await screen.findByRole('alert');
+  expect(warn).toHaveTextContent('6_rudder');
+  expect(warn).toHaveTextContent('11-09 10:20');
+  expect(warn).toHaveTextContent('하나 더 생깁니다');
+});
+
+test('62 — 같은 이름 묶음이 없으면 경고가 없다', () => {
+  mockApi({ 'POST /api/uploads/similar-preset': {} });
+  render(<FolderUploadDialog plan={plan} onSubmit={() => {}} onCancel={() => {}} />);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+test('62 — 파일 추가(attach): 이 자료에 같은 이름 파일이 있으면 새 이름으로 더한다고 미리 알린다', () => {
+  const p = planFolder([{ relPath: 'R1/doc/a.pdf', file: { size: 1 }, size: 1 }, { relPath: 'R1/b.pdf', file: { size: 1 }, size: 1 }]);
+  render(<FolderUploadDialog plan={p} attach existing={['R1/doc/a.pdf', 'doc/b.pdf']} onSubmit={() => {}} onCancel={() => {}} />);
+  const note = screen.getByRole('note');
+  expect(note).toHaveTextContent('같은 이름의 파일이 1개');
+  expect(note).toHaveTextContent('a.pdf');
+});

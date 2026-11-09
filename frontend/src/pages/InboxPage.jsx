@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useOutletContext, useSearchParams } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { ChevronRight, Inbox } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
 import { ErrorNote, Page, PageHeader } from '../components/ui/Page.jsx';
 import { BlockSkeleton } from '../components/ui/Skeleton.jsx';
+import Spinner from '../components/ui/Spinner.jsx';
 import { Tabs } from '../components/ui/Tabs.jsx';
 import BatchCard from '../components/inbox/BatchCard.jsx';
 import FixList from '../components/coverage/FixList.jsx';
@@ -15,6 +16,9 @@ import { READ_ONLY_REASON } from '../lib/levels.js';
 import { hasPendingConvert } from '../lib/inboxStatus.js';
 import { useConfirm } from '../components/ui/ConfirmDialog.jsx';
 import { LEAVE_TEXT, useUnsavedGuard } from '../lib/useUnsavedGuard.js';
+import { useToast } from '../components/ui/Toast.jsx';
+import { useInboxSummary } from '../components/shell/InboxSummary.jsx';
+import { useUploadSnapshot, useUploadStore } from '../components/inbox/UploadProvider.jsx';
 
 const tabId = (id) => `inbox-tab-${id}`;
 // 48 — 손볼 자료(갖춤 현황에서 옮김)는 확정 자료 목록이라 배치를 부르지 않는다. /inbox?tab=fix 로 바로 연다
@@ -48,6 +52,11 @@ export default function InboxPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // 62 — 메뉴 배지·'다른 창에서 올리는 중' 안내. 목록을 다시 부를 때 같이 맞춘다
+  const { summary, refresh: refreshSummary } = useInboxSummary();
+  const uploadSnap = useUploadSnapshot(useUploadStore());
+  const localUploads = uploadSnap ? Object.values(uploadSnap.jobs).filter((j) => j.busy || j.resumable).length : 0;
+  const elsewhere = Math.max(0, (summary?.uploading || 0) - localUploads);
   const requestRef = useRef(0);
   // 11 — 초안 카드의 저장하지 않은 변경(카드 번호 묶음). 있으면 화면·탭을 떠날 때 묻는다
   const [dirtyCards, setDirtyCards] = useState(() => new Set());
@@ -71,10 +80,10 @@ export default function InboxPage() {
     if (tab === 'fix') { setBatches([]); setLoading(false); return Promise.resolve(); }
     const latest = () => id === requestRef.current;
     return api(`/batches?scope=${tab}`)
-      .then((rows) => { if (latest()) { setBatches(rows); setError(''); } })
+      .then((rows) => { if (latest()) { setBatches(rows); setError(''); refreshSummary(); } })
       .catch(() => { if (latest()) setError('정리 대기 목록을 불러오지 못했습니다.'); })
       .finally(() => { if (latest()) setLoading(false); });
-  }, [tab]);
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps -- refreshSummary 는 바뀌지 않는다
   // 올리기는 오래 걸린다 — 끝났을 때의 탭·load 를 쓰도록 ref 로 들고 있는다.
   const latestRef = useRef({ tab, load });
   latestRef.current = { tab, load };
@@ -100,6 +109,15 @@ export default function InboxPage() {
   }
   const uploader = useUploader({ scope: 'inbox', onUploaded, disabled: !canWrite || storage?.reachable === false, away: INBOX_AWAY });
 
+  // 62 — 확정하면 카드가 목록에서 사라진다. 어디로 갔는지 토스트로 알리고 자료로 바로 가게 한다
+  const navigate = useNavigate();
+  const toast = useToast();
+  const onConfirmed = useCallback(({ entry_id: id, title, merged }) => toast.show({
+    tone: 'ok', duration: 8000,
+    message: merged ? `${id} ‘${title}’ 에 파일을 추가했습니다` : `확정했습니다: ${id} ‘${title}’`,
+    action: { label: '자료 보기', onClick: () => navigate(`/e/${id}`) },
+  }), [toast, navigate]);
+
   async function claim(key) {
     let message = '';
     try { await api(`/batches/${key}/claim`, { method: 'POST' }); } catch (err) { message = errorText(err); }
@@ -122,6 +140,14 @@ export default function InboxPage() {
         <UploadCenterStack><UploadCenterCard u={uploader} title="정리 대기로 올리기" /></UploadCenterStack>
       )}
       {canWrite && !uploader.busy && !uploader.resumable && <div className="mb-4 empty:hidden"><UploadFeedback u={uploader} /></div>}
+      {/* 62 — 이 창이 아닌 곳(다른 탭·PC, 닫은 창)에서 보내는 중인 묶음 — 목록에는 다 보낸 뒤에야 나타난다 */}
+      {canWrite && elsewhere > 0 && (
+        <p role="status" className="mb-4 flex items-center gap-2 rounded-md border border-n-200 bg-n-25 px-3 py-2 text-ui text-n-700">
+          <Spinner size={12} className="shrink-0 text-n-500" />
+          <span>다른 창(또는 다른 PC)에서 올리는 중인 묶음이 <span className="font-mono">{elsewhere}</span>개 있습니다. 다 보내면 아래에 나타납니다.
+            창을 닫아 멈춘 올리기는 하루 안에 자동으로 지워지니, 그때는 다시 올려 주세요.</span>
+        </p>
+      )}
       <Tabs label="배치 구분" items={TABS} value={tab} onChange={changeTab} controls={PANEL_ID} />
       <div role="tabpanel" id={PANEL_ID} aria-labelledby={tabId(tab)} className="flex flex-col gap-8 pt-5">
         {isFix && <FixList />}
@@ -138,7 +164,7 @@ export default function InboxPage() {
         )}
         {active.map((b) => (
           <BatchCard key={b.key} batch={b} me={user.employee_id} isAdmin={isAdmin} canWrite={canWrite} onChanged={reload} onClaim={claim}
-                   onDirtyChange={onDirtyChange} dirtyIds={dirtyCards} />
+                   onDirtyChange={onDirtyChange} dirtyIds={dirtyCards} onConfirmed={onConfirmed} />
         ))}
         {/* 2026-11-06 — 같은 BDF 뿐이라 초안 없이 끝난 묶음(서버가 3일 보인다, 17)은 할 일이 아니라 맨 아래 접힌 한 줄로 */}
         {!isFix && settled.length > 0 && (
@@ -151,7 +177,7 @@ export default function InboxPage() {
             <div className="flex flex-col gap-5 border-t border-n-200 p-3">
               {settled.map((b) => (
                 <BatchCard key={b.key} batch={b} me={user.employee_id} isAdmin={isAdmin} canWrite={canWrite} onChanged={reload} onClaim={claim}
-                           onDirtyChange={onDirtyChange} dirtyIds={dirtyCards} />
+                           onDirtyChange={onDirtyChange} dirtyIds={dirtyCards} onConfirmed={onConfirmed} />
               ))}
             </div>
           </details>

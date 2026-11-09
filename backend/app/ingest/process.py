@@ -4,6 +4,7 @@ import os
 import re
 from datetime import datetime
 
+from sqlalchemy import and_, case, or_
 from sqlalchemy.orm import Session
 
 from .. import audit, models
@@ -177,9 +178,16 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
             logger.warning("배치 %s 처리 중 파일을 건너뜀: %s (%s)", batch.key, rel, exc)
             continue
 
+        # 62 — 확정 자료(vault)뿐 아니라 다른 묶음의 정리 대기 초안 파일과도 비교한다(확정 전에 같은 폴더를
+        # 두 번 올리면 보고서 등은 막히지 않아 초안이 둘 생긴다 — '…에 이미 있음' 으로 알린다). 확정 자료를 먼저 가리킨다
         dup = (
             db.query(models.File.id)
-            .filter(models.File.sha256 == digest, models.File.location == "vault")
+            .outerjoin(models.Entry, models.Entry.id == models.File.entry_id)
+            .filter(models.File.sha256 == digest, or_(
+                models.File.location == "vault",
+                and_(models.File.location == "staging", models.Entry.status == "draft",
+                     models.File.batch_id != batch.id)))
+            .order_by(case((models.File.location == "vault", 0), else_=1), models.File.id)
             .first()
         )
         f = models.File(batch_id=batch.id, rel_path=rel, name=name, ext=safe_ext(name),

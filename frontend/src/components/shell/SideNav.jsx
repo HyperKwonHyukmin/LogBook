@@ -1,5 +1,7 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Anchor, Grid2x2Check, History, Inbox, ScanSearch, Search, Settings, Trash2 } from 'lucide-react';
+import Spinner from '../ui/Spinner.jsx';
+import { useInboxSummary } from './InboxSummary.jsx';
 
 // 48 — 문서 본문 검색(/reports)·분류(/browse, 태그 동의어 /tags)는 검색 화면 안에서 들어가므로 '검색' 아래에서 강조한다
 const IN_SEARCH = ['/reports', '/browse', '/tags'];
@@ -16,7 +18,7 @@ const GROUPS = [
     { to: '/graph', label: '살펴보기', icon: Grid2x2Check, also: ['/coverage'] }, // 25 관계 지도 · 26 갖춤 현황(첫 탭이 관계 지도, 2026-11-06)
   ] },
   { label: '등록·정리', items: [
-    { to: '/inbox', label: '정리 대기', icon: Inbox }, // 48 — 손볼 자료 탭 포함
+    { to: '/inbox', label: '정리 대기', icon: Inbox, badge: 'inbox' }, // 48 — 손볼 자료 탭 포함 · 62 배지
     { to: '/trash', label: '휴지통', icon: Trash2 },
     { to: '/log', label: '활동 로그', icon: History },
   ] },
@@ -28,12 +30,37 @@ const linkClass = ({ isActive }) =>
     ? 'bg-navy-700 text-on-navy'
     : 'text-on-navy-muted hover:bg-navy-800 hover:text-on-navy active:bg-navy-700'}`;
 
-function Item({ to, label, icon: Icon, end, also, match, pathname, search }) {
+/**
+ * 62 — '정리 대기' 배지: 확정하지 않은 내 초안 수, 올리는 중·정리 중이면 작은 스피너.
+ * 다른 화면에 있어도 '아직 확정할 것이 남았다'·'아직 처리 중이다'가 보이게(확정을 잊고 쌓이거나 다시 올리는 일).
+ */
+function InboxBadge() {
+  const { summary } = useInboxSummary();
+  if (!summary) return null;
+  const working = (summary.staged || 0) + (summary.uploading || 0);
+  const n = summary.drafts || 0;
+  if (!n && !working) return null;
+  const tip = [working ? `처리 중 ${working}묶음` : '', n ? `확정할 초안 ${n}건` : ''].filter(Boolean).join(' · ');
+  return (
+    <span title={tip} className="ml-auto inline-flex items-center gap-1.5">
+      {working > 0 && <Spinner size={12} className="text-on-navy-muted" />}
+      {n > 0 && (
+        <span className="min-w-5 rounded-full bg-wait px-1.5 text-center font-mono text-micro leading-5 text-n-0">
+          {n > 99 ? '99+' : n}
+        </span>
+      )}
+      <span className="sr-only">({tip})</span>
+    </span>
+  );
+}
+
+function Item({ to, label, icon: Icon, end, also, match, pathname, search, badge }) {
   const body = (active) => (
     <>
       <Icon size={16} strokeWidth={1.75} aria-hidden="true"
             className={`shrink-0 transition-colors duration-150 ease-out ${active ? 'text-on-navy' : 'text-on-navy-icon group-hover:text-on-navy-muted'}`} />
       {label}
+      {badge === 'inbox' && <InboxBadge />}
     </>
   );
   // 주소 질의까지 봐야 하는 메뉴(검색·즐겨찾기)는 NavLink 대신 직접 판정한다(NavLink 는 질의를 보지 않는다).

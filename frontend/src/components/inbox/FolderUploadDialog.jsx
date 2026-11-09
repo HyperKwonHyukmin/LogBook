@@ -7,6 +7,8 @@ import AssigneeInput from '../people/AssigneeInput.jsx';
 import { api } from '../../api/client.js';
 import { formatBytes } from '../../lib/labels.js';
 import { initialChecked, previewDrafts, skippedByExt } from '../../lib/folderPlan.js';
+import { sameNameBatch, useInboxSummary } from '../shell/InboxSummary.jsx';
+import { BATCH_STATE_LABELS } from '../../lib/labels.js';
 
 /** 그룹 머리 체크 — 모두 체크면 체크, 일부면 중간 표시. */
 function GroupCheck({ files, checked, onToggle, label }) {
@@ -25,7 +27,15 @@ function GroupCheck({ files, checked, onToggle, label }) {
  * attach — 기존 초안·자료에 파일 추가: 파일 고르기만(묶는 단위·공통 분류는 그 자료를 따른다).
  * onSubmit({ relPaths: Set, preset, splitTop }) · onCancel().
  */
-export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = false }) {
+/** 62 — 더할 자료에 이미 있는 경로와 겹치는 고른 파일. 서버는 올린 경로 그대로(맨 위 폴더 포함) 자료 안에 두고,
+ * 겹치면 'name (2).ext' 로 바꾼다(entries/files.unique_rel, 대소문자 무시). */
+export function overlapping(files, existing) {
+  if (!existing?.length) return [];
+  const have = new Set(existing.map((p) => p.toLowerCase()));
+  return files.filter((f) => have.has(f.relPath.toLowerCase()));
+}
+
+export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = false, existing = null }) {
   const id = useId();
   const [checked, setChecked] = useState(() => initialChecked(plan));
   // 기본은 폴더 전체를 자료 1건(사용자 결정 2026-11-05) — 하위 폴더마다 나누려면 고른다
@@ -53,11 +63,15 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = 
     setTarget(split ? null : hint.target || null);
   }, [hint, split]);
   const hintShown = hint && !split && !touched.current;
+  // 62 — 같은 이름의 묶음이 아직 올리는 중·정리 중·확정 전이면 알린다(모르고 두 번 올리는 일). 막지는 않는다
+  const { summary } = useInboxSummary();
+  const same = attach ? null : sameNameBatch(summary, plan.root);
   const touch = (setter) => (v) => { touched.current = true; setter(v); };
   const drafts = useMemo(() => previewDrafts(plan, checked, split), [plan, checked, split]);
   const skipped = useMemo(() => skippedByExt(plan, checked), [plan, checked]);
   const chosen = plan.files.filter((f) => checked.has(f.relPath));
   const chosenSize = chosen.reduce((s, f) => s + f.size, 0);
+  const overlap = attach ? overlapping(chosen, existing) : [];
   const canSplit = !attach && !!plan.root && plan.groups.some((g) => g.dir.split('/').length >= 2);
 
   const set = (paths, on) => setChecked((cur) => {
@@ -93,6 +107,20 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = 
           <p className="mt-1 text-ui text-n-600">
             체크한 파일만 올립니다. 결과·세션 파일(op2·f06·mvw 등)은 체크를 풀어 두었으니, 필요하면 체크해서 함께 올리세요.
           </p>
+          {overlap.length > 0 && (
+            <p role="note" className="mt-2 rounded-md border border-wait-line bg-wait-bg px-3 py-2 text-ui text-n-800">
+              <span className="font-medium text-wait">이 자료에 같은 이름의 파일이 {overlap.length}개 있습니다</span>
+              ({overlap.slice(0, 3).map((f) => f.relPath.split('/').pop()).join(', ')}{overlap.length > 3 ? ` 외 ${overlap.length - 3}개` : ''}).
+              바꿔 넣지 않고 <span className="font-mono">이름 (2)</span>처럼 새 이름으로 더하며, 내용까지 똑같으면 건너뜁니다.
+            </p>
+          )}
+          {same && (
+            <p role="alert" className="mt-2 rounded-md border border-wait-line bg-wait-bg px-3 py-2 text-ui text-wait">
+              같은 이름의 묶음 <span className="font-mono font-medium">{same.name}</span> 이(가) 이미 정리 대기에 있습니다
+              ({BATCH_STATE_LABELS[same.state] || same.state}{same.received_at && <>, <span className="font-mono">{same.received_at.replace('T', ' ').slice(5, 16)}</span> 올림</>}).
+              다시 올리면 묶음이 하나 더 생깁니다. 정리 대기에서 먼저 확인해 주세요.
+            </p>
+          )}
         </div>
 
         {!attach && <section aria-label="자료 묶기" className="flex flex-col gap-2">

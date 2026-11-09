@@ -267,3 +267,19 @@ test('할 일이 없고 끝난 묶음만 있으면 빈 화면 안내와 접힌 �
   expect(await screen.findByText('정리할 자료가 없습니다')).toBeInTheDocument();
   expect(screen.getByText(/같은 BDF 뿐이라 초안 없이 끝난 묶음/)).toBeInTheDocument();
 });
+
+test('62 — 이 창 밖에서 올리는 중인 묶음이 있으면 한 줄로 알린다', async () => {
+  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) })));
+  const { InboxSummaryContextForTest: Ctx } = await import('../components/shell/InboxSummary.jsx');
+  const auth = { user: { employee_id: 'A100001', name: '사용자' }, isAdmin: false };
+  render(
+    <AuthContext.Provider value={auth}>
+      <Ctx.Provider value={{ summary: { drafts: 0, staged: 0, uploading: 2, names: [] }, refresh: () => {} }}>
+        <MemoryRouter initialEntries={['/inbox']}>
+          <Routes><Route path="/inbox" element={<UploadProvider><InboxPage /></UploadProvider>} /></Routes>
+        </MemoryRouter>
+      </Ctx.Provider>
+    </AuthContext.Provider>,
+  );
+  expect(await screen.findByText(/다른 창\(또는 다른 PC\)에서 올리는 중인 묶음이/)).toHaveTextContent('2개');
+});

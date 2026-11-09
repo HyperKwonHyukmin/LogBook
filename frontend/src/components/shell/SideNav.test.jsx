@@ -81,3 +81,17 @@ test('48 — 문서 본문 검색(/reports)에서도 검색 메뉴가 활성, �
   expect(screen.queryByRole('link', { name: '최근 비교' })).toBeNull();
   expect(screen.getAllByRole('link').filter((a) => a.getAttribute('aria-current') === 'page')).toHaveLength(0);
 });
+
+test('62 — 정리 대기 메뉴에 확정할 초안 수와 처리 중 표시가 붙는다', async () => {
+  const { InboxSummaryContextForTest: Ctx } = await import('./InboxSummary.jsx');
+  const at = (summary) => render(
+    <MemoryRouter><Ctx.Provider value={{ summary, refresh: () => {} }}><SideNav isAdmin={false} storage={{ reachable: true }} /></Ctx.Provider></MemoryRouter>,
+  );
+  const { unmount } = at({ drafts: 3, staged: 1, uploading: 0, names: [] });
+  const link = screen.getByRole('link', { name: /정리 대기/ });
+  expect(link).toHaveTextContent('3');
+  expect(link).toHaveTextContent('처리 중 1묶음 · 확정할 초안 3건');
+  unmount();
+  at({ drafts: 0, staged: 0, uploading: 0, names: [] });
+  expect(screen.getByRole('link', { name: '정리 대기' })).toBeInTheDocument();
+});

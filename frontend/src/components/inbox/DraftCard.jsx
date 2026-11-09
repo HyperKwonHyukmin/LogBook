@@ -46,7 +46,10 @@ const TITLE_VALUE_FIELDS = ['hulls', 'no_hull', 'zones', 'target'];
 /** 서버 쪽 내용이 실제로 바뀌었을 때만 달라지는 열쇠 — 폴링으로 같은 내용의 새 객체가 와도 입력을 지우지 않는다. */
 const entryKey = (e) => `${e.entry_id}|${e.version}|${e.files.map((f) => f.id).join(',')}`;
 
-export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirtyChange }) {
+/**
+ * onConfirmed({ entry_id, title, merged }) — 확정이 끝나면 부른다(카드는 목록에서 사라지므로 부모가 토스트로 알린다).
+ */
+export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirtyChange, onConfirmed }) {
   const [values, setValues] = useState(() => editValues(entry)); // 고치는 값
   const [base, setBase] = useState(() => editValues(entry));     // 마지막으로 맞춘 서버 값(바뀐 칸을 가린다)
   const [selected, setSelected] = useState([]);
@@ -56,6 +59,8 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
   const [dup, setDup] = useState(null); // 17 — 확정 409 duplicate_model 의 대상 목록(오류가 아니라 안내로 보인다)
   const canForce = isAdminLevel(useContext(AuthContext)?.user);
   const [busy, setBusy] = useState(false); // 저장·확정·버리기·나누기 등 동작 중
+  // 62 — 확정 중에는 단추 문구로 알린다(파일을 보관소로 옮기는 데 몇 초 걸릴 수 있다)
+  const [confirming, setConfirming] = useState(false);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const attaching = attachmentBusy || (entry.pending_attachments || []).length > 0;
   const [over, setOver] = useState(false);
@@ -268,13 +273,24 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
       if (!pick) return;
       shared = pick === true;
     }
-    act(async () => {
+    runConfirm(async () => {
       if (shared) {
         const res = await api(`/entries/${entry.entry_id}`, { method: 'PATCH', body: { version: versionRef.current, no_hull: true } });
         takeVersion(res);
       }
       return api(`/entries/${entry.entry_id}/confirm`, { method: 'POST' });
-    }, '확정하지');
+    });
+  }
+
+  /** 62 — 확정 실행: 단추를 '확정하는 중'으로 바꾸고, 성공하면 onConfirmed 로 알린다(실패는 act 가 카드에 보인다). */
+  function runConfirm(fn) {
+    const merged = !!entry.merge_into;
+    let done = null;
+    setConfirming(true);
+    return act(async () => { done = await fn(); return done; }, '확정하지').finally(() => {
+      setConfirming(false);
+      if (done) onConfirmed?.({ entry_id: done.entry_id || entry.entry_id, title: done.title || entry.title, merged });
+    });
   }
 
   /** 초안 버리기 — 초안은 휴지통에서 복원할 수 없어 확인 대화상자를 거친다. */
@@ -339,7 +355,8 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
                 title={confirmBlocked ? `확정할 수 없음: ${blocking.map((c) => c.text.split(': ')[0]).join(', ')}`
                   : attaching ? '파일 첨부가 끝난 뒤 확정할 수 있습니다' : dirty ? '바뀐 칸을 저장한 뒤 확정합니다' : undefined}
                 onClick={confirmEntry}>
-          <CheckCircle2 size={14} aria-hidden="true" />{dirty ? '저장하고 확정' : '확정'}
+          {confirming ? <><Spinner size={12} />확정하는 중…</>
+            : <><CheckCircle2 size={14} aria-hidden="true" />{dirty ? '저장하고 확정' : '확정'}</>}
         </Button>
       </header>
       {checks.length > 0 && (
@@ -636,7 +653,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
             <div className="flex-1" />
             {canForce && canEdit && (
               <Button variant="secondary" size="sm" disabled={disabled}
-                      onClick={() => act(() => api(`/entries/${entry.entry_id}/confirm?force=true`, { method: 'POST' }), '확정하지')}>
+                      onClick={() => runConfirm(() => api(`/entries/${entry.entry_id}/confirm?force=true`, { method: 'POST' }))}>
                 그래도 확정
               </Button>
             )}

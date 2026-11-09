@@ -18,7 +18,7 @@ export const useFolderReviewer = () => useContext(FolderReviewContext);
 export function FolderReviewHost({ children }) {
   const [folder, setFolder] = useState(null);   // {reading: true} | {plan, items, send, attach}
   const seq = useRef(0);
-  const review = useCallback((collected, send, { attach = false } = {}) => {
+  const review = useCallback((collected, send, { attach = false, existing = null } = {}) => {
     const my = ++seq.current;
     const latest = () => my === seq.current;
     setFolder({ reading: true });
@@ -26,7 +26,7 @@ export function FolderReviewHost({ children }) {
       if (!latest()) return;
       if (!items.length || !isFolderUpload(items)) { setFolder(null); if (items.length) send(items); return; }
       const rules = await api('/uploads/rules').catch(() => FALLBACK_RULES);
-      if (latest()) setFolder({ plan: planFolder(items, rules), items, send, attach });
+      if (latest()) setFolder({ plan: planFolder(items, rules), items, send, attach, existing });
     }).catch(() => { if (latest()) setFolder(null); });
   }, []);
 
@@ -47,7 +47,7 @@ export function FolderReviewHost({ children }) {
         document.body,
       )}
       {folder?.plan && (
-        <FolderUploadDialog plan={folder.plan} attach={folder.attach} onSubmit={submit}
+        <FolderUploadDialog plan={folder.plan} attach={folder.attach} existing={folder.existing} onSubmit={submit}
                             onCancel={() => { seq.current += 1; setFolder(null); }} />
       )}
     </FolderReviewContext.Provider>

@@ -217,6 +217,12 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
         # 20 — 확정 전 같은 호선의 같은·비슷한 제목(막지 않는다). 기존 자료에 추가하는 초안은 보지 않는다
         if entry.status == "draft" and not entry.merge_into_id:
             d["similar_entries"] = quality.similar_entries(db, entry, viewer)
+    if entry.status == "confirmed" and viewer is not None:
+        # 62 — 이 사람이 [파일 추가]로 이 자료에 붙이는 중인 묶음 — 화면을 떠났다 돌아와도 진행을 이어 보인다
+        d["pending_additions"] = [{"key": k, "state": st} for k, st in db.query(models.Batch.key, models.Batch.state)
+                                  .filter(models.Batch.target_entry_id == entry.id, models.Batch.uploader == viewer.employee_id,
+                                          models.Batch.state.in_(("staged", "processed", "failed")))
+                                  .order_by(models.Batch.id)]
     if entry.status == "draft":
         from .draft_attachments import pending_batches
         d["pending_attachments"] = [{"key": b.key, "state": b.state}
@@ -617,6 +623,16 @@ def _recheck_duplicates(db: Session, user: models.User, batch: models.Batch, fil
                   for f, ids in found]})
 
 
+def _same_in_target(db: Session, target: models.Entry, files: list[models.File]) -> dict[int, tuple[models.File, str]]:
+    """62 — 대상 자료(확정)에 내용이 똑같은(sha256) 파일이 이미 있는 초안 파일 → {file id: (파일, 대상의 같은 파일 경로)}."""
+    digests = {f.sha256 for f in files if f.sha256}
+    if not digests:
+        return {}
+    have = {sha: rel for sha, rel in db.query(models.File.sha256, models.File.rel_path)
+            .filter(models.File.entry_id == target.id, models.File.location == "vault", models.File.sha256.in_(digests))}
+    return {f.id: (f, have[f.sha256]) for f in files if f.sha256 in have}
+
+
 def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User,
             ip: str | None = None, force: bool = False) -> models.Entry:
     """초안 확정(새 Entry) 또는 기존 자료에 합치기(merge_into_id). force = LV3 가 완전 동일 BDF 409 를 넘긴다(17)."""
@@ -648,22 +664,38 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
         if target.status != "confirmed":
             raise HTTPException(status_code=409, detail="target_not_confirmed")
         files_root = entry_dir(storage, target) / "files"
+        # 62 — 대상 자료에 이미 있는 똑같은 파일(sha256)은 붙이지 않고 휴지통 폴더로 — 같은 보고서가 'r (2).pdf' 로 쌓이지 않게
+        same = _same_in_target(db, target, files)
+        skip_rel = f"draft_{entry.entry_id}_same_{_stamp()}" if same else None
+        files = [f for f in files if f.id not in same]
         planned: set[str] = set()
         # 대상 자료가 이미 쓰는 이름 — 중단된 앞선 시도가 옮겨 둔 사본을 찾을 때 남의 파일을 집지 않게(리뷰 7)
         taken = {r.casefold() for (r,) in db.query(models.File.rel_path).filter_by(entry_id=target.id)}
         plans = [(f, plan_rel(staging_root, files_root, f, planned, taken)) for f in files]
-        undo = move_all(rel_move_pairs(staging_root, files_root, plans))
+        skipped = [(f, of) for f, of in same.values()]
+        undo = move_all(rel_move_pairs(staging_root, files_root, plans)
+                        + (rel_move_pairs(staging_root, storage.trash / skip_rel, [(f, f.rel_path) for f, _ in skipped])
+                           if skipped else []))
         try:
+            # 62 — 이름이 겹쳐 바뀐 파일 · 건너뛴 파일을 배치에 남긴다([파일 추가] 결과 안내가 읽는다)
+            notes = [{"name": f.rel_path, "to": r, "reason": "renamed"} for f, r in plans if r != f.rel_path]
+            notes += [{"name": f.rel_path, "of": of, "reason": "duplicate_in_entry"} for f, of in skipped]
+            if notes:
+                batch.excluded = list(batch.excluded or []) + notes
+            for f, _of in skipped:
+                f.entry_id, f.location, f.trash_rel = None, "trash", skip_rel
             for f, r in plans:
                 f.entry_id, f.rel_path, f.location = target.id, r, "vault"
             people.copy_assignees(db, entry, target)   # 46 — 초안에 단 담당자도 대상 자료에
             db.query(models.ModelRevision).filter_by(entry_id=entry.id).delete(synchronize_session=False)
             _clear_dangling_references(db, entry.id)
             db.delete(entry)
-            target.version += 1
+            if plans:
+                target.version += 1
             db.flush()
-            audit.record(db, storage, actor=user.employee_id, action="ENTRY_FILES_ADDED", target_type="entry",
-                         target_id=target.entry_id, after={"files": [r for _, r in plans]} | extra, ip=ip)
+            if plans:
+                audit.record(db, storage, actor=user.employee_id, action="ENTRY_FILES_ADDED", target_type="entry",
+                             target_id=target.entry_id, after={"files": [r for _, r in plans]} | extra, ip=ip)
         except Exception:
             db.rollback()
             undo()

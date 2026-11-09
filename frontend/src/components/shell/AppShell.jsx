@@ -6,6 +6,7 @@ import TopBar from './TopBar.jsx';
 import { DisconnectedBanner, useStorageStatus } from './ConnectionStatus.jsx';
 import GlobalDrop from './GlobalDrop.jsx';
 import { UploadProvider } from '../inbox/UploadProvider.jsx';
+import { InboxSummaryProvider } from './InboxSummary.jsx';
 import { ErrorBoundary, RecoveryPanel } from '../ui/ErrorBoundary.jsx';
 import { WorkbenchPickBanner } from '../workbench/WorkbenchSend.jsx';
 import { CompareBar, CompareBasketProvider } from '../compare/CompareBasket.jsx';
@@ -34,6 +35,8 @@ export default function AppShell() {
   }
   return (
     <ToastProvider>
+      {/* 62 — 내 정리 대기 요약(메뉴 배지 · 다른 창 올리기 안내 · 같은 이름 경고) */}
+      <InboxSummaryProvider>
       <UploadProvider>
         <FavoritesProvider>
           <CompareBasketProvider>
@@ -61,6 +64,7 @@ export default function AppShell() {
           </CompareBasketProvider>
         </FavoritesProvider>
       </UploadProvider>
+      </InboxSummaryProvider>
     </ToastProvider>
   );
 }

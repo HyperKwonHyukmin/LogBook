@@ -167,7 +167,7 @@ function ProcessedDetail({ converts }) {
 }
 
 /** 한 번에 올라온 배치 = 섹션 — 머리(출처·받은 시각·상태·지금 하는 일) + 설명 + 제외 목록 + 초안들. */
-export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChanged, onClaim, onDirtyChange, dirtyIds }) {
+export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChanged, onClaim, onDirtyChange, dirtyIds, onConfirmed }) {
   const mine = batch.uploader === me;
   const drafts = batch.entries || [];
   const [confirm, dialog] = useConfirm();
@@ -288,7 +288,7 @@ export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChang
       {drafts.map((d) => (
         <DraftCard key={d.entry_id} entry={d} canEdit={canWrite && (mine || isAdmin)}
                    siblings={drafts.filter((s) => s.entry_id !== d.entry_id).map((s) => ({ entry_id: s.entry_id, title: s.title }))}
-                   onChanged={onChanged} onDirtyChange={onDirtyChange} />
+                   onChanged={onChanged} onDirtyChange={onDirtyChange} onConfirmed={onConfirmed} />
       ))}
     </section>
   );
