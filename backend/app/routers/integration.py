@@ -23,6 +23,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -32,6 +33,8 @@ from ..config import settings
 from ..database import get_db
 from ..dependencies import client_ip, get_storage
 from ..identifiers import EMPLOYEE_ID_PATTERN
+from ..ops.registry import write_registry
+from ..schemas import user_snapshot
 from ..storage.paths import StoragePaths
 from ..uploads import service as upload_service
 from . import auth as auth_router
@@ -89,6 +92,49 @@ def wb_levels(db: Session = Depends(get_db)):
     return {"labels": {str(k): v for k, v in access.LEVEL_LABELS.items()},
             "levels": {e: {"level": lv if lv in access.LEVELS else 1,
                            "last_login": last.isoformat() if last else None} for e, lv, last in rows}}
+
+
+# ---- 새로 올라온 자료 수(WorkBench 관리자 콘솔 → 스트림덱 'LB 새 자료' 키, 2026-11-18) ----
+# 관리자가 마지막으로 확인한 시각(since) 뒤에 다른 사람이 올린 묶음 수. WorkBench 가 서버끼리 묻고(이 비밀키),
+# 스트림덱은 WorkBench 에만 붙는다 — 이 서버는 평문 HTTP 라 스트림덱이 열쇠를 들고 직접 오지 않게 했다.
+# 올리는 중(uploading)과 실패(failed)는 아직 자료가 아니라 뺀다. 올린 사람을 모르는 Inbox 묶음(uploader 없음)은 센다.
+
+NEW_UPLOADS_NAMES = 3
+
+
+@router.get("/new-uploads", dependencies=[Depends(require_integration)])
+def wb_new_uploads(
+    since: str = Query(..., min_length=10, max_length=40),
+    exclude: str | None = Query(default=None, max_length=20),
+    db: Session = Depends(get_db),
+):
+    """since(ISO, 이 서버 시각 기준 — 시간대가 붙어 오면 이 서버 시각으로 바꾼다) 뒤에 받은 묶음 수.
+    exclude = 그 사번이 올린 묶음은 뺀다(관리자 자신이 올린 것은 이미 안다)."""
+    try:
+        cut = datetime.fromisoformat(since.strip().replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=422, detail="invalid_since")
+    if cut.tzinfo is not None:
+        cut = cut.astimezone().replace(tzinfo=None)
+    me = (exclude or "").strip().upper()
+
+    def others(q):
+        return q.filter(or_(models.Batch.uploader.is_(None), models.Batch.uploader != me)) if me else q
+
+    q = others(db.query(models.Batch)
+               .filter(models.Batch.received_at > cut, models.Batch.state.notin_(("uploading", "failed"))))
+    count = q.count()
+    # 이름과 시각 두 칸만 — JSON·TEXT 칸까지 가져와 정렬하면 MySQL 정렬 버퍼가 넘칠 수 있다
+    latest = (q.with_entities(models.Batch.original_name, models.Batch.received_at)
+              .order_by(models.Batch.received_at.desc()).limit(NEW_UPLOADS_NAMES).all())
+    # 지금 올리는 중인 묶음의 가장 이른 시작 시각. received_at 은 올리기 시작한 시각이라, 관리자가 그 묶음이
+    # 다 올라가기 전에 '확인'하면 끝난 뒤에도 since 보다 앞서 영영 세지 않는다 → 스트림덱이 확인 시각을 이 값으로 당긴다.
+    uploading_since = (others(db.query(func.min(models.Batch.received_at))
+                              .filter(models.Batch.state == "uploading")).scalar())
+    return {"count": count,
+            "latest_at": latest[0].received_at.isoformat() if latest else None,
+            "names": [name for name, _ in latest],
+            "uploading_since": uploading_since.isoformat() if uploading_since else None}
 
 
 # ---- 모델 파일 내보내기(WorkBench GMU 가져오기) ----
@@ -175,6 +221,32 @@ def export_content(file_id: int, request: Request, as_: str = Query(default="", 
 
 # ---- 50 — 다른 Unit 의 권상 Wire 배치(WorkBench Module Unit Studio 참조) ----
 
+def _reference_user(db: Session, storage: StoragePaths, employee_id: str) -> models.User:
+    """권상 참조의 `as` 사번 — LogBook 에 한 번도 들어온 적 없는 WorkBench 활성 사용자는 LV1 로 만들어 준다.
+
+    권상 참조는 LogBook 등급과 무관하게 보여 주기로 했는데(2026-11-06), LogBook 행이 없으면 _acting_user 가
+    404 를 내 Studio 에 'LogBook 에서 찾을 수 없거나 볼 권한이 없습니다' 가 떴다(2026-11-16 다른 사용자 PC).
+    처음 로그인(auth.admit)과 같이 USER_JOIN 감사 기록·registry.json 을 남긴다.
+    행이 이미 있으면 _acting_user 그대로 — 사용 중지(disabled)·승인 대기 사용자를 되살리지 않는다."""
+    eid = (employee_id or "").strip().upper()
+    if not EMPLOYEE_ID_PATTERN.fullmatch(eid) or db.query(models.User).filter_by(employee_id=eid).first() is not None:
+        return _acting_user(db, employee_id)
+    try:
+        wb = wb_users.cached(db, eid)
+    except wb_users.WbUnavailable:
+        raise HTTPException(status_code=503, detail="wb_unavailable")
+    if wb is None or not wb.is_active:
+        raise HTTPException(status_code=404, detail="file_not_found")
+    user, _created = roles.ensure_local_user(db, wb)
+    db.flush()
+    audit.record(db, storage, actor=user.employee_id, action="USER_JOIN", target_type="user",
+                 target_id=user.employee_id, after=user_snapshot(user), ip=None)
+    db.refresh(user)
+    write_registry(db, storage)
+    log.info("권상 참조로 처음 온 WorkBench 사용자 %s 를 LV1 로 등록", eid)
+    return user
+
+
 def _reference_file(db: Session, file_id: int, user: models.User) -> models.File:
     """권상 참조용 파일 — 레벨과 무관하게 확정 Wire 모델을 보여 주는 범위(lifting_refs.reference_visible).
     없거나 휴지통이거나 차단 자료면 404(존재를 숨기는 것은 files._file 과 같다)."""
@@ -190,7 +262,7 @@ def wb_lifting_refs(as_: str = Query(default="", alias="as"), q: str | None = Qu
                     offset: int = Query(default=0, ge=0), mine: bool = Query(default=False),
                     db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage)):
     """확정 자료의 Wire 모델 목록 + 요약(평면 선분 제외) — 레벨과 무관, 차단 자료만 뺀다(lifting_refs.reference_visible_filter). 404 = 사번 없음·비활성."""
-    user = _acting_user(db, as_)
+    user = _reference_user(db, storage, as_)
     return lifting_refs.list_refs(db, storage, user, q=q, hull=(hull or "").strip() or None,
                                   limit=limit, offset=offset, mine=mine)
 
@@ -199,7 +271,7 @@ def wb_lifting_refs(as_: str = Query(default="", alias="as"), q: str | None = Qu
 def wb_lifting_ref(file_id: int, as_: str = Query(default="", alias="as"),
                    db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage)):
     """한 Wire 모델의 전체 요약(평면 선분 포함). 404 = 없음·권한 밖, 415 = Wire 모델이 아니거나 Wire 를 못 찾음."""
-    user = _acting_user(db, as_)
+    user = _reference_user(db, storage, as_)
     f = _reference_file(db, file_id, user)
     out = lifting_refs.detail(db, storage, f)
     if out is None:
@@ -213,7 +285,7 @@ def wb_lifting_ref_result(file_id: int, as_: str = Query(default="", alias="as")
     """59 — 그 Wire 모델과 함께 온 구조 해석 결과(결과 JSON + 모델 JSON 내용). Studio 가 결과 화면을 그린다.
     404 = 없음·권한 밖 / no_result(결과 세트 없음) · 415 = Wire 모델 아님 · 422 = 읽을 수 없음(drm·bad_json·too_large·file_missing)
     · 503 = 공유 폴더 오류."""
-    user = _acting_user(db, as_)
+    user = _reference_user(db, storage, as_)
     f = _reference_file(db, file_id, user)
     if not lifting_refs.is_reference(db, f):
         raise HTTPException(status_code=415, detail="not_wire_model")
