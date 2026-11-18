@@ -69,11 +69,11 @@ test('머리말·파일 트리·첫 보고서 미리보기·변경 이력', asyn
   expect(within(hist).getByText('구역: (없음) → 선수부')).toBeInTheDocument();
 });
 
-test('미확정 자료는 읽기 전용이고 정리 대기로 안내한다', async () => {
+test('미확정 자료는 읽기 전용이고 올리기와 확정으로 안내한다', async () => {
   renderPage({ 'GET /api/entries/E000001': { ...ENTRY, status: 'draft', vault_unc: null } });
   expect(await screen.findByText('미확정')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '변경하기' })).toBeNull();
-  expect(screen.getByRole('link', { name: /정리 대기/ })).toHaveAttribute('href', '/inbox');
+  expect(screen.getByRole('link', { name: /올리기와 확정/ })).toHaveAttribute('href', '/inbox');
   expect(screen.queryByRole('button', { name: '파일 추가' })).toBeNull();
 });
 
@@ -95,7 +95,7 @@ test('휴지통으로 보내면 휴지통 화면으로 간다', async () => {
 test('파일 추가 영역을 연다', async () => {
   renderPage({ 'GET /api/entries/E000001': ENTRY });
   await userEvent.click(await screen.findByRole('button', { name: '파일 추가' }));
-  expect(screen.getByText(/정리 대기를 거치지 않고 이 자료에 바로 추가됩니다/)).toBeInTheDocument();
+  expect(screen.getByText(/확정 단계를 거치지 않고 이 자료에 바로 추가됩니다/)).toBeInTheDocument();
 });
 
 test('파일 추가 — 워커가 합치면 목록을 새로 부르고 알린다', async () => {
@@ -111,15 +111,15 @@ test('파일 추가 — 워커가 합치면 목록을 새로 부르고 알린다
   await waitFor(() => expect(entryCalls).toBeGreaterThanOrEqual(2));
 });
 
-test('파일 추가 — 바로 붙이지 못하면 정리 대기로 안내한다', async () => {
+test('파일 추가 — 바로 붙이지 못하면 올리기와 확정으로 안내한다', async () => {
   renderPage({
     'GET /api/entries/E000001': ENTRY,
     'GET /api/batches/K': { key: 'K', state: 'processed', excluded: [] },
   });
   await userEvent.click(await screen.findByRole('button', { name: '파일 추가' }));
   await userEvent.upload(screen.getByLabelText('파일 선택'), new File(['%PDF'], '보고서.pdf', { type: 'application/pdf' }));
-  expect(await screen.findByText(/바로 붙이지 못해 정리 대기에 두었습니다/, {}, { timeout: 4000 })).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: '정리 대기로' })).toHaveAttribute('href', '/inbox');
+  expect(await screen.findByText(/바로 붙이지 못해 올리기와 확정에 두었습니다/, {}, { timeout: 4000 })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '올리기와 확정으로' })).toHaveAttribute('href', '/inbox');
 });
 
 test('없는 자료', async () => {
@@ -538,6 +538,6 @@ test('62 — 서버가 아직 붙이는 중인 [파일 추가]가 있으면 패�
     'GET /api/entries/E000001': { ...ENTRY, pending_additions: [{ key: 'K9', state: 'staged' }] },
     'GET /api/batches/K9': { key: 'K9', state: 'staged', excluded: [], queue: { worker_alive: true, ahead: 2 } },
   });
-  expect(await screen.findByText(/앞의 배치 2개를 먼저 처리하고 있습니다/, {}, { timeout: 4000 })).toBeInTheDocument();
+  expect(await screen.findByText(/앞의 묶음 2개를 먼저 처리하고 있습니다/, {}, { timeout: 4000 })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /파일 추가 중/ })).toBeDisabled();
 });

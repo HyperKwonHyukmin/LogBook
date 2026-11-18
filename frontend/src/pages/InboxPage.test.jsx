@@ -42,7 +42,7 @@ function mount(path = '/inbox') {
   );
 }
 
-test('내 배치: 초안 카드, 처리 중 배치, DRM 제외 목록', async () => {
+test('내가 올린 묶음: 초안 카드, 처리 중 배치, DRM 제외 목록', async () => {
   renderPage({ 'GET /api/batches?scope=mine': MINE });
   expect(await screen.findByRole('article', { name: /E000010/ })).toBeInTheDocument();
   const k2 = screen.getByRole('region', { name: /방금 올린 폴더/ });
@@ -51,10 +51,10 @@ test('내 배치: 초안 카드, 처리 중 배치, DRM 제외 목록', async ()
   expect(screen.getByText(/DRM 암호화/)).toBeInTheDocument();
 });
 
-test('주인 없는 배치를 가져온다', async () => {
+test('폴더에 직접 넣은 묶음를 가져온다', async () => {
   renderPage({ 'GET /api/batches?scope=mine': [], 'GET /api/batches?scope=unclaimed': UNCLAIMED,
                'POST /api/batches/K3/claim': { ...UNCLAIMED[0], uploader: 'A100001' } });
-  await userEvent.click(await screen.findByRole('tab', { name: /주인 없는 배치/ }));
+  await userEvent.click(await screen.findByRole('tab', { name: /폴더에 직접 넣은 묶음/ }));
   await userEvent.click(await screen.findByRole('button', { name: '내가 올렸어요' }));
   const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
   expect(calls).toContain('POST /api/batches/K3/claim');
@@ -73,7 +73,7 @@ test('탭을 빨리 바꿔도 늦게 온 이전 탭 응답이 목록을 덮지 �
     pending[name] = (rows) => resolve({ ok: true, status: 200, json: () => Promise.resolve(rows) });
   });
   renderPage({ 'GET /api/batches?scope=mine': deferred('mine'), 'GET /api/batches?scope=unclaimed': deferred('unclaimed') });
-  await userEvent.click(screen.getByRole('tab', { name: /주인 없는 배치/ }));
+  await userEvent.click(screen.getByRole('tab', { name: /폴더에 직접 넣은 묶음/ }));
   await vi.waitFor(() => expect(pending.unclaimed).toBeDefined());
   pending.unclaimed(UNCLAIMED);
   expect(await screen.findByRole('region', { name: /주인 없음/ })).toBeInTheDocument();
@@ -83,25 +83,25 @@ test('탭을 빨리 바꿔도 늦게 온 이전 탭 응답이 목록을 덮지 �
   expect(screen.getByRole('region', { name: /주인 없음/ })).toBeInTheDocument();
 });
 
-test('다른 탭에서 올리기가 끝나면 내 배치 탭으로 가서 한 번만 새로 부른다', async () => {
+test('다른 탭에서 올리기가 끝나면 내가 올린 묶음 탭으로 가서 한 번만 새로 부른다', async () => {
   uploadBatch.mockResolvedValue({ key: 'K9', uploaded: 1, rejected: [] });
   renderPage({ 'GET /api/batches?scope=mine': [], 'GET /api/batches?scope=unclaimed': UNCLAIMED });
-  await userEvent.click(await screen.findByRole('tab', { name: /주인 없는 배치/ }));
+  await userEvent.click(await screen.findByRole('tab', { name: /폴더에 직접 넣은 묶음/ }));
   await screen.findByRole('region', { name: /주인 없음/ });
   const before = gets().length;
   await userEvent.upload(screen.getByLabelText('파일 선택'), [new File(['GRID'], 'a.bdf')]);
-  await vi.waitFor(() => expect(screen.getByRole('tab', { name: '내 배치' })).toHaveAttribute('aria-selected', 'true'));
+  await vi.waitFor(() => expect(screen.getByRole('tab', { name: '내가 올린 묶음' })).toHaveAttribute('aria-selected', 'true'));
   await screen.findByText('정리할 자료가 없습니다');
   expect(gets().slice(before)).toEqual(['GET /api/batches?scope=mine']);
 });
 
 test('탭은 화살표로 옮겨 가고 탭 패널과 연결된다', async () => {
   renderPage({ 'GET /api/batches?scope=mine': [], 'GET /api/batches?scope=unclaimed': [] });
-  const mine = screen.getByRole('tab', { name: '내 배치' });
+  const mine = screen.getByRole('tab', { name: '내가 올린 묶음' });
   expect(document.getElementById(mine.getAttribute('aria-controls'))).toHaveAttribute('role', 'tabpanel');
   mine.focus();
   await userEvent.keyboard('{ArrowLeft}');   // 처음에서 왼쪽 = 마지막 탭
-  const other = screen.getByRole('tab', { name: '주인 없는 배치' });
+  const other = screen.getByRole('tab', { name: '폴더에 직접 넣은 묶음' });
   expect(other).toHaveFocus();
   expect(other).toHaveAttribute('aria-selected', 'true');
   await userEvent.keyboard('{ArrowRight}');
@@ -117,7 +117,7 @@ test('받은 시각이 없어도 배치를 그린다', async () => {
 test('가져가기에 실패하면 새로 부른 뒤에도 사유가 남는다', async () => {
   renderPage({ 'GET /api/batches?scope=mine': [], 'GET /api/batches?scope=unclaimed': UNCLAIMED,
     'POST /api/batches/K3/claim': () => Promise.resolve({ ok: false, status: 409, json: () => Promise.resolve({ detail: 'already_claimed' }) }) });
-  await userEvent.click(await screen.findByRole('tab', { name: /주인 없는 배치/ }));
+  await userEvent.click(await screen.findByRole('tab', { name: /폴더에 직접 넣은 묶음/ }));
   await userEvent.click(await screen.findByRole('button', { name: '내가 올렸어요' }));
   await vi.waitFor(() => expect(gets().filter((c) => c === 'GET /api/batches?scope=unclaimed')).toHaveLength(2));
   await new Promise((r) => { setTimeout(r, 20); });
@@ -130,11 +130,11 @@ test('초안 카드에 저장하지 않은 변경이 있으면 탭을 바꿀 때
                'GET /api/vocab?kind=zone': { kind: 'zone', other: '기타', terms: [] } });
   const card = await screen.findByRole('article', { name: /E000010/ });
   await userEvent.type(within(card).getByLabelText('설명'), '메모');
-  await userEvent.click(screen.getByRole('tab', { name: /주인 없는 배치/ }));
+  await userEvent.click(screen.getByRole('tab', { name: /폴더에 직접 넣은 묶음/ }));
   const dlg = await screen.findByRole('alertdialog', { name: '저장하지 않은 변경이 있습니다' });
   await userEvent.click(within(dlg).getByRole('button', { name: '계속 고치기' }));
   expect(within(card).getByLabelText('설명')).toHaveValue('메모');
-  await userEvent.click(screen.getByRole('tab', { name: /주인 없는 배치/ }));
+  await userEvent.click(screen.getByRole('tab', { name: /폴더에 직접 넣은 묶음/ }));
   await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '버리고 떠나기' }));
   expect(await screen.findByText('주인 없음')).toBeInTheDocument();
 });
@@ -156,7 +156,7 @@ test('LV1(게스트)도 올린다 — 올리기 단추·끌어 놓기 안내가 
   expect(screen.queryByText(/등급은 자료를 올릴 수 없습니다/)).toBeNull();
 });
 
-test('48 — 손볼 자료 탭(/inbox?tab=fix)은 배치 대신 확정 자료 목록을 종류별로 보인다', async () => {
+test('48 — 보완할 자료 탭(/inbox?tab=fix)은 배치 대신 확정 자료 목록을 종류별로 보인다', async () => {
   const E = (id, o) => ({ id, title: `${id} 제목`, rows: ['h:9001'], zones: ['정반'], models: 1, reports: 1, doc_linked: false,
     model_linked: false, solve: 'pass', needs_fix: false, unsigned: false, uploaded_by: 'M1', uploader_name: '김해석', confirmed_at: '2026-09', ...o });
   const coverage = { hulls: { 9001: 'LNGC' }, zones: ['정반'], truncated: false,
@@ -166,7 +166,7 @@ test('48 — 손볼 자료 탭(/inbox?tab=fix)은 배치 대신 확정 자료 �
     return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(coverage) });
   }));
   mount('/inbox?tab=fix');
-  expect(screen.getByRole('tab', { name: '손볼 자료' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('tab', { name: '보완할 자료' })).toHaveAttribute('aria-selected', 'true');
   const kind = await screen.findByRole('tab', { name: /문서 없는 모델/ });
   expect(kind).toHaveTextContent('문서 없는 모델 2');
   expect(screen.getByRole('link', { name: 'E000002 제목' })).toHaveAttribute('href', '/e/E000002');
@@ -257,7 +257,7 @@ test('같은 BDF 뿐이라 초안 없이 끝난 묶음은 맨 아래 접힌 한 
   expect(fold).toHaveTextContent('1개');
   expect(within(fold).getByRole('region', { name: /WB #6784/, hidden: true })).toBeInTheDocument();
   // 접힌 줄 밖(위쪽 할 일 목록)에는 없다
-  expect(screen.getAllByRole('region', { name: /배치 /, hidden: true }).filter((r) => !fold.contains(r))).toHaveLength(1);
+  expect(screen.getAllByRole('region', { name: /묶음 /, hidden: true }).filter((r) => !fold.contains(r))).toHaveLength(1);
 });
 
 test('할 일이 없고 끝난 묶음만 있으면 빈 화면 안내와 접힌 줄이 함께 보인다', async () => {

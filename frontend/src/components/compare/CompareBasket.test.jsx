@@ -125,12 +125,8 @@ test('담기 단추 ③ 전체 화면 뷰어 머리줄', async () => {
   expect(within(bar()).getByText('main.bdf')).toBeInTheDocument();
 });
 
-test('48 — 바구니가 비어도 [최근 비교] 단추는 보이고, 비교 화면에서는 숨는다', async () => {
-  const { unmount } = render(<Shell><span /></Shell>);
+test('바구니가 비면 아무것도 띄우지 않는다(최근 비교는 계정 메뉴로 옮김, 2026-11-18)', async () => {
+  render(<Shell><span /></Shell>);
   expect(bar()).toBeNull();
-  const quick = screen.getByRole('region', { name: '최근 비교 바로가기' });
-  expect(within(quick).getByRole('button', { name: '최근 비교' })).toHaveAttribute('aria-haspopup', 'menu');
-  unmount();
-  render(<Shell at="/compares"><span /></Shell>);
   expect(screen.queryByRole('region', { name: '최근 비교 바로가기' })).toBeNull();
 });

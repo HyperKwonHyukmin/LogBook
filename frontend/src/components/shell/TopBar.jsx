@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { LogOut, Search, Upload, X } from 'lucide-react';
+import { History as HistoryIcon, LogOut, Search, Upload, X } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import Logo from '../ui/Logo.jsx';
 import Menu from '../ui/Menu.jsx';
@@ -225,7 +225,11 @@ export default function TopBar({ user, onLogout }) {
             </div>
           </div>
         )}
-        items={[{ label: '로그아웃', icon: LogOut, onSelect: onLogout }]}
+        items={[
+          // 2026-11-18 — 화면 오른쪽 아래에 늘 떠 있던 [최근 비교] 단추를 여기로 옮겼다(내용을 가렸다)
+          { label: '최근 비교', icon: HistoryIcon, onSelect: () => navigate('/compares') },
+          { label: '로그아웃', icon: LogOut, onSelect: onLogout },
+        ]}
       />
     </header>
   );

@@ -29,7 +29,7 @@ test('05 운영 동작·오류·작업 라벨', () => {
   }
   expect(errorText({ detail: { code: 'backup_failed', message: 'x' } })).toMatch('백업');
   expect(JOB_TYPE_LABELS).toEqual({ extract_file: '문서 본문 추출', convert_model: 'BDF 변환',
-    process_batch: '배치 처리', write_meta: '메타 파일 쓰기', solve_check: '해석 검증', revision_diff: '판 비교' });
+    process_batch: '묶음 처리', write_meta: '메타 파일 쓰기', solve_check: '해석 검증', revision_diff: '판 비교' });
   expect(JOB_STATE_LABELS).toEqual({ queued: '대기', running: '실행 중', done: '완료', failed: '실패' });
 });
 
@@ -38,4 +38,23 @@ test('06 해석 검증 라벨', () => {
   expect(ACTION_LABELS.OPS_SOLVE_CHECK).toBe('해석 검증 일괄');
   expect(JOB_TYPE_LABELS.solve_check).toBe('해석 검증');
   expect(errorText({ detail: 'model_not_ready' })).toMatch('3D 변환');
+});
+
+test('서버가 기록하는 모든 활동 코드에 화면 라벨이 있다(2026-11-18 — DRAFT_FILES_ADDED 가 원시 코드로 보였다)', async () => {
+  const { readdirSync, readFileSync, statSync } = await import('node:fs');
+  const { join, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = join(dirname(fileURLToPath(import.meta.url)), '../../../backend/app');
+  const codes = new Set();
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) { if (name !== '__pycache__') walk(p); continue; }
+      if (!name.endsWith('.py')) continue;
+      for (const m of readFileSync(p, 'utf8').matchAll(/action="([A-Z_]+)"/g)) codes.add(m[1]);
+    }
+  };
+  walk(root);
+  expect(codes.size).toBeGreaterThan(30);
+  expect([...codes].filter((c) => !ACTION_LABELS[c]).sort()).toEqual([]);
 });

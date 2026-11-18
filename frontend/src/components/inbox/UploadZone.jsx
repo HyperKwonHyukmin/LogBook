@@ -289,9 +289,9 @@ export function PageDropOverlay({ u }) {
       <div className="pointer-events-none fixed inset-0 z-40 animate-fade bg-scrim">
         <div role="status" className="absolute left-1/2 top-16 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-2.5 rounded-lg bg-n-0 px-4 py-2.5 text-ui text-n-700 shadow-md">
           <UploadCloud size={16} className="shrink-0 text-brand" aria-hidden="true" />
-          {u.disabled ? <span>지금은 새 배치로 올릴 수 없습니다. 999_LogBook 공유 폴더에 연결되면 올릴 수 있습니다.</span>
+          {u.disabled ? <span>지금은 새 묶음으로 올릴 수 없습니다. 999_LogBook 공유 폴더에 연결되면 올릴 수 있습니다.</span>
             : onZone ? <span><span className="font-semibold text-brand">초안 카드</span>에 놓으면 그 초안에 첨부합니다.</span>
-              : <span>초안 카드에 놓으면 <span className="font-semibold text-n-900">그 초안에 첨부</span>, 빈 곳에 놓으면 <span className="font-semibold text-n-900">새 배치</span>로 올립니다.</span>}
+              : <span>초안 카드에 놓으면 <span className="font-semibold text-n-900">그 초안에 첨부</span>, 빈 곳에 놓으면 <span className="font-semibold text-n-900">새 묶음</span>으로 올립니다.</span>}
         </div>
       </div>
     );
@@ -301,7 +301,7 @@ export function PageDropOverlay({ u }) {
       <div className="flex h-full max-h-[420px] w-full max-w-[720px] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand-ring bg-brand-subtle text-center">
         <UploadCloud size={24} className="text-brand" aria-hidden="true" />
         <p className="text-body font-semibold text-brand">{u.disabled ? '지금은 올릴 수 없습니다' : '여기에 놓아 올리기'}</p>
-        <p className="text-ui text-n-600">{u.disabled ? '999_LogBook 공유 폴더에 연결되면 올릴 수 있습니다.' : '한 번에 놓은 것이 한 배치가 됩니다.'}</p>
+        <p className="text-ui text-n-600">{u.disabled ? '999_LogBook 공유 폴더에 연결되면 올릴 수 있습니다.' : '한 번에 놓은 것이 한 묶음이 됩니다.'}</p>
       </div>
     </div>
   );

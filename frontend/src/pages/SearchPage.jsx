@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ListChecks, SearchX, SlidersHorizontal, Star, X } from 'lucide-react';
+import { ArrowRight, ListChecks, SearchX, SlidersHorizontal, Star, X } from 'lucide-react';
 import { api } from '../api/client.js';
 import { AuthContext } from '../auth/AuthContext.jsx';
 import BulkClassifyDialog, { bulkDoneText } from '../components/search/BulkClassifyDialog.jsx';
@@ -9,7 +9,7 @@ import EntryPreviewPanel from '../components/search/EntryPreviewPanel.jsx';
 import usePreviewWidth, { PreviewResizer } from '../components/search/usePreviewWidth.jsx';
 import ResultList, { itemKey } from '../components/search/ResultList.jsx';
 import ResultSummary from '../components/search/ResultSummary.jsx';
-import SearchModeTabs from '../components/search/SearchModeTabs.jsx';
+import SearchModeTabs, { modeHref } from '../components/search/SearchModeTabs.jsx';
 import GroupedResults, { slotItems } from '../components/search/GroupedResults.jsx';
 import { useBasketBarVisible } from '../components/compare/CompareBasket.jsx';
 import AutoMore from '../components/ui/AutoMore.jsx';
@@ -293,13 +293,13 @@ export default function SearchPage() {
           </h1>
           <Segmented label="보기 단위" items={UNITS} value={state.unit} onChange={(v) => update({ unit: v })} />
           {/* 10 — 내 즐겨찾기만. 켜면 미확정도 함께 보이므로 '미확정 포함' 은 숨긴다 */}
-          <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-meta text-n-700 hover:text-n-900">
+          <label className="flex h-7 cursor-pointer items-center gap-1.5 whitespace-nowrap text-meta text-n-700 hover:text-n-900">
             <input type="checkbox" checked={state.fav} onChange={(e) => update({ fav: e.target.checked })}
                    className="h-3.5 w-3.5 cursor-pointer accent-brand" />
             즐겨찾기만
           </label>
           {!state.fav && (
-            <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-meta text-n-700 hover:text-n-900">
+            <label className="flex h-7 cursor-pointer items-center gap-1.5 whitespace-nowrap text-meta text-n-700 hover:text-n-900">
               <input type="checkbox" checked={state.drafts} onChange={(e) => update({ drafts: e.target.checked })}
                      className="h-3.5 w-3.5 cursor-pointer accent-brand" />
               미확정 포함
@@ -392,8 +392,15 @@ export default function SearchPage() {
                 검색 결과나 자료 화면에서 별 단추를 누르면 여기에 모입니다. 다른 PC에서 로그인해도 같은 목록이 보입니다.
               </EmptyState>
             ) : (
-              <EmptyState icon={SearchX} title={state.fav ? '즐겨찾기 중 맞는 자료가 없습니다' : '찾는 자료가 없습니다'}>
+              // 2026-11-18 — 자료 검색은 보고서 본문(OCR 포함)을 찾지 않는다. 비었을 때 문서 본문 검색으로 같은 검색어를 넘길 길을 준다
+              <EmptyState icon={SearchX} title={state.fav ? '즐겨찾기 중 맞는 자료가 없습니다' : '찾는 자료가 없습니다'}
+                          action={!state.fav && state.q.trim() && (
+                            <Link to={modeHref('/reports', state.q.trim())} className={buttonClass('secondary', 'sm')}>
+                              문서 본문에서 찾기<ArrowRight size={14} aria-hidden="true" />
+                            </Link>
+                          )}>
                 검색어를 줄이거나 필터를 해제해 보세요. 띄어 쓴 낱말은 모두 맞아야 합니다.
+                {!state.fav && state.q.trim() && ' 보고서 안의 문장이라면 문서 본문 검색에 있을 수 있습니다.'}
               </EmptyState>
             )
           )}

@@ -154,7 +154,15 @@ export function ShortcutHelp({ onClose }) {
 }
 
 const LEGEND_KEY = 'lb.viewer.legend.collapsed';
-const readCollapsed = () => { try { return localStorage.getItem(LEGEND_KEY) === '1'; } catch { return false; } };
+// 사용자가 직접 고른 값이 있으면 그것, 없으면 좁은 창(1280px 미만 = 1366@125% 같은 노트북)에서는 접힌 채로 연다.
+// 2026-11-18 — 1093px 에서 펼친 범례가 모델 절반을 덮었다. 같은 목록이 왼쪽 패널에도 있어 접혀도 잃는 것이 없다.
+const readCollapsed = () => {
+  try {
+    const saved = localStorage.getItem(LEGEND_KEY);
+    if (saved === '1' || saved === '0') return saved === '1';
+  } catch { /* 저장소를 못 읽으면 창 폭으로 */ }
+  return typeof window !== 'undefined' && window.innerWidth < 1280;
+};
 
 /** 범례(오른쪽 아래) — 색 기준 항목·개수, 숨긴 항목은 취소선 + '숨김' 글자. 절점이 켜져 있으면 절점 분류도. */
 export function ViewportLegend({ v }) {

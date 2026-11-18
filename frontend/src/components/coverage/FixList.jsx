@@ -49,7 +49,7 @@ export default function FixList() {
     let alive = true;
     setError('');
     api('/coverage').then((d) => { if (alive) setData(d); })
-      .catch((err) => { if (alive) setError(errorText(err, '손볼 자료를 불러오지 못했습니다.')); });
+      .catch((err) => { if (alive) setError(errorText(err, '보완할 자료를 불러오지 못했습니다.')); });
     return () => { alive = false; };
   }, [attempt]);
 
@@ -59,14 +59,14 @@ export default function FixList() {
   if (error) {
     return <ErrorNote action={<Button variant="ghost" size="sm" className="-my-1" onClick={() => setAttempt((n) => n + 1)}>다시 시도</Button>}>{error}</ErrorNote>;
   }
-  if (!lists) return <RowsSkeleton rows={5} label="손볼 자료를 불러오는 중" />;
+  if (!lists) return <RowsSkeleton rows={5} label="보완할 자료를 불러오는 중" />;
 
   const list = lists[tab];
   const shown = showAll ? list : list.slice(0, LIST_LIMIT);
   const items = LIST_TABS.map((t) => ({ id: t.id, label: `${t.label} ${lists[t.id].length}` }));
   return (
-    <section aria-label="손볼 자료 목록">
-      <Segmented label="손볼 자료 종류" role="tablist" items={items} value={tab} onChange={(v) => { setTab(v); setShowAll(false); }} />
+    <section aria-label="보완할 자료 목록">
+      <Segmented label="보완할 자료 종류" role="tablist" items={items} value={tab} onChange={(v) => { setTab(v); setShowAll(false); }} />
       <p className="py-2.5 text-ui text-n-600">{LIST_TABS.find((t) => t.id === tab).note}</p>
       {list.length ? (
         <div className="overflow-auto rounded-lg border border-n-200">

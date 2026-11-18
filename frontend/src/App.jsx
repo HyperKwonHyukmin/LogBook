@@ -61,7 +61,7 @@ export default function App() {
             {/* 11 — 최근 비교(사용자별) */}
             <Route path="compares" element={<RecentComparesPage />} />
             {/* 살펴보기 — 갖춤 현황·관계 지도를 메뉴 하나 아래 탭으로(2026-11-05) */}
-            <Route element={<SectionTabs label="살펴보기" items={EXPLORE_TABS} />}>
+            <Route element={<SectionTabs label="자료 현황" items={EXPLORE_TABS} />}>
               <Route path="coverage" element={<Suspense fallback={null}><CoveragePage /></Suspense>} />
               <Route path="graph" element={<Suspense fallback={null}><GraphPage /></Suspense>} />
             </Route>

@@ -82,7 +82,7 @@ export default function SimilarPage() {
       setSelId(d?.results?.[0]?.lead.file_id ?? null);
       setOpen(new Set());
     } catch (err) {
-      setError(errorText(err, '비슷한 선례를 찾지 못했습니다.'));
+      setError(errorText(err, '비슷한 모델을 찾지 못했습니다.'));
     } finally {
       setBusy(false);
     }
@@ -128,7 +128,7 @@ export default function SimilarPage() {
   return (
     <div className="px-6 pb-10 pt-5 min-[1441px]:px-8">
       <header className="mb-4 border-b border-n-200 pb-4">
-        <h1 className="text-title font-semibold tracking-[-0.018em] text-n-900">선례 찾기</h1>
+        <h1 className="text-title font-semibold tracking-[-0.018em] text-n-900">비슷한 모델 찾기</h1>
         <p className="mt-1 text-ui text-n-600">새 해석을 시작하기 전에, 비슷한 모델을 누가 해석했고 결과가 어땠는지 찾습니다. 기준 BDF 와 같은 점·다른 점을 함께 보여 줍니다.</p>
       </header>
 
@@ -168,7 +168,7 @@ export default function SimilarPage() {
             <>
               <b className="text-body font-semibold text-n-900">기준 BDF 를 정하세요</b>
               <p className="mt-1 text-ui text-n-600">LogBook 에 있는 BDF 를 아래에서 고르거나, 내 PC 의 BDF 를 이 칸에 끌어다 놓으세요(32MB 까지, 저장하지 않습니다).
-                자료 화면의 BDF 미리보기에서 [선례 찾기]를 눌러도 여기로 옵니다.</p>
+                자료 화면의 BDF 미리보기에서 [비슷한 모델 찾기]를 눌러도 여기로 옵니다.</p>
             </>
           )}
         </div>
@@ -198,21 +198,21 @@ export default function SimilarPage() {
 
       {data && (
         <div className="mt-4 grid items-start gap-5 min-[1180px]:grid-cols-[minmax(0,1fr)_360px]">
-          <section aria-label="선례 목록" className="min-w-0 rounded-lg border border-n-200">
+          <section aria-label="비슷한 모델 목록" className="min-w-0 rounded-lg border border-n-200">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-n-200 px-3.5 py-2.5">
-              <b className="text-ui font-semibold text-n-900">{weak ? `가까운 모델 ${shown.length}개` : `선례 ${shown.length}건`}
+              <b className="text-ui font-semibold text-n-900">{weak ? `가까운 모델 ${shown.length}개` : `비슷한 모델 ${shown.length}건`}
                 <span className="ml-2 font-normal text-n-600">비교한 자료 {data.candidates}건</span></b>
               <Segmented label="정렬" items={ORDERS} value={order} onChange={setOrder} />
             </div>
             {weak && (
               <div className="m-3.5 rounded-lg bg-n-50 px-4 py-3 text-ui text-n-800">
-                <b className="font-semibold">충분히 비슷한 선례가 없습니다.</b> 가장 가까운 모델도 일부만 닮았습니다. 아래는 참고로만 보세요.
+                <b className="font-semibold">충분히 비슷한 모델이 없습니다.</b> 가장 가까운 모델도 일부만 닮았습니다. 아래는 참고로만 보세요.
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
                   <Link to="/coverage" className={buttonClass('secondary', 'sm')}>갖춤 현황에서 같은 구역 보기</Link>
                 </div>
               </div>
             )}
-            <div ref={listRef} role="listbox" aria-label="찾은 선례">
+            <div ref={listRef} role="listbox" aria-label="찾은 모델">
               {shown.map((r, i) => {
                 const L = r.lead;
                 const c = compareLines({ ...base, zone: zone ?? base.zone }, L, r.score);
@@ -248,7 +248,7 @@ export default function SimilarPage() {
                           <dd className="flex flex-wrap gap-1">{c.diff.map((s) => <span key={s} className="rounded-sm border border-wait-line bg-wait-bg px-1.5 text-meta leading-5 text-wait">{s}</span>)}</dd>
                         </>}
                       </dl>
-                      {L.solve === 'fail' && <p className="mt-2 flex items-center gap-1.5 text-meta text-err"><span className="h-1.5 w-1.5 rounded-full bg-err" />이 선례는 해석 검증에 실패했습니다. 그대로 가져다 쓰기 전에 원인을 확인하세요.</p>}
+                      {L.solve === 'fail' && <p className="mt-2 flex items-center gap-1.5 text-meta text-err"><span className="h-1.5 w-1.5 rounded-full bg-err" />이 모델은 해석 검증에 실패했습니다. 그대로 가져다 쓰기 전에 원인을 확인하세요.</p>}
                       {grp && (
                         <button type="button" aria-expanded={isOpen} className="mt-1.5 text-meta font-medium text-brand hover:underline"
                                 onClick={() => setOpen((s) => { const n = new Set(s); if (n.has(L.file_id)) n.delete(L.file_id); else n.add(L.file_id); return n; })}>
@@ -280,8 +280,8 @@ export default function SimilarPage() {
             </div>
           </section>
 
-          <aside aria-label="선례 상세" aria-live="polite" className="rounded-lg border border-n-200 p-4 min-[1180px]:sticky min-[1180px]:top-4">
-            {sel ? <Detail base={{ ...base, zone: zone ?? base.zone }} item={sel.m} row={sel.r} /> : <p className="text-ui text-n-600">선례를 고르면 기준과 나란히 봅니다.</p>}
+          <aside aria-label="찾은 모델 상세" aria-live="polite" className="rounded-lg border border-n-200 p-4 min-[1180px]:sticky min-[1180px]:top-4">
+            {sel ? <Detail base={{ ...base, zone: zone ?? base.zone }} item={sel.m} row={sel.r} /> : <p className="text-ui text-n-600">찾은 모델을 고르면 기준과 나란히 봅니다.</p>}
           </aside>
         </div>
       )}
@@ -305,7 +305,7 @@ function Detail({ base, item, row }) {
       <p className="mb-2.5 text-meta text-n-600"><span className="font-mono">{item.entry_id}</span> · {item.file_name}</p>
       <div className="grid grid-cols-2 gap-2">
         <div><Thumb item={base} className="h-[110px]" /><p className="mt-1 text-meta text-n-600">기준</p></div>
-        <div><Thumb item={item} className="h-[110px]" /><p className="mt-1 text-meta text-n-600">선례</p></div>
+        <div><Thumb item={item} className="h-[110px]" /><p className="mt-1 text-meta text-n-600">찾은 모델</p></div>
       </div>
       {/* 닮은 정도를 썸네일 바로 아래에 — 왜 이 순위인지 먼저 보고, 그다음 값 비교·단면 */}
       {s && (
@@ -323,7 +323,7 @@ function Detail({ base, item, row }) {
         </>
       )}
       <table className="mt-3 w-full border-collapse text-ui">
-        <thead><tr className="text-meta text-n-600"><th className="w-[72px]" /><th className="py-1 text-left font-normal">기준</th><th className="py-1 text-left font-normal">선례 (다른 값은 주황)</th></tr></thead>
+        <thead><tr className="text-meta text-n-600"><th className="w-[72px]" /><th className="py-1 text-left font-normal">기준</th><th className="py-1 text-left font-normal">찾은 모델 (다른 값은 주황)</th></tr></thead>
         <tbody>
           {cells.map(([k, a, b, d]) => (
             <tr key={k} className="border-t border-n-100 align-top">
@@ -337,7 +337,7 @@ function Detail({ base, item, row }) {
       <div className="mt-1 flex flex-wrap gap-1">
         {sectionUnion(base, item).map((x) => (
           <span key={x.label} className={`rounded-xs px-1.5 font-mono text-meta ${x.where === 'both' ? 'bg-brand-muted text-brand' : 'bg-n-100 text-n-700'}`}>
-            {x.label}{x.where !== 'both' && <span className="font-sans text-n-600"> {x.where === 'base' ? '기준만' : '선례만'}</span>}
+            {x.label}{x.where !== 'both' && <span className="font-sans text-n-600"> {x.where === 'base' ? '기준만' : '찾은 모델만'}</span>}
           </span>
         ))}
         {!base.sections.length && !item.sections.length && <span className="text-meta text-n-600">단면 정보가 없습니다.</span>}
@@ -347,7 +347,7 @@ function Detail({ base, item, row }) {
         {base.file_id && <Link to={`/compare?ids=${base.file_id},${item.file_id}`} className={buttonClass('secondary', 'sm')}>나란히 비교</Link>}
         <Link to={`/v/${item.file_id}`} className={buttonClass('ghost', 'sm')}>3D 로 보기</Link>
       </div>
-      {!item.reports && <p className="mt-2 text-meta text-n-600">이 선례에는 문서가 없습니다. 작성자에게 결과를 물어보세요.</p>}
+      {!item.reports && <p className="mt-2 text-meta text-n-600">이 모델에는 문서가 없습니다. 작성자에게 결과를 물어보세요.</p>}
     </>
   );
 }

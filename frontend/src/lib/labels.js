@@ -5,7 +5,7 @@ export const ACTION_LABELS = {
   USER_REGISTER: '가입 신청', USER_APPROVE: '가입 승인', USER_REJECT: '가입 거절',
   USER_DISABLE: '계정 비활성화', USER_ENABLE: '계정 재활성화',
   USER_ADMIN_GRANT: '관리자 지정', USER_ADMIN_REVOKE: '관리자 해제', ADMIN_BOOTSTRAP: '관리자 초기 설정',
-  BATCH_RECEIVED: '자료 받음', BATCH_CLAIM: '배치 가져감',
+  BATCH_RECEIVED: '자료 받음', BATCH_CLAIM: '묶음 가져감',
   ENTRY_UPDATE: '정보 수정', ENTRY_CONFIRM: '확정', ENTRY_FILES_ADDED: '파일 추가',
   ENTRY_REVIEW: '검토 서명', ENTRY_REVIEW_CANCEL: '검토 서명 취소',   // 53
   ENTRY_FILES_REMOVED: '파일 삭제', ENTRY_FILES_RESTORED: '파일 되돌리기',   // 37
@@ -35,6 +35,10 @@ export const ACTION_LABELS = {
   ENTRY_RETITLE: '제목 형식 정비', ENTRY_RETITLE_REVERT: '제목 정비 되돌림',
   // 21 — 프로젝트(29 에서 없앰 — 옛 이력 표시용)·문서(보고서 종류 파일) 정보. 23 — 메뉴 이름 '보고서' → '문서'
   ENTRY_PROJECT: '프로젝트 변경', REPORT_META: '문서 분류 변경', REPORT_LINKS: '문서 모델 연결 변경',
+  // 2026-11-18 — 서버가 기록하는데 라벨이 없어 원시 코드로 보이던 것(labels.test 가 다시 빠지지 않게 잡는다)
+  DRAFT_FILES_ADDED: '초안에 파일 추가', DRAFT_ATTACHMENT_RELEASED: '초안 첨부 따로 떼기',
+  VOCAB_MOVE: '분류 값 옮기기', VOCAB_TERM_DELETE: '분류 용어 삭제',
+  WB_UPLOAD: 'WorkBench 에서 받음', DB_REBUILD: 'DB 다시 만들기',
 };
 
 /** 20 — 확정에 필요한 분류 칸(BDF 자료). 서버 required_missing·409 required_fields 의 missing 과 같은 이름. */
@@ -46,7 +50,7 @@ export const requiredText = (missing) => (missing || []).map((k) => REQUIRED_LAB
 
 /** 워커 작업 종류·상태(관리자 운영 화면). */
 export const JOB_TYPE_LABELS = {
-  extract_file: '문서 본문 추출', convert_model: 'BDF 변환', process_batch: '배치 처리', write_meta: '메타 파일 쓰기',
+  extract_file: '문서 본문 추출', convert_model: 'BDF 변환', process_batch: '묶음 처리', write_meta: '메타 파일 쓰기',
   solve_check: '해석 검증', revision_diff: '판 비교',
 };
 export const JOB_STATE_LABELS = { queued: '대기', running: '실행 중', done: '완료', failed: '실패' };
@@ -55,7 +59,7 @@ export const JOB_STATE_LABELS = { queued: '대기', running: '실행 중', done:
 export const KIND_LABELS = { model: 'BDF', result: '결과', report: '문서', drawing: '도면', other: '기타' };
 
 export const BATCH_STATE_LABELS = {
-  staged: '분석 중', processed: '정리 대기', failed: '처리 실패', done: '완료', uploading: '올리는 중',
+  staged: '분석 중', processed: '확정 전', failed: '처리 실패', done: '완료', uploading: '올리는 중',
 };
 
 export const EXCLUDE_REASON_LABELS = {
@@ -87,8 +91,8 @@ export const ERROR_LABELS = {
   duplicate_model: '같은 BDF 가 이미 있어 확정하지 않았습니다.',
   target_not_confirmed: '합칠 대상 Entry 가 확정 상태가 아닙니다.',
   draft_attachments_pending: '추가 파일을 첨부 중입니다. 첨부가 끝난 뒤 다시 진행해 주세요.',
-  attachment_target_changed: '자료 상태가 변경되었습니다. 정리 대기 목록을 다시 확인해 주세요.',
-  attachment_target_not_draft: '이 자료는 이미 확정되었거나 정리 대기에서 제외되었습니다.',
+  attachment_target_changed: '자료 상태가 변경되었습니다. 올리기와 확정 목록을 다시 확인해 주세요.',
+  attachment_target_not_draft: '이 자료는 이미 확정되었거나 올리기와 확정에서 제외되었습니다.',
   attachment_still_processing: '파일을 처리 중입니다. 잠시 뒤 상태를 다시 확인해 주세요.',
   already_claimed: '이미 다른 사람이 가져갔습니다.',
   entry_trashed: '휴지통에 있는 자료입니다.',

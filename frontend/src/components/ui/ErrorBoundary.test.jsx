@@ -51,10 +51,10 @@ test('검색 응답이 깨져 화면이 터져도 내비·상단 바는 남고 �
   expect(within(alert).getByRole('link', { name: '검색으로' })).toHaveAttribute('href', '/');
   expect(screen.queryByText(/Unexpected Application Error/)).toBeNull();
   // 셸은 그대로 — 내비가 살아 있다
-  const nav = screen.getByRole('link', { name: /정리 대기/ });
+  const nav = screen.getByRole('link', { name: /올리기와 확정/ });
   await userEvent.click(nav);
   expect(screen.queryByText('이 화면을 표시하지 못했습니다')).toBeNull();
-  expect(await screen.findByRole('heading', { name: '정리 대기' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: '올리기와 확정' })).toBeInTheDocument();
 });
 
 test('셸 밖(최상위)에서 터지면 errorElement 의 한국어 화면 — 다시 시도·검색으로·접힌 기술 정보', async () => {

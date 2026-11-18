@@ -224,5 +224,8 @@ export function headerLines(label) {
   const s = String(label || '');
   if (s.includes(' ')) { const i = s.indexOf(' '); return [s.slice(0, i), s.slice(i + 1)]; }
   if (s.length >= 5 && /^[가-힣]+$/.test(s)) return [s.slice(0, 2), s.slice(2)];
+  // 2026-11-18 — 붙여 쓴 영문(SidePassage)은 대문자 경계에서 나눈다. 예전엔 45px 칸에서 'SidePa/ssage' 로 낱말 가운데가 끊겼다
+  const camel = s.match(/^([A-Za-z0-9]*[a-z0-9])([A-Z][A-Za-z0-9]*)$/);
+  if (camel && s.length >= 7) return [camel[1], camel[2]];
   return [s];
 }

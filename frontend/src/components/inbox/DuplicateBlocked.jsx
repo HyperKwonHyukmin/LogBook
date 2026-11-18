@@ -9,7 +9,7 @@ import { EntryLink } from '../preview/SameModel.jsx';
  *            rel_path, uploaded_by, uploaded_by_name}], total, hidden, includes}
  */
 
-export const ENTRY_STATUS_TEXT = { confirmed: '확정', draft: '정리 대기' };
+export const ENTRY_STATUS_TEXT = { confirmed: '확정', draft: '확정 전' };
 export const HIDDEN_DUPLICATE_TEXT = '권한이 없는 자료에 같은 BDF 가 이미 있습니다. 관리자(LV3)에게 문의하세요.';
 export const DUPLICATE_RULE_TEXT = '파일 이름이 달라도 형상·속성·재료·하중이 모두 같은 BDF 는 다시 올리지 않습니다.';
 

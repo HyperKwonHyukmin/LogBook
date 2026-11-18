@@ -62,15 +62,15 @@ test('찾아 쓰기·등록·정리 두 묶음, 메뉴 7개(2026-11-05)', () => 
   const nav = screen.getByRole('navigation', { name: '주 메뉴' });
   for (const g of ['찾아 쓰기', '등록·정리']) expect(within(nav).getByText(g)).toBeInTheDocument();
   const links = screen.getAllByRole('link').map((a) => a.textContent);
-  expect(links).toEqual(['검색', '호선', '선례 찾기', '살펴보기', '정리 대기', '휴지통', '활동 로그']);
+  expect(links).toEqual(['검색', '호선', '비슷한 모델 찾기', '자료 현황', '올리기와 확정', '휴지통', '활동 로그']);
 });
 
-test('살펴보기는 갖춤 현황(/coverage)과 관계 지도(/graph) 모두에서 활성이다', () => {
+test('자료 현황는 갖춤 현황(/coverage)과 관계 지도(/graph) 모두에서 활성이다', () => {
   const { unmount } = renderNav(false, '/graph');
-  expect(screen.getByRole('link', { name: '살펴보기' })).toHaveAttribute('aria-current', 'page');
+  expect(screen.getByRole('link', { name: '자료 현황' })).toHaveAttribute('aria-current', 'page');
   unmount();
   renderNav(false, '/coverage');
-  expect(screen.getByRole('link', { name: '살펴보기' })).toHaveAttribute('aria-current', 'page');
+  expect(screen.getByRole('link', { name: '자료 현황' })).toHaveAttribute('aria-current', 'page');
 });
 
 test('48 — 문서 본문 검색(/reports)에서도 검색 메뉴가 활성, 비교 화면은 어느 메뉴도 아니다', () => {
@@ -82,16 +82,16 @@ test('48 — 문서 본문 검색(/reports)에서도 검색 메뉴가 활성, �
   expect(screen.getAllByRole('link').filter((a) => a.getAttribute('aria-current') === 'page')).toHaveLength(0);
 });
 
-test('62 — 정리 대기 메뉴에 확정할 초안 수와 처리 중 표시가 붙는다', async () => {
+test('62 — 올리기와 확정 메뉴에 확정할 초안 수와 처리 중 표시가 붙는다', async () => {
   const { InboxSummaryContextForTest: Ctx } = await import('./InboxSummary.jsx');
   const at = (summary) => render(
     <MemoryRouter><Ctx.Provider value={{ summary, refresh: () => {} }}><SideNav isAdmin={false} storage={{ reachable: true }} /></Ctx.Provider></MemoryRouter>,
   );
   const { unmount } = at({ drafts: 3, staged: 1, uploading: 0, names: [] });
-  const link = screen.getByRole('link', { name: /정리 대기/ });
+  const link = screen.getByRole('link', { name: /올리기와 확정/ });
   expect(link).toHaveTextContent('3');
   expect(link).toHaveTextContent('처리 중 1묶음 · 확정할 초안 3건');
   unmount();
   at({ drafts: 0, staged: 0, uploading: 0, names: [] });
-  expect(screen.getByRole('link', { name: '정리 대기' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '올리기와 확정' })).toBeInTheDocument();
 });

@@ -110,13 +110,13 @@ export default function StatsPage() {
   const s = data?.summary;
   return (
     <Page>
-      <PageHeader title="자료 현황" description="확정된 자료 기준입니다. 정리 대기 초안과 휴지통은 건수만 따로 보입니다." />
+      <PageHeader title="자료 현황" description="확정된 자료 기준입니다. 확정 전 초안과 휴지통은 건수만 따로 보입니다." />
       {error && <ErrorNote className="mb-4">{error}</ErrorNote>}
       {!data && !error && <RowsSkeleton rows={4} label="자료 현황을 불러오는 중" />}
       {data && (
         <div className="flex flex-col gap-8">
           <section aria-label="요약" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <Stat label="확정 자료" value={num(s.confirmed)} hint={`정리 대기 ${num(s.drafts)} · 휴지통 ${num(s.trashed)}`} />
+            <Stat label="확정 자료" value={num(s.confirmed)} hint={`확정 전 ${num(s.drafts)} · 휴지통 ${num(s.trashed)}`} />
             <Stat label="파일" value={num(s.files)} />
             <Stat label="용량" value={formatBytes(s.bytes)} />
             <Stat label="호선" value={num(s.hulls)} />

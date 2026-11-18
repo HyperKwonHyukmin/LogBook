@@ -540,3 +540,10 @@ test('48 — [자료 | 문서 본문] 전환은 검색어만 들고 문서 화�
   expect(within(tabs).getByRole('link', { name: '자료' })).toHaveAttribute('aria-current', 'page');
   expect(within(tabs).getByRole('link', { name: '문서 본문' })).toHaveAttribute('href', '/reports?q=9999+%EA%B0%95%EB%8F%84');
 });
+
+test('찾는 자료가 없으면 같은 검색어로 문서 본문 검색에 가는 길을 준다(2026-11-18)', async () => {
+  mockApi({ 'GET /api/search?q=zzz&limit=50&offset=0': { unit: 'entry', total: 0, items: [], facets: FACETS, hull_suggestion: null, terms: [] } });
+  renderAt('/?q=zzz');
+  expect(await screen.findByText('찾는 자료가 없습니다')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /문서 본문에서 찾기/ })).toHaveAttribute('href', '/reports?q=zzz');
+});

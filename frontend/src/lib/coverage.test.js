@@ -69,7 +69,7 @@ test('먼저 볼 칸은 검증 실패 → 문서 없음, 정렬과 목록', () =
 test('열 머리 두 줄 표기', () => {
   expect(headerLines('데크하우스')).toEqual(['데크', '하우스']);
   expect(headerLines('크레인 받침')).toEqual(['크레인', '받침']);
-  expect(headerLines('SidePassage')).toEqual(['SidePassage']);
+  expect(headerLines('SidePassage')).toEqual(['Side', 'Passage']);   // 2026-11-18 — 한 줄이면 45px 칸에서 낱말 가운데가 끊겼다
   expect(headerLines('정반')).toEqual(['정반']);
 });
 
@@ -125,4 +125,11 @@ test('45 — 같은 시리즈 호선은 한 행(대표 호선), 같은 자료의
     ['h:3370', ['3370', '3371'], '174K LNG'], ['h:3500', ['3500'], '선종 미입력']]);
   expect(g.keysOf(data.entries[2])).toEqual(['h:3370']);
   expect(data.entries.filter((e) => g.keysOf(e).includes('h:3370')).map((e) => e.id)).toEqual(['a', 'b', 'both']);
+});
+
+test('열 머리 — 붙여 쓴 영문은 대문자 경계에서 두 줄로(2026-11-18)', () => {
+  expect(headerLines('SidePassage')).toEqual(['Side', 'Passage']);
+  expect(headerLines('Truss')).toEqual(['Truss']);
+  expect(headerLines('Unit')).toEqual(['Unit']);
+  expect(headerLines('정반 구조')).toEqual(['정반', '구조']);
 });

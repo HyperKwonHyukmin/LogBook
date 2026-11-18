@@ -160,7 +160,7 @@ export default function CoveragePage() {
                     <th key={c.key} scope="col" title={c.label}
                         className={`sticky top-0 z-20 w-[45px] min-w-[45px] max-w-[45px] border-b border-n-200 px-px pb-1.5 pt-2 text-center align-bottom text-meta font-medium leading-tight
                           ${sel?.colKey === c.key ? 'bg-n-100 text-n-900' : 'bg-n-50 text-n-700'}`}>
-                      <span className="block">{headerLines(c.label).map((l, k) => <span key={k} className={`block ${/[가-힣]/.test(l) ? 'whitespace-nowrap' : 'break-all'}`}>{l}</span>)}</span>
+                      <span className="block">{headerLines(c.label).map((l, k) => <span key={k} className={`block ${/[가-힣]/.test(l) ? 'whitespace-nowrap' : 'truncate'}`}>{l}</span>)}</span>
                       <span className="mx-[7px] mt-1.5 block h-[3px] overflow-hidden rounded-full bg-n-150" aria-hidden="true">
                         <span className="block h-full bg-n-400" style={{ width: `${(grid.colFilled.get(c.key) / grid.rows.length) * 100}%` }} />
                       </span>
@@ -256,7 +256,7 @@ export default function CoveragePage() {
               {todos.length > 9 && <p className="mt-2 text-meta text-n-600">그 밖에 {todos.length - 9}칸이 더 있습니다.</p>}
               {/* 48 — 손볼 자료 목록(문서 없는 모델 등)은 정리 대기로 옮겼다 */}
               <Link to="/inbox?tab=fix" className="mt-3 inline-block text-meta text-n-600 underline-offset-2 hover:text-brand hover:underline">
-                손볼 자료를 자료 단위로 보기 (정리 대기)
+                보완할 자료를 자료 단위로 보기 (올리기와 확정)
               </Link>
             </>
           )}

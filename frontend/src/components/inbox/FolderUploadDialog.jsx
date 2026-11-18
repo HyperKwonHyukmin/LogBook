@@ -116,9 +116,9 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = 
           )}
           {same && (
             <p role="alert" className="mt-2 rounded-md border border-wait-line bg-wait-bg px-3 py-2 text-ui text-wait">
-              같은 이름의 묶음 <span className="font-mono font-medium">{same.name}</span> 이(가) 이미 정리 대기에 있습니다
+              같은 이름의 묶음 <span className="font-mono font-medium">{same.name}</span> 이(가) 이미 올리기와 확정에 있습니다
               ({BATCH_STATE_LABELS[same.state] || same.state}{same.received_at && <>, <span className="font-mono">{same.received_at.replace('T', ' ').slice(5, 16)}</span> 올림</>}).
-              다시 올리면 묶음이 하나 더 생깁니다. 정리 대기에서 먼저 확인해 주세요.
+              다시 올리면 묶음이 하나 더 생깁니다. 올리기와 확정에서 먼저 확인해 주세요.
             </p>
           )}
         </div>
@@ -148,7 +148,7 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = 
 
         {!attach && <section aria-label="공통 분류" className="grid gap-3 rounded-md border border-n-200 p-3 sm:grid-cols-3">
           <p className="text-meta text-n-600 sm:col-span-3">
-            아래 값은 만들어지는 모든 초안에 같이 들어갑니다(선택). 호선은 넣지 않습니다. 초안마다 정리 대기에서 고칠 수 있습니다.
+            아래 값은 만들어지는 모든 초안에 같이 들어갑니다(선택). 호선은 넣지 않습니다. 초안마다 올리기와 확정에서 고칠 수 있습니다.
             {hintShown && (
               <> 비슷한 기존 자료 <span className="font-mono">{hint.from_entry}</span>
                 {hint.from_title && <>({hint.from_title})</>}의 구역·대상을 넣었습니다. 다르면 고치세요.</>

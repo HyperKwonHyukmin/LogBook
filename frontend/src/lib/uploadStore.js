@@ -30,7 +30,7 @@ export const IDLE_JOB = Object.freeze({
 
 const CANCEL_INFO = {
   removed: '올리기를 취소했습니다.',
-  finished: '서버가 이미 다 받은 뒤라 취소하지 못했습니다. 정리 대기에서 확인해 주세요.',
+  finished: '서버가 이미 다 받은 뒤라 취소하지 못했습니다. 올리기와 확정에서 확인해 주세요.',
   failed: '올리기를 멈췄습니다. 서버에 남은 임시 파일은 하루 안에 자동으로 정리됩니다.',
 };
 

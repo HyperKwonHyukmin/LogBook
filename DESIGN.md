@@ -100,7 +100,7 @@
 |---|---|---|
 | 버튼 | `ui/Button.jsx` | sm 28 / md 32 / lg 36 / icon 32 / icon-sm 28. 변형은 primary(네이비) · secondary · ghost · danger · danger-solid(확인 대화상자 안에서만) · inverse(**네이비 크롬 위에서만**: 흰 바탕 + 네이비 글자). 비활성은 opacity가 아니라 색(`n-150`/`n-50` 바탕 + `n-500` 글자)으로 칠한다. `loading` 이면 스피너를 두고 `aria-busy` 를 켠다. |
 | 입력 | `ui/Field.jsx` | `inputClass()` 는 h-8, `n-250` 테두리, hover `n-300` 이다. 포커스는 `.field` 가 `border-brand` 와 3px 옅은 링으로, 오류는 `aria-invalid` 에 따라 `err` 로 그린다. 라벨은 위쪽 12/500 n-600. |
-| 탭 | `ui/Tabs.jsx` `Tabs` | 보기 전환(정리 대기, 사용자 상태, XLSX 시트)에 쓴다. 선택은 n-900 글자와 2px n-900 밑줄이며 **강조색을 쓰지 않는다**. ←/→ 로 옮긴다. |
+| 탭 | `ui/Tabs.jsx` `Tabs` | 보기 전환(올리기와 확정, 사용자 상태, XLSX 시트)에 쓴다. 선택은 n-900 글자와 2px n-900 밑줄이며 **강조색을 쓰지 않는다**. ←/→ 로 옮긴다. |
 | 세그먼트 | `ui/Tabs.jsx` `Segmented` | 값 전환(문서\|파일, 구역\|자유 태그)에 쓴다. 선택은 `n-0 + shadow-sm` 이며 **파란 채움을 쓰지 않는다**. |
 | 상태 | `ui/Status.jsx` | `StatusDot` 은 6px 점과 글자로 표시한다(색만으로 구분하지 않는다). `DraftBadge`, `HullChip`(전역 1종: `brand` 네이비 채움 + 흰 mono 12/500, 높이 20px, hover `navy-700`, 링크. `ChipInput` 의 호선 칩도 같은 모양), `TagChip`(`n-100`). |
 | 파일 배지 | `ui/KindBadge.jsx` | 파일 이름이 있으면 **확장자 라틴 대문자**(PDF/PPTX/XLSX/BDF/F06)를 sans 600으로 쓴다. 종류만 아는 Entry 행은 종류 라벨을 sans로 쓴다. 모노는 쓰지 않는다. |

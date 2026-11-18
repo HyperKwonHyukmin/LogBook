@@ -206,7 +206,7 @@ export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChang
   const dupCount = (batch.excluded || []).filter((x) => x.reason === 'duplicate_model').length;
   return (
     // 2026-11-06 — 묶음 하나 = 회색 틀 하나. 초안 카드(흰 면)가 그 안에 앉아, 긴 3D 화면 뒤에서도 어디까지가 한 세트인지 보인다
-    <section aria-label={`배치 ${batch.original_name}`} className="flex flex-col gap-3 rounded-xl border border-n-200 bg-n-50 p-3 min-[900px]:p-4">
+    <section aria-label={`묶음 ${batch.original_name}`} className="flex flex-col gap-3 rounded-xl border border-n-200 bg-n-50 p-3 min-[900px]:p-4">
       <div className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1 px-1">
         <SourceIcon size={14} className="text-n-500" aria-hidden="true" title={batch.source === 'web' ? '웹에서 올림' : '00_Inbox 에서 받음'} />
         <h2 className="text-body font-semibold text-n-900">{batch.original_name}</h2>

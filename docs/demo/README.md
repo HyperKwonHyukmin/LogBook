@@ -1,6 +1,29 @@
 # LogBook 설명회 시연 자료
 
-## 소개 발표자료(HTML 덱) — 2026-11-09 기준 v13
+## 소개 발표자료(HTML 덱) — 2026-11-18 기준 v15 (15쪽)
+
+- **v15(2026-11-18)** — 겹치는 쪽을 덜어 20쪽 → 15쪽(사용자 결정 '중복 제거, 핵심 위주'). 나눠 줄 파일 = `LogBook-Deck-v15.html`(한 파일 판, 5.1 MB),
+  원본 = `LogBook-Deck-v15-edit.html`, PDF 15쪽. 빌드 원본 `Results\LogBook-deck-src\v15\build15.py`(v14-edit → v15, 쪽을 id 로 잘라 내고 합친 두 쪽을 끼움).
+  - 빠진 쪽: 02 이름(표지 '이름' 한 줄로) · 04 정의 표 · 05 세 지식자산 · 06 4대 목표(→ 새 3쪽 'LogBook이란' = 정의 + 세 지식자산 삼각형 + 쓰는 순서 다섯 줄) ·
+    12 활용 목차(13~15쪽 제목에 이미 세 질문, 쓰는 순서 끝 줄이 대신) · 17 Hi-TESS 그림(→ 새 12쪽 = 옛 16 주고받기 + Core 띠 + 모델이 쌓이는 방식).
+  - 겹침 근거: 병목 4개(03) = 정의 표(04) = 4대 목표(06), 'WorkBench 자동화 · LogBook 지식자산' 이 05 · 16 · 17 · 19 네 번, 기능 요약이 06 · 16 · 17 세 번.
+  - 옛 → 새 쪽: 01→1, 03→2, (04+05+06)→3, 07~11→4~8, 13~15→9~11, (16+17)→12, 18~20→13~15. 쪽 번호 참조 · 기록 번호 · 장 색인(PARTS.at) · '2쪽 4가지 병목 중' 을 함께 바꿨다.
+  - 관계 지도(9쪽)가 Ⅳ 장 첫 쪽이 되어 남색 난(`op`). 신뢰 쪽 맺음 문장은 머리와 같은 말이라 '기록은 지우지 않고, 지운 자료도 되돌릴 수 있습니다' 로 바꿨다.
+  - 확인: 빈 폴더 + 인터넷 끊김으로 15쪽 · 깨진 그림 0 · 바깥 요청 0 · 넘침 0.
+
+### v14
+
+- **v14(2026-11-18)** — 화면 이름 변경 반영(선례 찾기 → 비슷한 모델 찾기 · 정리 대기 → 올리기와 확정 · 손볼 자료 → 보완할 자료),
+  12 · 15쪽 캡처 3장 교체(`LogBook-assets/sim-list-v14.jpg` · `sim-side-v14.jpg`, 통합 데모를 2배로 — `v14/cap_demo_sim.js`). 쪽 수 · 순서 그대로.
+  빌드 원본 `Results\LogBook-deck-src\v14\build14.py`(v13 → v14 치환).
+- ★ **파일 이름 규칙이 v14 부터 바뀌었다** — 다른 PC 에서 그림이 전부 깨지던 원인(2026-11-18 신고)은 원본 `LogBook-Deck-v13.html` 을 옮긴 것이다.
+  원본은 옆 폴더 `LogBook-assets/` 그림과 인터넷 글꼴을 불러와 혼자 옮기면 그림 18장이 빠진다(빈 폴더 + 인터넷 끊김으로 재현, 한 파일 판은 정상).
+  - **나눠 줄 파일 = `LogBook-Deck-v14.html`**(한 파일 판, 6.1 MB, 그림 · 글꼴 모두 안에 있음).
+  - 고칠 때 쓰는 원본 = `LogBook-Deck-v14-edit.html`. 이것만 옮기면 맨 위에 빨간 안내 띠가 뜬다.
+  - 만드는 순서(`Results\LogBook-deck-src` 폴더에서): `python v14\build14.py` → `python make_standalone.py ..\LogBook-Deck-v14-edit.html ..\LogBook-Deck-v14.html`(글꼴을 받아 약 2분 30초)
+    → 확인 `node v14\deckshot.js <빈 폴더에 복사한 v14.html> <출력 폴더> --offline`(20쪽 · 깨진 그림 0 · 바깥 요청 0 · 넘침 0이어야 함)
+    → PDF `node v14\export_pdf_cdp.mjs --html Results/LogBook-Deck-v14.html --out Results/LogBook-Deck-v14.pdf`(9333 Chrome 먼저).
+  - `make_standalone.py` 에 둘째 인자(출력 경로)를 더했다. 인자 하나면 예전처럼 `-standalone.html`.
 
 - 위치: `C:\Coding\ClaudeCode\Huashu_Design\huashu-design\Results\LogBook-Deck-v13.html` / `.pdf` / `-standalone.html` (20쪽, v1~v12도 같은 폴더). huashu-design 장부(帳簿) 문법 디자인.
 - **v13(2026-11-09)** — v12 뒤 기능(43~61)을 쪽 수 · 순서 그대로 반영: 07 올리기(폴더째 · 비슷한 자료의 분류 미리 채움 · PLM 선종 · 담당자,
@@ -18,7 +41,7 @@
 - 이름 쪽은 ① 유래(칩 로그 · 노트 · 항해일지 = 역사적 사실)와 ② 고른 이유(항해 기록을 보듯 연구를 돌아본다) · ③ 더한 방향(Record → Connect → Insight = 우리의 해석)을 칸으로 가른다. 이름 본뜻을 '통찰'까지 부풀리지 않는다.
 - 16쪽 Hi-TESS 그림 바닥 띠 = **Hi-TESS Core**(공통 규약, v9). 표현은 '규약으로 연결을 정리 · 강화, 첫 결과 = 해석 출처 연결'까지 — Core 는 아직 실행 코드가 없으니 '통합 완료'·'Core 가 운영'이라고 쓰지 않는다(hitess-core 00 §4).
 - 용어: '지식자산'(지적자산 X), '후속선'(자매선 X), '연구실의 자산'(팀의 자산 X). 2026-10-20 — 본문에 'BDF' 를 쓰지 않는다(다른 형식도 들어올 수 있음 → '해석 모델'·'모델'), '크롬' 대신 '웹 브라우저'(줄바꿈 안 되게 `웹&nbsp;브라우저`). 2쪽 '이름의 본뜻은 기록 — ③은 LogBook이 더한 방향' 문구는 지웠다. 캡처 그림 속 글자는 화면 그대로.
-- 고치는 법: 새 버전은 최신본을 복사해 만든다(이전 버전 보존). v12 빌드 원본은 `Results\LogBook-deck-src12uild12.py`(v11 → v12, 6쪽 신설 · 뒤 쪽 번호 · 기록 번호 · `PARTS[].at` 밀기) · `view12.js`. v11 빌드 원본은 `Results\LogBook-deck-src11uild11.py`(v10 → v11, 7쪽 부탁 띠) · `view11.js`(넘침 점검). v10 빌드 원본은 `Results\LogBook-deck-src\v10\build10.py`(v9 → v10, 18쪽 跋 추가). v9 빌드 원본은 `Results\LogBook-deck-src\v9\`(`build9.py` = v8 → v9 16쪽 치환, `view9.js`), 그 전 v8 은 `…\v8\` — `build8.py`(v7 → v8 문자열 치환, 치환마다 일치 횟수 assert) · `name.html` · `assets.html`(새 쪽) · `view8.js`(쪽마다 `.sb` 넘침 점검, `node view8.js <접두어> <쪽 번호…>`).
+- 고치는 법: 새 버전은 최신본을 복사해 만든다(이전 버전 보존). v12 빌드 원본은 `Results\LogBook-deck-src\v12\build12.py`(v11 → v12, 6쪽 신설 · 뒤 쪽 번호 · 기록 번호 · `PARTS[].at` 밀기) · `view12.js`. v11 빌드 원본은 `Results\LogBook-deck-src\v11\build11.py`(v10 → v11, 7쪽 부탁 띠) · `view11.js`(넘침 점검). v10 빌드 원본은 `Results\LogBook-deck-src\v10\build10.py`(v9 → v10, 18쪽 跋 추가). v9 빌드 원본은 `Results\LogBook-deck-src\v9\`(`build9.py` = v8 → v9 16쪽 치환, `view9.js`), 그 전 v8 은 `…\v8\` — `build8.py`(v7 → v8 문자열 치환, 치환마다 일치 횟수 assert) · `name.html` · `assets.html`(새 쪽) · `view8.js`(쪽마다 `.sb` 넘침 점검, `node view8.js <접두어> <쪽 번호…>`).
   PDF: huashu-design 폴더에서 `node scripts/export_single_absolute_deck_pdf.mjs --html Results/LogBook-Deck-v12.html --out Results/LogBook-Deck-v12.pdf`.
   **다른 PC로 옮길 때는 `-standalone.html`** — 원본은 `LogBook-assets/` 그림과 웹 글꼴(CDN)을 바깥에서 불러와, HTML 만 옮기거나 CDN 이 막히면 캡처가 빠지고 글꼴이 바뀌어 칸이 깨진다. `Results\LogBook-deck-src\make_standalone.py ../LogBook-Deck-vNN.html` 로 그림·글꼴(쓰인 글자만)을 한 파일에 넣는다(약 6 MB, 인터넷 되는 PC에서 3분). 원본을 고친 뒤에는 다시 돌린다.
 - 쪽을 넣거나 빼면 본문의 「→ NN쪽」 참조, `data-entry` 기록 번호, 스크립트의 `PARTS[].at`을 함께 고친다.

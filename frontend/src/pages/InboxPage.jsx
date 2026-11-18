@@ -23,14 +23,14 @@ import { useUploadSnapshot, useUploadStore } from '../components/inbox/UploadPro
 const tabId = (id) => `inbox-tab-${id}`;
 // 48 — 손볼 자료(갖춤 현황에서 옮김)는 확정 자료 목록이라 배치를 부르지 않는다. /inbox?tab=fix 로 바로 연다
 const TABS = [
-  { id: 'mine', label: '내 배치', tabId: tabId('mine') },
-  { id: 'fix', label: '손볼 자료', tabId: tabId('fix') },
-  { id: 'unclaimed', label: '주인 없는 배치', tabId: tabId('unclaimed') },
+  { id: 'mine', label: '내가 올린 묶음', tabId: tabId('mine') },
+  { id: 'fix', label: '보완할 자료', tabId: tabId('fix') },
+  { id: 'unclaimed', label: '폴더에 직접 넣은 묶음', tabId: tabId('unclaimed') },
 ];
 const tabOf = (v) => (TABS.some((t) => t.id === v) ? v : 'mine');
 const PANEL_ID = 'inbox-tabpanel';
 // 올리던 중에 이 화면을 떠났다가 끝나면 셸이 띄우는 토스트(올리기는 셸 저장소에서 계속된다)
-const INBOX_AWAY = { title: '정리 대기로 올리기', message: '올렸습니다. 정리 대기에서 묶음 제안을 확인하세요.', to: '/inbox', label: '정리 대기로' };
+const INBOX_AWAY = { title: '올리기', message: '올렸습니다. 올리기와 확정에서 묶음 제안을 확인하세요.', to: '/inbox', label: '올리기와 확정으로' };
 const POLL_MS = 5000;
 /** BDF 3D 변환만 기다릴 때는 느긋하게 — 변환은 한 건에 수십 초~분 걸린다. */
 const CONVERT_POLL_MS = 15000;
@@ -81,7 +81,7 @@ export default function InboxPage() {
     const latest = () => id === requestRef.current;
     return api(`/batches?scope=${tab}`)
       .then((rows) => { if (latest()) { setBatches(rows); setError(''); refreshSummary(); } })
-      .catch(() => { if (latest()) setError('정리 대기 목록을 불러오지 못했습니다.'); })
+      .catch(() => { if (latest()) setError('올린 자료 목록을 불러오지 못했습니다.'); })
       .finally(() => { if (latest()) setLoading(false); });
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps -- refreshSummary 는 바뀌지 않는다
   // 올리기는 오래 걸린다 — 끝났을 때의 탭·load 를 쓰도록 ref 로 들고 있는다.
@@ -129,7 +129,7 @@ export default function InboxPage() {
     <Page>
       {dialog}
       {canWrite && <PageDropOverlay u={uploader} />}
-      <PageHeader title="정리 대기"
+      <PageHeader title="올리기와 확정"
         description={canWrite
           ? '올린 자료의 묶음 제안을 확인하고 확정하세요. 확정 전에도 검색에는 미분류로 보입니다. 이 화면 어디에나 폴더를 끌어 놓아도 올라갑니다.'
           : READ_ONLY_REASON}
@@ -137,7 +137,7 @@ export default function InboxPage() {
       {/* 올릴 수 없으면 '공유 폴더에 연결되면 올릴 수 있습니다' 같은 올리기 안내를 띄우지 않는다 */}
       {/* 52 — 올리는 중·멈춤은 화면 가운데 카드로(어디까지 왔는지 바로 보이게), 끝난 결과는 이 자리에 */}
       {canWrite && (uploader.busy || uploader.resumable) && (
-        <UploadCenterStack><UploadCenterCard u={uploader} title="정리 대기로 올리기" /></UploadCenterStack>
+        <UploadCenterStack><UploadCenterCard u={uploader} title="올리기" /></UploadCenterStack>
       )}
       {canWrite && !uploader.busy && !uploader.resumable && <div className="mb-4 empty:hidden"><UploadFeedback u={uploader} /></div>}
       {/* 62 — 이 창이 아닌 곳(다른 탭·PC, 닫은 창)에서 보내는 중인 묶음 — 목록에는 다 보낸 뒤에야 나타난다 */}
@@ -148,7 +148,7 @@ export default function InboxPage() {
             창을 닫아 멈춘 올리기는 하루 안에 자동으로 지워지니, 그때는 다시 올려 주세요.</span>
         </p>
       )}
-      <Tabs label="배치 구분" items={TABS} value={tab} onChange={changeTab} controls={PANEL_ID} />
+      <Tabs label="올린 자료 구분" items={TABS} value={tab} onChange={changeTab} controls={PANEL_ID} />
       <div role="tabpanel" id={PANEL_ID} aria-labelledby={tabId(tab)} className="flex flex-col gap-8 pt-5">
         {isFix && <FixList />}
         {!isFix && error && <ErrorNote>{error}</ErrorNote>}
@@ -159,7 +159,7 @@ export default function InboxPage() {
               ? '올린 자료가 없습니다.'
               : tab === 'mine'
               ? <>폴더나 파일을 이 화면에 끌어 놓거나 위의 단추로 고르세요. 탐색기로 <span className="font-mono">999_LogBook\00_Inbox</span> 에 복사하면 1~2분 뒤 여기에 나타납니다.</>
-              : '주인을 찾지 못한 배치가 없습니다.'}
+              : '폴더에 직접 넣은 묶음이 없습니다.'}
           </EmptyState>
         )}
         {active.map((b) => (

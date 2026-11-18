@@ -59,11 +59,11 @@ export function stagedStatus(batch) {
     line = `처리 중 문제가 생겨 다시 시도를 기다리는 중입니다(${q.attempts}번 시도)`;
     tone = 'wait';
   } else if (q.ahead > 0) {
-    line = `앞의 배치 ${q.ahead}개를 먼저 처리하고 있습니다`;
+    line = `앞의 묶음 ${q.ahead}개를 먼저 처리하고 있습니다`;
   } else if (q.busy_with?.length) {
     line = `워커가 하던 작업(${q.busy_with.map((t) => JOB_TYPE_LABELS[t] || t).join('·')})을 마치면 시작합니다`;
   } else {
-    line = '곧 시작합니다. 워커가 30초마다 새 배치를 확인합니다';
+    line = '곧 시작합니다. 서버가 30초마다 새 묶음을 확인합니다';
   }
   const at = BATCH_STEPS.findIndex((s) => s.id === current);
   const steps = BATCH_STEPS.map((s, i) => ({ ...s, state: at < 0 ? 'todo' : i < at ? 'done' : i === at ? 'current' : 'todo' }));

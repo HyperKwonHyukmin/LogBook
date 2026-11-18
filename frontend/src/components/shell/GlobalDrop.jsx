@@ -9,7 +9,7 @@ import { useInboxSummary } from './InboxSummary.jsx';
 // 자기 올리기 칸이 있는 화면 — 정리 대기는 화면 전체 덮개, Entry 는 '파일 추가' 칸이 따로 있다
 const OWN_UPLOAD = [/^\/inbox\/?$/, /^\/e\/[^/]+\/?$/];
 const GLOBAL_SCOPE = 'global';
-const DEFAULT_AWAY = { message: '올렸습니다. 정리 대기에서 묶음 제안을 확인하세요.', to: '/inbox', label: '정리 대기로' };
+const DEFAULT_AWAY = { message: '올렸습니다. 올리기와 확정에서 묶음 제안을 확인하세요.', to: '/inbox', label: '올리기와 확정으로' };
 
 /**
  * 앱 어디서든 탐색기에서 끌어 온 파일을 놓으면 새 배치로 올린다(정리 대기와 같은 동작).

@@ -29,6 +29,24 @@ function renderViewer(engine, { variant = 'compact', model = sampleModelV2(), fo
 
 const ready = () => screen.findByRole('list', { name: 'PID' });
 
+// 범례는 좁은 창(1280px 미만)이면 접힌 채로 연다(2026-11-18). 아래 시험들은 넓은 사무실 화면 기준이다.
+const WIDE = 1536;
+let savedWidth;
+beforeEach(() => { savedWidth = window.innerWidth; window.innerWidth = WIDE; localStorage.removeItem('lb.viewer.legend.collapsed'); });
+afterEach(() => { window.innerWidth = savedWidth; localStorage.removeItem('lb.viewer.legend.collapsed'); });
+
+test('좁은 창에서는 범례가 접힌 채로 열리고, 펼치면 목록이 보인다', async () => {
+  window.innerWidth = 1093;
+  renderViewer(fakeEngine(), { variant: 'full' });
+  await ready();
+  const legend = screen.getByRole('group', { name: '범례' });
+  const head = within(legend).getByRole('button');
+  expect(head).toHaveAttribute('aria-expanded', 'false');
+  await userEvent.click(head);
+  expect(head).toHaveAttribute('aria-expanded', 'true');
+  expect(within(legend).getAllByRole('listitem').length).toBeGreaterThan(0);
+});
+
 describe('작은 뷰어', () => {
   test('엔진에 그룹·점검·단면 계획을 넘긴다', async () => {
     const engine = fakeEngine();

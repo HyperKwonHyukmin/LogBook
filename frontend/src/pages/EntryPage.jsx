@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { pageTitle } from '../lib/pageTitle.js';
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom';
 import { Check, ChevronDown, ChevronRight, Copy, FileQuestion, Folder, Link2, Lock, MoreHorizontal, Pencil, RefreshCw, Trash2, Undo2, Upload } from 'lucide-react';
 import { api } from '../api/client.js';
@@ -306,7 +307,7 @@ function AddFilesStatus({ watch, onRecheck }) {
     return (
       <>
         <p role="status" className="mt-2 text-meta text-wait">
-          이 자료에 바로 붙이지 못해 정리 대기에 두었습니다.{skipped} <Link to="/inbox" className="underline underline-offset-2">정리 대기로</Link>
+          이 자료에 바로 붙이지 못해 올리기와 확정에 두었습니다.{skipped} <Link to="/inbox" className="underline underline-offset-2">올리기와 확정으로</Link>
         </p>
         {dupNote}
       </>
@@ -520,6 +521,10 @@ export default function EntryPage() {
   }, [entry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (editing) titleRef.current?.focus(); }, [editing]);
+
+  // 2026-11-18 — 탭 제목을 자료 제목으로(셸은 번호로만 정한다)
+  const entryTitle = entry?.title;
+  useEffect(() => { if (entryTitle) document.title = pageTitle(`/e/${entryId}`, entryTitle); }, [entryId, entryTitle]);
 
   const changed = editing && draft ? changedFields(base, draft) : [];
   // 37 — 고치는 동안 다시 불러온 목록에 없는 파일(다른 경로로 이미 빠짐)은 셈에서 뺀다
@@ -810,7 +815,7 @@ export default function EntryPage() {
         )}
         {entry.status === 'draft' && (
           <p className="mt-3 rounded-md border border-wait-line bg-wait-bg px-3 py-2 text-ui text-wait">
-            미확정 자료는 <Link to="/inbox" className="font-medium underline underline-offset-2 hover:no-underline">정리 대기에서 고치고 확정합니다</Link>.
+            미확정 자료는 <Link to="/inbox" className="font-medium underline underline-offset-2 hover:no-underline">올리기와 확정에서 고치고 확정합니다</Link>.
           </p>
         )}
         {conflict && (
@@ -850,7 +855,7 @@ export default function EntryPage() {
           {(adding || addBusy) && editable && (
             <div className="mb-3 rounded-lg border border-n-200 p-3">
               <p className="mb-2 text-meta text-n-600">
-                여기 올린 파일은 정리 대기를 거치지 않고 이 자료에 바로 추가됩니다. 이름이 같은 파일이 있으면 바꾸지 않고
+                여기 올린 파일은 확정 단계를 거치지 않고 이 자료에 바로 추가됩니다. 이름이 같은 파일이 있으면 바꾸지 않고
                 <span className="font-mono"> 이름 (2)</span>처럼 새 이름으로 더하고, 내용까지 똑같은 파일은 건너뜁니다.
               </p>
               <UploadZone targetEntryId={entry.entry_id} disabled={offline} showSuccess={false} scope={`entry:${entry.entry_id}`}

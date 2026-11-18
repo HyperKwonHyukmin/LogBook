@@ -15,7 +15,7 @@ const td = 'border-b border-n-200 px-3 py-2 align-top text-ui';
 const PAGE = 50;
 const CATEGORIES = [['', '전체'], ['report', '보고서'], ['excel', '엑셀'], ['model', '모델']];
 const SKIP_REASONS = {
-  file_not_found: '파일 없음', already_removed: '이미 정리됨', entry_not_active: '자료가 확정·정리 대기가 아님',
+  file_not_found: '파일 없음', already_removed: '이미 정리됨', entry_not_active: '자료가 확정 또는 확정 전 상태가 아님',
   not_uploader: '권한 없음', file_not_in_vault: '파일 자리가 맞지 않음', entry_trashed: '이미 휴지통',
 };
 

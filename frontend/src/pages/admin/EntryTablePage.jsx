@@ -186,7 +186,7 @@ export default function EntryTablePage() {
         </select>
         <label className="flex items-center gap-1.5 text-meta text-n-700">
           <input type="checkbox" checked={drafts} onChange={(e) => { setDrafts(e.target.checked); setPicked(new Set()); }} />
-          정리 대기 초안 포함
+          확정 전 초안 포함
         </label>
         <span className="ml-auto text-meta text-n-600">
           <span className="font-mono">{shown.length}</span> / <span className="font-mono">{rows.length}</span>건

@@ -55,7 +55,7 @@ const DraftAttachments = forwardRef(function DraftAttachments({ entry, disabled,
   }, [stop]);
   const pending = entry.pending_attachments || [];
   const u = useUploader({ scope: `draft:${entry.entry_id}`, targetEntryId: entry.entry_id, targetEntryStatus: 'draft', onUploaded: start,
-    away: { title: `${entry.entry_id} 초안에 첨부`, message: '초안에 붙일 파일을 올렸습니다. 정리 대기에서 첨부 결과를 확인하세요.', to: '/inbox', label: '정리 대기로' },
+    away: { title: `${entry.entry_id} 초안에 첨부`, message: '초안에 붙일 파일을 올렸습니다. 올리기와 확정에서 첨부 결과를 확인하세요.', to: '/inbox', label: '올리기와 확정으로' },
     disabled: disabled || pending.length > 0 || watch.state === 'working' });
   const busy = u.busy || watch.state === 'working' || releasing;
   useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
@@ -107,7 +107,7 @@ const DraftAttachments = forwardRef(function DraftAttachments({ entry, disabled,
         <UploadFeedback u={{ ...u, disabled: false }} showSuccess={false} />
       </div>}
       {(busy || pending.some((p) => p.state !== 'failed')) && <p role="status" className="mt-2 text-meta text-n-600">파일 첨부 중입니다. 같은 목록에 추가된 뒤 확정할 수 있습니다.</p>}
-      {watch.state === 'done' && <p role="status" className="mt-2 text-meta text-n-700">첨부 처리가 끝났습니다. 아래 파일 목록을 확인한 뒤 함께 확정하세요.{watch.excluded > 0 && ` 제외된 파일 ${watch.excluded}개는 정리 대기 배치에서 확인해 주세요.`}</p>}
+      {watch.state === 'done' && <p role="status" className="mt-2 text-meta text-n-700">첨부 처리가 끝났습니다. 아래 파일 목록을 확인한 뒤 함께 확정하세요.{watch.excluded > 0 && ` 제외된 파일 ${watch.excluded}개는 올리기와 확정의 묶음에서 확인해 주세요.`}</p>}
       {watch.state === 'slow' && <p role="status" className="mt-2 text-meta text-wait">첨부가 지연되고 있습니다. <Button variant="ghost" size="sm" onClick={() => start(watch.key)}>상태 다시 확인</Button></p>}
       {(watch.state === 'failed' || pending.some((p) => p.state === 'failed')) && <div role="alert" className="mt-2 text-meta text-err">
         첨부하지 못했습니다. 원본 초안은 유지됩니다. 파일은 별도 배치에 보존됩니다.

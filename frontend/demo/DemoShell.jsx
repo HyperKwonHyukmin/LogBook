@@ -13,7 +13,7 @@ const NAV = [
   { to: '/graph', label: '관계 지도', icon: Waypoints, note: '무엇이 이어져 있나' },
   { to: '/coverage', label: '갖춤 현황', icon: Grid2x2Check, note: '무엇이 비어 있나' },
   // 첫 기준 = 같은 설계가 여러 척에 있는 예(주소의 file) — 화면에서 다른 BDF 로 바꿀 수 있다
-  { to: `/similar?file=${DEMO_SIMILAR_FILE}`, label: '선례 찾기', icon: ScanSearch, note: '무엇을 다시 쓰나' },
+  { to: `/similar?file=${DEMO_SIMILAR_FILE}`, label: '비슷한 모델 찾기', icon: ScanSearch, note: '무엇을 다시 쓰나' },
   // 22 — 보고서 본문 검색 · 위치 발췌 · 근거 요약(예시 답변). 첫 화면은 '볼라드 사용률' 검색 결과
   { to: `/reports?q=${encodeURIComponent('볼라드 사용률')}&retrieval=hybrid`, label: '문서', icon: FileText, note: '보고서 본문 검색 · 근거 요약' },
 ];

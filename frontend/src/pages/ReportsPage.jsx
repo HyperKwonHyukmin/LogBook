@@ -510,7 +510,7 @@ export default function ReportsPage() {
           {data && selected.size > 0 && <BulkTypeBar count={selected.size} options={typeMeta?.options} busy={bulkBusy}
                                                      onApply={applyBulk} onClear={() => setSelected(new Set())} />}
           {data && data.items.length > 0 && <SelectAll items={data.items} selected={selected} disabled={bulkBusy} onChange={setSelected} />}
-          {data && !data.items.length && <div className="py-10 text-center text-ui text-n-600"><FileText size={24} className="mx-auto mb-3 text-n-400" aria-hidden="true" />조건에 맞는 문서가 없습니다.<p className="mt-2 text-meta">BDF 없이 문서만 올릴 수 있습니다. 정리 대기에서 자료를 확정하면 여기에 표시됩니다.</p><Link to="/inbox" className={buttonClass('secondary', 'sm', 'mt-3')}>문서 올리기</Link></div>}
+          {data && !data.items.length && <div className="py-10 text-center text-ui text-n-600"><FileText size={24} className="mx-auto mb-3 text-n-400" aria-hidden="true" />조건에 맞는 문서가 없습니다.<p className="mt-2 text-meta">BDF 없이 문서만 올릴 수 있습니다. 올리기와 확정에서 자료를 확정하면 여기에 표시됩니다.</p><Link to="/inbox" className={buttonClass('secondary', 'sm', 'mt-3')}>문서 올리기</Link></div>}
           <ul className="divide-y divide-n-200">{data?.items.map((r) => <li key={r.file_id} className="flex items-start gap-1">
             <label className="flex shrink-0 cursor-pointer items-center py-3.5 pl-3 has-[:disabled]:cursor-not-allowed" title={r.can_edit ? undefined : NO_EDIT_TITLE}>
               <input type="checkbox" className="h-3.5 w-3.5 accent-brand" aria-label={`${r.name} 선택`}

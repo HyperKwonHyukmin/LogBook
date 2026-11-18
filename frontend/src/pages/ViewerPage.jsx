@@ -1,12 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Box, X } from 'lucide-react';
+import { Box, Download, X } from 'lucide-react';
 import { api } from '../api/client.js';
-import { hasModelView } from '../lib/files.js';
+import { downloadFile, hasModelView } from '../lib/files.js';
 import { errorText } from '../lib/labels.js';
 import { modelStaleNote, modelStateMessage } from '../lib/modelState.js';
 import ModelNote from '../components/preview/ModelNote.jsx';
-import Button from '../components/ui/Button.jsx';
+import Button, { buttonClass } from '../components/ui/Button.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
 import KindBadge from '../components/ui/KindBadge.jsx';
 import { Bar } from '../components/ui/Skeleton.jsx';
@@ -24,6 +24,7 @@ export default function ViewerPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [res, setRes] = useState({ id: fileId, file: null, summary: null, error: '' });
+  const [downloadError, setDownloadError] = useState('');
 
   // 파일 메타 → (모델이고 DRM 이 아니면) 변환 상태. 볼 수 없는 상태면 뷰어를 띄우지 않는다.
   useEffect(() => {
@@ -80,9 +81,22 @@ export default function ViewerPage() {
       </header>
       {error && <EmptyState icon={Box} title={error} />}
       {file && !isModel && (
+        // 2026-11-18 — PPTX·PDF 주소로 들어오면 막다른 화면이었다. 자료 화면(그 파일 미리보기)과 내려받기를 주 행동으로
         <EmptyState icon={Box} title="3D 로 볼 수 있는 모델 파일이 아닙니다"
-                    action={entryHref && <Link to={entryHref} className="text-ui text-brand hover:underline">자료에서 열기</Link>}>
-          BDF 파일만 3D 로 볼 수 있습니다.
+                    action={(
+                      <div className="flex flex-wrap items-center justify-center gap-2">
+                        {entryHref && <Link to={entryHref} className={buttonClass('primary', 'md')}>자료에서 미리 보기</Link>}
+                        <Button variant="secondary" size="md"
+                                onClick={async () => {
+                                  setDownloadError('');
+                                  try { await downloadFile(file); } catch (e) { setDownloadError(errorText(e, '내려받지 못했습니다.')); }
+                                }}>
+                          <Download size={14} aria-hidden="true" />내려받기
+                        </Button>
+                        {downloadError && <p role="alert" className="w-full text-meta text-err">{downloadError}</p>}
+                      </div>
+                    )}>
+          BDF 파일만 3D 로 볼 수 있습니다. 문서는 자료 화면에서 바로 미리 볼 수 있습니다.
         </EmptyState>
       )}
       {msg && <div className="mx-auto mt-12 w-full max-w-[520px] px-6"><ModelNote title={msg.title} busy={msg.busy}>{msg.text}</ModelNote></div>}

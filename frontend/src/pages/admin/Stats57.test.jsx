@@ -27,7 +27,7 @@ test('57 자료 현황 — 요약·형식별(펼치면 확장자)·월별·상�
   mockApi({ 'GET /api/admin/stats': STATS });
   inRouter(<StatsPage />);
   expect(await screen.findByText('확정 자료')).toBeInTheDocument();
-  expect(screen.getByText('정리 대기 3 · 휴지통 21')).toBeInTheDocument();
+  expect(screen.getByText('확정 전 3 · 휴지통 21')).toBeInTheDocument();
   expect(screen.getByText('22')).toBeInTheDocument();   // 해석 모델 = Nastran 18 + Abaqus 4
   expect(screen.queryByText('.pptx')).toBeNull();
   await userEvent.click(screen.getByRole('button', { name: '보고서' }));

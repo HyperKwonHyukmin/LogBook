@@ -90,7 +90,7 @@ export default function DraftSimilar({ entry, disabled, onMerge, onFound }) {
     <section aria-label="기존 모델과 견주기" className="mx-4 mb-4 rounded-md bg-wait-bg px-3 py-2 text-meta text-n-800">
       <p className="flex flex-wrap items-center gap-x-2">
         <span className="font-medium text-wait">기존 모델과 견주기: 같은 모델인지 확인한 뒤 확정하세요.</span>
-        {fileId && <Link to={`/similar?file=${fileId}`} className={buttonClass('ghost', 'sm')}>선례 찾기에서 자세히</Link>}
+        {fileId && <Link to={`/similar?file=${fileId}`} className={buttonClass('ghost', 'sm')}>비슷한 모델 찾기에서 자세히</Link>}
       </p>
       <ul className="mt-1 flex flex-col gap-1">
         {same.map((m) => (

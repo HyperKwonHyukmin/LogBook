@@ -11,7 +11,7 @@ test('처리 중이면 단계와 n/N — 지난 단계는 끝남, 지금 단계�
 });
 
 test('대기 사유 — 앞 배치, 다른 작업, 곧 시작, 재시도', () => {
-  expect(stagedStatus(staged({ ...alive, ahead: 2 })).line).toBe('앞의 배치 2개를 먼저 처리하고 있습니다');
+  expect(stagedStatus(staged({ ...alive, ahead: 2 })).line).toBe('앞의 묶음 2개를 먼저 처리하고 있습니다');
   expect(stagedStatus(staged({ ...alive, busy_with: ['convert_model'] })).line).toMatch(/BDF 변환.*마치면 시작/);
   expect(stagedStatus(staged(alive)).line).toMatch(/곧 시작합니다/);
   const retry = stagedStatus(staged({ ...alive, attempts: 1, last_error: 'boom' }, { step: 'files', done: 1, total: 2 }));

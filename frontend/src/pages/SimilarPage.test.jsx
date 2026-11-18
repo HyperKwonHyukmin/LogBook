@@ -27,15 +27,15 @@ function renderPage(path = '/similar?file=1', map = {}) {
 
 test('같은 설계를 한 줄로 묶고 같은 점·다른 점을 보인다', async () => {
   renderPage();
-  const list = await screen.findByRole('listbox', { name: '찾은 선례' });
+  const list = await screen.findByRole('listbox', { name: '찾은 모델' });
   const first = within(list).getAllByRole('option')[0];
   expect(within(first).getByText('같은 설계 2개 자료')).toBeInTheDocument();
   expect(within(first).getByText('형상 같음(같은 설계)')).toBeInTheDocument();
   expect(within(first).getByText('거의 같음')).toBeInTheDocument();
   await userEvent.click(within(first).getByRole('button', { name: '같은 설계 자료 2개 모두 보기' }));
   expect(within(first).getByRole('link', { name: '선례 3' })).toHaveAttribute('href', '/e/E000003');
-  expect(within(list).getByText(/이 선례는 해석 검증에 실패했습니다/)).toBeInTheDocument();
-  const detail = screen.getByRole('complementary', { name: '선례 상세' });
+  expect(within(list).getByText(/이 모델은 해석 검증에 실패했습니다/)).toBeInTheDocument();
+  const detail = screen.getByRole('complementary', { name: '찾은 모델 상세' });
   expect(within(detail).getByRole('link', { name: '나란히 비교' })).toHaveAttribute('href', '/compare?ids=1,2');
   // 42 — 기준을 좁히는 칸은 구역뿐(해석 종류는 없앴다)
   expect(screen.getByRole('combobox', { name: '구역' })).toBeInTheDocument();

@@ -150,7 +150,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
     const n = selected.length;
     const ok = await confirm({
       title: `파일 ${n}개를 이 초안에서 뺄까요?`,
-      body: '휴지통 폴더(95_Trash)로 옮겨지고 정리 대기에서는 되돌릴 수 없습니다. 다시 필요하면 [파일 추가]로 올리세요.',
+      body: '휴지통 폴더(95_Trash)로 옮겨지고 올리기와 확정에서는 되돌릴 수 없습니다. 다시 필요하면 [파일 추가]로 올리세요.',
       confirmLabel: `${n}개 빼기`,
     });
     if (!ok) return;
@@ -267,7 +267,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
     if (!entry.merge_into && !(values.hulls || []).length && !values.no_hull) {
       const pick = await confirm({
         title: '호선 없이 확정합니다. 공용 자료인가요?',
-        body: '여러 호선에 두루 쓰는 자료면 [공용으로 확정]을 누르세요. 호선이 있는데 아직 모르면 [보완 필요로 확정]을 누르면 손볼 자료에 남아 나중에 호선을 채울 수 있습니다.',
+        body: '여러 호선에 두루 쓰는 자료면 [공용으로 확정]을 누르세요. 호선이 있는데 아직 모르면 [보완 필요로 확정]을 누르면 보완할 자료에 남아 나중에 호선을 채울 수 있습니다.',
         confirmLabel: '공용으로 확정', altLabel: '보완 필요로 확정', tone: 'primary',
       });
       if (!pick) return;

@@ -28,7 +28,7 @@ test('분석 중 — 아직 시작 전이면 기다리는 중으로, 흐르는 �
   draw({ ...base, state: 'staged', queue: { ...queue, job_state: 'queued', ahead: 2 }, progress: null });
   const panel = screen.getByRole('status', { name: '정리 진행' });
   expect(panel).toHaveTextContent('정리를 기다리는 중입니다');
-  expect(panel).toHaveTextContent('앞의 배치 2개를 먼저 처리하고 있습니다');
+  expect(panel).toHaveTextContent('앞의 묶음 2개를 먼저 처리하고 있습니다');
   expect(within(panel).getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
 });
 
@@ -37,7 +37,7 @@ test('분석 중 — 워커가 꺼져 있으면 눈에 띄게 알린다', () => 
   expect(screen.getByRole('status')).toHaveTextContent('처리 프로그램(워커)이 꺼져 있어 기다리는 중입니다. 관리자에게 알려 주세요.');
 });
 
-test('정리 대기 — 왜 기다리는지, BDF 변환 상태, 초안마다 확인할 것', async () => {
+test('올리기와 확정 — 왜 기다리는지, BDF 변환 상태, 초안마다 확인할 것', async () => {
   const draft = { entry_id: 'E000010', status: 'draft', title: '', version: 1, hulls: [], zones: [], hull_evidence: [],
     suggested_entry: null, merge_into: null, uploaded_by: 'A100001',
     files: [
