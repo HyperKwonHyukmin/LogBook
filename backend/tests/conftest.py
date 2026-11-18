@@ -25,6 +25,8 @@ os.environ["LOGBOOK_REPORT_OLLAMA_URL"] = "http://127.0.0.1:9"
 # 돌린다(0) — 모의(monkeypatch)가 자식 프로세스에는 닿지 않는다. 자식 프로세스 경로는 test_isolated.py 가 따로 본다
 os.environ["LOGBOOK_EXTRACT_TIMEOUT"] = "0"
 os.environ["LOGBOOK_CONVERT_TIMEOUT"] = "0"
+# 관계 지도 보고서 특징 미리 계산(main.lifespan) — 테스트에서는 백그라운드 스레드를 띄우지 않는다
+os.environ["LOGBOOK_GRAPH_WARMUP"] = "0"
 
 import pytest  # noqa: E402
 

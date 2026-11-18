@@ -6,8 +6,8 @@
     vector   조각 벡터 평균(정규화, 색인의 임베딩 모델 기준) — '본문이 비슷한 보고서'(주제·내용이 가까움).
 
 저장하지 않는다. API 프로세스 안에 파일별로 (색인 행의 sha256·indexed_at·벡터 수·모델) 열쇠와 함께 들고 있다가,
-열쇠가 바뀐 파일만 다시 계산한다(색인 워커가 다시 색인하면 indexed_at 이 바뀐다). 서버를 다시 띄운 뒤 첫 요청은 모든 보고서의
-조각 본문을 한 번 읽는다(보고서 수천 건이면 수 초).
+열쇠가 바뀐 파일만 다시 계산한다(색인 워커가 다시 색인하면 indexed_at 이 바뀐다). 서버를 다시 띄운 뒤에는 모든 보고서의
+조각 본문을 한 번 읽어야 해서(보고서 232건에 약 30초) 서버 시작 때 백그라운드에서 미리 계산한다(warm, main.lifespan).
 
 권한·현재성은 이 모듈이 보지 않는다 — 부르는 쪽이 볼 수 있고 '현재'인(search.current_document) 파일만 넘긴다.
 """
@@ -88,6 +88,9 @@ def _build(chunks: list[dict], vector: np.ndarray | None, model: str | None) -> 
 
 
 _lock = threading.Lock()
+# 계산은 한 번에 하나만 — 서버 시작 때의 미리 계산(warm)과 첫 관계 지도 요청이 겹치면 같은 보고서를 두 번 계산하지 않고
+# 뒤 요청이 기다렸다가 캐시를 쓴다. 캐시에 다 있으면 잠금 안에서도 금방 끝난다.
+_compute_lock = threading.Lock()
 _cache: dict[str, dict[int, tuple[tuple, Feature]]] = {}   # 색인 경로 → {file_id: (열쇠, 특징)}
 
 
@@ -105,6 +108,22 @@ def features(store, file_ids) -> dict[int, Feature]:
     ids = sorted(set(file_ids))
     if store is None or not ids:
         return {}
+    with _compute_lock:
+        return _features(store, ids)
+
+
+def warm(store) -> int:
+    """색인된 모든 보고서의 특징을 미리 계산해 캐시에 넣는다(서버 시작 때 백그라운드에서 한 번). 넣은 수를 돌려준다.
+    이것이 없으면 서버를 다시 띄운 뒤 관계 지도를 처음 연 사람이 모든 보고서 본문을 읽는 시간을 기다린다(145 보고서 232건에서 약 30초, 2026-11-18 사용자 신고 — 본문 글자당 약 1.2µs)."""
+    if store is None:
+        return 0
+    with store.read() as db:
+        ids = [row["file_id"] for row in db.execute(
+            "SELECT file_id FROM documents WHERE active=1 AND state IN ('ready', 'partial') AND chunk_count > 0")]
+    return len(features(store, ids))
+
+
+def _features(store, ids: list[int]) -> dict[int, Feature]:
     path = str(store.path.resolve())
     out: dict[int, Feature] = {}
     with store.read() as db:

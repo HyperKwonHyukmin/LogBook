@@ -69,7 +69,33 @@ async def lifespan(app: FastAPI):
         safe_seed_wb_rules(db, get_storage())
     finally:
         db.close()
+    _start_report_features_warmup()
     yield
+
+
+def _start_report_features_warmup() -> None:
+    """관계 지도의 문서 관계(32)에 쓰는 보고서 본문 특징을 서버 시작 직후 백그라운드에서 미리 계산한다.
+    안 하면 재시작 뒤 관계 지도를 처음 연 사람이 약 30초 기다린다(report_index.features.warm).
+    LOGBOOK_GRAPH_WARMUP=0 이면 끈다(테스트). 실패해도 기동·화면에는 영향이 없다 — 그때는 첫 요청이 계산한다."""
+    import os
+    import threading
+    import time
+
+    if os.getenv("LOGBOOK_GRAPH_WARMUP", "1").strip().lower() in ("0", "false", "no"):
+        return
+
+    def run():
+        from .report_index import features as report_features
+        from .routers.reports import get_report_index
+
+        started = time.perf_counter()
+        try:
+            count = report_features.warm(get_report_index())
+            log.info("보고서 본문 특징 미리 계산: %d건, %.1f초", count, time.perf_counter() - started)
+        except Exception:  # noqa: BLE001
+            log.warning("보고서 본문 특징 미리 계산 실패 — 첫 관계 지도 요청이 계산합니다", exc_info=True)
+
+    threading.Thread(target=run, name="report-features-warmup", daemon=True).start()
 
 
 def create_app(frontend_dist: Path | None | object = _USE_DEFAULT) -> FastAPI:

@@ -204,3 +204,31 @@ def test_report_revisions_in_entry(db, make_user, make_entry_file, client, auth_
     s = entry["report_revisions"][0]
     assert s["count"] == 2 and s["name"] == "deck_report_Rev.B.pdf"
     assert [x["display"] for x in s["items"]] == ["Rev.A", "Rev.B"]
+
+
+# ── 서버 시작 때 미리 계산(관계 지도 첫 요청 30초 대기 방지, 2026-11-18) ─────────────────
+
+def test_warm_fills_cache_so_graph_request_does_not_recompute(db, make_entry_file, monkeypatch):
+    e, a = make_entry_file(title="미리 계산", name="가.pdf")
+    _, b = make_entry_file(entry=e, name="나.pdf")
+    _index(a, e, _text(11))
+    store = _index(b, e, _text(12))
+    rf.clear_cache()
+    assert rf.warm(store) >= 2
+    monkeypatch.setattr(rf, "_build", lambda *a, **k: pytest.fail("미리 계산한 보고서를 다시 계산했다"))
+    assert {a.id, b.id} <= set(rf.features(store, [a.id, b.id]))
+    assert rf.warm(None) == 0
+
+
+def test_startup_warmup_switch(monkeypatch):
+    import threading
+    from app import main
+    from app.report_index import features as feats_mod
+    called = threading.Event()
+    monkeypatch.setattr(feats_mod, "warm", lambda store: called.set() or 0)
+    monkeypatch.setenv("LOGBOOK_GRAPH_WARMUP", "0")
+    main._start_report_features_warmup()
+    assert not called.wait(0.3)
+    monkeypatch.setenv("LOGBOOK_GRAPH_WARMUP", "1")
+    main._start_report_features_warmup()
+    assert called.wait(5)
