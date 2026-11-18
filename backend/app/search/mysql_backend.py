@@ -10,6 +10,7 @@ Entry 수가 수만 건을 넘지 않는다는 전제로, 후보 Entry 의 필�
     호선 앞부분 일치 · 호선순·제목순 정렬 · 태그별 묶기.
 21: 보고서 문서 분류(report_meta)의 파일 적중 · 파일 보기 행에 공용 여부(보고서 화면이 '자료 소속'을 파생한다).
 29: 프로젝트(21) 필터·묶기·검색어 적중은 없앴다."""
+import os
 import re
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -41,6 +42,8 @@ HULL_TERM = re.compile(r"^[0-9]{4}$")
 # 19 — 숫자만 2자리 이상인 검색어는 호선 앞부분으로도 맞춘다('349' → 3496·3497). 정확 일치보다 낮은 점수
 HULL_PREFIX_TERM = re.compile(r"^[0-9]{2,}$")
 S_ID, S_HULL, S_TITLE_EXACT, S_TITLE, S_TAG, S_TYPE, S_DESC, S_FILE, S_BODY = 100, 100, 90, 70, 50, 50, 40, 30, 10
+# 보조 파일 확장자 — 이름 적중은 파일 보기에서만 찾는다(2026-11-18 'post' → posture.json)
+SIDECAR_EXTS = frozenset({".json", ".csv"})
 S_HULL_PREFIX = 60
 S_CONCLUSION = 60   # 53 — 결론 한 줄(제목 다음). 주의점은 설명과 같은 S_DESC
 S_HULL_SERIES = 95   # 45 — 같은 시리즈 다른 호선(정확 일치 바로 아래)
@@ -155,6 +158,11 @@ class _Hits:
         self.meta: dict[int, tuple[int, str]] = {}
         self.files: dict[int, tuple[int, str]] = {}
         self.body_files: dict[int, int] = {}
+        # 2026-11-18 — 보조 파일(json·csv, SIDECAR_EXTS) 이름 적중. 파일 보기에서만 Entry 를 끌어온다
+        # ('post' 가 WorkBench 권상 자료의 …_posture.json 에 걸려 자료 보기에 28건이 딸려 나왔다)
+        self.side: dict[int, tuple[int, str]] = {}
+        # Entry pk → 이름이 맞은 파일 이름들(자료 보기 행의 '파일 이름: …')
+        self.name_files: dict[int, list[str]] = {}
 
     def entry(self, eid: int, score: int, where: str, *, meta: bool = True) -> None:
         if score > self.entries.get(eid, (0, ""))[0]:
@@ -165,6 +173,14 @@ class _Hits:
     def file(self, fid: int, score: int, where: str) -> None:
         if score > self.files.get(fid, (0, ""))[0]:
             self.files[fid] = (score, where)
+
+    def side_entry(self, eid: int, score: int, where: str) -> None:
+        if score > self.side.get(eid, (0, ""))[0]:
+            self.side[eid] = (score, where)
+
+    def for_unit(self, unit: str) -> dict[int, tuple[int, str]]:
+        """이 보기에서 Entry 를 끌어오는 적중 — 파일 보기만 보조 파일 이름 적중을 더한다."""
+        return {**self.side, **self.entries} if unit == "file" else self.entries
 
 
 def _label_people(db: Session, facets: list[dict]) -> None:
@@ -218,9 +234,9 @@ class MySqlSearch:
             terms = [query.q.strip()]
             hits = [self._wb_hits(db, wb_id, statuses, vis)]
         if terms:
-            ids = set(hits[0].entries)
+            ids = set(hits[0].for_unit(query.unit))
             for h in hits[1:]:
-                ids &= set(h.entries)
+                ids &= set(h.for_unit(query.unit))
         else:
             ids = {i for (i,) in db.query(models.Entry.id).filter(models.Entry.status.in_(statuses), vis)}
         if fav_at is not None:
@@ -455,10 +471,17 @@ class MySqlSearch:
             h.entry(eid, S_CONCLUSION, "conclusion")
         for (eid,) in db.query(E.id).filter(live, E.caveats.like(like, escape="\\")):
             h.entry(eid, S_DESC, "caveats")
-        for fid, eid in (db.query(F.id, F.entry_id).join(E, E.id == F.entry_id)
-                         .filter(live, F.location != "trash", F.name.like(like, escape="\\"))):
-            h.entry(eid, S_FILE, "file", meta=False)
+        for fid, eid, fname in (db.query(F.id, F.entry_id, F.name).join(E, E.id == F.entry_id)
+                                .filter(live, F.location != "trash", F.name.like(like, escape="\\"))
+                                .order_by(F.id)):
             h.file(fid, S_FILE, "file")
+            # 보조 파일(json·csv — 권상 posture.json 등) — 파일 보기에서만(for_unit).
+            # 종류 'other' 전체가 아니다: .hm·.fem·.inp·.stp·.zip 이름으로는 자료도 찾는다.
+            if os.path.splitext(fname or "")[1].lower() in SIDECAR_EXTS:
+                h.side_entry(eid, S_FILE, "file")
+                continue
+            h.entry(eid, S_FILE, "file", meta=False)
+            h.name_files.setdefault(eid, []).append(fname)
         # 21 — 보고서 문서 분류(파일 하나의 값이라 그 파일만 맞는다 — 같은 자료의 다른 파일은 물려받지 않는다)
         for fid, eid in (db.query(F.id, F.entry_id).join(E, E.id == F.entry_id)
                          .join(models.ReportMeta, models.ReportMeta.file_id == F.id)
@@ -744,6 +767,8 @@ class MySqlSearch:
                 "report": reports.get(e.id),
                 "revisions": revs.get(e.id),
                 "score": r.get("score", 0), "matched": r.get("matched", []),
+                # 2026-11-18 — 파일 이름으로 맞았으면 어느 파일인지(화면 '파일 이름: …', 최대 3개)
+                "matched_files": list(dict.fromkeys(n for h in hits for n in h.name_files.get(e.id, [])))[:3],
                 "snippets": snippets.get(e.id, []),
                 # 13·15 — 공개 단계(공유·블록이면 배지). 볼 수 있는 사람에게만 실린다
                 **access.access_brief(e),

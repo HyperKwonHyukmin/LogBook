@@ -14,7 +14,7 @@ Hi-TESS LogBook(구조해석 자료 창고). 무엇·어떻게 쓰는지는 `REA
   - 같은 날 다듬기: 최근 비교는 계정 메뉴로(바구니가 비면 떠 있는 단추 없음) · 활동 코드 라벨 누락은 `labels.test.js` 가 서버 코드와 대조해 잡는다 ·
     BDF 범례는 1280px 미만이면 접힌 채로 연다 · 자료 검색이 비면 '문서 본문에서 찾기' 링크. 기록 `.impeccable/critique/2026-11-18T06-15-00Z__logbook-frontend.md`.
   - 관계 지도 첫 열기 30초(2026-11-18 신고) = 서버 재시작 뒤 보고서 본문 특징(MinHash·평균 벡터, 메모리 캐시뿐)을 232건 모두 계산하던 것. 이제 서버 시작 때 백그라운드 스레드가 미리 계산한다(`report_index.features.warm`, `main._start_report_features_warmup`, 끄기 `LOGBOOK_GRAPH_WARMUP=0`). 재시작 직후 약 30초 안에 열면 그만큼은 기다린다. 더 줄이려면 MinHash 를 한 순열 방식으로 바꾸는 안(약 10배)이 남아 있다 — 지도 결과 값이 조금 바뀌어 보류.
-  - **파일 이름 검색 규칙(2026-11-18, 'post' 로 찾으면 권상 자료 28건이 나온 신고)**: 파일 이름은 부분 일치라 권상 보조 파일(`…_posture.json`, 종류 '기타')이 낱말 안에서 걸렸다. 이제 종류 '기타' 파일의 이름 적중은 **파일 보기에서만** 찾고 자료 보기 결과에는 올리지 않는다(`search/mysql_backend.py` `_Hits.side`·`for_unit`). 단 Abaqus `.inp` 는 종류가 '기타' 여도 모델이라 예외(`is_abaqus_input`). 자료 보기 행에는 이름이 맞은 파일을 `matched_files`(최대 3개)로 싣고 카드가 '파일 이름 …' 줄로 보인다(`ResultList.jsx`). 시험 `tests/test_search_sidecar_names.py`.
+  - **파일 이름 검색 규칙(2026-11-18, 'post' 로 찾으면 권상 자료 28건이 나온 신고)**: 파일 이름은 부분 일치라 권상 보조 파일(`…_posture.json`, 종류 '기타')이 낱말 안에서 걸렸다. 이제 보조 파일(`.json`·`.csv`, `SIDECAR_EXTS`)의 이름 적중은 **파일 보기에서만** 찾고 자료 보기 결과에는 올리지 않는다(`search/mysql_backend.py` `_Hits.side`·`for_unit`). 종류 '기타' 전체로 넓히지 말 것 — `.hm`·`.fem`·`.inp`·`.stp`·`.zip` 이름으로 자료를 못 찾게 된다(커밋 전 리뷰). 자료 보기 행에는 이름이 맞은 파일을 `matched_files`(최대 3개)로 싣고 카드가 '파일 이름 …' 줄로 보인다(`ResultList.jsx`). 시험 `tests/test_search_sidecar_names.py`.
 
 ## 검사
 - 백엔드: `backend\.venv\Scripts\pytest.exe -q`(전체 약 15분). 고친 곳만 먼저 돌리고 전체는 끝에 한 번.

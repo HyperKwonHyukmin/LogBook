@@ -155,6 +155,13 @@ function EntryRow({ item, on, terms, filters, picked, onPick }) {
         {item.snippets?.length
           ? <Snippets snippets={item.snippets.slice(0, ROW_SNIPPETS)} clamp="line-clamp-1" />
           : <ReportLine report={item.report} />}
+        {/* 2026-11-18 — 파일 이름으로 맞았으면 어느 파일인지. 제목·본문에 검색어가 없어도 왜 나왔는지 보이게 */}
+        {item.matched_files?.length > 0 && (
+          <p className="mt-1 line-clamp-1 text-meta text-n-600">
+            <span className="mr-1.5 font-medium text-n-500">파일 이름</span>
+            {item.matched_files.map((n, i) => <span key={n}>{i > 0 && ', '}<TermHighlight text={n} terms={terms} /></span>)}
+          </p>
+        )}
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-meta">
           <KindCounts item={item} />
           {item.tags?.length > 0 && (

@@ -547,3 +547,14 @@ test('찾는 자료가 없으면 같은 검색어로 문서 본문 검색에 가
   expect(await screen.findByText('찾는 자료가 없습니다')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /문서 본문에서 찾기/ })).toHaveAttribute('href', '/reports?q=zzz');
 });
+
+test('파일 이름으로 맞은 자료는 어느 파일인지 보인다(2026-11-18)', async () => {
+  const hit = { ...ITEM, entry_id: 'E000003', title: '권상 검토', matched: ['file'], snippets: [],
+    matched_files: ['3515_sidepassage.bdf'] };
+  mockApi({ 'GET /api/search?q=sidepass&limit=50&offset=0': { unit: 'entry', total: 1, items: [hit], facets: FACETS,
+    hull_suggestion: null, terms: ['sidepass'] } });
+  renderAt('/?q=sidepass');
+  const line = (await screen.findByText('파일 이름')).closest('p');
+  expect(line).toHaveTextContent('3515_sidepassage.bdf');
+  expect(within(line).getByText('sidepass', { selector: 'mark' })).toBeInTheDocument();
+});
