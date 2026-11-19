@@ -53,7 +53,7 @@ export default function CommentsPage() {
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   {c.is_new && <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-label="새 글" />}
                   <span className="text-ui font-medium text-n-900" title={c.author.employee_id}>{c.author.name || c.author.employee_id}</span>
-                  <span className="text-meta text-n-600">{c.reply_to_me ? '내 글에 답글' : '내 자료에'}</span>
+                  <span className="text-meta text-n-600">{c.reply_to_me ? '내 글에 답글' : c.reason === 'assigned' ? '담당 자료에' : '내 자료에'}</span>
                   <IssueChip status={c.status} />
                   <span className="ml-auto font-mono text-meta text-n-500">{formatDateTime(c.created_at)}</span>
                 </div>

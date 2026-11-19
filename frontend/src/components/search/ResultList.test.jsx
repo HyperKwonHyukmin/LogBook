@@ -44,7 +44,7 @@ test('제목 머리 빼기 — 둘째 줄과 겹치는 호선(공용), 구역, �
   expect(it('공용 · 기타 · x', { hulls: [] })).toBe('공용 · 기타 · x');   // 공용이 아닌 자료의 '공용' 은 떼지 않는다
 });
 
-test('행 제목은 구별자만 보이고 전체 제목은 title, 오른쪽에 담당자(퇴사, 외 N)와 0 이 아닌 파일 수만', () => {
+test('행 제목은 구별자만 보이고 전체 제목은 title, 오른쪽에 담당자(외 N, 퇴사는 행에 안 보임)와 0 이 아닌 파일 수만', () => {
   render(
     <MemoryRouter>
       <ResultList unit="entry" onSelect={() => {}} onOpen={() => {}}
@@ -55,8 +55,9 @@ test('행 제목은 구별자만 보이고 전체 제목은 title, 오른쪽에 
   );
   const link = screen.getByRole('link', { name: 'M03 Upper stand' });
   expect(link).toHaveAttribute('title', '3503 · 기타 · Unit · M03 Upper stand');
-  const who = screen.getByTitle('담당자 김미희(퇴사), 박준석');
-  expect(who).toHaveTextContent('담당 김미희 퇴사 외 1');
+  const who = screen.getByTitle('담당자 김미희, 박준석');
+  expect(who).toHaveTextContent('담당 김미희 외 1');
+  expect(screen.queryByText(/퇴사/)).toBeNull();
   expect(screen.getByLabelText('파일 BDF 2, 결과 1')).toBeInTheDocument();
   expect(screen.queryByText(/도면/)).toBeNull();
 });

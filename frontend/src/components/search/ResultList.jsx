@@ -109,15 +109,16 @@ export function titleTail(item) {
   return parts.slice(i).join(' · ');
 }
 
-/** 2026-11-19 — 담당자(과제를 한 사람, 주 담당자 먼저). 올린 사람은 일괄 이관으로 대부분 같아 행에 두지 않는다. */
+/**
+ * 2026-11-19 — 담당자(과제를 한 사람, 주 담당자 먼저). 올린 사람은 일괄 이관으로 대부분 같아 행에 두지 않는다.
+ * 퇴사 여부는 행에 보이지 않는다(사용자 요청 — 목록이 어수선해진다). 자료 화면 담당자 칸에서 '(퇴사)'로 보인다.
+ */
 function Assignees({ people }) {
   if (!people?.length) return null;
   const [main, ...rest] = people;
-  const all = people.map((p) => `${p.name}${p.employed ? '' : '(퇴사)'}`).join(', ');
   return (
-    <div className="truncate text-n-600" title={`담당자 ${all}`}>
+    <div className="truncate text-n-600" title={`담당자 ${people.map((p) => p.name).join(', ')}`}>
       담당 <span className="text-n-800">{main.name}</span>
-      {!main.employed && <span className="text-n-500"> 퇴사</span>}
       {rest.length > 0 && <span className="text-n-500"> 외 {rest.length}</span>}
     </div>
   );

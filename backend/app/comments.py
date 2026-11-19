@@ -20,7 +20,7 @@ registry.json(comments)에 남겨 재구축 뒤에도 되살린다 — 쓰기마
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from . import access, audit, models
@@ -261,8 +261,17 @@ def mark_seen(db: Session, employee_id: str) -> datetime:
     return now
 
 
+def _assigned_entry_ids(employee_id: str):
+    """2026-11-19 — 내가 담당자인 자료 id(SQL 부분 질의). 명부에 사번이 있는 재직자만(손으로 넣은 퇴사자 등은 받을 사람이 없다)."""
+    Pn, A = models.Person, models.EntryAssignee
+    return (select(A.entry_id).join(Pn, Pn.id == A.person_id)
+            .where(Pn.employee_id.isnot(None), func.upper(Pn.employee_id) == (employee_id or "").upper(),
+                   Pn.employed.is_(True)))
+
+
 def _inbox_query(db: Session, user):
-    """내게 온 글 — 내가 올린 확정 자료에 남이 쓴 글 + 내 글에 남이 단 답글(지운 글 제외, 지금 볼 수 있는 자료만)."""
+    """내게 온 글 — 내가 올린 확정 자료에 남이 쓴 글 + 내 글에 남이 단 답글(지운 글 제외, 지금 볼 수 있는 자료만).
+    2026-11-19 — 내가 담당자인 자료에 남이 쓴 글도(자료 대부분이 일괄 이관이라 올린 사람이 한 사람이다. 해석한 사람이 받게)."""
     me = user.employee_id
     P = aliased(C)
     return (db.query(C, models.Entry, P)
@@ -270,7 +279,8 @@ def _inbox_query(db: Session, user):
             .outerjoin(P, P.id == C.parent_id)
             .filter(C.employee_id != me, C.deleted_at.is_(None), models.Entry.status == "confirmed",
                     access.visible_entries_filter(user),
-                    or_(models.Entry.uploaded_by == me, and_(P.id.isnot(None), P.employee_id == me))))
+                    or_(models.Entry.uploaded_by == me, and_(P.id.isnot(None), P.employee_id == me),
+                        models.Entry.id.in_(_assigned_entry_ids(me)))))
 
 
 def _since(db: Session, user) -> datetime:
@@ -297,6 +307,9 @@ def inbox(db: Session, user, limit: int = 50) -> dict:
             "created_at": _iso(c.created_at),
             "entry": {"entry_id": e.entry_id, "title": e.title},
             "reply_to_me": p is not None and p.employee_id == user.employee_id,
+            # 2026-11-19 — 왜 받았나: reply(내 글에 답글) > mine(내가 올린 자료) > assigned(내가 담당자인 자료)
+            "reason": ("reply" if p is not None and p.employee_id == user.employee_id
+                       else "mine" if e.uploaded_by == user.employee_id else "assigned"),
             "is_new": c.created_at > since,
         })
     return {"items": items, "unread": unread_count(db, user), "seen_at": _iso(seen_at(db, user.employee_id))}

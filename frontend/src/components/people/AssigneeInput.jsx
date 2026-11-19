@@ -18,9 +18,10 @@ import { writeSearch } from '../../lib/search.js';
 
 const meta = (p) => [p.department, p.position].filter(Boolean).join(' · ');
 
+/** 2026-11-19 — 칩 대신 이름 옆 글자 '(퇴사)'(사용자 요청). 검색 결과 행에는 퇴사를 보이지 않고 자료 화면에서만. */
 export function RetiredBadge({ person }) {
   if (person.employed !== false) return null;
-  return <span className="ml-1.5 rounded-xs bg-n-100 px-1 text-micro font-medium text-n-600">퇴사</span>;
+  return <span className="ml-1 text-n-500">(퇴사)</span>;
 }
 
 /** 읽기 화면 — 이름(누르면 그 담당자의 자료 검색, 46)·부서·직책·퇴사 표시. */

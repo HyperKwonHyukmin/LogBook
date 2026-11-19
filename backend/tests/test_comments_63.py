@@ -167,6 +167,30 @@ def test_inbox_and_seen(client, db, make_user, auth_headers, make_entry_file):
     assert comments.SEEN_KEY not in client.get("/api/me/prefs", headers=ha).json()
 
 
+def test_inbox_includes_assignee(client, db, make_user, auth_headers, make_entry_file):
+    """2026-11-19 — 담당자(명부에 사번이 있는 재직자)도 그 자료의 새 의견을 받는다. 퇴사자, 사번 없는 사람은 받지 않는다."""
+    from app import people
+
+    _users(make_user)
+    make_user("D400004", name="퇴사자")   # LV2 — 자료는 보이지만 명부에서 퇴사라 받지 않는다
+    e, _ = make_entry_file(title="이관 자료")                     # A100001 이 올림(일괄 이관)
+    analyst = models.Person(employee_id="B200002", name="동료", source="wb")
+    gone = models.Person(employee_id="D400004", name="퇴사자", source="wb", employed=False)
+    db.add_all([analyst, gone])
+    db.commit()
+    people.set_assignees(db, e, [analyst, gone])
+    db.commit()
+    _post(client, auth_headers("Z900009"), e.entry_id, body="경계조건 질문")
+    assert client.get("/api/me/comments/summary", headers=auth_headers("B200002")).json() == {"unread": 1}
+    box = client.get("/api/me/comments", headers=auth_headers("B200002")).json()
+    assert box["items"][0]["reason"] == "assigned" and box["items"][0]["reply_to_me"] is False
+    assert client.get("/api/me/comments", headers=auth_headers("A100001")).json()["items"][0]["reason"] == "mine"
+    assert client.get("/api/me/comments/summary", headers=auth_headers("D400004")).json() == {"unread": 0}
+    # 담당자 자신이 쓴 글은 자기에게 오지 않는다
+    _post(client, auth_headers("B200002"), e.entry_id, body="제가 답합니다")
+    assert client.get("/api/me/comments/summary", headers=auth_headers("B200002")).json() == {"unread": 1}
+
+
 def test_inbox_hides_trashed_and_deleted(client, db, make_user, auth_headers, make_entry_file):
     _users(make_user)
     mine, _ = make_entry_file()
