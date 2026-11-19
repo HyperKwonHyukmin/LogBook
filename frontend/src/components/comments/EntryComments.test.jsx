@@ -2,7 +2,8 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { calls, mockApi } from '../../test/mockApi.js';
-import EntryComments from './EntryComments.jsx';
+import { useState } from 'react';
+import EntryComments, { CommentsLink } from './EntryComments.jsx';
 import CommentsPage from '../../pages/CommentsPage.jsx';
 
 const author = (employee_id, name) => ({ employee_id, name });
@@ -108,4 +109,25 @@ test('새 의견 화면 — 목록을 보이고 읽음 표시를 보낸다', asy
   await waitFor(() => expect(calls(fetch)).toContain('POST /api/me/comments/seen'));
   await waitFor(() => expect(seen).toHaveBeenCalled());
   window.removeEventListener('logbook:comments-seen', seen);
+});
+
+test('속성 칸 링크 — 의견 수와 열린 이슈를 받아 보이고, 누르면 의견 구역으로 내려간다', async () => {
+  mockApi({ [`GET ${URL}`]: { total: 3, open_issues: 1, can_comment: true, items: [item({ kind: 'issue', status: 'open' })] } });
+  function Both() {
+    const [counts, setCounts] = useState(null);
+    return <MemoryRouter><CommentsLink counts={counts} /><EntryComments entryId="E000001" status="confirmed" onCounts={setCounts} /></MemoryRouter>;
+  }
+  render(<Both />);
+  const link = await screen.findByRole('button', { name: /의견 3/ });
+  expect(link).toHaveTextContent('열린 이슈 1');
+  const section = screen.getByRole('region', { name: '의견과 이슈' });
+  section.scrollIntoView = vi.fn();
+  await userEvent.click(link);
+  expect(section.scrollIntoView).toHaveBeenCalled();
+  expect(section).toHaveFocus();
+});
+
+test('의견이 없으면 링크는 "의견 남기기"', () => {
+  render(<CommentsLink counts={{ total: 0, open_issues: 0 }} />);
+  expect(screen.getByRole('button', { name: '의견 남기기' })).toBeInTheDocument();
 });

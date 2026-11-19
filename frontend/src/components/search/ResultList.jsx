@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Highlight, { TermHighlight } from '../ui/Highlight.jsx';
 import KindBadge from '../ui/KindBadge.jsx';
-import { BarChart3, Box, Check, File, FileText, PenTool } from 'lucide-react';
+import { BarChart3, Box, Check, Copy, File, FileText, PenTool } from 'lucide-react';
 import { DraftBadge, FilterLink, HullChip, TagLink } from '../ui/Status.jsx';
 import { KIND_LABELS, formatDateTime } from '../../lib/labels.js';
 import { filterValues, locatorLabel } from '../../lib/search.js';
@@ -13,6 +13,8 @@ import { FavoriteToggle } from '../favorites/Favorites.jsx';
 import { AccessBadge } from '../access/AccessPanel.jsx';
 import NeedsFixBadge from '../ui/NeedsFixBadge.jsx';
 import RevisionBrief from '../revisions/RevisionBrief.jsx';
+import { copyText } from '../../lib/files.js';
+import { useToast } from '../ui/Toast.jsx';
 
 const stop = (e) => e.stopPropagation();
 
@@ -86,6 +88,67 @@ function KindCounts({ item }) {
   );
 }
 
+/**
+ * 2026-11-19 — 자료 구성 표시: 모델(BDF)과 문서(보고서, 발표자료)가 있는지를 제목 앞에서 바로 보이게.
+ * 맨 아래 'BDF 2, 문서 1' 줄은 작고 흐려서 목록을 훑을 때 눈에 들어오지 않았다. 둘 다 없으면(도면, 기타만) 그리지 않는다.
+ */
+export function contentKind(item) {
+  const c = item.kind_counts;
+  const has = (k) => (c ? (c[k] || 0) > 0 : (item.kinds || []).includes(k));
+  const m = has('model');
+  const r = has('report');
+  return m && r ? 'both' : m ? 'model' : r ? 'report' : null;
+}
+const CONTENT = {
+  both: { label: '모델+문서', tip: 'BDF 모델과 문서(보고서, 발표자료)가 모두 있는 자료', cls: 'bg-ok-bg text-ok' },
+  model: { label: '모델만', tip: 'BDF 모델만 있고 문서는 없는 자료', cls: 'bg-brand-subtle text-brand' },
+  report: { label: '문서만', tip: '문서(보고서, 발표자료)만 있고 BDF 모델은 없는 자료', cls: 'bg-n-100 text-n-700' },
+};
+
+export function ContentBadge({ item }) {
+  const k = contentKind(item);
+  if (!k) return null;
+  const { label, tip, cls } = CONTENT[k];
+  return (
+    <span title={tip} data-testid="content-kind"
+          className={`inline-flex h-5 shrink-0 items-center gap-1 rounded-xs px-1.5 text-micro font-semibold ${cls}`}>
+      {k !== 'report' && <Box size={11} aria-hidden="true" />}
+      {k !== 'model' && <FileText size={11} aria-hidden="true" />}
+      {label}
+    </span>
+  );
+}
+
+/** 자료 번호 + 복사 단추(2026-11-19). 눌러도 행 선택과 미리보기는 열리지 않는다. */
+export function EntryIdCopy({ entryId }) {
+  const toast = useToast();
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return undefined;
+    const t = setTimeout(() => setCopied(false), 1600);
+    return () => clearTimeout(t);
+  }, [copied]);
+  async function click(e) {
+    e.stopPropagation();
+    if (await copyText(entryId)) {
+      setCopied(true);
+      toast.show({ tone: 'ok', message: `자료 번호 ${entryId} 를 복사했습니다` });
+    } else {
+      toast.show({ tone: 'err', message: '복사하지 못했습니다. 번호를 직접 골라 복사해 주세요.' });
+    }
+  }
+  return (
+    <span className="inline-flex items-center justify-end gap-0.5">
+      <span className="select-all font-mono text-n-500">{entryId}</span>
+      <button type="button" onClick={click} onKeyDown={stop} aria-label={`자료 번호 ${entryId} 복사`} title="번호 복사"
+              className={`-mr-1 inline-flex h-6 w-6 items-center justify-center rounded-sm transition-colors duration-150
+                          hover:bg-n-100 hover:text-n-900 ${copied ? 'text-ok' : 'text-n-500'}`}>
+        {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
+      </button>
+    </span>
+  );
+}
+
 /** 54 — 여러 자료 고르기 칸. 행을 누르면 미리보기, 이 칸을 누르면 고르기(행 동작으로 번지지 않게). */
 function PickBox({ item, picked, onPick }) {
   return (
@@ -113,6 +176,7 @@ function EntryRow({ item, on, terms, filters, picked, onPick }) {
       <RowThumb item={item} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
+          <ContentBadge item={item} />
           <Link to={`/e/${item.entry_id}`} onClick={stop}
                 className={`min-w-0 truncate text-body font-semibold tracking-[-0.005em] hover:underline ${on ? 'text-brand' : 'text-n-900'}`}>
             <TermHighlight text={item.title} terms={terms} />
@@ -178,7 +242,7 @@ function EntryRow({ item, on, terms, filters, picked, onPick }) {
         {item.posted_at && (
           <div className="tnum text-n-600" title={formatDateTime(item.posted_at)}>올림 <span className="font-mono text-n-800">{item.posted_at.slice(0, 10)}</span></div>
         )}
-        <div className="mt-1 font-mono text-n-500">{item.entry_id}</div>
+        <div className="mt-1"><EntryIdCopy entryId={item.entry_id} /></div>
       </div>
     </div>
   );

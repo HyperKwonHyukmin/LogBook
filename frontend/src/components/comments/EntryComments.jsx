@@ -125,7 +125,7 @@ function CommentItem({ c, reply = false, onChanged, onReply, canReply }) {
         </p>
       )}
       {c.resolved && !c.deleted && (
-        <p className="mt-1 text-meta text-ok">{c.resolved.name || c.resolved.employee_id} 님이 해결함 · {formatDateTime(c.resolved.at)}</p>
+        <p className="mt-1 text-meta text-ok">{c.resolved.name || c.resolved.employee_id} 님이 {formatDateTime(c.resolved.at)}에 해결함</p>
       )}
       {!editing && !c.deleted && (canReply || c.can_resolve || c.can_edit || c.can_delete) && (
         <div className="mt-1 flex flex-wrap gap-0.5">
@@ -172,7 +172,27 @@ function Thread({ c, entryId, canComment, onChanged }) {
  * 63 — 자료 의견과 이슈. 확정 자료 화면 아래에 다른 사람이 의견을 남기고, 고칠 점은 이슈로 올려 해결까지 따라간다.
  * 결론과 주의점(53)은 올린 사람이 정리한 글이고, 여기는 다른 사람의 목소리다.
  */
-export default function EntryComments({ entryId, status }) {
+export const COMMENTS_ANCHOR = 'entry-comments';
+
+/** 속성 칸의 '의견' 줄 — 의견 수와 열린 이슈 수, 누르면 아래 의견 구역으로 내려간다(63). */
+export function CommentsLink({ counts }) {
+  function go() {
+    const el = document.getElementById(COMMENTS_ANCHOR);
+    el?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    el?.focus?.({ preventScroll: true });
+  }
+  const total = counts?.total || 0;
+  const open = counts?.open_issues || 0;
+  return (
+    <button type="button" onClick={go}
+            className="inline-flex min-w-0 items-baseline gap-1.5 rounded-xs text-left text-ui text-n-800 underline-offset-2 hover:text-brand hover:underline">
+      {counts == null ? <span className="text-n-500">…</span> : total ? <span>의견 <span className="font-mono">{total}</span></span> : <span>의견 남기기</span>}
+      {open > 0 && <span className="text-meta font-medium text-wait">열린 이슈 {open}</span>}
+    </button>
+  );
+}
+
+export default function EntryComments({ entryId, status, onCounts }) {
   const toast = useToast();
   const [data, setData] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -183,7 +203,7 @@ export default function EntryComments({ entryId, status }) {
     if (status === 'draft') return undefined;
     let live = true;
     api(`/entries/${encodeURIComponent(entryId)}/comments`)
-      .then((d) => { if (live) { setData(d); setFailed(false); } })
+      .then((d) => { if (live) { setData(d); setFailed(false); onCounts?.({ total: d.total, open_issues: d.open_issues }); } })
       .catch(() => { if (live) setFailed(true); });
     return () => { live = false; };
   }, [entryId, status, tick]);
@@ -199,7 +219,7 @@ export default function EntryComments({ entryId, status }) {
 
   const items = data?.items || [];
   return (
-    <section aria-label="의견과 이슈" className="mt-8 border-t border-n-200 pt-5">
+    <section id={COMMENTS_ANCHOR} tabIndex={-1} aria-label="의견과 이슈" className="mt-8 scroll-mt-4 border-t border-n-200 pt-5 outline-none">
       <div className="mb-1 flex items-baseline gap-2">
         <SectionTitle>의견 {data?.total > 0 && <span className="font-mono font-normal text-n-500">{data.total}</span>}</SectionTitle>
         {data?.open_issues > 0 && <span className="text-meta font-medium text-wait">열린 이슈 {data.open_issues}</span>}

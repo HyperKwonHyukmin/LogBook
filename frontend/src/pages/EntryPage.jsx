@@ -43,7 +43,7 @@ import WbOrigins from '../components/workbench/WbOrigins.jsx';
 import WireChip from '../components/ui/WireChip.jsx';
 import { needsLiftingWire } from '../lib/inboxStatus.js';
 import AssigneeInput, { AssigneeList, RunnerList } from '../components/people/AssigneeInput.jsx';
-import EntryComments from '../components/comments/EntryComments.jsx';
+import EntryComments, { CommentsLink } from '../components/comments/EntryComments.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
 // 21 — 프로젝트(있을 때만 기록). 29 — 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
@@ -458,6 +458,8 @@ export default function EntryPage() {
   const toast = useToast();
   const [confirm, dialog] = useConfirm();
   const { entry, status, error, setError, commit, reload } = useEntry(entryId);
+  const [commentCounts, setCommentCounts] = useState(null);   // 63 — 속성 칸 '의견' 줄(아래 의견 구역이 알려 준다)
+  useEffect(() => { setCommentCounts(null); }, [entryId]);
   // 62 — 붙은 파일을 목록에 '새 파일'로 표시하고, 패널이 화면 밖이어도 알 수 있게 토스트로도 알린다
   const [addedIds, setAddedIds] = useState(() => new Set());
   const adder = useAddFilesWatch({ onMerged: (r) => {
@@ -881,7 +883,7 @@ export default function EntryPage() {
               : <p className="text-ui text-n-500">파일이 없습니다.</p>}
           </div>
           {/* 63 — 자료 의견과 이슈(확정 자료만) */}
-          <EntryComments entryId={entry.entry_id} status={entry.status} />
+          <EntryComments entryId={entry.entry_id} status={entry.status} onCounts={setCommentCounts} />
         </div>
 
         <aside aria-label="속성" className="min-w-0">
@@ -968,6 +970,8 @@ export default function EntryPage() {
                 <Prop label="확정">{person(entry.confirmed_by)}</Prop>
               )}
               {entry.status === 'confirmed' && <ReviewProp entry={entry} disabled={editing} onDone={() => reload().catch(() => {})} />}
+              {/* 63 — 의견 수와 열린 이슈, 누르면 아래 의견 구역으로 */}
+              {entry.status !== 'draft' && <Prop label="의견"><CommentsLink counts={commentCounts} /></Prop>}
             </dl>
           )}
           {/* 13 — 공개 범위(변경하기와 분리: 확인 후 바로 적용, 이력에 따로 남는다) */}
