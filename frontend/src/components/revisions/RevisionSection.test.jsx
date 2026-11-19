@@ -90,8 +90,8 @@ test('두 판 고르기 — 계열 밖 모델과 비교를 요청한다', async 
   const { fetch } = renderSection({
     'POST /api/files/1/diff/9': { a: 1, b: 9, id: 20, state: 'queued', summary: null, error: null, stale: false },
   });
-  await userEvent.click(await screen.findByRole('button', { name: '두 판 고르기' }));
-  const g = screen.getByRole('group', { name: '두 판 고르기' });
+  await userEvent.click(await screen.findByRole('button', { name: 'Revision 모델 비교' }));
+  const g = screen.getByRole('group', { name: 'Revision 모델 비교' });
   await userEvent.selectOptions(within(g).getByLabelText('뒤 판'), '9');
   await userEvent.click(within(g).getByRole('button', { name: '비교' }));
   expect(await screen.findByText(/비교 중입니다/)).toBeInTheDocument();
@@ -189,15 +189,15 @@ test('2026-11-19 — 묶인 판이 없으면 판 구역 없이 단추만 파일 
   const header = (actions) => <div data-testid="files-header">파일 머리{actions}</div>;
   renderSection({ 'GET /api/entries/E000001/revisions': { ...DATA, series: [],
     others: [item(1, 'a.bdf', null), item(2, 'b.bdf', null)] } }, { renderHeader: header });
-  await screen.findByRole('button', { name: /두 판 고르기/ });   // 판 정보를 받기 전에는 단추 없는 머리 줄
+  await screen.findByRole('button', { name: /Revision 모델 비교/ });   // 판 정보를 받기 전에는 단추 없는 머리 줄
   const head = screen.getByTestId('files-header');
-  expect(within(head).getByRole('button', { name: /두 판 고르기/ })).toBeInTheDocument();
+  expect(within(head).getByRole('button', { name: /Revision 모델 비교/ })).toBeInTheDocument();
   expect(within(head).getByRole('button', { name: '판 정리' })).toBeInTheDocument();
   expect(screen.queryByText('판으로 묶인 BDF 가 없습니다.')).toBeNull();
   expect(screen.queryByRole('region', { name: '판' })).toBeNull();
   // 두 판 고르기를 열면 그때 고르기 칸이 보인다
-  await userEvent.click(within(head).getByRole('button', { name: /두 판 고르기/ }));
-  expect(screen.getByRole('group', { name: '두 판 고르기' })).toBeInTheDocument();
+  await userEvent.click(within(head).getByRole('button', { name: /Revision 모델 비교/ }));
+  expect(screen.getByRole('group', { name: 'Revision 모델 비교' })).toBeInTheDocument();
 });
 
 test('2026-11-19 — 묶인 판이 있으면 판 구역 뒤에 파일 머리 줄을 단추 없이 그린다', async () => {

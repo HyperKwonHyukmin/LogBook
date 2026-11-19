@@ -97,7 +97,7 @@ function RevNode({ item, selected, onPick }) {
   );
 }
 
-/** 두 판 고르기 — 같은 자료의 모델 아무 둘(계열 밖도). */
+/** Revision 모델 비교(화면 이름, 2026-11-19 — 옛 이름 '두 판 고르기') — 같은 자료의 모델 아무 둘(계열 밖도). */
 function PairPicker({ models, onCompare, onCancel }) {
   const [a, setA] = useState(models[0]?.file_id ?? '');
   const [b, setB] = useState(models[1]?.file_id ?? '');
@@ -107,7 +107,7 @@ function PairPicker({ models, onCompare, onCancel }) {
     </select>
   );
   return (
-    <div role="group" aria-label="두 판 고르기" className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-n-200 bg-n-50 px-2 py-1.5">
+    <div role="group" aria-label="Revision 모델 비교" className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-n-200 bg-n-50 px-2 py-1.5">
       <span className="text-meta text-n-700">앞</span>{sel('앞 판', a, setA)}
       <ArrowRight size={14} className="text-n-400" aria-hidden="true" />
       <span className="text-meta text-n-700">뒤</span>{sel('뒤 판', b, setB)}
@@ -179,7 +179,7 @@ export default function RevisionSection({ entryId, selectedId, onPick, locked = 
 
   const pickButton = allModels.length >= 2 && !edit && (
     <Button variant="ghost" size="sm" onClick={() => setPicking(!picking)} aria-expanded={picking}>
-      <GitCompareArrows size={14} aria-hidden="true" />두 판 고르기
+      <GitCompareArrows size={14} aria-hidden="true" />Revision 모델 비교
     </Button>
   );
   const editButton = data.can_edit && !edit && (
