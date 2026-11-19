@@ -284,7 +284,7 @@ test('결과 한 행 — 통제 값 줄·종류별 파일 수·태그 링크·�
   expect(within(row).getByRole('link', { name: '선미부' })).toHaveAttribute('href', '/?zone=%EC%84%A0%EB%AF%B8%EB%B6%80');
   expect(within(row).queryByRole('link', { name: 'FE 해석' })).toBeNull();   // 42 — 해석 종류는 없앴다(응답에 남아 있어도)
   expect(within(row).getByRole('link', { name: '벌크선' })).toHaveAttribute('href', '/?ship_type=%EB%B2%8C%ED%81%AC%EC%84%A0');
-  expect(within(row).getByLabelText('파일 BDF 2, 문서 1, 도면 0, 결과 0')).toBeInTheDocument();
+  expect(within(row).getByLabelText('파일 BDF 2, 문서 1')).toBeInTheDocument();   // 2026-11-19 — 0 인 종류는 뺀다
   expect(within(row).getByRole('link', { name: '#응력' })).toHaveAttribute('href', '/?tag=%EC%9D%91%EB%A0%A5');
   expect(row).toHaveTextContent('올림 2026-10-06');
   // 15 — 해석 시기는 보이지 않는다(응답에 남아 있어도)

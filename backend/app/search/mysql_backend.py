@@ -745,6 +745,9 @@ class MySqlSearch:
                 if eid in wanted:
                     groups[eid].add(fid)
         snippets = self._snippets(db, groups, terms)
+        # 2026-11-19 — 결과 행의 담당자 이름(주 담당자 먼저). 올린 사람은 일괄 이관 때문에 대부분 같은 사람이라 행에 싣지 않는다
+        pids = {int(p) for r in page for p in r["assignees"]}
+        people = {str(p.id): p for p in db.query(models.Person).filter(models.Person.id.in_(pids or [0]))}
         items = []
         for r in page:
             e = r["entry"]
@@ -755,6 +758,8 @@ class MySqlSearch:
                 "zones": sorted(r["zones"]), "target": min(r["targets"]) if r["targets"] else None,
                 "tags": free[e.id],
                 "uploaded_by": e.uploaded_by,
+                "assignees": [{"name": people[p].name, "employed": bool(people[p].employed)}
+                              for p in r["assignees"] if p in people],
                 "confirmed_at": e.confirmed_at.isoformat() if e.confirmed_at else None,
                 "conclusion": e.conclusion, "reviewed": bool(e.reviewed_by),   # 53
                 "file_count": r["file_count"], "kinds": sorted(r["kinds"]),

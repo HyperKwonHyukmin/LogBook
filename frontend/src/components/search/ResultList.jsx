@@ -37,7 +37,7 @@ function Snippets({ snippets, showName = true, clamp = 'line-clamp-2' }) {
 const Hulls = ({ hulls }) => hulls.map((h) => <HullChip key={h} hull={h} onClick={stop} />);
 const Sep = () => <span aria-hidden="true" className="text-n-300">·</span>;
 
-// 결과 행의 종류별 파일 수 — 이 넷은 0 이어도 보이고(무엇이 없는지도 정보다), 기타는 있을 때만.
+// 결과 행의 종류별 파일 수 순서 — 있는 종류만 보인다(2026-11-19, 없는 것은 구성 배지가 말한다).
 const COUNT_KINDS = ['model', 'report', 'drawing', 'result'];
 const KIND_ICONS = { model: Box, report: FileText, drawing: PenTool, result: BarChart3, other: File };
 const ROW_SNIPPETS = 2;
@@ -72,19 +72,54 @@ function KindIcon({ item }) {
   );
 }
 
-/** 종류별 파일 수 — 'BDF 2 · 문서 1 · 도면 0 · 결과 0'. 0 은 흐리게. */
+/**
+ * 종류별 파일 수 — 'BDF 2 · 결과 1 · 기타 4'. 2026-11-19 — 0 인 종류는 뺀다(모델, 문서가 없다는 것은 제목 앞 구성 배지가 말한다).
+ */
 function KindCounts({ item }) {
   const counts = item.kind_counts;
   if (!counts) return <span className="flex gap-1">{item.kinds.map((k) => <KindBadge key={k} kind={k} />)}</span>;
-  const kinds = counts.other > 0 ? [...COUNT_KINDS, 'other'] : COUNT_KINDS;
+  const kinds = [...COUNT_KINDS, 'other'].filter((k) => counts[k] > 0);
+  if (!kinds.length) return null;
   return (
-    <span className="tnum flex flex-wrap items-center gap-x-1.5" aria-label={`파일 ${kinds.map((k) => `${KIND_LABELS[k]} ${counts[k] || 0}`).join(', ')}`}>
+    <span className="tnum flex flex-wrap items-center gap-x-1.5 text-n-600" aria-label={`파일 ${kinds.map((k) => `${KIND_LABELS[k]} ${counts[k]}`).join(', ')}`}>
       {kinds.map((k, i) => (
-        <span key={k} aria-hidden="true" className={`whitespace-nowrap ${counts[k] ? 'text-n-700' : 'text-n-500'}`}>
-          {i > 0 && <span className="mr-1.5 text-n-300">·</span>}{KIND_LABELS[k]} <span className="font-mono">{counts[k] || 0}</span>
+        <span key={k} aria-hidden="true" className="whitespace-nowrap">
+          {i > 0 && <span className="mr-1.5 text-n-300">·</span>}{KIND_LABELS[k]} <span className="font-mono text-n-800">{counts[k]}</span>
         </span>
       ))}
     </span>
+  );
+}
+
+/**
+ * 2026-11-19 — 제목에서 둘째 줄과 겹치는 머리(이름 규칙 20·42: '호선 · 구역 · 대상 · 구별자')를 뺀 나머지.
+ * 머리는 앞에서부터 차례로 맞을 때만 떼고, 구별자는 적어도 한 토막 남긴다. 전체 제목은 링크 title 에 둔다.
+ */
+export function titleTail(item) {
+  const parts = String(item.title || '').split(' · ');
+  const heads = [
+    (p) => (item.hulls || []).includes(p) || (!!item.no_hull && p === '공용'),
+    (p) => (item.zones || []).includes(p),
+    (p) => !!item.target && p === item.target,
+  ];
+  let i = 0;
+  for (const match of heads) {
+    if (i < parts.length - 1 && match(parts[i])) i += 1;
+  }
+  return parts.slice(i).join(' · ');
+}
+
+/** 2026-11-19 — 담당자(과제를 한 사람, 주 담당자 먼저). 올린 사람은 일괄 이관으로 대부분 같아 행에 두지 않는다. */
+function Assignees({ people }) {
+  if (!people?.length) return null;
+  const [main, ...rest] = people;
+  const all = people.map((p) => `${p.name}${p.employed ? '' : '(퇴사)'}`).join(', ');
+  return (
+    <div className="truncate text-n-600" title={`담당자 ${all}`}>
+      담당 <span className="text-n-800">{main.name}</span>
+      {!main.employed && <span className="text-n-500"> 퇴사</span>}
+      {rest.length > 0 && <span className="text-n-500"> 외 {rest.length}</span>}
+    </div>
   );
 }
 
@@ -99,19 +134,21 @@ export function contentKind(item) {
   const r = has('report');
   return m && r ? 'both' : m ? 'model' : r ? 'report' : null;
 }
+// 2026-11-19 — 세 가지 모두 중성 바탕. 초록은 '확정' 전용, 남색 옅은 바탕은 선택 행 바탕과 같아 배지가 묻혔다.
+// 구분은 아이콘(상자, 문서)과 글자가 맡는다.
 const CONTENT = {
-  both: { label: '모델+문서', tip: 'BDF 모델과 문서(보고서, 발표자료)가 모두 있는 자료', cls: 'bg-ok-bg text-ok' },
-  model: { label: '모델만', tip: 'BDF 모델만 있고 문서는 없는 자료', cls: 'bg-brand-subtle text-brand' },
-  report: { label: '문서만', tip: '문서(보고서, 발표자료)만 있고 BDF 모델은 없는 자료', cls: 'bg-n-100 text-n-700' },
+  both: { label: '모델+문서', tip: 'BDF 모델과 문서(보고서, 발표자료)가 모두 있는 자료' },
+  model: { label: '모델만', tip: 'BDF 모델만 있고 문서는 없는 자료' },
+  report: { label: '문서만', tip: '문서(보고서, 발표자료)만 있고 BDF 모델은 없는 자료' },
 };
 
 export function ContentBadge({ item }) {
   const k = contentKind(item);
   if (!k) return null;
-  const { label, tip, cls } = CONTENT[k];
+  const { label, tip } = CONTENT[k];
   return (
     <span title={tip} data-testid="content-kind"
-          className={`inline-flex h-5 shrink-0 items-center gap-1 rounded-xs px-1.5 text-micro font-semibold ${cls}`}>
+          className="inline-flex h-5 shrink-0 items-center gap-1 rounded-xs bg-n-100 px-1.5 text-micro font-semibold text-n-700">
       {k !== 'report' && <Box size={11} aria-hidden="true" />}
       {k !== 'model' && <FileText size={11} aria-hidden="true" />}
       {label}
@@ -177,9 +214,10 @@ function EntryRow({ item, on, terms, filters, picked, onPick }) {
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <ContentBadge item={item} />
-          <Link to={`/e/${item.entry_id}`} onClick={stop}
+          {/* 2026-11-19 — 둘째 줄(호선, 구역, 대상)과 겹치는 제목 머리는 빼고 구별자만. 전체 제목은 title 로 */}
+          <Link to={`/e/${item.entry_id}`} onClick={stop} title={item.title}
                 className={`min-w-0 truncate text-body font-semibold tracking-[-0.005em] hover:underline ${on ? 'text-brand' : 'text-n-900'}`}>
-            <TermHighlight text={item.title} terms={terms} />
+            <TermHighlight text={titleTail(item)} terms={terms} />
           </Link>
           {item.status === 'draft' && <DraftBadge />}
           {/* 13 — 비공개(볼 수 있는 사람에게만 실린다) */}
@@ -237,10 +275,11 @@ function EntryRow({ item, on, terms, filters, picked, onPick }) {
       </div>
       {/* 10 — 즐겨찾기 별. 눌러도 행 선택·미리보기는 열리지 않는다. 꺼진 별은 행에 올리거나 고른 행에서만 보인다 */}
       <FavoriteToggle entryId={item.entry_id} initial={item.favorite} stop reveal={!on} className="-mr-2 -mt-1" />
-      <div className="w-[104px] shrink-0 text-right text-meta">
-        {/* 15 — 날짜 = 올린 날짜(확정일, 초안은 등록일). 해석 시기는 없앴다 */}
+      <div className="w-[104px] shrink-0 space-y-0.5 text-right text-meta">
+        <Assignees people={item.assignees} />
+        {/* 15 — 날짜 = 올린 날짜(확정일, 초안은 등록일). 해석 시기는 없앴다. 2026-11-19 — 담당자 아래로, 한 단계 흐리게 */}
         {item.posted_at && (
-          <div className="tnum text-n-600" title={formatDateTime(item.posted_at)}>올림 <span className="font-mono text-n-800">{item.posted_at.slice(0, 10)}</span></div>
+          <div className="tnum text-n-500" title={formatDateTime(item.posted_at)}>올림 <span className="font-mono text-n-600">{item.posted_at.slice(0, 10)}</span></div>
         )}
         <div className="mt-1"><EntryIdCopy entryId={item.entry_id} /></div>
       </div>

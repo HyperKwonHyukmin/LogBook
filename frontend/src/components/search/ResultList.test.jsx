@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import ResultList, { contentKind } from './ResultList.jsx';
+import ResultList, { contentKind, titleTail } from './ResultList.jsx';
 
 const counts = (model, report, o = {}) => ({ model, report, drawing: 0, result: 0, other: 0, ...o });
 const entry = (id, kc, o = {}) => ({ entry_id: id, title: `${id} 제목`, status: 'confirmed', hulls: [], zones: [], tags: [],
@@ -32,4 +32,31 @@ test('행마다 구성 배지와 자료 번호 복사 단추 — 복사해도 �
   expect(writeText).toHaveBeenCalledWith('E000233');
   expect(onSelect).not.toHaveBeenCalled();
   expect(within(btn.parentElement).getByText('E000233')).toBeInTheDocument();
+});
+
+test('제목 머리 빼기 — 둘째 줄과 겹치는 호선(공용), 구역, 대상만 앞에서부터, 구별자는 남긴다', () => {
+  const it = (title, o = {}) => titleTail({ title, hulls: ['3503'], zones: ['기타'], target: 'Unit', ...o });
+  expect(it('3503 · 기타 · Unit · M03 Upper stand')).toBe('M03 Upper stand');
+  expect(it('공용 · 기타 · 의장품 · 9 함미 축전지', { hulls: [], no_hull: true, target: '의장품' })).toBe('9 함미 축전지');
+  expect(it('3503 · 선미부 · Unit · m12')).toBe('선미부 · Unit · m12');   // 구역이 다르면 거기서 멈춘다
+  expect(it('3503 · 기타 · Unit')).toBe('Unit');                        // 다 맞아도 한 토막은 남긴다
+  expect(it('선미 구조 국부 강도')).toBe('선미 구조 국부 강도');         // 형식이 아닌 옛 제목은 그대로
+  expect(it('공용 · 기타 · x', { hulls: [] })).toBe('공용 · 기타 · x');   // 공용이 아닌 자료의 '공용' 은 떼지 않는다
+});
+
+test('행 제목은 구별자만 보이고 전체 제목은 title, 오른쪽에 담당자(퇴사, 외 N)와 0 이 아닌 파일 수만', () => {
+  render(
+    <MemoryRouter>
+      <ResultList unit="entry" onSelect={() => {}} onOpen={() => {}}
+                  items={[entry('E000222', counts(2, 0, { result: 1 }), { title: '3503 · 기타 · Unit · M03 Upper stand',
+                    hulls: ['3503'], zones: ['기타'], target: 'Unit',
+                    assignees: [{ name: '김미희', employed: false }, { name: '박준석', employed: true }] })]} />
+    </MemoryRouter>,
+  );
+  const link = screen.getByRole('link', { name: 'M03 Upper stand' });
+  expect(link).toHaveAttribute('title', '3503 · 기타 · Unit · M03 Upper stand');
+  const who = screen.getByTitle('담당자 김미희(퇴사), 박준석');
+  expect(who).toHaveTextContent('담당 김미희 퇴사 외 1');
+  expect(screen.getByLabelText('파일 BDF 2, 결과 1')).toBeInTheDocument();
+  expect(screen.queryByText(/도면/)).toBeNull();
 });
