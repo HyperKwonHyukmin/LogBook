@@ -21,8 +21,11 @@ KIND_BY_EXT = {
 # 해석 결과(op2·f06·xdb·h5 — BDF 로 다시 만들 수 있다)·HyperView 결과·세션(op2 경로에 매임)·Nastran 부산물.
 # f06·odb(Abaqus 결과) 도 뺀다(사용자 결정 2026-11-05) — 필요하면 목록에서 체크해 올린다
 # Abaqus 는 입력(.inp)만 추천하고 해석이 만든 파일(prt·sim·sta·msg·ipm 등)은 뺀다(사용자 결정 2026-11-06).
-SKIP_BY_DEFAULT_EXTS = (".op2", ".f06", ".xdb", ".h5", ".h3d", ".mvw", ".hwsession", ".pch", ".asm", ".plt", ".odb",
-                        ".prt", ".sim", ".sta", ".msg", ".msp", ".ipm", ".com", ".res", ".mdl", ".stt", ".lck", ".abq", ".pac", ".sel", ".fil", ".023", ".log")
+# 2026-11-19 — Nastran 부산물 .f04 · .fpdat 도 뺀다. 이 형식 뒤에 '.숫자' 가 붙은 것(a.f04.1, run.log.2)도
+# 같은 형식으로 본다(판정은 화면 frontend/src/lib/folderPlan.js skipExtOf).
+SKIP_BY_DEFAULT_EXTS = (".op2", ".f06", ".f04", ".fpdat", ".xdb", ".h5", ".h3d", ".mvw", ".hwsession", ".pch", ".asm", ".plt",
+                        ".odb", ".prt", ".sim", ".sta", ".msg", ".msp", ".ipm", ".com", ".res", ".mdl", ".stt", ".lck", ".abq",
+                        ".pac", ".sel", ".fil", ".023", ".log")
 # .dat 은 Nastran 입력일 수도 있어 늘 빼지는 않는다 — 같은 폴더에 이름이 같은 .inp 가 있을 때만(Abaqus 결과 .dat) 뺀다
 SKIP_WITH_INP_EXTS = (".dat",)
 

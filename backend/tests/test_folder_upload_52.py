@@ -56,6 +56,14 @@ def test_rules_endpoint(client, make_user, auth_headers):
     # 2026-11-06 — Abaqus 는 .inp 만 추천: 부산물은 빼고, .dat 은 같은 이름 .inp 가 있을 때만(Nastran .dat 보호)
     assert {".prt", ".sim", ".sta", ".msg", ".ipm"} <= set(body["skip_by_default"])
     assert ".inp" not in body["skip_by_default"] and ".dat" not in body["skip_by_default"]
+    assert {".f04", ".fpdat", ".log"} <= set(body["skip_by_default"])   # 2026-11-19 Nastran 부산물
+    # 화면이 서버를 못 읽을 때 쓰는 예비 목록(frontend/src/lib/folderPlan.js FALLBACK_RULES)도 같게
+    import re
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "folderPlan.js").read_text(encoding="utf-8")
+    block = re.search(r"skip_by_default:\s*\[(.*?)\]", src, re.S).group(1)
+    assert re.findall(r"'(\.[^']+)'", block) == body["skip_by_default"]
     assert body["skip_with_inp"] == [".dat"]
 
 

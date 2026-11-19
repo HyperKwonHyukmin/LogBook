@@ -9,8 +9,8 @@
 export const FALLBACK_RULES = {
   excluded_patterns: ['~$*', 'thumbs.db', 'desktop.ini', '*.master', '*.dball', '*.scratch', '*.tmp',
     '.ds_store', '._*', '*.crdownload', '*.part'],
-  skip_by_default: ['.op2', '.f06', '.xdb', '.h5', '.h3d', '.mvw', '.hwsession', '.pch', '.asm', '.plt', '.odb',
-    '.prt', '.sim', '.sta', '.msg', '.msp', '.ipm', '.com', '.res', '.mdl', '.stt', '.lck', '.abq', '.pac', '.sel',
+  skip_by_default: ['.op2', '.f06', '.f04', '.fpdat', '.xdb', '.h5', '.h3d', '.mvw', '.hwsession', '.pch', '.asm', '.plt',
+    '.odb', '.prt', '.sim', '.sta', '.msg', '.msp', '.ipm', '.com', '.res', '.mdl', '.stt', '.lck', '.abq', '.pac', '.sel',
     '.fil', '.023', '.log'],
   skip_with_inp: ['.dat'],
 };
@@ -45,13 +45,23 @@ export function planFolder(items, rules = FALLBACK_RULES) {
   const skipExts = new Set(rules.skip_by_default || []);
   const withInp = new Set(rules.skip_with_inp || []);
   const patterns = rules.excluded_patterns || [];
+  // 2026-11-19 — 제외 형식 뒤에 '.숫자' 가 붙은 Nastran 부산물(a.f04.1, run.log.2)은 그 형식으로 본다.
+  // 목록 요약('.f04 3개 빠짐')과 [포함] 단추도 같은 형식으로 묶이게 ext 를 그 형식으로 둔다. 제외 형식이 아니면(a.bdf.1) 그대로
+  const skipExtOf = (name) => {
+    const ext = extOf(name);
+    if (/^\.\d+$/.test(ext)) {
+      const inner = extOf(stemOf(name));
+      if (skipExts.has(inner)) return inner;
+    }
+    return ext;
+  };
   const files = [];
   const junk = [];
   for (const it of items) {
     if (!it.file) continue; // 읽을 수 없는 파일은 올리기가 '건너뜀'으로 알린다
     const name = baseName(it.relPath);
     if (patterns.some((p) => globMatch(p, name))) { junk.push(it.relPath); continue; }
-    const ext = extOf(name);
+    const ext = skipExtOf(name);
     files.push({ relPath: it.relPath, name, size: it.file.size || 0, ext, dir: dirOf(it.relPath), skip: skipExts.has(ext) });
   }
   // Abaqus 작업(job.inp)과 이름이 같은 job.dat 은 해석 결과다

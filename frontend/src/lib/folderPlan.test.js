@@ -28,6 +28,15 @@ describe('planFolder', () => {
     expect(skippedByExt(plan, checked)).toEqual([{ ext: '.op2', count: 1 }, { ext: '.f06', count: 1 }, { ext: '.mvw', count: 1 }]);
   });
 
+  it('2026-11-19 — f04, fpdat, log 와 그 뒤에 .숫자 가 붙은 것도 체크가 풀리고 같은 형식으로 묶인다', () => {
+    const plan = planFolder(['r/a.bdf', 'r/a.f04', 'r/a.f04.1', 'r/a.F04.12', 'r/a.FPDAT', 'r/a.log.2', 'r/a.bdf.1', 'r/job.023']
+      .map((p) => item(p)));
+    const checked = initialChecked(plan);
+    expect([...checked].sort()).toEqual(['r/a.bdf', 'r/a.bdf.1']);   // 제외 형식이 아닌 것 뒤의 .숫자 는 그대로 올린다
+    expect(skippedByExt(plan, checked)).toEqual([{ ext: '.f04', count: 3 }, { ext: '.fpdat', count: 1 },
+      { ext: '.log', count: 1 }, { ext: '.023', count: 1 }]);
+  });
+
   it('임시 파일은 목록에 넣지 않고 따로 센다', () => {
     const plan = planFolder(Y2025);
     expect(plan.junk).toEqual(['2025/manifold_support_8182/fe_model/~$calc.xlsm']);

@@ -384,7 +384,8 @@ export default function SearchPage() {
               {error}
             </ErrorNote>
           )}
-          {loading && !res && <RowsSkeleton rows={5} label="검색 중" />}
+          {loading && !res && <RowsSkeleton rows={5} label="검색 중"
+                                            slowNote="서버 응답을 기다리는 중입니다. 서버를 업데이트하는 중이면 30초쯤 걸릴 수 있습니다." />}
           {res && shownCount === 0 && !loading && (
             state.fav && !state.q && filterCount === 0 ? (
               <EmptyState icon={Star} title="즐겨찾기한 자료가 없습니다"

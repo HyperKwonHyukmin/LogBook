@@ -4,6 +4,7 @@ import Button from '../ui/Button.jsx';
 import ChipInput from '../ui/ChipInput.jsx';
 import VocabInput from '../ui/VocabInput.jsx';
 import { useConfirm } from '../ui/ConfirmDialog.jsx';
+import { useToast } from '../ui/Toast.jsx';
 import { Labeled, inputClass, selectClass } from '../ui/Field.jsx';
 import KindBadge from '../ui/KindBadge.jsx';
 import WireChip, { LiftingSetChip } from '../ui/WireChip.jsx';
@@ -59,6 +60,8 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
   const [dup, setDup] = useState(null); // 17 — 확정 409 duplicate_model 의 대상 목록(오류가 아니라 안내로 보인다)
   const canForce = isAdminLevel(useContext(AuthContext)?.user);
   const [busy, setBusy] = useState(false); // 저장·확정·버리기·나누기 등 동작 중
+  const [discarding, setDiscarding] = useState(false); // 버리기를 확인한 뒤(서버가 끝나기 전에도 카드를 숨긴다)
+  const toast = useToast();
   // 62 — 확정 중에는 단추 문구로 알린다(파일을 보관소로 옮기는 데 몇 초 걸릴 수 있다)
   const [confirming, setConfirming] = useState(false);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
@@ -300,8 +303,21 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
       body: '파일은 휴지통으로 가며, 초안은 복원할 수 없습니다.',
       confirmLabel: '버리기',
     });
-    if (ok) act(() => api(`/entries/${entry.entry_id}`, { method: 'DELETE' }), '버리지');
+    if (!ok) return;
+    // 2026-11-19 — 확인하면 카드를 곧바로 목록에서 뺀다(사용자 신고: 휴지통에 간다고 했는데 카드가 남아 멈춘 것처럼 보였다).
+    // 서버는 파일을 하나씩 휴지통 폴더로 옮겨 파일이 많으면 몇 초 걸린다. 실패하면(저장 실패 포함) 카드를 다시 보이고 오류를 적는다.
+    const id = entry.entry_id;
+    let done = false;
+    setDiscarding(true);
+    act(async () => {
+      const r = await api(`/entries/${id}`, { method: 'DELETE' });
+      done = true;
+      toast.show({ message: `${id} 초안을 버렸습니다. 파일은 휴지통으로 옮겼습니다.` });
+      return r;
+    }, '버리지').finally(() => { if (!done) setDiscarding(false); });
   }
+
+  if (discarding) return null;
 
   return (
     <article aria-label={`${entry.entry_id} ${entry.title}`} {...(canEdit ? { [DROP_ZONE_ATTR]: '' } : {})}

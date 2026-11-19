@@ -98,7 +98,9 @@ cd C:\Coding\Logbook\backend
 
 - 창 위의 점(●) 셋이 각 프로세스 상태다. 끝나면 3초 뒤 다시 띄우고, 연달아 죽으면 점점 길게 기다린다(각자 따로).
   API 는 3분 동안 응답이 없으면 강제로 다시 띄운다. Worker·Index 는 프로세스가 살아 있는지만 본다.
-- **[⟳ Update]**: 셋을 멈춤 → `git pull origin main` → `requirements.txt` 가 바뀌었으면 pip install → 셋을 다시 띄운다(9절).
+- **[⟳ Update]**: 셋이 도는 채로 `git pull origin main` → 셋을 멈춤 → `requirements.txt` 가 바뀌었으면 pip install → 셋을 다시 띄운다(9절).
+  2026-11-19 부터 pull 을 먼저 한다. 예전에는 먼저 멈추고 pull 해서 GitHub 에서 받는 동안 검색이 회색 줄로 멈춰 있었고, pull 이 실패하면
+  서버가 꺼진 채로 남았다(지금은 pull 실패 = 옛 코드로 계속 돈다). 그래도 다시 뜨는 몇 초 동안의 요청은 기다리고, 5초가 넘으면 검색 화면이 안내 한 줄을 보인다.
 - 로그: `backend\logs\uvicorn\`·`worker\`·`report-index\` 의 `YYYYMMDD.log`, 사건 기록 `backend\logs\server_events.jsonl`.
   30일 지난 일자 로그는 Manager 가 시작할 때 지운다.
 - 이미 떠 있으면 두 번째 창은 경고만 하고 닫힌다(`backend\logs\server_manager.pid`).
@@ -149,7 +151,7 @@ Start-ScheduledTask -TaskName 'Logbook Report Index'
 
 ## 9. 업데이트
 
-**Server Manager(145)**: 창의 **[⟳ Update]** 한 번이면 된다(6절). 로그 창에서 `[2/4] git pull` 의 After 해시와
+**Server Manager(145)**: 창의 **[⟳ Update]** 한 번이면 된다(6절). 로그 창에서 `[1/4] git pull` 의 After 해시와
 `[3/4]` 의 pip 결과를 본다 — pip 가 실패해도 재시작은 진행되니 오류 줄이 보이면 아래 명령으로 다시 설치하고 Update 를 한 번 더 누른다.
 
 - **`backend\server_manager.py`·`backend\serverguard\` 가 바뀐 업데이트는 Update 뒤 창을 닫고 `Logbook_Server.bat` 로 다시 연다.**

@@ -39,6 +39,8 @@ function mockFetch(map) {
     if (VOCAB[url]) return vocabReply(url);
     const r = map[key];
     if (!r) throw new Error(`unexpected ${key}`);
+    // 함수면 늦게 오는 응답(Promise 로 값을 준다)
+    if (typeof r === 'function') return r().then((v) => ({ ok: true, status: 200, json: () => Promise.resolve(v) }));
     return Promise.resolve(r.__status ? { ok: false, status: r.__status, json: () => Promise.resolve({ detail: r.detail }) }
                                      : { ok: true, status: 200, json: () => Promise.resolve(r) });
   }));
@@ -96,6 +98,28 @@ test('확정과 버리기', async () => {
   expect(calls).toContain('POST /api/entries/E000010/confirm');
   expect(calls).toContain('DELETE /api/entries/E000010');
   expect(onChanged).toHaveBeenCalledTimes(2);
+});
+
+test('2026-11-19 — 버리기를 확인하면 카드가 목록에서 바로 빠지고, 실패하면 다시 보이며 오류를 적는다', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  mockFetch({ 'DELETE /api/entries/E000010': () => gate.then(() => ({ ...ENTRY, status: 'trashed' })) });
+  const onChanged = vi.fn();
+  const { unmount } = render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={onChanged} />);
+  await userEvent.click(screen.getByRole('button', { name: '버리기' }));
+  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '버리기' }));
+  // 서버가 아직 답하지 않았어도 카드는 이미 빠졌다
+  expect(screen.queryByRole('article', { name: /E000010/ })).toBeNull();
+  release();
+  await vi.waitFor(() => expect(onChanged).toHaveBeenCalled());
+  unmount();
+
+  mockFetch({ 'DELETE /api/entries/E000010': { __status: 500, detail: 'x' } });
+  render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={() => {}} />);
+  await userEvent.click(screen.getByRole('button', { name: '버리기' }));
+  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '버리기' }));
+  const card = await screen.findByRole('article', { name: /E000010/ });
+  expect(card).toBeInTheDocument();
 });
 
 test('남의 초안은 고칠 수 없다', () => {

@@ -616,22 +616,35 @@ class LogbookManager:
         self.update_btn.configure(state="disabled", text="Updating...")
         threading.Thread(target=self._update_worker, daemon=True).start()
 
+    def _on_ui_and_wait(self, fn, timeout=120):
+        """화면 스레드에서 fn 을 돌리고 끝날 때까지 기다린다(업데이트 스레드에서 부른다)."""
+        done = threading.Event()
+
+        def run():
+            try:
+                fn()
+            finally:
+                done.set()
+
+        self.root.after(0, run)
+        done.wait(timeout=timeout)
+
     def _update_worker(self):
+        """2026-11-19 — 순서: 서버가 도는 채로 git pull → 서비스 중지 → (requirements 가 바뀌었으면) pip → 재시작.
+        예전에는 먼저 끄고 pull 해서 GitHub 에서 받는 시간(사내망에서 가끔 느림)만큼 검색이 멈춰 있었고(사용자 신고:
+        Update 직후 검색이 회색 줄로 한동안 멈춤), pull 이 실패하면 서버가 꺼진 채로 남았다.
+        pull 과 중지 사이의 짧은 틈에 돌던 프로세스가 새 코드를 늦게 import 할 수 있지만, 곧바로 끄고 다시 띄운다."""
         self.root.after(0, self._log, "=" * 50, "dim")
         self.root.after(0, self._log, "업데이트 시작.", "info")
 
-        self.root.after(0, self._log, "[1/4] 서비스 중지", "info")
-        self.root.after(0, self._stop_api)
-        self.root.after(0, self._stop_children)
-
-        self.root.after(0, self._log, "[2/4] git pull origin main", "info")
+        self.root.after(0, self._log, "[1/4] git pull origin main (서비스는 그대로 돈다)", "info")
         before = self._get_git_hash()
         if before:
             self.root.after(0, self._log, f"  Before: {before}", "dim")
         ok, lines = self._run_cmd_capture(["git", "pull", "origin", "main"],
                                            cwd=str(REPO_ROOT))
         if not ok:
-            self.root.after(0, self._log, "git pull 실패. Update aborted.", "error")
+            self.root.after(0, self._log, "git pull 실패. Update aborted — 서비스는 옛 코드로 계속 돈다.", "error")
             for line in lines[-5:]:
                 self.root.after(0, self._log, f"  {line}", "error")
             self._finish_update()
@@ -639,6 +652,10 @@ class LogbookManager:
         after = self._get_git_hash()
         if after:
             self.root.after(0, self._log, f"  After:  {after}", "dim")
+
+        self.root.after(0, self._log, "[2/4] 서비스 중지", "info")
+        self._on_ui_and_wait(self._stop_api)
+        self._on_ui_and_wait(self._stop_children)
 
         self.root.after(0, self._log, "[3/4] 의존성 변경 확인", "info")
         if self._requirements_changed():
