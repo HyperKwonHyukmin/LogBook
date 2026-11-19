@@ -54,6 +54,9 @@ class Settings:
     # 55 — Windows 계정 자동 로그인을 켤지(pywin32 sspi 가 없으면 이 값과 상관없이 꺼진다)와 받는 도메인(NetBIOS 이름)
     windows_login: bool = True
     ad_domain: str = "HHI"
+    # 2026-11-19 — 이 부서(WorkBench 부서 이름과 글자 그대로) 사람은 로그인할 때 LV1 이면 LV2 로 올린다(내리지는 않는다).
+    # 쉼표로 여러 개, 빈 값이면 끈다. 구조시스템연구실 설명회와 LogBook 오픈(31 의 '모델은 관리자만'을 이 부서에만 연다)
+    lv2_departments: tuple[str, ...] = ("구조시스템연구실",)
 
 
 def load_settings() -> Settings:
@@ -89,6 +92,8 @@ def load_settings() -> Settings:
         auth_mode="windows" if os.getenv("LOGBOOK_AUTH_MODE", "").strip().lower() == "windows" else "employee_id",
         windows_login=os.getenv("LOGBOOK_WINDOWS_LOGIN", "").strip() != "0",
         ad_domain=(os.getenv("LOGBOOK_AD_DOMAIN", "").strip() or "HHI").upper(),
+        lv2_departments=tuple(d.strip() for d in os.getenv("LOGBOOK_LV2_DEPARTMENTS", "구조시스템연구실").split(",")
+                              if d.strip()),
     )
 
 

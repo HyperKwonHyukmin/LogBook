@@ -12,6 +12,9 @@ LogBook 등급 바꾸기(15 — 1 게스트 | 2 일반 | 3 관리자. WorkBench 
 관리자가 아닌 LV2 를 모두 LV1(게스트)로 내리기(31 — 모델 자료가 안 보이게. --apply 없으면 대상만 보고):
     .venv\\Scripts\\python.exe -m app.cli level-guest [--apply]
 
+LV2 부서(기본 구조시스템연구실, LOGBOOK_LV2_DEPARTMENTS) 사람을 LV2 로 한 번에 올리기(로그인 때도 자동으로 올린다):
+    .venv\\Scripts\\python.exe -m app.cli level-dept [--apply]
+
 기존 파일(03 이전에 올라온 것)을 본문 추출 대기열에 넣기:
     .venv\\Scripts\\python.exe -m app.cli enqueue-extract [--force]
 
@@ -507,6 +510,8 @@ def main(argv: list[str]) -> int:
     sr.add_argument("level", type=int, choices=(1, 2, 3))
     lg = sub.add_parser("level-guest", help="31 — 관리자가 아닌 LV2 사용자를 모두 LV1(게스트)로 내린다(--apply 없으면 보고만)")
     lg.add_argument("--apply", action="store_true", help="실제로 바꾼다")
+    ld = sub.add_parser("level-dept", help="LV2 부서(기본 구조시스템연구실) WorkBench 사용자를 LV2 로 올린다(--apply 없으면 보고만)")
+    ld.add_argument("--apply", action="store_true", help="실제로 바꾼다(처음인 사람은 LogBook 행도 만든다)")
     ap = sub.add_parser("audit-purge-grants", help="열람 허락·회수 감사 기록을 DB·감사 파일에서 지운다(--apply 없으면 건수만)")
     ap.add_argument("--apply", action="store_true")
     rv = sub.add_parser("revisions-refresh", help="모든 자료의 BDF 판 묶음(14)을 다시 맞추고 인접 판 비교를 넣는다")
@@ -586,6 +591,17 @@ def main(argv: list[str]) -> int:
                 print(f"  {u.employee_id} {u.name} {u.department or ''}")
             verb = "LV1 로 내렸습니다" if args.apply else "LV1 로 내릴 대상입니다(--apply 로 실행)"
             print(f"{len(rows)}명 {verb}. WorkBench 관리자와 LV3 지정자는 그대로입니다.")
+            return 0
+        if args.cmd == "level-dept":
+            from .config import settings as cfg   # 'settings' 로 받으면 이 함수 안의 다른 settings 가 지역 변수가 된다
+            from .roles import department_to_lv2
+
+            rows = department_to_lv2(db, get_storage(), apply=args.apply)
+            for w in rows:
+                print(f"  {w.employee_id} {w.name or ''} {w.department or ''} {w.position or ''}")
+            verb = "LV2 로 올렸습니다" if args.apply else "LV2 로 올릴 대상입니다(--apply 로 실행)"
+            print(f"{len(rows)}명 {verb}. 부서: {', '.join(cfg.lv2_departments) or '(설정 없음)'}. "
+                  "이미 LV2 이상인 사람과 WorkBench 관리자는 뺐습니다.")
             return 0
         if args.cmd == "audit-purge-grants":
             from .audit import purge_not_kept

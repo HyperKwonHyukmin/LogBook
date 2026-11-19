@@ -110,6 +110,11 @@ SHOW GRANTS FOR '<logbook 계정>'@'<호스트>';
 `.venv\Scripts\python.exe -m app.cli level-guest` 로 대상을 보고 `level-guest --apply`. WorkBench 관리자는 자동 LV3, LogBook 에서 LV3 로
 지정한 사람도 그대로다. WorkBench 사용자 관리 표의 'LogBook' 열은 `/api/integration/levels`(공유 비밀키)를 읽어 보여 준다.
 
+**구조시스템연구실은 LV2**(2026-11-19, 설명회와 오픈): 그 부서(WorkBench 부서 이름과 글자 그대로) 사람은 로그인할 때 LV1 이면 LV2 로 올라간다
+(일반 자료 열람, 남의 자료 수정 및 휴지통은 안 됨, 블록 자료는 계속 LV3 만). 부서 목록은 `.env` 의 `LOGBOOK_LV2_DEPARTMENTS`(쉼표, 기본 `구조시스템연구실`, 빈 값이면 끔).
+로그인 전에 한 번에 올리려면 `.venv\Scripts\python.exe -m app.cli level-dept` 로 명단을 보고 `level-dept --apply`(처음인 사람은 LogBook 행도 만든다).
+내리지 않으므로 이 부서 사람을 LV1 로 내려도 다음 로그인 때 다시 LV2 가 된다. `level-guest` 는 이 부서 사람을 내리지 않는다.
+
 자료의 변경 이력에는 자료 내용 변경만 남긴다. **열람 허락·회수는 기록하지 않는다**(2026-10-20 결정). 지금 누가 허락받았는지는 자료 화면의 허락 목록이 보여 준다.
 예전 기록은 `.venv\Scripts\python.exe -m app.cli audit-purge-grants` 로 건수를 보고 `--apply` 로 지운다. DB 와 공유 폴더 감사 파일(`90_System\audit\*.jsonl`) 둘 다 지우므로 재구축해도 돌아오지 않는다.
 

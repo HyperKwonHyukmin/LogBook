@@ -51,4 +51,8 @@ WorkBench `tests/test_logbook_link.py` levels 2건, `utils/logbookLink.test.js` 
 - 모달 iframe 실사용 확인됨. 한때 LogBook 이 스타일 없이(흰 칸 + 'Hi-TESS LogBook' 글자, 표 깨짐) 보였으나 다시 열어 보니 정상 —
   Chromium·Electron 26/40·CSP 유무로는 재현되지 않았다. 다시 나오면 [새 창으로 열기]도 깨지는지 보고, 같으면
   WorkBench 앱 캐시(`%APPDATA%\HiTESS WorkBench\Cache`)를 의심한다.
+- 2026-11-19 변경: '모델 자료는 관리자만'을 **구조시스템연구실에만 연다**(설명회와 LogBook 오픈, 사용자 결정). 그 부서는 로그인 때 LV1 → LV2 자동
+  (`roles.promote_by_department`, `auth.admit` 한 곳 — 사번, Windows, WorkBench 자동 로그인 공통), 한 번에 올리기는 CLI `level-dept [--apply]`,
+  `level-guest` 는 그 부서를 뺀다. 설정 `LOGBOOK_LV2_DEPARTMENTS`(기본 구조시스템연구실). 블록 자료는 그대로 LV3 만, LV2 의 검토 서명과 해석 검증은 그대로 둔다.
+  내리지 않으므로 그 부서 사람을 LV1 로 둘 수는 없다(가릴 자료는 블록). 시험 `tests/test_dept_lv2.py`.
 - 결정: **등급 변경은 LogBook 사용자 관리에서만**. WorkBench 사용자 관리 'LogBook' 열은 보기 전용으로 둔다(서버 간 변경 API 는 만들지 않음).

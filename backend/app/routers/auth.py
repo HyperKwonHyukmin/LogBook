@@ -70,8 +70,10 @@ def admit(db: Session, storage: StoragePaths, employee_id: str, ip: str | None) 
                      target_id=user.employee_id, after=user_snapshot(user), ip=ip)
     else:
         db.commit()
+    # 2026-11-19 — LV2 부서(구조시스템연구실)의 LV1 은 LV2 로(감사 USER_LEVEL system). 모든 로그인 경로가 여기를 지난다
+    promoted = roles.promote_by_department(db, storage, user, ip=ip)
     db.refresh(user)
-    if created:
+    if created or promoted:
         write_registry(db, storage)  # 사용자 목록도 registry.json 에 남긴다(05 — 재구축 원천)
     return user
 
