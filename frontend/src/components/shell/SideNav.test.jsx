@@ -57,12 +57,12 @@ test('즐겨찾기는 메뉴가 아니라 검색의 fav=1 이다 — 검색 메�
   expect(screen.getByRole('link', { name: '검색' })).toHaveAttribute('aria-current', 'page');
 });
 
-test('찾아 쓰기·등록·정리 두 묶음, 메뉴 7개(2026-11-05)', () => {
+test('찾아 쓰기·등록·정리 두 묶음, 메뉴 8개(2026-11-19 나의 메모 추가)', () => {
   renderNav(false);
   const nav = screen.getByRole('navigation', { name: '주 메뉴' });
   for (const g of ['찾아 쓰기', '등록·정리']) expect(within(nav).getByText(g)).toBeInTheDocument();
   const links = screen.getAllByRole('link').map((a) => a.textContent);
-  expect(links).toEqual(['검색', '호선', '비슷한 모델 찾기', '자료 현황', '올리기와 확정', '휴지통', '활동 로그']);
+  expect(links).toEqual(['검색', '호선', '비슷한 모델 찾기', '자료 현황', '나의 메모', '올리기와 확정', '휴지통', '활동 로그']);
 });
 
 test('자료 현황는 갖춤 현황(/coverage)과 관계 지도(/graph) 모두에서 활성이다', () => {

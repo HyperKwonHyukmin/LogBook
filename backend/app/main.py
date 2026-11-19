@@ -23,6 +23,7 @@ from .routers import wb_targets as wb_targets_router
 from .routers import reports as reports_router
 from .routers import people as people_router
 from .routers import comments as comments_router
+from .routers import notes as notes_router
 from .routers import updates as updates_router
 from .spa import mount_spa
 from .vocab import safe_seed
@@ -123,6 +124,7 @@ def create_app(frontend_dist: Path | None | object = _USE_DEFAULT) -> FastAPI:
     app.include_router(reports_router.router)   # 21·22 — 보고서 목록·본문 검색·색인 상태·근거 요약
     app.include_router(favorites.router)
     app.include_router(comments_router.router)   # 63 — 자료 의견과 이슈
+    app.include_router(notes_router.router)      # 64 — 나의 메모
     app.include_router(compares.router)
     app.include_router(hulls.router)
     app.include_router(graph_router.router)   # 25 — 관계 지도

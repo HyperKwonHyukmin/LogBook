@@ -13,6 +13,7 @@ import HullsPage from './pages/HullsPage.jsx';
 import InboxPage from './pages/InboxPage.jsx';
 import RecentComparesPage from './pages/RecentComparesPage.jsx';
 import CommentsPage from './pages/CommentsPage.jsx';
+import NotesPage from './pages/NotesPage.jsx';
 import SearchPage from './pages/SearchPage.jsx';
 import ReportsPage, { ReportSearchRedirect } from './pages/ReportsPage.jsx';
 import TagsPage from './pages/TagsPage.jsx';
@@ -63,6 +64,8 @@ export default function App() {
             <Route path="compares" element={<RecentComparesPage />} />
             {/* 63 — 새 의견(계정 메뉴) */}
             <Route path="comments" element={<CommentsPage />} />
+            {/* 64 — 나의 메모(왼쪽 메뉴) */}
+            <Route path="notes" element={<NotesPage />} />
             {/* 살펴보기 — 갖춤 현황·관계 지도를 메뉴 하나 아래 탭으로(2026-11-05) */}
             <Route element={<SectionTabs label="자료 현황" items={EXPLORE_TABS} />}>
               <Route path="coverage" element={<Suspense fallback={null}><CoveragePage /></Suspense>} />

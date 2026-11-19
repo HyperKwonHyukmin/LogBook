@@ -485,6 +485,24 @@ class Favorite(Base):
     created_at = Column(DateTime, nullable=False, default=_now)
 
 
+class EntryNote(Base):
+    """64 — 나의 메모(개인 지식 노트). 사용자마다 자료 하나에 메모 하나, 마크다운 본문. 쓴 사람만 본다(관리자도 못 본다).
+
+    즐겨찾기와 같이 Entry 가 휴지통에 가면 행은 남기고 목록에서만 숨긴다. 영구 삭제·합치기 때는
+    entries.service._clear_dangling_references 가 지운다(FK CASCADE 도 건다). 개인 정보라 registry.json·재구축 대상이 아니다
+    (DB 백업에는 들어간다)."""
+
+    __tablename__ = "entry_notes"
+    __table_args__ = (UniqueConstraint("employee_id", "entry_id", name="uq_entry_notes_user_entry"),)
+
+    id = Column(Integer, primary_key=True)
+    employee_id = Column(String(20), nullable=False, index=True)
+    entry_id = Column(Integer, ForeignKey("entries.id", ondelete="CASCADE"), nullable=False, index=True)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=_now)
+    updated_at = Column(DateTime, nullable=False, default=_now)
+
+
 class UserPref(Base):
     """사용자 화면 설정(10) — 열쇠 하나에 JSON 값 하나. 받는 열쇠는 prefs.PREF_KEYS 에 적은 것뿐이다.
 

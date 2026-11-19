@@ -44,6 +44,7 @@ import WireChip from '../components/ui/WireChip.jsx';
 import { needsLiftingWire } from '../lib/inboxStatus.js';
 import AssigneeInput, { AssigneeList, RunnerList } from '../components/people/AssigneeInput.jsx';
 import EntryComments, { CommentsLink } from '../components/comments/EntryComments.jsx';
+import EntryNote from '../components/notes/EntryNote.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
 // 21 — 프로젝트(있을 때만 기록). 29 — 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
@@ -1000,6 +1001,8 @@ export default function EntryPage() {
               {entry.status !== 'draft' && <Prop label="의견"><CommentsLink counts={commentCounts} /></Prop>}
             </dl>
           )}
+          {/* 64 — 나의 메모(나만 보는 마크다운 노트). 휴지통 자료에는 쓰지 않는다 */}
+          {entry.status !== 'trashed' && <EntryNote entryId={entry.entry_id} />}
           {/* 13 — 공개 범위(변경하기와 분리: 확인 후 바로 적용, 이력에 따로 남는다) */}
           {entry.status !== 'trashed' && (
             <AccessPanel entry={entry} disabled={editing} onChanged={() => reload().catch(() => {})} />

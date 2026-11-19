@@ -25,7 +25,7 @@ Hi-TESS LogBook(구조해석 자료 창고). 무엇·어떻게 쓰는지는 `REA
 - **테스트 DB `logbook_test` 는 모든 세션이 같이 쓴다.** 다른 세션이 pytest 를 돌리는 중이면 기다린다(동시에 돌리면 잠겨서 멈춘다). 멈췄다고 중간에 끊으면 표 지우기가 반쯤 끝나 다음 실행이 `Can't DROP ...` 로 실패한다 → `SET FOREIGN_KEY_CHECKS=0` 후 `logbook_test` 의 표를 모두 DROP 하고 다시 돌린다(2026-10-19).
 - **작업 폴더도 여러 세션이 같이 쓴다** — 커밋할 때 `git add -A` 금지, 이 세션이 고친 파일만 골라 add 하고 커밋 전에 `git status` 로 확인한다(2026-10-19 다른 세션의 39 미커밋 작업이 섞여 푸시됨).
   - **dist 도 섞인다** — 다른 세션의 미커밋 프런트 변경이 있으면 `npm run build` 결과에 그 코드가 들어가 145 에 배포된다. 그때는 `git worktree add --detach <scratchpad>\wt HEAD` 로 깨끗한 사본을 만들고 이 세션이 고친 파일만 복사해 거기서 테스트·빌드한 뒤 그 `frontend/dist` 를 가져와 커밋한다(node_modules 는 junction, 끝나면 junction 부터 지우고 `git worktree remove`)(2026-11-06, 55·56 배포 때).
-- **사이드 메뉴를 늘리지 않는다** — 새 화면은 기존 메뉴 아래 위쪽 탭(`components/shell/SectionTabs.jsx`, 살펴보기·관리가 이 방식)이나 화면 안 단추로 넣는다. 메뉴는 7개 + 관리 1개(51, 2026-11-05).
+- **사이드 메뉴를 늘리지 않는다** — 새 화면은 기존 메뉴 아래 위쪽 탭(`components/shell/SectionTabs.jsx`, 살펴보기·관리가 이 방식)이나 화면 안 단추로 넣는다. 메뉴는 8개 + 관리 1개(51, 2026-11-05 에 7개 → 2026-11-19 사용자 결정으로 '나의 메모'(64)를 더해 8개 — 날마다 따로 찾아 들어가는 개인 노트라 예외).
 - 스키마를 바꾸는 테스트에는 `@pytest.mark.fresh_schema`(README '개발 PC' 끝).
 - 계획 문서는 `docs/plans/YYYY-MM-DD-logbook-NN-<주제>.md`, 번호는 `docs/plans/README.md` 표에 올린다. 다른 계획이 미리 잡아 둔 번호(예: 32 가 33·34 예약)는 건너뛴다. 다른 세션이 커밋 전에 번호를 잡았을 수 있으니 문서를 만들기 직전에 `docs/plans` 폴더와 표를 다시 본다(2026-11-05 — 52 가 두 세션에서 겹쳐 결론·검토 서명을 53 으로 옮김).
 - **개발 이력(업데이트 이력)** = `backend/app/changelog/changelog.json`, 관리자가 관리 › 업데이트 이력(`/admin/updates`)에서 본다(46).
