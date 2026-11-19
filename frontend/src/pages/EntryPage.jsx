@@ -43,6 +43,7 @@ import WbOrigins from '../components/workbench/WbOrigins.jsx';
 import WireChip from '../components/ui/WireChip.jsx';
 import { needsLiftingWire } from '../lib/inboxStatus.js';
 import AssigneeInput, { AssigneeList, RunnerList } from '../components/people/AssigneeInput.jsx';
+import EntryComments from '../components/comments/EntryComments.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
 // 21 — 프로젝트(있을 때만 기록). 29 — 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
@@ -879,6 +880,8 @@ export default function EntryPage() {
                                     hull={entry.hulls[0]?.hull_no || ''} />
               : <p className="text-ui text-n-500">파일이 없습니다.</p>}
           </div>
+          {/* 63 — 자료 의견과 이슈(확정 자료만) */}
+          <EntryComments entryId={entry.entry_id} status={entry.status} />
         </div>
 
         <aside aria-label="속성" className="min-w-0">

@@ -186,6 +186,31 @@ class EntryGrant(Base):
     granted_at = Column(DateTime, nullable=False, default=_now)
 
 
+COMMENT_KINDS = ("comment", "issue")
+
+
+class EntryComment(Base):
+    """63 — 자료 의견과 이슈. 확정 자료에만 쓴다. 답글은 한 단계(parent_id 는 최상위 글만 가리킨다).
+    이슈(kind='issue')는 resolved_at 이 비면 '열림'. 답글이 달린 최상위 글을 지우면 deleted_at 을 찍고 본문을 비운다.
+
+    사람이 남긴 지식이라 registry.json(comments)에 남겨 재구축 뒤에도 되살린다(05). 자료가 영구 삭제되면 함께 지운다."""
+
+    __tablename__ = "entry_comments"
+    __table_args__ = (CheckConstraint("kind IN ('comment','issue')", name="ck_entry_comments_kind"),)
+
+    id = Column(Integer, primary_key=True)
+    entry_id = Column(Integer, ForeignKey("entries.id", ondelete="CASCADE"), nullable=False, index=True)
+    parent_id = Column(Integer, ForeignKey("entry_comments.id", ondelete="CASCADE"), nullable=True, index=True)
+    employee_id = Column(String(20), nullable=False, index=True)
+    kind = Column(String(10), nullable=False, default="comment")
+    body = Column(Text, nullable=False, default="")
+    resolved_by = Column(String(20), nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=_now, index=True)
+    edited_at = Column(DateTime, nullable=True)
+    deleted_at = Column(DateTime, nullable=True)
+
+
 class EntryHull(Base):
     __tablename__ = "entry_hulls"
 

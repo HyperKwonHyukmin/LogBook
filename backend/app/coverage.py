@@ -17,6 +17,7 @@
     solve       해석 검증(06) 요약 — pass(하나라도 통과) | fail(검증한 모델이 모두 실패이고 검증 안 한 모델 없음) | none
     needs_fix   필수 분류(호선 또는 공용, 43 — 구역·대상은 선택)가 빠진 BDF 자료(20)
     unsigned    서명이 없거나 옛 규칙 서명인 BDF 가 있음(12)
+    open_issues 해결 안 된 이슈 수(63 — 자료 의견과 이슈)
 
 권한(13·15): 보는 사람이 볼 수 있는 확정 자료만. 연결(doc_linked·model_linked)도 상대 자료가 보일 때만 센다.
 """
@@ -27,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from . import access, models
 from .bdf.signature import VERSION as SIG_VERSION
+from .comments import open_issue_counts
 from .entries import quality
 from .plm_ship import series_view, ship_facets
 from .vocab import Vocab
@@ -115,6 +117,7 @@ def build_coverage(db: Session, user) -> dict:
         return "none"
 
     names = _names(db, {e.uploaded_by for e in rows})
+    issues = open_issue_counts(db, pks)   # 63 — 열린 이슈(보완할 자료 '열린 이슈')
     zone_count: dict[str, int] = defaultdict(int)
     target_count: dict[str, int] = defaultdict(int)
     out = []
@@ -136,7 +139,7 @@ def build_coverage(db: Session, user) -> dict:
             "models": n_models, "reports": kinds.get(e.id, {}).get("report", 0),
             "doc_linked": e.id in doc_linked, "model_linked": e.id in model_linked,
             "solve": solve_of(e.id) if n_models else None,
-            "needs_fix": bool(missing), "unsigned": e.id in unsigned,
+            "needs_fix": bool(missing), "unsigned": e.id in unsigned, "open_issues": issues.get(e.id, 0),
             "uploaded_by": e.uploaded_by, "uploader_name": names.get(e.uploaded_by or ""),
             "confirmed_at": e.confirmed_at.strftime("%Y-%m") if e.confirmed_at else None,
         })

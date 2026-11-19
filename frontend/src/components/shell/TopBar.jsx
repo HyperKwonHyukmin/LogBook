@@ -1,12 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { History as HistoryIcon, LogOut, Search, Upload, X } from 'lucide-react';
+import { History as HistoryIcon, LogOut, MessageSquare, Search, Upload, X } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import Logo from '../ui/Logo.jsx';
 import Menu from '../ui/Menu.jsx';
 import { canWriteLevel, levelName, levelOf } from '../../lib/levels.js';
 import { api } from '../../api/client.js';
 import { FACET_LABELS } from '../../lib/labels.js';
+import { useUnreadComments } from '../../lib/useUnreadComments.js';
 
 const DEBOUNCE_MS = 200;
 // 19 — 자동완성: 종류마다 몇 개까지, 순서는 호선 · 구역 · 태그
@@ -51,6 +52,7 @@ export default function TopBar({ user, onLogout }) {
   const [dismissed, setDismissed] = useState(false);   // Esc 로 닫았다 — 다시 입력할 때까지 숨긴다
   const suggestReq = useRef(0);
   const open = focused && !dismissed && options.length > 0;
+  const unread = useUnreadComments();   // 63 — 새 의견 수(계정 메뉴와 아바타 점)
 
   // 입력이 멈추면 호선·구역·태그 후보를 한 번에 묻는다. 늦게 온 옛 응답은 버린다. 실패하면 후보 없이 그냥 검색창이다
   useEffect(() => {
@@ -206,10 +208,12 @@ export default function TopBar({ user, onLogout }) {
       <Menu
         width={232}
         trigger={(props) => (
-          <button type="button" {...props} aria-label={`계정 메뉴 (${user.name})`}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-navy-700 text-ui font-semibold text-on-navy ring-1 ring-navy-500
+          <button type="button" {...props} aria-label={`계정 메뉴 (${user.name})${unread ? ` 새 의견 ${unread}건` : ''}`}
+                  className="relative flex h-8 w-8 items-center justify-center rounded-full bg-navy-700 text-ui font-semibold text-on-navy ring-1 ring-navy-500
                              transition-colors duration-150 ease-out hover:bg-navy-600 active:bg-navy-600 aria-expanded:bg-navy-600">
             {user.name.slice(0, 1)}
+            {unread > 0 && <span aria-hidden="true" data-testid="unread-dot"
+                                 className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-wait ring-2 ring-navy-900" />}
           </button>
         )}
         header={(
@@ -228,6 +232,8 @@ export default function TopBar({ user, onLogout }) {
         items={[
           // 2026-11-18 — 화면 오른쪽 아래에 늘 떠 있던 [최근 비교] 단추를 여기로 옮겼다(내용을 가렸다)
           { label: '최근 비교', icon: HistoryIcon, onSelect: () => navigate('/compares') },
+          // 63 — 내 자료에 온 의견과 내 글에 달린 답글
+          { label: unread ? `새 의견 ${unread > 99 ? '99+' : unread}` : '받은 의견', icon: MessageSquare, onSelect: () => navigate('/comments') },
           { label: '로그아웃', icon: LogOut, onSelect: onLogout },
         ]}
       />

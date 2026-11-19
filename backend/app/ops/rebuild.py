@@ -29,6 +29,7 @@ from ..report_catalog import restore_reports
 from ..models import ENTRY_ACCESS, FILE_KINDS, LEGACY_ENTRY_ACCESS, USER_LEVELS, USER_STATUSES
 from ..storage.paths import StoragePaths, long_join, to_long
 from .autoinc import fix_autoinc
+from ..comments import restore_from_registry as restore_comments
 from .registry import read_registry
 from .state import worker_status
 
@@ -475,6 +476,7 @@ def rebuild(db: Session, storage: StoragePaths, *, force: bool = False) -> dict:
     result["alias_tags"] = _restore_aliases(db, registry)
     result["vocab_terms"] = _restore_vocab(db, registry)
     result["wb_target_rules"] = _restore_wb_rules(db, registry)
+    result["comments"] = restore_comments(db, registry)   # 63
     result["audit"], result["audit_bad"] = _restore_audit(db, storage)
     db.commit()
 

@@ -177,3 +177,13 @@ test('자동완성 도우미 — 응답 → 후보 순서, 후보 → 검색 주
   expect(suggestionSearch('?q=34&hull=3496', { key: 'hull', value: '3496' })).toBe('hull=3496');
   expect(suggestionSearch('?q=34&hull=3496', { key: 'hull', value: '3497' })).toBe('hull=3496&hull=3497');
 });
+
+test('63 — 새 의견이 있으면 아바타에 점, 계정 메뉴에 새 의견 수, 누르면 /comments', async () => {
+  mockApi({ 'GET /api/me/comments/summary': { unread: 3 } });
+  renderTopBar();
+  const btn = await screen.findByRole('button', { name: /새 의견 3건/ });
+  expect(screen.getByTestId('unread-dot')).toBeInTheDocument();
+  await userEvent.click(btn);
+  await userEvent.click(screen.getByRole('menuitem', { name: '새 의견 3' }));
+  expect(screen.getByTestId('loc').textContent).toBe('/comments');
+});

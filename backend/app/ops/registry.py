@@ -16,13 +16,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .. import models
+from ..comments import registry_rows as comment_rows
 from ..storage.paths import StoragePaths, to_long
 
 log = logging.getLogger(__name__)
 REGISTRY_FILE = "registry.json"
 EMPTY = {"version": 1, "users": [], "hulls": [], "tags": [], "vocab": [], "entry_access": [], "grants": [],
-         "wb_target_rules": []}
-LIST_KEYS = ("users", "hulls", "tags", "vocab", "entry_access", "grants", "wb_target_rules")
+         "wb_target_rules": [], "comments": []}
+LIST_KEYS = ("users", "hulls", "tags", "vocab", "entry_access", "grants", "wb_target_rules", "comments")
 _write_lock = threading.Lock()
 
 
@@ -68,7 +69,8 @@ def build_registry(db: Session) -> dict:
                 for r in db.query(models.WbTargetRule).order_by(models.WbTargetRule.target)]
     return {"version": 1, "written_at": datetime.now().replace(microsecond=0).isoformat(),
             "users": users, "hulls": hulls, "tags": tags, "vocab": vocab,
-            "entry_access": entry_access, "grants": grants, "wb_target_rules": wb_rules}
+            "entry_access": entry_access, "grants": grants, "wb_target_rules": wb_rules,
+            "comments": comment_rows(db)}   # 63 — 자료 의견과 이슈(사람이 남긴 지식)
 
 
 def write_registry(db: Session, storage: StoragePaths) -> bool:

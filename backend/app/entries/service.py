@@ -600,6 +600,10 @@ def _clear_dangling_references(db: Session, entry_id: int) -> None:
     # 10 — 즐겨찾기는 Entry 와 함께 사라진다(영구 삭제·합치기). 휴지통 이동은 여기를 거치지 않아 남는다
     db.query(models.Favorite).filter_by(entry_id=entry_id).delete(synchronize_session=False)
     db.query(models.EntryAssignee).filter_by(entry_id=entry_id).delete(synchronize_session=False)   # 46
+    # 63 — 의견과 이슈도 Entry 와 함께(답글 먼저 — 부모를 가리키는 FK)
+    db.query(models.EntryComment).filter(models.EntryComment.entry_id == entry_id,
+                                         models.EntryComment.parent_id.isnot(None)).delete(synchronize_session=False)
+    db.query(models.EntryComment).filter_by(entry_id=entry_id).delete(synchronize_session=False)
 
 
 def _recheck_duplicates(db: Session, user: models.User, batch: models.Batch, files: list[models.File],

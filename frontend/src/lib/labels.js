@@ -13,7 +13,7 @@ export const ACTION_LABELS = {
   ENTRY_TRASH: '휴지통으로', ENTRY_RESTORE: '복원', DRAFT_DISCARD: '초안 버림',
   TAG_ALIAS: '동의어 묶기', TAG_UNALIAS: '동의어 풀기', HULL_UPDATE: '호선 정보 수정', HULL_PLM: '선박 정보(PLM) 반영',
   PERSON_UPDATE: '담당자 명부 수정',   // 46
-  TRASH_PURGE: '영구 삭제', JOB_RETRY: '작업 다시 시도',
+  TRASH_PURGE: '영구 삭제', JOB_RETRY: '작업 다시 시도', COMMENT_DELETE: '의견 삭제(관리자)',   // 63
   OPS_REEXTRACT: '본문 다시 추출', OPS_RECONVERT: 'BDF 다시 변환', OPS_BACKUP: '수동 백업',
   SOLVE_CHECK: '해석 검증 요청', OPS_SOLVE_CHECK: '해석 검증 일괄',
   VOCAB_SEED: '분류 목록 기본값', VOCAB_TERM_ADD: '분류 용어 추가', VOCAB_TERM_UPDATE: '분류 용어 수정',
@@ -71,6 +71,14 @@ export const EXCLUDE_REASON_LABELS = {
 };
 
 export const ERROR_LABELS = {
+  // 63 — 자료 의견과 이슈
+  comment_empty: '내용을 입력해 주세요.',
+  comment_too_long: '글은 2000자까지 쓸 수 있습니다.',
+  comment_not_found: '글을 찾을 수 없습니다. 이미 지워졌을 수 있습니다.',
+  comment_deleted: '지워진 글입니다.',
+  not_comment_author: '글을 쓴 사람만 할 수 있습니다.',
+  cannot_resolve: '이슈를 쓴 사람, 자료를 올린 사람, 관리자만 해결로 표시할 수 있습니다.',
+  reply_depth: '답글에는 답글을 달 수 없습니다.',
   // 27 — 선례 찾기
   similar_base_not_found: '기준 BDF 를 찾지 못했습니다. 볼 수 없는 자료이거나 아직 변환되지 않았습니다.',
   bdf_too_large: 'BDF 가 32MB 를 넘어 이 화면에서 읽을 수 없습니다. 먼저 올려 확정한 뒤 자료 화면에서 찾아 주세요.',

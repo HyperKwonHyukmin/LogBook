@@ -62,6 +62,8 @@ test('먼저 볼 칸은 검증 실패 → 문서 없음, 정렬과 목록', () =
   expect(l.no_model.map((e) => e.id)).toEqual(['nomodel']);       // 다른 자료 모델과 연결된 문서는 빠진다
   expect(l.solve_fail.map((e) => e.id)).toEqual(['fail']);
   expect(l.needs_fix.map((e) => e.id)).toEqual(['unset']);
+  expect(l.open_issue).toEqual([]);   // 63 — open_issues 가 없는 옛 응답도 빈 목록
+  expect(listRows({ ...DATA, entries: [E('iss', { open_issues: 2 })] }, null).open_issue.map((e) => e.id)).toEqual(['iss']);
   const scoped = listRows(DATA, { rowKey: 'h:9002', col: { key: '정반', label: '정반' } });
   expect(scoped.no_report.map((e) => e.id)).toEqual(['noreport']);
 });

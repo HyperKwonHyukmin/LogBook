@@ -199,6 +199,9 @@ export const LIST_TABS = [
     test: (e) => e.needs_fix },
   { id: 'unsigned', label: '서명 없는 모델', note: '옛 방식으로 변환되어 내용 서명이 없습니다. 관리자가 다시 변환하면 채워집니다.',
     test: (e) => e.unsigned },
+  // 63 — 자료 의견과 이슈
+  { id: 'open_issue', label: '열린 이슈', note: '다른 사람이 고칠 점을 이슈로 남겼고 아직 해결로 표시되지 않은 자료입니다. 자료 화면 아래 의견에서 확인합니다.',
+    test: (e) => e.open_issues > 0 },
 ];
 
 /** 목록 탭 — scope({rowKey, col})가 있으면 그 칸 자료만. keysOf = 고른 행 기준(없으면 호선). */
