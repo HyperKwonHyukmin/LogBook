@@ -220,12 +220,30 @@ def test_warm_fills_cache_so_graph_request_does_not_recompute(db, make_entry_fil
     assert rf.warm(None) == 0
 
 
+def test_warm_in_batches_with_pause(db, make_entry_file, monkeypatch):
+    """2026-11-19 — 끊어 계산하고 사이에 쉰다(검색 요청에 틈을 준다). 끊어도 모두 캐시에 들어간다."""
+    e, a = make_entry_file(title="끊어 계산", name="가.pdf")
+    files = [a] + [make_entry_file(entry=e, name=f"{n}.pdf")[1] for n in ("나", "다", "라", "마", "바")]
+    store = None
+    for i, f in enumerate(files):
+        store = _index(f, e, _text(20 + i))
+    rf.clear_cache()
+    sleeps = []
+    import time as time_mod
+    monkeypatch.setattr(time_mod, "sleep", lambda s: sleeps.append(s))
+    assert rf.warm(store, pause=0.05) >= 6
+    assert sleeps and all(s == 0.05 for s in sleeps)   # 6건 이상 = 4건씩 끊어 사이에 쉼
+    monkeypatch.setattr(rf, "_build", lambda *a, **k: pytest.fail("미리 계산한 보고서를 다시 계산했다"))
+    assert {f.id for f in files} <= set(rf.features(store, [f.id for f in files]))
+
+
 def test_startup_warmup_switch(monkeypatch):
     import threading
     from app import main
     from app.report_index import features as feats_mod
     called = threading.Event()
-    monkeypatch.setattr(feats_mod, "warm", lambda store: called.set() or 0)
+    monkeypatch.setattr(feats_mod, "warm", lambda store, pause=0.0: called.set() or 0)
+    monkeypatch.setenv("LOGBOOK_GRAPH_WARMUP_DELAY", "0")
     monkeypatch.setenv("LOGBOOK_GRAPH_WARMUP", "0")
     main._start_report_features_warmup()
     assert not called.wait(0.3)

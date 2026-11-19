@@ -112,15 +112,27 @@ def features(store, file_ids) -> dict[int, Feature]:
         return _features(store, ids)
 
 
-def warm(store) -> int:
+WARM_BATCH = 4   # 미리 계산을 이만큼씩 끊어 하고 사이에 쉰다(아래 pause)
+
+
+def warm(store, pause: float = 0.0) -> int:
     """색인된 모든 보고서의 특징을 미리 계산해 캐시에 넣는다(서버 시작 때 백그라운드에서 한 번). 넣은 수를 돌려준다.
-    이것이 없으면 서버를 다시 띄운 뒤 관계 지도를 처음 연 사람이 모든 보고서 본문을 읽는 시간을 기다린다(145 보고서 232건에서 약 30초, 2026-11-18 사용자 신고 — 본문 글자당 약 1.2µs)."""
+    이것이 없으면 서버를 다시 띄운 뒤 관계 지도를 처음 연 사람이 모든 보고서 본문을 읽는 시간을 기다린다(145 보고서 232건에서 약 30초, 2026-11-18 사용자 신고 — 본문 글자당 약 1.2µs).
+    pause(초) — WARM_BATCH 건마다 쉰다(2026-11-19). 계산은 파이썬 반복이라 도는 동안 같은 프로세스의 검색, 썸네일 요청과
+    처리 시간을 나눠 쓴다(업데이트 직후 검색이 느리다는 신고). 쉬는 틈에 요청이 먼저 돈다. 끊어도 캐시는 건마다 쌓인다."""
+    import time
+
     if store is None:
         return 0
     with store.read() as db:
         ids = [row["file_id"] for row in db.execute(
             "SELECT file_id FROM documents WHERE active=1 AND state IN ('ready', 'partial') AND chunk_count > 0")]
-    return len(features(store, ids))
+    done = 0
+    for i in range(0, len(ids), WARM_BATCH):
+        done += len(features(store, ids[i:i + WARM_BATCH]))
+        if pause > 0 and i + WARM_BATCH < len(ids):
+            time.sleep(pause)
+    return done
 
 
 def _features(store, ids: list[int]) -> dict[int, Feature]:

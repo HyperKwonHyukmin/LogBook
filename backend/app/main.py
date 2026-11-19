@@ -77,7 +77,9 @@ async def lifespan(app: FastAPI):
 def _start_report_features_warmup() -> None:
     """관계 지도의 문서 관계(32)에 쓰는 보고서 본문 특징을 서버 시작 직후 백그라운드에서 미리 계산한다.
     안 하면 재시작 뒤 관계 지도를 처음 연 사람이 약 30초 기다린다(report_index.features.warm).
-    LOGBOOK_GRAPH_WARMUP=0 이면 끈다(테스트). 실패해도 기동·화면에는 영향이 없다 — 그때는 첫 요청이 계산한다."""
+    LOGBOOK_GRAPH_WARMUP=0 이면 끈다(테스트). 실패해도 기동·화면에는 영향이 없다 — 그때는 첫 요청이 계산한다.
+    2026-11-19 — 업데이트 직후 검색이 느리다는 신고: 시작 직후(사람들이 새로고침하는 때)를 피해 LOGBOOK_GRAPH_WARMUP_DELAY 초
+    (기본 60) 뒤에 시작하고, 보고서 몇 건마다 쉬며 계산한다(features.warm pause)."""
     import os
     import threading
     import time
@@ -85,13 +87,19 @@ def _start_report_features_warmup() -> None:
     if os.getenv("LOGBOOK_GRAPH_WARMUP", "1").strip().lower() in ("0", "false", "no"):
         return
 
+    try:
+        delay = max(0.0, float(os.getenv("LOGBOOK_GRAPH_WARMUP_DELAY", "60")))
+    except ValueError:
+        delay = 60.0
+
     def run():
         from .report_index import features as report_features
         from .routers.reports import get_report_index
 
+        time.sleep(delay)
         started = time.perf_counter()
         try:
-            count = report_features.warm(get_report_index())
+            count = report_features.warm(get_report_index(), pause=0.05)
             log.info("보고서 본문 특징 미리 계산: %d건, %.1f초", count, time.perf_counter() - started)
         except Exception:  # noqa: BLE001
             log.warning("보고서 본문 특징 미리 계산 실패 — 첫 관계 지도 요청이 계산합니다", exc_info=True)
