@@ -47,6 +47,8 @@ export function AccessSelect({ value, onChange, disabled, id, className = '', ca
  */
 export default function AccessPanel({ entry, onChanged, disabled = false }) {
   const current = accessOf(entry);
+  // 2026-11-19 — 늘 펼쳐 두던 고르기 칸과 열람 허락은 [바꾸기]를 눌러야 펼친다(거의 쓰지 않는 설정이 속성보다 크게 보였다)
+  const [expanded, setExpanded] = useState(false);
   const [value, setValue] = useState(current);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -79,19 +81,28 @@ export default function AccessPanel({ entry, onChanged, disabled = false }) {
     } finally { setBusy(false); }
   }
 
+  const grantCount = (entry.grants || []).length;
+  const open = expanded || !!error;
   return (
-    <section aria-label="공개 범위" className="mt-6 border-t border-n-200 pt-4">
+    <section aria-label="공개 범위" className="mt-5 border-t border-n-200 pt-4">
       {dialog}
-      <SectionTitle className="mb-2">공개 범위</SectionTitle>
-      <p className="flex items-center gap-1.5 text-ui text-n-900">
-        <Icon size={14} className="text-n-400" aria-hidden="true" />
-        <span>{opt.label}</span>
-      </p>
-      <p className="mt-0.5 text-meta text-n-500">{opt.help}</p>
+      <div className="flex min-h-7 items-center gap-2">
+        <SectionTitle>공개 범위</SectionTitle>
+        <span className="inline-flex min-w-0 items-center gap-1.5 text-ui text-n-900" title={opt.help}>
+          <Icon size={14} className="shrink-0 text-n-400" aria-hidden="true" />{opt.label}
+        </span>
+        {manage && current !== 'shared' && <span className="shrink-0 text-meta text-n-500">허락 {grantCount}명</span>}
+        {manage && (
+          <Button variant="ghost" size="sm" className="-mr-2 ml-auto" aria-expanded={open} onClick={() => setExpanded(!open)}>
+            {open ? '접기' : '바꾸기'}
+          </Button>
+        )}
+      </div>
+      {(open || !manage) && <p className="mt-0.5 text-meta text-n-500">{opt.help}</p>}
       {current === 'blocked' && !manage && entry.can_edit && (
         <p className="mt-1 text-meta text-n-600">관리자가 블록한 자료입니다. 공개 범위와 열람 허락은 관리자만 바꿉니다.</p>
       )}
-      {manage && (
+      {manage && open && (
         <div className="mt-3 flex items-center gap-2">
           <label htmlFor={selectId} className="sr-only">공개 범위 바꾸기</label>
           <AccessSelect id={selectId} value={value} onChange={setValue} disabled={busy || disabled}
@@ -103,7 +114,7 @@ export default function AccessPanel({ entry, onChanged, disabled = false }) {
       )}
       {error && <p role="alert" className="mt-2 text-meta text-err">{error}</p>}
       {/* 공유 자료는 누구나 보므로 개별 허락이 필요 없다(행은 남아 있다가 단계를 바꾸면 다시 효력이 난다) */}
-      {manage && current !== 'shared' && (
+      {manage && open && current !== 'shared' && (
         <Grants entry={entry} onChanged={onChanged} disabled={disabled} />
       )}
     </section>

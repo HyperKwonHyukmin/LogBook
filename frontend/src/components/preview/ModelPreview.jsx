@@ -131,13 +131,22 @@ function ModelPreviewBody({ file, inline, compare }) {
           {`INCLUDE 파일 ${missing.join(', ')} 이 없습니다. 같은 자료에 추가하면 자동으로 다시 변환합니다.`}
         </p>
       )}
-      <div className="flex items-start gap-3">
+      {/* 2026-11-19 — 요약, 비슷한 모델 찾기, 비교에 담기를 한 줄로(자료 화면에서 뷰어가 첫 화면 밖으로 밀리던 것) */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <div className="min-w-0 flex-1"><SummaryLine summary={data} /></div>
-        {compare}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {inline && nastran && (
+            // 27 — 이 BDF 를 기준으로 비슷한 확정 모델 찾기
+            <Link to={`/similar?file=${file.id}`} className={buttonClass('ghost', 'sm')}>
+              <ScanSearch size={14} aria-hidden="true" />비슷한 모델 찾기
+            </Link>
+          )}
+          {compare}
+        </div>
       </div>
-      {/* 해석 검증(06) — 다시 변환되면(key) 새 모델 기준으로 카드를 새로 시작한다. */}
+      {/* 해석 검증(06) — 다시 변환되면(key) 새 모델 기준으로 카드를 새로 시작한다. 자료 화면(inline)은 한 줄로 줄인다 */}
       {nastran && <SolveCheckCard key={data.key || 'solve'} fileId={file.id} fileName={file.name} initial={data.solve || null}
-                      ready={data.state === 'done'} />}
+                      ready={data.state === 'done'} slim={inline} />}
       {warnings.length > 0 && (
         <details className="group text-meta">
           <summary className="w-fit cursor-pointer select-none rounded-sm text-n-600 hover:text-n-900">{`경고 ${warnings.length}`}</summary>
@@ -145,12 +154,6 @@ function ModelPreviewBody({ file, inline, compare }) {
             {warnings.map((w, i) => <li key={i} className="break-words font-mono text-micro text-n-600">{w}</li>)}
           </ul>
         </details>
-      )}
-      {inline && nastran && (
-        // 27 — 이 BDF 를 기준으로 비슷한 확정 모델 찾기(전체 화면 뷰어 위 줄)
-        <Link to={`/similar?file=${file.id}`} className={buttonClass('ghost', 'sm', 'self-start')}>
-          <ScanSearch size={14} aria-hidden="true" />이 BDF 와 비슷한 모델 찾기
-        </Link>
       )}
       {inline ? (
         <div className={VIEWER_HEIGHT}>

@@ -20,3 +20,14 @@ test('해석 모델이 맨 위 — 변환 모델 > 다른 모델 파일 > 나머
   expect(t.map((n) => n.name)).toEqual(['run', 'z_main.bdf', 'b_part.dat', 'docs', 'a_report.pdf']);
   expect(t[0].children.map((n) => n.name)).toEqual(['sub.bdf']);
 });
+
+test('하위가 폴더 하나뿐인 폴더 사슬은 한 줄로 합친다', () => {
+  const files = [{ id: 1, rel_path: '2018/15_unit/fe_model/a.bdf', kind: 'model' },
+                 { id: 2, rel_path: '2018/15_unit/report/r.pdf', kind: 'report' },
+                 { id: 3, rel_path: 'x/y/z/only.pdf', kind: 'report' }];
+  const t = buildTree(files);
+  expect(t.map((n) => n.name)).toEqual(['2018/15_unit', 'x/y/z']);
+  expect(t[0].path).toBe('2018/15_unit');
+  expect(t[0].children.map((n) => n.name)).toEqual(['fe_model', 'report']);
+  expect(t[1].children[0].file.id).toBe(3);
+});

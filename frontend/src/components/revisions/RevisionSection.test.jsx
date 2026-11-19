@@ -184,3 +184,25 @@ test('16 — 같은 판이면 3D 단추가 없다', async () => {
   const flow = await screen.findByRole('list', { name: '판 흐름' });
   expect(within(flow).queryByRole('button', { name: 'R0 → R1 3D 변경 보기' })).toBeNull();
 });
+
+test('2026-11-19 — 묶인 판이 없으면 판 구역 없이 단추만 파일 머리 줄(renderHeader)로 넘긴다', async () => {
+  const header = (actions) => <div data-testid="files-header">파일 머리{actions}</div>;
+  renderSection({ 'GET /api/entries/E000001/revisions': { ...DATA, series: [],
+    others: [item(1, 'a.bdf', null), item(2, 'b.bdf', null)] } }, { renderHeader: header });
+  await screen.findByRole('button', { name: /두 판 고르기/ });   // 판 정보를 받기 전에는 단추 없는 머리 줄
+  const head = screen.getByTestId('files-header');
+  expect(within(head).getByRole('button', { name: /두 판 고르기/ })).toBeInTheDocument();
+  expect(within(head).getByRole('button', { name: '판 정리' })).toBeInTheDocument();
+  expect(screen.queryByText('판으로 묶인 BDF 가 없습니다.')).toBeNull();
+  expect(screen.queryByRole('region', { name: '판' })).toBeNull();
+  // 두 판 고르기를 열면 그때 고르기 칸이 보인다
+  await userEvent.click(within(head).getByRole('button', { name: /두 판 고르기/ }));
+  expect(screen.getByRole('group', { name: '두 판 고르기' })).toBeInTheDocument();
+});
+
+test('2026-11-19 — 묶인 판이 있으면 판 구역 뒤에 파일 머리 줄을 단추 없이 그린다', async () => {
+  const header = (actions) => <div data-testid="files-header">{actions ? '단추 있음' : '단추 없음'}</div>;
+  renderSection({}, { renderHeader: header });
+  expect(await screen.findByRole('list', { name: '판 흐름' })).toBeInTheDocument();
+  expect(screen.getByTestId('files-header')).toHaveTextContent('단추 없음');
+});

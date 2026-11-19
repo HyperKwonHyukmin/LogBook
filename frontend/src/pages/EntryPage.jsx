@@ -57,6 +57,15 @@ const OPTIONAL_KEYS = new Set(['no_hull', 'project', 'target', 'assignees', 'con
 const hullRule = (v) => /^\d{4}$/.test(v) || '호선은 숫자 4자리입니다.';
 const show = (v) => (v === true ? '예' : (Array.isArray(v) ? v.join(', ') : v) || '(없음)');
 const HISTORY_FILES_SHOWN = 5;
+// 2026-11-19 — 권상 Wire 안내를 자료마다 숨긴다(이 브라우저에만, 저장이 막혀도 안내가 다시 보일 뿐)
+const WIRE_HINT_KEY = 'lb.wireHintHidden';
+function hiddenWireHints() {
+  try { return new Set(JSON.parse(localStorage.getItem(WIRE_HINT_KEY) || '[]')); } catch { return new Set(); }
+}
+const wireHintHidden = (entryId) => hiddenWireHints().has(entryId);
+function hideWireHint(entryId) {
+  try { localStorage.setItem(WIRE_HINT_KEY, JSON.stringify([...hiddenWireHints().add(entryId)].slice(-500))); } catch { /* 저장 못 함 */ }
+}
 const HISTORY_SHOWN = 5;
 // 이력에 파일 이름을 늘어놓는 동작(37 — 파일 삭제·되돌리기)
 const FILE_ACTIONS = new Set(['ENTRY_FILES_ADDED', 'ENTRY_FILES_REMOVED', 'ENTRY_FILES_RESTORED', 'FILES_PURGE']);
@@ -458,6 +467,7 @@ export default function EntryPage() {
   const toast = useToast();
   const [confirm, dialog] = useConfirm();
   const { entry, status, error, setError, commit, reload } = useEntry(entryId);
+  const [, setWireTick] = useState(0);   // 권상 안내 [다시 보지 않기] 뒤 다시 그리기
   const [commentCounts, setCommentCounts] = useState(null);   // 63 — 속성 칸 '의견' 줄(아래 의견 구역이 알려 준다)
   useEffect(() => { setCommentCounts(null); }, [entryId]);
   // 62 — 붙은 파일을 목록에 '새 파일'로 표시하고, 패널이 화면 밖이어도 알 수 있게 토스트로도 알린다
@@ -703,6 +713,25 @@ export default function EntryPage() {
       },
     });
   }
+  /** '파일 N' 머리 줄 — revActions = 판 단추(묶인 판이 없을 때 RevisionSection 이 넘긴다). */
+  function filesHeader(revActions) {
+    return (
+      <div className="mb-2 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
+        <SectionTitle>파일 <span className="font-mono font-normal text-n-500">{entry.files.length}</span></SectionTitle>
+        {editing && <span className="text-meta text-n-500">지울 파일은 줄 오른쪽 [삭제] — 변경 완료 때 반영</span>}
+        <div className="ml-auto flex items-center gap-1">
+          {revActions}
+          {editable && (
+            <Button variant="ghost" size="sm" onClick={() => setAdding(!adding)} aria-expanded={adding || addBusy}
+                    disabled={addBusy} title={addBusy ? '추가가 끝나면 닫을 수 있습니다' : undefined}>
+              {addBusy ? <><Spinner size={12} />파일 추가 중…</> : <><Upload size={14} aria-hidden="true" />파일 추가</>}
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   async function copy(text, what) {
     const ok = await copyText(text);
     toast.show(ok ? { message: `${what}를 복사했습니다.` } : { tone: 'err', message: '복사하지 못했습니다.' });
@@ -833,26 +862,21 @@ export default function EntryPage() {
 
       <div className="mt-6 grid grid-cols-1 gap-8 min-[1200px]:grid-cols-[minmax(0,1fr)_272px]">
         <div className="min-w-0">
-          {/* 14 — 한 자료 안 BDF 판 흐름(R0 → R1 → R2)과 변경 요약 */}
-          {entry.files.filter((f) => f.kind === 'model').length >= 2 && (
+          {/* 14 — 한 자료 안 BDF 판 흐름(R0 → R1 → R2)과 변경 요약. 묶인 판이 없으면 구역 없이 단추만 파일 머리 줄로 */}
+          {entry.files.filter((f) => f.kind === 'model').length >= 2 ? (
             <RevisionSection entryId={entry.entry_id} selectedId={file?.id} onPick={setPicked} locked={editing}
-                             onEditingChange={setRevEditing} onSaved={() => setRevSaved((n) => n + 1)} />
-          )}
-          <div className="mb-2 flex h-7 items-center gap-2">
-            <SectionTitle>파일 <span className="font-mono font-normal text-n-500">{entry.files.length}</span></SectionTitle>
-            {editing && <span className="text-meta text-n-500">지울 파일은 줄 오른쪽 [삭제] — 변경 완료 때 반영</span>}
-            {editable && (
-              <Button variant="ghost" size="sm" onClick={() => setAdding(!adding)} aria-expanded={adding || addBusy} className="ml-auto"
-                      disabled={addBusy} title={addBusy ? '추가가 끝나면 닫을 수 있습니다' : undefined}>
-                {addBusy ? <><Spinner size={12} />파일 추가 중…</> : <><Upload size={14} aria-hidden="true" />파일 추가</>}
-              </Button>
-            )}
-          </div>
+                             onEditingChange={setRevEditing} onSaved={() => setRevSaved((n) => n + 1)} renderHeader={filesHeader} />
+          ) : filesHeader(null)}
           {/* 49 — Module Unit 권상 자료인데 Wire 모델이 없다(확정 뒤에도 파일 추가로 채울 수 있다) */}
-          {editable && needsLiftingWire(entry, entry.target) && (
-            <p role="note" className="mb-3 rounded-md bg-wait-bg px-3 py-2 text-meta text-n-800">
-              <span className="font-medium text-wait">권상 Wire 모델이 없습니다.</span>{' '}
-              Wire 를 설치한 모델(<span className="font-mono">_lifting.bdf</span>)을 [파일 추가]로 올려 두면 나중에 이전 실적의 권상 위치를 찾을 수 있습니다.
+          {/* 2026-11-19 — 하면 좋은 선택 사항이라 주황 경고 대신 회색 안내 한 줄, 자료마다 [다시 보지 않기] */}
+          {editable && needsLiftingWire(entry, entry.target) && !wireHintHidden(entry.entry_id) && (
+            <p role="note" className="mb-2 flex items-start gap-2 rounded-md bg-n-50 px-3 py-1.5 text-meta text-n-600">
+              <span className="min-w-0 flex-1">
+                권상 Wire 모델이 없습니다. Wire 를 설치한 모델(<span className="font-mono">_lifting.bdf</span>)을 [파일 추가]로 올려 두면
+                나중에 이전 실적의 권상 위치를 찾을 수 있습니다.
+              </span>
+              <button type="button" onClick={() => { hideWireHint(entry.entry_id); setWireTick((n) => n + 1); }}
+                      className="shrink-0 rounded-sm px-1 text-n-500 underline-offset-2 hover:text-n-900 hover:underline">다시 보지 않기</button>
             </p>
           )}
           {(adding || addBusy) && editable && (
@@ -878,7 +902,7 @@ export default function EntryPage() {
           {editable && <RemovedFiles files={entry.removed_files} busy={restoring || editing} onRestore={restoreFiles} />}
           <div className="mt-4">
             {file && <SameModelNotice model={file.model} />}
-            {file ? <FilePreview key={file.id} file={file} vaultUnc={entry.vault_unc} trashed={trashed} hideTitles={[entry.title]}
+            {file ? <FilePreview key={file.id} file={file} vaultUnc={entry.vault_unc} trashed={trashed} hideTitles={[entry.title]} showName
                                     hull={entry.hulls[0]?.hull_no || ''} />
               : <p className="text-ui text-n-500">파일이 없습니다.</p>}
           </div>
@@ -886,7 +910,9 @@ export default function EntryPage() {
           <EntryComments entryId={entry.entry_id} status={entry.status} onCounts={setCommentCounts} />
         </div>
 
-        <aside aria-label="속성" className="min-w-0">
+        {/* 2026-11-19 — 넓은 화면에서 속성 칸을 화면에 붙여 둔다(뷰어나 의견을 보며 호선, 구역을 다시 보려고 올라가지 않게).
+            고치는 중에는 칸이 길어 붙이지 않는다 */}
+        <aside aria-label="속성" className={`min-w-0 ${editing ? '' : 'min-[1200px]:sticky min-[1200px]:top-4 min-[1200px]:self-start'}`}>
           {editing ? (
             <dl className="grid grid-cols-[76px_minmax(0,1fr)] gap-x-3 gap-y-2">
               <Prop label="호선" changed={isChanged('hulls')} error={errors.hulls}>

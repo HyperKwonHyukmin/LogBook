@@ -46,6 +46,9 @@ test('올린 사람은 공유로 바꾸고 확인한 뒤 적용한다(취소하�
   const onChanged = vi.fn();
   const fetch = mockApi({ 'PUT /api/entries/E000001/access': { ...BASE, access: 'shared' } });
   render(<AccessPanel entry={{ ...BASE, can_manage_access: true, grants: [] }} onChanged={onChanged} />);
+  expect(screen.queryByRole('combobox', { name: '공개 범위' })).toBeNull();
+  expect(screen.getByText('허락 0명')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '바꾸기' }));   // 2026-11-19 — 접혀 있다
   const select = screen.getByRole('combobox', { name: '공개 범위' });
   expect(within(select).queryByRole('option', { name: '블록' })).toBeNull();
   const apply = screen.getByRole('button', { name: '적용' });
@@ -65,6 +68,7 @@ test('올린 사람은 공유로 바꾸고 확인한 뒤 적용한다(취소하�
 test('관리자(can_block)는 블록을 고를 수 있다', async () => {
   const fetch = mockApi({ 'PUT /api/entries/E000001/access': { ...BASE, access: 'blocked' } });
   render(<AccessPanel entry={{ ...BASE, can_manage_access: true, can_block: true, grants: [] }} onChanged={vi.fn()} />);
+  await userEvent.click(screen.getByRole('button', { name: '바꾸기' }));   // 2026-11-19 — 접혀 있다
   await userEvent.selectOptions(screen.getByRole('combobox', { name: '공개 범위' }), 'blocked');
   await userEvent.click(screen.getByRole('button', { name: '적용' }));
   await answer(true);
@@ -93,6 +97,7 @@ test('열람 허락 — 효력 없는 허락 표시, 누르면 가입자 목록,
     'DELETE /api/entries/E000001/grants/M1': { grants: [] },
   });
   render(<AccessPanel entry={entry} onChanged={onChanged} />);
+  await userEvent.click(screen.getByRole('button', { name: '바꾸기' }));   // 2026-11-19 — 접혀 있다
   const list = screen.getByRole('list', { name: '열람 허락 목록' });
   expect(within(list).getByText('효력 없음')).toBeInTheDocument();
   expect(within(list).getByText('LV1 게스트')).toBeInTheDocument();

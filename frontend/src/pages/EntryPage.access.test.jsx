@@ -55,6 +55,7 @@ test('올린 사람(LV1) — 변경하기·파일 추가와 공개 범위 고르
     { ...ENTRY, access: 'normal', label: null, can_edit: true, can_manage_access: true, can_block: false, grants: [] });
   expect(await screen.findByRole('button', { name: /변경하기/ })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /파일 추가/ })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '바꾸기' }));   // 2026-11-19 — 접혀 있다
   const select = screen.getByRole('combobox', { name: '공개 범위' });
   expect(select).toHaveValue('normal');
   expect([...select.options].map((o) => o.value)).toEqual(['shared', 'normal']);
@@ -73,6 +74,7 @@ test('블록된 자기 자료 — 내용은 고치지만 공개 범위는 관리
 test('LV3 — 블록 선택지가 있다', async () => {
   renderAs({ employee_id: 'A1', name: '관리', level: 3 },
     { ...ENTRY, access: 'normal', label: null, can_edit: true, can_manage_access: true, can_block: true, grants: [] });
+  await userEvent.click(await screen.findByRole('button', { name: '바꾸기' }));
   const select = await screen.findByRole('combobox', { name: '공개 범위' });
   expect([...select.options].map((o) => o.value)).toEqual(['shared', 'normal', 'blocked']);
 });
@@ -97,6 +99,7 @@ test('열람 허락을 주면 허락 목록에 보이고, 변경 이력에는 �
       </MemoryRouter>
     </AuthContext.Provider>,
   );
+  await userEvent.click(await screen.findByRole('button', { name: '바꾸기' }));
   const box = await screen.findByRole('textbox', { name: '열람 허락할 사람 찾기' });
   await userEvent.type(box, '박');
   await userEvent.click(await screen.findByRole('checkbox', { name: '박승인 고르기' }));

@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { calls, mockApi } from '../../test/mockApi.js';
@@ -120,4 +120,12 @@ test('f06 받기는 인증 GET 으로 받는다', async () => {
   expect(click).toHaveBeenCalled();
   expect(click.mock.contexts[0].download).toBe('m.f06');
   click.mockRestore();
+});
+
+test('2026-11-19 slim — 제목, 상태, 단추가 한 줄이고 설명 문장은 제목 툴팁으로', () => {
+  render(<SolveCheckCard fileId={7} fileName="m.bdf" slim />);
+  const card = screen.getByRole('region', { name: '해석 검증' });
+  expect(within(card).getByText('Nastran 해석 검증')).toHaveAttribute('title', expect.stringContaining('원본 파일은 바뀌지 않습니다'));
+  expect(within(card).queryByText(/FATAL 없이 끝까지/)).toBeNull();
+  expect(within(card).getByRole('button', { name: /해석 검증/ })).toBeInTheDocument();
 });

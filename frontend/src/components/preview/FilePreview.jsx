@@ -218,11 +218,12 @@ export function FileActions({ file, vaultUnc, trashed = false, showPath = false,
 
 /**
  * 파일 미리보기(설계 §6.3) — 형식별 본문. toolbar=true 면 위에 크기·동작 줄을 둔다
- * (파일 이름은 옆 파일 목록에 이미 있어 되풀이하지 않는다). hideTitles: 요약에서 뺄 제목들.
+ * (showName 이면 파일 이름도 — 자료 화면은 목록과 미리보기 사이가 멀다). hideTitles: 요약에서 뺄 제목들.
  * BDF(kind=model)는 3D 미리보기(ModelPreview)를 쓴다. inlineModel=false 면 뷰어 대신 썸네일 + 3D 로 보기
  * (좁은 검색 미리보기 패널). hull = 소속 자료의 대표 호선(모델의 '비교에 담기').
  */
-export default function FilePreview({ file, vaultUnc, trashed = false, toolbar = true, hideTitles = [], inlineModel = true, hull = '' }) {
+export default function FilePreview({ file, vaultUnc, trashed = false, toolbar = true, hideTitles = [], inlineModel = true, hull = '',
+  showName = false }) {
   const ext = extOf(file.name);
   const notice = extractNotice(file.extract);
   // DRM 파일은 서버가 본문을 못 읽는다(시트 API 도 409). 미리보기 대신 사유와 내려받기만 보인다.
@@ -236,7 +237,9 @@ export default function FilePreview({ file, vaultUnc, trashed = false, toolbar =
   return (
     <div className="flex flex-col gap-3">
       {toolbar && !inTrash && (
-        <div className="flex min-h-7 items-center gap-3">
+        <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1">
+          {/* 2026-11-19 — 자료 화면은 파일 목록과 미리보기 사이가 멀어 어느 파일인지 이름을 다시 보인다(showName) */}
+          {showName && <span className="min-w-0 truncate text-ui font-semibold text-n-900" title={file.rel_path}>{file.name}</span>}
           <span className="shrink-0 font-mono text-meta text-n-500">{formatBytes(file.size)}</span>
           <FileActions file={file} vaultUnc={vaultUnc} trashed={trashed} className="ml-auto justify-end" />
         </div>

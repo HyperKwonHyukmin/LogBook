@@ -126,8 +126,10 @@ const INITIAL = { data: null, error: '', errors: 0, fatal: false, polls: 0, seq:
  *  · ready: 모델 변환이 끝났는가(아니면 단추를 잠근다 — 서버도 409 model_not_ready 로 막는다).
  *  · compact: 전체 화면 뷰어 왼쪽 패널(좁은 폭)용 세로 배치.
  *  · onData(solve): 자세한 행이 바뀔 때마다 알린다(뷰어의 고정 노드 표시).
+ *  · slim: 자료 화면용 한 줄(2026-11-19) — 제목, 상태, 단추를 한 줄에. 설명 문장은 제목에 마우스를 올리면 보인다
+ *    (검증 중일 때만 줄 아래에 보인다). 결과 색 바탕은 그대로.
  */
-export default function SolveCheckCard({ fileId, fileName, initial = null, ready = true, compact = false, onData }) {
+export default function SolveCheckCard({ fileId, fileName, initial = null, ready = true, compact = false, slim = false, onData }) {
   const [st, setSt] = useState(() => ({ ...INITIAL, data: initial || null }));
   const [tick, setTick] = useState(initial?.state ? 1 : 0);
   const [open, setOpen] = useState(false);
@@ -210,6 +212,44 @@ export default function SolveCheckCard({ fileId, fileName, initial = null, ready
   );
 
   const tone = solveBadge(data).tone;
+  const errors = (
+    <>
+      {reqError && <p role="alert" className="text-meta text-err">{reqError}</p>}
+      {!reqError && gaveUp && st.error && (
+        <div role="alert" className="flex items-center gap-2 text-meta text-err">
+          <span className="min-w-0 flex-1">{st.error}</span>
+          <Button variant="ghost" size="sm" onClick={recheck}><RefreshCw size={14} aria-hidden="true" />다시 확인</Button>
+        </div>
+      )}
+      {capped && (
+        <div className="flex items-center gap-2 text-meta text-n-600">
+          <span className="min-w-0 flex-1">검증이 오래 걸리고 있습니다.</span>
+          <Button variant="ghost" size="sm" onClick={recheck}><RefreshCw size={14} aria-hidden="true" />다시 확인</Button>
+        </div>
+      )}
+      {done && open && (
+        <div id={detailsId}><Details solve={data} fileId={fileId} fileName={fileName} /></div>
+      )}
+    </>
+  );
+  if (slim) {
+    return (
+      <section aria-label="해석 검증" className={`flex flex-col gap-1.5 rounded-lg border px-3 py-1.5 ${PANEL_CLASS[tone]}`}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-ui font-semibold text-n-900" title={`${NASTRAN_NOTE} ${ORIGINAL_NOTE}`}>
+            <Cpu size={14} aria-hidden="true" className="text-brand" />Nastran 해석 검증
+          </span>
+          <SolveBadge solve={data} />
+          <div className="ml-auto flex items-center gap-x-1.5">
+            {toggle}
+            {button}
+          </div>
+        </div>
+        {pending && <p className="text-meta text-n-600">{NASTRAN_BUSY}</p>}
+        {errors}
+      </section>
+    );
+  }
   return (
     <section aria-label="해석 검증" className={`flex flex-col gap-2 rounded-lg border px-3.5 py-3 ${PANEL_CLASS[tone]}`}>
       {/* 머리 — 실제 Nastran 해석을 돌린다는 것을 제목에서 바로 알린다 */}
@@ -228,22 +268,7 @@ export default function SolveCheckCard({ fileId, fileName, initial = null, ready
       <p className="text-meta text-n-600">
         {pending ? NASTRAN_BUSY : NASTRAN_NOTE} <span>{ORIGINAL_NOTE}</span>
       </p>
-      {reqError && <p role="alert" className="text-meta text-err">{reqError}</p>}
-      {!reqError && gaveUp && st.error && (
-        <div role="alert" className="flex items-center gap-2 text-meta text-err">
-          <span className="min-w-0 flex-1">{st.error}</span>
-          <Button variant="ghost" size="sm" onClick={recheck}><RefreshCw size={14} aria-hidden="true" />다시 확인</Button>
-        </div>
-      )}
-      {capped && (
-        <div className="flex items-center gap-2 text-meta text-n-600">
-          <span className="min-w-0 flex-1">검증이 오래 걸리고 있습니다.</span>
-          <Button variant="ghost" size="sm" onClick={recheck}><RefreshCw size={14} aria-hidden="true" />다시 확인</Button>
-        </div>
-      )}
-      {done && open && (
-        <div id={detailsId}><Details solve={data} fileId={fileId} fileName={fileName} /></div>
-      )}
+      {errors}
     </section>
   );
 }

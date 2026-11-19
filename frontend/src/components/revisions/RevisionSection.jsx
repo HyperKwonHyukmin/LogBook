@@ -122,8 +122,10 @@ function PairPicker({ models, onCompare, onCancel }) {
  * 판 흐름 줄(14 D) — Entry 상세 파일 영역 위. 계열마다 R0 → R1 → R2 와 판 사이 변경 칩.
  * 칩을 누르면 변경 요약, [두 판 고르기]로 임의 비교, [판 정리](올린 사람·관리자)로 계열을 고친다.
  * props: entryId, selectedId·onPick(미리보기 파일), locked(정보 고치는 중), onEditingChange, onSaved(이력 다시 읽기)
+ * renderHeader(actions): 바로 아래 '파일' 머리 줄을 그린다(2026-11-19). 판으로 묶인 BDF 가 없으면 '판' 구역을 그리지 않고
+ * [두 판 고르기], [판 정리] 단추를 그 머리 줄에 넘긴다(빈 구역이 본문 첫 자리를 차지하던 것). 있으면 판 구역 뒤에 그대로 그린다.
  */
-export default function RevisionSection({ entryId, selectedId, onPick, locked = false, onEditingChange, onSaved }) {
+export default function RevisionSection({ entryId, selectedId, onPick, locked = false, onEditingChange, onSaved, renderHeader }) {
   const { data, setData, failed, reload } = useRevisions(entryId, 0);
   const toast = useToast();
   const [confirm, dialog] = useConfirm();
@@ -136,9 +138,10 @@ export default function RevisionSection({ entryId, selectedId, onPick, locked = 
   useEffect(() => { setOpen(null); setPicking(false); setEdit(null); }, [entryId]);
   useEffect(() => { onEditingChange?.(!!edit); }, [edit]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (failed || !data) return null;           // 판 묶음은 덧붙는 정보 — 못 읽으면 조용히 빠진다
+  const header = (actions) => (renderHeader ? renderHeader(actions) : null);
+  if (failed || !data) return header(null);           // 판 묶음은 덧붙는 정보 — 못 읽으면 조용히 빠진다
   const allModels = [...data.series.flatMap((s) => s.items), ...data.others];
-  if (allModels.length < 2 && !edit) return null;   // 모델이 하나뿐이면 판 이야기가 없다
+  if (allModels.length < 2 && !edit) return header(null);   // 모델이 하나뿐이면 판 이야기가 없다
 
   const nameOf = (id) => {
     const it = allModels.find((x) => x.file_id === id);
@@ -174,7 +177,43 @@ export default function RevisionSection({ entryId, selectedId, onPick, locked = 
     } finally { setSaving(false); }
   }
 
+  const pickButton = allModels.length >= 2 && !edit && (
+    <Button variant="ghost" size="sm" onClick={() => setPicking(!picking)} aria-expanded={picking}>
+      <GitCompareArrows size={14} aria-hidden="true" />두 판 고르기
+    </Button>
+  );
+  const editButton = data.can_edit && !edit && (
+    <Button variant="ghost" size="sm" disabled={locked} title={locked ? '정보 고치기를 먼저 끝내 주세요' : '계열·순서·최신판을 고칩니다'}
+            onClick={() => { setEdit(editorState(data)); setEditError(''); setOpen(null); setPicking(false); }}>
+      판 정리
+    </Button>
+  );
+  const picker = picking && !edit && (
+    <PairPicker models={allModels} onCancel={() => setPicking(false)}
+                onCompare={(a, b) => { setPicking(false); openDiff(a, b, true); }} />
+  );
+  const diffPanel = open && (
+    <div className="mt-2">
+      <WidgetBoundary what="판 비교" resetKey={`${open.a}-${open.b}`} className="rounded-lg border border-n-200">
+        <RevisionDiffPanel key={`${open.a}-${open.b}`} a={open.a} b={open.b} names={open.names} request={open.request}
+                           onClose={() => { setOpen(null); reload(); }} />
+      </WidgetBoundary>
+    </div>
+  );
+
+  // 판으로 묶인 BDF 가 없다 — 구역 없이 단추만 머리 줄로(머리 줄을 그리는 쪽이 없으면 예전처럼 구역을 그린다)
+  if (renderHeader && data.series.length === 0 && !edit) {
+    return (
+      <>
+        {dialog}
+        {header(<>{pickButton}{editButton}</>)}
+        {(picker || diffPanel) && <section aria-label="판" className="mb-3">{picker}{diffPanel}</section>}
+      </>
+    );
+  }
+
   return (
+    <>
     <section aria-label="판" className="mb-4">
       {dialog}
       <div className="mb-2 flex h-7 items-center gap-2">
@@ -183,22 +222,10 @@ export default function RevisionSection({ entryId, selectedId, onPick, locked = 
         </SectionTitle>
         {data.manual && <span className="text-meta text-n-500" title="사람이 정리한 판 배치입니다">정리됨</span>}
         <div className="flex-1" />
-        {allModels.length >= 2 && !edit && (
-          <Button variant="ghost" size="sm" onClick={() => setPicking(!picking)} aria-expanded={picking}>
-            <GitCompareArrows size={14} aria-hidden="true" />두 판 고르기
-          </Button>
-        )}
-        {data.can_edit && !edit && (
-          <Button variant="ghost" size="sm" disabled={locked} title={locked ? '정보 고치기를 먼저 끝내 주세요' : '계열·순서·최신판을 고칩니다'}
-                  onClick={() => { setEdit(editorState(data)); setEditError(''); setOpen(null); setPicking(false); }}>
-            판 정리
-          </Button>
-        )}
+        {pickButton}
+        {editButton}
       </div>
-      {picking && !edit && (
-        <PairPicker models={allModels} onCancel={() => setPicking(false)}
-                    onCompare={(a, b) => { setPicking(false); openDiff(a, b, true); }} />
-      )}
+      {picker}
       {edit ? (
         <RevisionEditor state={edit} setState={setEdit} saving={saving} error={editError}
                         onSave={save} onCancel={() => { setEdit(null); setEditError(''); }} onReset={reset} canReset={data.manual} />
@@ -237,16 +264,11 @@ export default function RevisionSection({ entryId, selectedId, onPick, locked = 
               );
             })}
           </ul>
-          {open && (
-            <div className="mt-2">
-              <WidgetBoundary what="판 비교" resetKey={`${open.a}-${open.b}`} className="rounded-lg border border-n-200">
-                <RevisionDiffPanel key={`${open.a}-${open.b}`} a={open.a} b={open.b} names={open.names} request={open.request}
-                                   onClose={() => { setOpen(null); reload(); }} />
-              </WidgetBoundary>
-            </div>
-          )}
+          {diffPanel}
         </>
       )}
     </section>
+    {header(null)}
+    </>
   );
 }
