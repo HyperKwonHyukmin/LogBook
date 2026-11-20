@@ -284,3 +284,33 @@ def test_detail_result_brief_unreadable(secret, client, db, storage, make_entry_
     _sibling(db, storage, make_entry_file, e, "9999_M04.json", b'{"nodes": []}')
     r = client.get(f"/api/integration/lifting-refs/{f.id}?as={LV2}", headers=H)
     assert r.status_code == 200 and r.json()["resultBrief"] == {"unavailable": "bad_json"}
+
+
+# ---- 2026-11-16 — LogBook 에 처음 오는 WorkBench 사용자 ----
+# LogBook 행이 없으면 404 가 나 Studio 에 'LogBook 에서 찾을 수 없거나 볼 권한이 없습니다' 가 떴다.
+
+def test_first_time_wb_user_is_joined_as_lv1(secret, client, db, world):
+    from conftest import wb_put
+    newbie = "M500009"
+    wb_put(newbie, name="처음", active=True)
+    r = client.get(f"/api/integration/lifting-refs?as={newbie}", headers=H)
+    assert r.status_code == 200, r.text
+    assert sorted(i["name"] for i in r.json()["items"]) == ["9999_m04_lifting.bdf", "9999_m05_lifting.bdf"]
+    db.expire_all()
+    u = db.query(models.User).filter_by(employee_id=newbie).one()
+    assert (u.status, u.level, u.name) == ("active", 1, "처음")
+    assert db.query(models.AuditLog).filter_by(action="USER_JOIN", target_id=newbie).count() == 1
+    # 두 번째 요청은 행을 다시 만들지 않는다
+    assert client.get(f"/api/integration/lifting-refs?as={newbie}", headers=H).status_code == 200
+    assert db.query(models.AuditLog).filter_by(action="USER_JOIN", target_id=newbie).count() == 1
+
+
+def test_disabled_or_unknown_users_stay_blocked(secret, client, db, make_user, world):
+    from conftest import wb_put
+    make_user("M500010", name="중지", status="disabled", wb_active=True)
+    assert client.get("/api/integration/lifting-refs?as=M500010", headers=H).status_code == 404
+    wb_put("M500011", name="WB비활성", active=False)
+    assert client.get("/api/integration/lifting-refs?as=M500011", headers=H).status_code == 404
+    db.expire_all()
+    assert db.query(models.User).filter_by(employee_id="M500010").one().status == "disabled"
+    assert db.query(models.User).filter_by(employee_id="M500011").first() is None

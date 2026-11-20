@@ -41,3 +41,10 @@ Hi-TESS LogBook(구조해석 자료 창고). 무엇·어떻게 쓰는지는 `REA
 개발 PC 에서 커밋·푸시 → 145 Server Manager ⟳ Update(git pull · requirements 바뀌면 pip install · 재시작).
 145 는 Server Manager 한 창이 API·Worker·보고서 색인 워커를 띄운다(작업 스케줄러 없음, 41). `server_manager.py`·`serverguard/` 를 바꾼 업데이트는 Update 뒤 **창을 X 로 닫고 다시 열도록** 알린다(Update 는 창 메모리의 옛 코드로 다시 띄운다).
 `backend\.env` 는 git 밖이라 Update 로 바뀌지 않는다 — 새 설정 키가 생기면 145 `.env` 에 손으로 넣도록 알린다. 처음 설치·설정은 README '145 서버'.
+
+## 145 데이터 검증 (사용자가 요청할 때만)
+"145 데이터 검증해 / 분류 제대로 됐는지 봐" 같은 요청이면 개발 PC 에서 145 운영 자료를 점검·정리한다(2026-11-05 첫 실행 — 분류 5건 채움, 중복 1건 휴지통).
+- **API 로만 한다** `http://10.14.42.145:9095` — 관리자 사번 `/api/auth/login`(사번만) → Bearer 토큰 → 끝나면 `/api/auth/logout`. MySQL 직접 수정 금지(145 계정은 localhost 전용이라 접속도 안 되고, 고치면 `entry.json`·감사 기록과 어긋난다). 공유 폴더도 손대지 않는다.
+- **읽기**: `/api/search?drafts=true&limit=200`(전체 자료) · `/api/vocab?kind=zone|target`(분류 목록) · `/api/vocab/unlisted?kind=…`(목록 밖 값) · `/api/admin/cleanup/titles`(제목 정리 후보) · `/api/entries/{id}`(파일·sha256).
+- **볼 것**: 호선 없음인데 공용(`no_hull`) 아님 · 구역/대상 빠짐 · 목록 밖 분류 값 · 같은 sha256 파일의 중복 자료 · 제목과 분류 어긋남 · PLM 선종 빈 호선. `/api/admin/cleanup/missing` 은 BDF 자료의 호선만 보므로 이것만 믿지 않는다.
+- **고치기**: 결과를 표로 보고하고 승인받은 뒤 `POST /api/entries/bulk-classify` — 먼저 `dry_run: true`, 적용 뒤 다시 읽어 확인. 중복은 sha256 재확인 후 `DELETE /api/entries/{id}`(휴지통, 복원 가능). 영구 삭제는 하지 않는다. 임시 스크립트는 scratchpad 에 둔다.
