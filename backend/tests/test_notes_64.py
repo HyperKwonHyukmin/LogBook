@@ -52,7 +52,11 @@ def test_listing_order_search_and_trash(client, db, make_user, auth_headers, mak
     _put(client, h, a.entry_id, "SOL 101 해석 조건은 **보고서 3쪽**")
     _put(client, h, b.entry_id, "트렁크 관통구 보강 참고")
     _put(client, h, c.entry_id, "휴지통 갈 메모")
-    db.query(models.EntryNote).filter_by(entry_id=a.id).update({"updated_at": models.EntryNote.updated_at - 60})
+    # a 를 가장 오래된 메모로. MySQL 의 'updated_at - 60' 은 날짜가 아니라 숫자 빼기라 시각에 따라 없는 값이 된다(2026-11-20 실패)
+    from datetime import datetime, timedelta
+
+    db.query(models.EntryNote).filter_by(entry_id=a.id).update(
+        {"updated_at": datetime.now().replace(microsecond=0) - timedelta(hours=1)})
     db.commit()
 
     box = client.get("/api/me/notes", headers=h).json()
