@@ -30,6 +30,10 @@ LV1 도 LogBook 화면에서는 이미 직접 올릴 수 있으므로(`require_w
 
 순서가 어긋나 옛 LogBook 이 비관리자에게 `sender_not_admin` 을 돌려주면, WB 는 'LogBook 서버가 아직 이 기능을 지원하지 않습니다'로 보여 준다.
 
+## 진행
+
+- 2026-11-20: LogBook `5f9ffe4`, WorkBench `73ba043` 푸시. 시험 통과(LogBook 23, WB 56). 145 반영 전, 실제 WB → LogBook 전송과 화면은 아직 확인 안 함.
+
 ## 시험
 
 - `tests/test_wb_upload_19.py`: 비관리자 자기 해석 성공(왕복), 남의 해석과 origin 없음 403 `sender_not_owner`, 비활성 WB 사용자 403, `after.by`.
