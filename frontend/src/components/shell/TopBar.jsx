@@ -4,6 +4,7 @@ import { CircleHelp, History as HistoryIcon, LogOut, MessageSquare, Search, Uplo
 import Button from '../ui/Button.jsx';
 import Logo from '../ui/Logo.jsx';
 import Menu from '../ui/Menu.jsx';
+import ManualPanel from './ManualPanel.jsx';
 import { canWriteLevel, levelName, levelOf } from '../../lib/levels.js';
 import { api } from '../../api/client.js';
 import { FACET_LABELS } from '../../lib/labels.js';
@@ -22,10 +23,12 @@ const MANUAL_SECTIONS = [
   ['/similar', 'more'], ['/reports', 'more'], ['/hulls', 'more'], ['/h/', 'more'], ['/graph', 'more'],
   ['/coverage', 'more'], ['/notes', 'together'], ['/comments', 'together'],
 ];
-export function manualHref(pathname = '') {
+/** 지금 화면에 맞는 설명서 구역(data-sec) — 없으면 목차. */
+export function manualSection(pathname = '') {
   const hit = MANUAL_SECTIONS.find(([p]) => pathname.startsWith(p));
-  return `${MANUAL_URL}#${hit ? hit[1] : pathname === '/' ? 'search' : 'toc'}`;
+  return hit ? hit[1] : pathname === '/' ? 'search' : 'toc';
 }
+export const manualHref = (pathname = '') => `${MANUAL_URL}#${manualSection(pathname)}`;
 
 /** /api/suggest/all 응답 → 한 줄 목록 [{key, value}] (종류 순서대로). */
 export function suggestOptions(res) {
@@ -50,6 +53,7 @@ export default function TopBar({ user, onLogout }) {
   const onHome = location.pathname === '/';
   const urlQ = onHome ? params.get('q') || '' : null;
   const [q, setQ] = useState(urlQ || '');
+  const [manualOpen, setManualOpen] = useState(false);
   const inputRef = useRef(null);
   const timerRef = useRef(null);
   // 타이머가 늦게 불려도 그 순간의 주소(다른 필터)를 쓰게 한다.
@@ -174,6 +178,7 @@ export default function TopBar({ user, onLogout }) {
   }
 
   return (
+    <>
     <header className="on-navy flex h-12 shrink-0 items-center gap-3 bg-navy-900 px-3">
       <div className="flex w-[196px] shrink-0 items-center pl-1"><Logo tone="navy" /></div>
       <form role="search" className="relative min-w-0 max-w-[560px] flex-1" onSubmit={onSubmit}>
@@ -218,10 +223,12 @@ export default function TopBar({ user, onLogout }) {
       {canWriteLevel(user) && (
         <Button variant="inverse" size="md" onClick={() => navigate('/inbox')}><Upload size={14} aria-hidden="true" />올리기</Button>
       )}
-      <a href={manualHref(location.pathname)} target="_blank" rel="noopener" aria-label="사용 설명서" title="사용 설명서 (새 탭)"
-         className="flex h-8 w-8 items-center justify-center rounded-full text-on-navy-muted transition-colors duration-150 ease-out hover:bg-navy-700 hover:text-on-navy">
+      {/* 2026-11-20 — 새 탭 대신 오른쪽 패널(앱을 그대로 쓰면서 본다). 다시 누르면 닫는다 */}
+      <button type="button" onClick={() => setManualOpen((v) => !v)} aria-label="사용 설명서" aria-expanded={manualOpen}
+              title={manualOpen ? '사용 설명서 닫기' : '사용 설명서'}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-on-navy-muted transition-colors duration-150 ease-out hover:bg-navy-700 hover:text-on-navy aria-expanded:bg-navy-700 aria-expanded:text-on-navy">
         <CircleHelp size={18} aria-hidden="true" />
-      </a>
+      </button>
       <Menu
         width={232}
         trigger={(props) => (
@@ -251,10 +258,16 @@ export default function TopBar({ user, onLogout }) {
           { label: '최근 비교', icon: HistoryIcon, onSelect: () => navigate('/compares') },
           // 63 — 내 자료에 온 의견과 내 글에 달린 답글
           { label: unread ? `새 의견 ${unread > 99 ? '99+' : unread}` : '받은 의견', icon: MessageSquare, onSelect: () => navigate('/comments') },
-          { label: '사용 설명서', icon: CircleHelp, onSelect: () => window.open(manualHref(location.pathname), '_blank', 'noopener') },
+          { label: '사용 설명서', icon: CircleHelp, onSelect: () => setManualOpen(true) },
           { label: '로그아웃', icon: LogOut, onSelect: onLogout },
         ]}
       />
     </header>
+    {/* 패널은 header 밖에 둔다 — on-navy 글자색을 물려받지 않게 */}
+    {manualOpen && (
+      <ManualPanel href={manualHref(location.pathname)} section={manualSection(location.pathname)}
+                   onClose={() => setManualOpen(false)} />
+    )}
+    </>
   );
 }
