@@ -26,9 +26,10 @@ def no_secret(monkeypatch):
     monkeypatch.setattr(integration, "settings", dataclasses.replace(integration.settings, wb_integration_secret=""))
 
 
-def _begin(client, who=ADMIN, name="WB #1 · GroupModuleUnit"):
-    return client.post(f"/api/integration/uploads?as={who}", headers=H,
-                       json={"name": name, "origin": {"analysis_id": 1, "owner": "B190001", "program": "GroupModuleUnit"}})
+def _begin(client, who=ADMIN, name="WB #1 · GroupModuleUnit", owner="B190001", via=None):
+    origin = {"analysis_id": 1, "owner": owner, "program": "GroupModuleUnit"} if owner is not None else None
+    body = {"name": name, "origin": origin, **({"via": via} if via else {})}
+    return client.post(f"/api/integration/uploads?as={who}", headers=H, json=body)
 
 
 def test_roundtrip_creates_staged_batch_for_sender(secret, client, db, storage, make_user):
@@ -47,6 +48,7 @@ def test_roundtrip_creates_staged_batch_for_sender(secret, client, db, storage, 
     assert os.path.exists(to_long(storage.staging / key / "run" / "9999_model.bdf"))
     log = db.query(models.AuditLog).filter_by(action="WB_UPLOAD", target_id=key).one()
     assert log.employee_id == ADMIN and log.after["origin"]["program"] == "GroupModuleUnit"
+    assert log.after["by"] == "admin"
 
 
 def test_first_time_admin_is_admitted(secret, client, db, wb):
@@ -57,15 +59,69 @@ def test_first_time_admin_is_admitted(secret, client, db, wb):
     assert db.query(models.User).filter_by(employee_id=ADMIN).count() == 1
 
 
-def test_non_admin_sender_rejected(secret, client, make_user):
+def test_non_admin_cannot_send_others_analysis(secret, client, make_user):
+    """65 — 관리자가 아니면 남의 해석(origin.owner ≠ as)과 출처 없는 보내기는 막는다."""
     make_user(MEMBER, level=2, wb_admin=False)
     r = _begin(client, who=MEMBER)
-    assert r.status_code == 403 and r.json()["detail"] == "sender_not_admin"
+    assert r.status_code == 403 and r.json()["detail"] == "sender_not_owner"
+    r = _begin(client, who=MEMBER, owner=None)
+    assert r.status_code == 403 and r.json()["detail"] == "sender_not_owner"
+
+
+def test_owner_roundtrip_lv1(secret, client, db, storage, make_user):
+    """65 — LV1 도 자기 해석은 보낸다. 묶음 주인은 본인, 감사 기록 after.by = owner."""
+    make_user(MEMBER, level=1, wb_admin=False)
+    r = _begin(client, who=MEMBER, owner=MEMBER.lower(), via="my_projects")
+    assert r.status_code == 201, r.text
+    key = r.json()["key"]
+    r = client.put(f"/api/integration/uploads/{key}/chunk", headers=OCTET,
+                   params={"as": MEMBER, "path": "run/9999_own.bdf", "offset": 0}, content=b"SOL 101\nCEND\n")
+    assert r.status_code == 200, r.text
+    r = client.post(f"/api/integration/uploads/{key}/finish?as={MEMBER}", headers=H,
+                    json={"files": [{"rel_path": "run/9999_own.bdf", "size": 13}]})
+    assert r.status_code == 200 and r.json()["state"] == "staged", r.text
+    assert db.query(models.Batch).filter_by(key=key).one().uploader == MEMBER
+    log = db.query(models.AuditLog).filter_by(action="WB_UPLOAD", target_id=key).one()
+    assert log.after["by"] == "owner"
+
+
+def test_other_user_cannot_touch_owner_batch(secret, client, make_user):
+    """65 — 조각, 취소는 origin 이 없지만 남의 묶음은 기존 '묶음 주인만' 검사가 막는다."""
+    make_user(MEMBER, level=1, wb_admin=False)
+    make_user("M190002", level=1, wb_admin=False)
+    key = _begin(client, who=MEMBER, owner=MEMBER).json()["key"]
+    r = client.put(f"/api/integration/uploads/{key}/chunk", headers=OCTET,
+                   params={"as": "M190002", "path": "x.bdf", "offset": 0}, content=b"x")
+    assert r.status_code == 403
+    r = client.delete(f"/api/integration/uploads/{key}?as=M190002", headers=H)
+    assert r.status_code == 403
+
+
+def test_first_time_member_is_admitted_as_lv1(secret, client, db, wb):
+    wb(MEMBER, name="일반", active=True, admin=False)
+    r = _begin(client, who=MEMBER, owner=MEMBER)
+    assert r.status_code == 201, r.text
+    assert db.query(models.User).filter_by(employee_id=MEMBER).one().level == 1
+
+
+def test_inactive_wb_user_rejected(secret, client, make_user):
+    make_user(MEMBER, level=1, wb_admin=False, wb_active=False)
+    r = _begin(client, who=MEMBER, owner=MEMBER)
+    assert r.status_code == 403 and r.json()["detail"] == "sender_unknown"
+
+
+def test_admin_own_analysis_by_path(secret, client, db, make_user):
+    """65 — 관리자가 자기 해석을 보내도 All Projects 면 admin, My Projects 면 owner 로 남긴다."""
+    make_user(ADMIN, level=3, wb_admin=True)
+    k1 = _begin(client, owner=ADMIN).json()["key"]
+    k2 = _begin(client, owner=ADMIN, via="my_projects").json()["key"]
+    by = {r.target_id: r.after["by"] for r in db.query(models.AuditLog).filter_by(action="WB_UPLOAD")}
+    assert by[k1] == "admin" and by[k2] == "owner"
 
 
 def test_unknown_sender_rejected(secret, client):
     r = _begin(client, who="Z199999")
-    assert r.status_code == 403 and r.json()["detail"] == "sender_not_admin"
+    assert r.status_code == 403 and r.json()["detail"] == "sender_unknown"
 
 
 def test_routes_hidden_without_secret(no_secret, client, make_user):

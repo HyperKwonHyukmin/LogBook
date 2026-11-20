@@ -310,11 +310,25 @@ class WbUploadBegin(BaseModel):
     # 출처 — {analysis_id, owner, program, project, created_at, note, passport?}. 감사 기록(WB_UPLOAD)과
     # 묶음(batches.origin, 39 — wb_origin.clean 이 정한 칸만)에 남긴다.
     origin: dict | None = None
+    # 65 — 어느 화면에서 보냈나: "my_projects"(해석 주인 본인) | "all_projects"(관리자). 옛 WB 는 보내지 않는다(None = 관리자)
+    via: str | None = Field(default=None, max_length=40)
 
 
-def _wb_sender(db: Session, storage: StoragePaths, employee_id: str, ip: str | None) -> models.User:
-    """보내는 사람 — WorkBench 에서 활성 '관리자'여야 한다(WB 도 막지만 여기서 한 번 더).
-    LogBook 에 처음 오는 관리자면 사번 로그인과 같은 절차(admit)로 행을 만든다."""
+_ANY_ORIGIN = object()
+
+
+def _origin_owner(origin) -> str:
+    return str((origin or {}).get("owner") or "").strip().upper() if isinstance(origin, dict) else ""
+
+
+def _wb_sender(db: Session, storage: StoragePaths, employee_id: str, ip: str | None,
+               origin=_ANY_ORIGIN) -> models.User:
+    """보내는 사람 — WorkBench 에서 활성 사용자여야 한다(WB 도 막지만 여기서 한 번 더).
+
+    - WB 관리자: 누구의 해석이든 보낸다(19, All Projects).
+    - 관리자가 아닌 사람(65, My Projects): 시작 요청(origin 을 넘김)에서 `origin.owner` 가 자기 사번일 때만.
+      조각, 마치기, 취소(origin 없음)는 '묶음을 시작한 사람만'(upload_service._uploading)이 이미 막는다.
+    LogBook 에 처음 오는 사람이면 사번 로그인과 같은 절차(admit)로 행을 만든다(관리자는 LV3, 아니면 LV1)."""
     eid = (employee_id or "").strip().upper()
     if not EMPLOYEE_ID_PATTERN.fullmatch(eid):
         raise HTTPException(status_code=422, detail="invalid_employee_id")
@@ -322,8 +336,11 @@ def _wb_sender(db: Session, storage: StoragePaths, employee_id: str, ip: str | N
         wb = wb_users.cached(db, eid)
     except wb_users.WbUnavailable:
         raise HTTPException(status_code=503, detail="wb_unavailable")
-    if wb is None or not wb.is_active or not wb.is_admin:
-        raise HTTPException(status_code=403, detail="sender_not_admin")
+    if wb is None or not wb.is_active:
+        # 65 — 예전에는 sender_not_admin. 이제 그 코드는 '옛 LogBook' 표시로만 남겨 WB 가 문구를 가를 수 있게 한다
+        raise HTTPException(status_code=403, detail="sender_unknown")
+    if not wb.is_admin and origin is not _ANY_ORIGIN and _origin_owner(origin) != eid:
+        raise HTTPException(status_code=403, detail="sender_not_owner")
     if db.query(models.User.id).filter_by(employee_id=eid).first() is None:
         return auth_router.admit(db, storage, eid, ip)
     user = db.query(models.User).filter_by(employee_id=eid).first()
@@ -339,7 +356,9 @@ def _wb_sender(db: Session, storage: StoragePaths, employee_id: str, ip: str | N
 @router.post("/uploads", status_code=201, dependencies=[Depends(require_integration)])
 def wb_upload_begin(body: WbUploadBegin, request: Request, as_: str = Query(default="", alias="as"),
                     db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage)):
-    user = _wb_sender(db, storage, as_, client_ip(request))
+    user = _wb_sender(db, storage, as_, client_ip(request), origin=body.origin)
+    # 65 — 감사 기록에서 My Projects 본인 보내기(owner)와 All Projects 관리자 보내기(admin)를 가른다
+    by = "owner" if body.via == "my_projects" or not access.is_admin(user) else "admin"
     b = upload_service.begin(db, storage, user, name=body.name, target_entry_id=None)
     try:
         # 39 — 출처를 묶음에도 남긴다(Hi-TESS Core 1단계). 실패해도 업로드는 계속 — 출처만 빠진다
@@ -350,7 +369,7 @@ def wb_upload_begin(body: WbUploadBegin, request: Request, as_: str = Query(defa
         log.exception("WorkBench 보내기 %s 출처 저장 실패(업로드는 계속)", b.key)
     try:
         audit.record(db, storage, actor=user.employee_id, action="WB_UPLOAD", target_type="batch",
-                     target_id=b.key, after={"name": b.original_name, "origin": body.origin or {}},
+                     target_id=b.key, after={"name": b.original_name, "origin": body.origin or {}, "by": by},
                      ip=client_ip(request))
     except Exception:
         db.rollback()
