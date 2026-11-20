@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { History as HistoryIcon, LogOut, MessageSquare, Search, Upload, X } from 'lucide-react';
+import { CircleHelp, History as HistoryIcon, LogOut, MessageSquare, Search, Upload, X } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import Logo from '../ui/Logo.jsx';
 import Menu from '../ui/Menu.jsx';
@@ -13,6 +13,19 @@ const DEBOUNCE_MS = 200;
 // 19 — 자동완성: 종류마다 몇 개까지, 순서는 호선 · 구역 · 태그
 const SUGGEST_LIMIT = 5;
 const SUGGEST_KINDS = ['hull', 'zone', 'tag'];
+
+// 사용 설명서 웹판(public/manual/index.html — WorkBench outputs/LB-manual 에서 만든 한 파일 HTML).
+// 주소 #<쪽 id> 로 그 쪽을 연다. 지금 화면에 맞는 쪽을 고른다(없으면 목차).
+export const MANUAL_URL = '/manual/index.html';
+const MANUAL_SECTIONS = [
+  ['/inbox', 'upload'], ['/e/', 'entry'], ['/v/', 'viewer'], ['/compare', 'viewer'], ['/trash', 'edit'],
+  ['/similar', 'more'], ['/reports', 'more'], ['/hulls', 'more'], ['/h/', 'more'], ['/graph', 'more'],
+  ['/coverage', 'more'], ['/notes', 'together'], ['/comments', 'together'],
+];
+export function manualHref(pathname = '') {
+  const hit = MANUAL_SECTIONS.find(([p]) => pathname.startsWith(p));
+  return `${MANUAL_URL}#${hit ? hit[1] : pathname === '/' ? 'search' : 'toc'}`;
+}
 
 /** /api/suggest/all 응답 → 한 줄 목록 [{key, value}] (종류 순서대로). */
 export function suggestOptions(res) {
@@ -205,6 +218,10 @@ export default function TopBar({ user, onLogout }) {
       {canWriteLevel(user) && (
         <Button variant="inverse" size="md" onClick={() => navigate('/inbox')}><Upload size={14} aria-hidden="true" />올리기</Button>
       )}
+      <a href={manualHref(location.pathname)} target="_blank" rel="noopener" aria-label="사용 설명서" title="사용 설명서 (새 탭)"
+         className="flex h-8 w-8 items-center justify-center rounded-full text-on-navy-muted transition-colors duration-150 ease-out hover:bg-navy-700 hover:text-on-navy">
+        <CircleHelp size={18} aria-hidden="true" />
+      </a>
       <Menu
         width={232}
         trigger={(props) => (
@@ -234,6 +251,7 @@ export default function TopBar({ user, onLogout }) {
           { label: '최근 비교', icon: HistoryIcon, onSelect: () => navigate('/compares') },
           // 63 — 내 자료에 온 의견과 내 글에 달린 답글
           { label: unread ? `새 의견 ${unread > 99 ? '99+' : unread}` : '받은 의견', icon: MessageSquare, onSelect: () => navigate('/comments') },
+          { label: '사용 설명서', icon: CircleHelp, onSelect: () => window.open(manualHref(location.pathname), '_blank', 'noopener') },
           { label: '로그아웃', icon: LogOut, onSelect: onLogout },
         ]}
       />

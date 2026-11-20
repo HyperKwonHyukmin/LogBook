@@ -2,7 +2,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
-import TopBar, { suggestionSearch, suggestOptions } from './TopBar.jsx';
+import TopBar, { manualHref, MANUAL_URL, suggestionSearch, suggestOptions } from './TopBar.jsx';
 import { calls, mockApi } from '../../test/mockApi.js';
 
 function LocationProbe() {
@@ -186,4 +186,14 @@ test('63 — 새 의견이 있으면 아바타에 점, 계정 메뉴에 새 의�
   await userEvent.click(btn);
   await userEvent.click(screen.getByRole('menuitem', { name: '새 의견 3' }));
   expect(screen.getByTestId('loc').textContent).toBe('/comments');
+});
+
+describe('사용 설명서 링크', () => {
+  it('지금 화면에 맞는 쪽을 연다', () => {
+    expect(manualHref('/')).toBe(`${MANUAL_URL}#search`);
+    expect(manualHref('/inbox')).toBe(`${MANUAL_URL}#upload`);
+    expect(manualHref('/e/E000001')).toBe(`${MANUAL_URL}#entry`);
+    expect(manualHref('/v/12')).toBe(`${MANUAL_URL}#viewer`);
+    expect(manualHref('/admin/users')).toBe(`${MANUAL_URL}#toc`);
+  });
 });
