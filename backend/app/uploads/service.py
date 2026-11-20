@@ -64,7 +64,8 @@ def clean_preset(db: Session, user: models.User, preset: dict | None) -> dict | 
 
 def begin(db: Session, storage: StoragePaths, user: models.User, *, name: str,
           target_entry_id: str | None, target_status: str | None = None,
-          preset: dict | None = None, split_top: bool = False, whole: bool = False) -> models.Batch:
+          preset: dict | None = None, split_top: bool = False, whole: bool = False,
+          auto_confirm: bool = False) -> models.Batch:
     if not storage.check_reachable():
         raise HTTPException(status_code=503, detail="storage_unreachable")
     target = None
@@ -81,6 +82,11 @@ def begin(db: Session, storage: StoragePaths, user: models.User, *, name: str,
         # 56 — 사람이 고른 공통 분류만 남긴다. 비워 보냈으면(폴더 창에서 자동 채움을 지움) 자동 채움도 하지 않는다는 표시.
         # 보내지 않으면(파일 끌어 놓기·하위 폴더마다 나누기) None — 처리 때 초안마다 자기 이름으로 비슷한 자료를 찾는다
         preset = clean_preset(db, user, preset) or {hint.SKIP_KEY: True}
+    if target is None and auto_confirm:
+        # 66 — 정리 끝에 ingest.auto_confirm 이 읽는다. 다른 열쇠(공통 분류, 자동 채움 끄기)와 섞이지 않는다
+        from ..ingest.auto_confirm import KEY as AUTO_KEY
+
+        preset = {**(preset or {}), AUTO_KEY: True}
     key = new_batch_key()
     os.makedirs(to_long(storage.web_inbox / key), exist_ok=True)
     batch = models.Batch(key=key, source="web", original_name=(name or "").strip()[:255] or key,

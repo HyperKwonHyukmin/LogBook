@@ -101,3 +101,27 @@ test('62 — 파일 추가(attach): 이 자료에 같은 이름 파일이 있으
   expect(note).toHaveTextContent('같은 이름의 파일이 1개');
   expect(note).toHaveTextContent('a.pdf');
 });
+
+test('66 — 올리고 바로 확정: 기본은 꺼짐, 켜면 단추가 [올리고 확정]이 되고 선택을 기억한다', async () => {
+  mockApi({ 'POST /api/uploads/similar-preset': {} });
+  window.localStorage.removeItem('logbook.upload.autoConfirm');
+  const onSubmit = vi.fn();
+  const { unmount } = render(<FolderUploadDialog plan={plan} onSubmit={onSubmit} onCancel={() => {}} />);
+  const box = screen.getByRole('checkbox', { name: /올리고 바로 확정/ });
+  expect(box).not.toBeChecked();
+  fireEvent.click(box);
+  fireEvent.click(screen.getByRole('button', { name: /올리고 확정/ }));
+  expect(onSubmit.mock.calls[0][0].autoConfirm).toBe(true);
+  unmount();
+  // 다음에 열면 켜진 채로
+  render(<FolderUploadDialog plan={plan} onSubmit={() => {}} onCancel={() => {}} />);
+  expect(screen.getByRole('checkbox', { name: /올리고 바로 확정/ })).toBeChecked();
+  window.localStorage.removeItem('logbook.upload.autoConfirm');
+});
+
+test('66 — 기존 자료에 파일 추가(attach)에는 바로 확정 칸이 없다', () => {
+  mockApi({});
+  const onSubmit = vi.fn();
+  render(<FolderUploadDialog plan={plan} onSubmit={onSubmit} onCancel={() => {}} attach />);
+  expect(screen.queryByRole('checkbox', { name: /올리고 바로 확정/ })).toBeNull();
+});

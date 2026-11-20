@@ -10,8 +10,22 @@ import { formatBytes } from '../../lib/labels.js';
 import { isAdminLevel } from '../../lib/levels.js';
 import { isOsFileDrag, useUploadSnapshot, useUploadStore, useUploadWindowGuards } from './UploadProvider.jsx';
 import { useFolderReviewer } from './FolderReview.jsx';
+import { useInRouterContext, useLocation, useNavigate } from 'react-router-dom';
+import UploadSteps, { stepState, useBatchFollow } from './UploadSteps.jsx';
 
 export { isOsFileDrag };
+
+/** 66 — 절차도의 '올리기와 확정으로' 단추. 이미 그 화면이면 '아래 묶음에서 확인'만 적는다. */
+function GoInbox({ onGo }) {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  if (pathname.startsWith('/inbox')) return <p className="mt-1 text-meta text-n-600">아래 묶음에서 확인하고 [확정]을 누르세요.</p>;
+  return (
+    <Button variant="primary" size="sm" className="mt-2" onClick={() => { onGo?.(); navigate('/inbox'); }}>
+      올리기와 확정으로 가기
+    </Button>
+  );
+}
 
 /** 화면 덮개 대신 자기가 받는 놓기 칸(예: 정리 대기의 초안 카드). 덮개는 이 칸에 놓인 것을 가져가지 않는다. */
 export const DROP_ZONE_ATTR = 'data-drop-zone';
@@ -77,8 +91,12 @@ export function useUploader({ scope = 'upload', onUploaded, disabled = false, ta
 /** 저장소의 한 scope 를 화면용 객체로(useUploader 와 셸의 떠 있는 상자가 같이 쓴다). */
 export function uploaderView(store, scope, job, { disabled = false, canForce = false, fileRef = null, dirRef = null, opts = {}, review = null } = {}) {
   const send = (items, extra = {}) => store.start(scope, items, { ...opts, ...extra });
+  const started = store.optionsOf?.(scope) || {};
   return {
     ...job, scope, disabled, fileRef, dirRef, canForce,
+    // 66 — 절차도: '올리고 바로 확정'을 골랐는지, 기존 자료에 파일 추가인지(그때는 확정 단계가 없어 절차도를 보이지 않는다)
+    autoConfirm: !!started.autoConfirm,
+    attaching: !!(opts.targetEntryId || started.targetEntryId),
     start: (items, { force = false } = {}) => (review && !force && !job.busy
       ? review(Promise.resolve(items), send) : send(items, { force })),
     /** 끌어 놓기 — 폴더 펼치기부터 '파일 확인 중'으로 보이고, 그동안 또 놓으면 안내만 한다. */
@@ -215,6 +233,11 @@ function centerHeading(u) {
 export function UploadCenterCard({ u, title, children }) {
   const h = centerHeading(u);
   const closable = !u.busy && !u.resumable;
+  // 66 — 새 자료 올리기면 절차도(① 올리기 → ② 분류 확인 → ③ 확정)와 다음에 할 일을 보인다. 올리기가 끝나면 서버 정리를 따라간다
+  const steps = !u.attaching;
+  const batch = useBatchFollow(u.result?.key, steps && !u.busy && u.result?.uploaded > 0);
+  const st = steps ? stepState(u, batch) : null;
+  const inRouter = useInRouterContext();
   return (
     <div role="region" aria-label={title || '올리기 상황'}
          className="pointer-events-auto relative max-h-[60vh] w-full animate-pop overflow-y-auto rounded-xl border border-n-200 bg-n-0 p-5 shadow-lg">
@@ -226,6 +249,13 @@ export function UploadCenterCard({ u, title, children }) {
         </div>
         {h.pct != null && <span className="font-mono text-[22px] font-semibold leading-none text-brand">{h.pct}%</span>}
       </div>
+      {st && (
+        <div className="mb-3 rounded-lg bg-n-50 px-3 py-2.5" data-testid="upload-steps">
+          <UploadSteps current={st.current} done={st.done} auto={st.auto} />
+          <p role="status" className="mt-2 text-ui text-n-800">{st.text}</p>
+          {st.go && inRouter && <GoInbox onGo={u.dismiss} />}
+        </div>
+      )}
       {children || <UploadFeedback u={{ ...u, disabled: false }} showSuccess={false} />}
       {closable && (
         <button type="button" aria-label="닫기" onClick={u.dismiss}

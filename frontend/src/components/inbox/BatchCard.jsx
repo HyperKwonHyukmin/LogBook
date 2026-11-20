@@ -9,6 +9,8 @@ import { DuplicateTargets } from './DuplicateBlocked.jsx';
 import { BATCH_STATE_LABELS, EXCLUDE_REASON_LABELS } from '../../lib/labels.js';
 import { MODEL_CONVERT_LABELS, bulkConfirmPlan, convertCounts, stagedStatus, stagedTiming } from '../../lib/inboxStatus.js';
 import { errorText } from '../../lib/labels.js';
+import { Link } from 'react-router-dom';
+import UploadSteps from './UploadSteps.jsx';
 
 const STATE_TONE = { failed: 'text-err', staged: 'text-n-600', processed: 'text-wait', done: 'text-ok', uploading: 'text-n-600' };
 
@@ -167,6 +169,48 @@ function ProcessedDetail({ converts }) {
 }
 
 /** 한 번에 올라온 배치 = 섹션 — 머리(출처·받은 시각·상태·지금 하는 일) + 설명 + 제외 목록 + 초안들. */
+/**
+ * 66 — 묶음마다 지금 몇 단계인지(① 올리기 → ② 분류 확인 → ③ 확정). 정리 중이면 ② 로 가는 중, 초안이 남았으면 ②,
+ * '올리고 바로 확정'이 다 끝냈으면 ③ 과 확정한 자료 링크. 기존 자료에 파일 추가 묶음에는 보이지 않는다.
+ */
+function BatchSteps({ batch, drafts }) {
+  const auto = !!batch.auto_confirm;
+  const result = batch.auto_result;
+  if (batch.state === 'failed') return null;
+  let st;
+  if (batch.state === 'staged' || (auto && !result && batch.state === 'processed' && !drafts.length)) {
+    st = { current: 2, done: 1, text: '서버가 파일을 정리하는 중입니다. 끝나면 초안이 아래에 나타납니다.' };
+  } else if (drafts.length) {
+    st = { current: 2, done: 1,
+      text: `지금 2단계입니다. 초안의 분류를 확인하고 [확정]을 누르면 3단계(검색에 나옴)가 됩니다.${auto && result?.kept?.length ? ' 자동 확정에서 건너뛴 초안입니다.' : ''}` };
+  } else if (result) {
+    st = { current: 3, done: 3, text: '확정까지 끝났습니다.' };
+  } else {
+    return null;
+  }
+  const confirmed = result?.confirmed || [];
+  const reasons = Object.fromEntries((result?.kept || []).map((k) => [k.entry_id, k.reason]));
+  return (
+    <div className="rounded-lg border border-n-200 bg-n-0 px-3 py-2.5" data-testid="batch-steps">
+      <UploadSteps current={st.current} done={st.done} auto={auto} />
+      <p className="mt-1.5 text-ui text-n-800">{st.text}</p>
+      {confirmed.length > 0 && (
+        <p className="mt-1 text-meta text-n-600">
+          바로 확정한 자료 <span className="font-mono">{confirmed.length}</span>건:{' '}
+          {confirmed.map((id, i) => (
+            <span key={id}>{i > 0 && ', '}<Link to={`/e/${id}`} className="font-mono text-brand hover:underline">{id}</Link></span>
+          ))}
+        </p>
+      )}
+      {drafts.some((d) => reasons[d.entry_id]) && (
+        <p className="mt-1 text-meta text-n-600">
+          확인이 필요한 이유: {drafts.filter((d) => reasons[d.entry_id]).map((d) => `${d.entry_id} ${reasons[d.entry_id]}`).join(', ')}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChanged, onClaim, onDirtyChange, dirtyIds, onConfirmed }) {
   const mine = batch.uploader === me;
   const drafts = batch.entries || [];
@@ -217,7 +261,7 @@ export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChang
         </span>
         {drafts.length > 0 && (
           <span className="text-meta text-n-500">
-            초안 <span className="font-mono">{drafts.length}</span>개 · 확인 후 확정하세요
+            초안 <span className="font-mono">{drafts.length}</span>개
           </span>
         )}
         {converts.length > 0 && (
@@ -238,6 +282,7 @@ export default function BatchCard({ batch, me, isAdmin, canWrite = true, onChang
         )}
       </div>
       {dialog}
+      {!batch.attachment_target && !batch.target_entry_id && <BatchSteps batch={batch} drafts={drafts} />}
       {bulk.message && (
         <p role={bulk.failed ? 'alert' : 'status'}
            className={`rounded-md px-3 py-2 text-ui ${bulk.failed ? 'border border-wait-line bg-wait-bg text-wait' : 'border border-n-200 bg-n-0 text-n-800'}`}>{bulk.message}</p>

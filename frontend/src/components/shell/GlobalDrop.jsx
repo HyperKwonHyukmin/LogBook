@@ -9,7 +9,8 @@ import { useInboxSummary } from './InboxSummary.jsx';
 // 자기 올리기 칸이 있는 화면 — 정리 대기는 화면 전체 덮개, Entry 는 '파일 추가' 칸이 따로 있다
 const OWN_UPLOAD = [/^\/inbox\/?$/, /^\/e\/[^/]+\/?$/];
 const GLOBAL_SCOPE = 'global';
-const DEFAULT_AWAY = { message: '올렸습니다. 올리기와 확정에서 묶음 제안을 확인하세요.', to: '/inbox', label: '올리기와 확정으로' };
+// 66 — '올리고 바로 확정'일 수도 있어 다음 단계는 가운데 카드의 절차도가 말한다. 토스트는 어디서 이어지는지만
+const DEFAULT_AWAY = { message: '올렸습니다. 다음 단계는 올리기와 확정에서 이어집니다.', to: '/inbox', label: '올리기와 확정으로' };
 
 /**
  * 앱 어디서든 탐색기에서 끌어 온 파일을 놓으면 새 배치로 올린다(정리 대기와 같은 동작).

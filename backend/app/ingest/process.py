@@ -297,3 +297,12 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
         except Exception:
             db.rollback()
             logger.exception("배치 %s 의 동일 BDF 감사 기록 실패(처리는 완료됨)", batch.key)
+    # 66 — '올리고 바로 확정'을 켠 묶음: 사람이 볼 것이 없는 초안은 곧바로 확정한다(나머지는 올리기와 확정에 남는다).
+    # 정리 결과는 위에서 이미 커밋했다 — 자동 확정이 실패해도 초안은 그대로 남는다
+    from . import auto_confirm
+
+    try:
+        auto_confirm.run(db, storage, batch)
+    except Exception:   # noqa: BLE001
+        db.rollback()
+        logger.exception("배치 %s 자동 확정 실패(초안은 그대로)", batch.key)

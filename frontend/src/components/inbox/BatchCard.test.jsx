@@ -46,7 +46,7 @@ test('올리기와 확정 — 왜 기다리는지, BDF 변환 상태, 초안마�
       { id: 3, rel_path: 'r.pdf', name: 'r.pdf', kind: 'report', size: 10, drm_encrypted: false, model: null },
     ] };
   draw({ ...base, state: 'processed', entries: [draft] });
-  expect(screen.getByText(/초안/, { selector: 'span' })).toHaveTextContent('초안 1개 · 확인 후 확정하세요');
+  expect(screen.getByText(/초안/, { selector: 'span' })).toHaveTextContent('초안 1개');   // 66 — '확인 후 확정' 안내는 절차도 줄이 맡는다
   expect(screen.getByTitle('BDF 3D 변환 상태')).toHaveTextContent('BDF 변환 중 1 · 준비됨 1');
   await userEvent.click(screen.getByText('왜 기다리나요?'));
   expect(screen.getByText(/서버가 폴더·파일 이름으로/)).toBeInTheDocument();
@@ -87,4 +87,21 @@ test('52 — 초안이 하나면 묶음 확정 단추가 없다', () => {
   draw({ ...base, state: 'processed', entries: [{ entry_id: 'E1', status: 'draft', title: 't', version: 1, hulls: [], zones: [],
     hull_evidence: [], suggested_entry: null, merge_into: null, uploaded_by: 'A100001', files: [] }] });
   expect(screen.queryByRole('button', { name: '이 묶음 모두 확정' })).toBeNull();
+});
+
+test('66 — 바로 확정이 다 끝낸 묶음은 3단계와 확정한 자료 링크, 남은 초안은 2단계와 건너뛴 이유', async () => {
+  const { MemoryRouter } = await import('react-router-dom');
+  const { unmount } = render(<MemoryRouter><BatchCard batch={{ ...base, state: 'done', auto_confirm: true,
+    auto_result: { confirmed: ['E000301', 'E000302'], kept: [] } }} me="A100001" isAdmin={false} onChanged={() => {}} onClaim={() => {}} /></MemoryRouter>);
+  let steps = screen.getByTestId('batch-steps');
+  expect(steps).toHaveTextContent('확정(끝남)');
+  expect(steps).toHaveTextContent('확정까지 끝났습니다');
+  expect(within(steps).getByRole('link', { name: 'E000302' })).toHaveAttribute('href', '/e/E000302');
+  unmount();
+
+  draw({ ...base, state: 'processed', auto_confirm: true, auto_result: { confirmed: [], kept: [{ entry_id: 'E000303', reason: '같은 파일이 이미 있음' }] },
+    entries: [{ entry_id: 'E000303', title: 'x', status: 'draft', files: [], hulls: [], zones: [], tags: [], version: 1 }] });
+  steps = screen.getByTestId('batch-steps');
+  expect(steps).toHaveTextContent('지금 2단계');
+  expect(steps).toHaveTextContent('E000303 같은 파일이 이미 있음');
 });

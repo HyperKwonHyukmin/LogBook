@@ -63,6 +63,9 @@ def batch_to_dict(db: Session, b: models.Batch, ctx: dict | None = None, viewer=
          # 17 — 완전 동일 BDF 로 뺀 항목은 대상(파일 id)을 보는 사람 권한으로 설명해 싣는다(볼 수 없는 대상은 hidden)
          "excluded": duplicates.public_excluded(db, b.excluded, viewer), "error": b.error,
          "allow_duplicates": bool(b.allow_duplicates),
+         # 66 — '올리고 바로 확정'을 켰는지와 결과 {confirmed: [E…], kept: [{entry_id, reason}]}(정리가 끝난 뒤)
+         "auto_confirm": bool(isinstance(b.preset, dict) and b.preset.get("auto_confirm")),
+         "auto_result": b.preset.get("auto_result") if isinstance(b.preset, dict) else None,
          "target_entry_id": b.target_entry_id, "entries": [entry_to_dict(db, e, viewer=viewer) for e in drafts]}
     if b.state == "staged" or drafts:
         ctx = ctx or queue_context(db)
@@ -99,17 +102,27 @@ def list_batches(scope: str = Query(default="mine", pattern="^(mine|unclaimed|al
         models.Batch.state.in_(("staged", "processed", "failed")),
         and_(models.Batch.state == "done", models.Batch.processed_at >= recent,
              cast(models.Batch.excluded, String).like(f"%{duplicates.REASON_MODEL}%"),
-             ~exists().where(models.Entry.batch_id == models.Batch.id))))
+             ~exists().where(models.Entry.batch_id == models.Batch.id)),
+        # 66 — 자동 확정한 묶음은 하루 동안 남겨 '3단계 확정 완료'와 확정한 자료를 보인다
+        and_(models.Batch.state == "done", models.Batch.processed_at >= datetime.now() - timedelta(hours=AUTO_DONE_HOURS),
+             cast(models.Batch.preset, String).like('%"auto_result"%'))))
     if scope == "mine":
         q = q.filter(models.Batch.uploader == user.employee_id)
     elif scope == "unclaimed":
         q = q.filter(models.Batch.uploader.is_(None))
     rows = q.order_by(models.Batch.received_at.desc(), models.Batch.id.desc()).limit(200).all()
-    rows = [b for b in rows if b.state != "done" or _has_duplicate_exclusion(b)]
+    rows = [b for b in rows if b.state != "done" or _has_duplicate_exclusion(b) or _auto_result(b)]
     ctx = queue_context(db) if rows else None
     out = [batch_to_dict(db, b, ctx, viewer=user) for b in rows]
     # 13 — 남의 배치인데 남은 초안이 모두 볼 수 없는 것이면 배치째 뺀다(이름도 드러내지 않는다)
     return [d for d, b in zip(out, rows) if d["entries"] or not _has_hidden_drafts(db, b, user)]
+
+
+AUTO_DONE_HOURS = 24
+
+
+def _auto_result(b: models.Batch) -> dict | None:
+    return b.preset.get("auto_result") if isinstance(b.preset, dict) else None
 
 
 def _has_duplicate_exclusion(b: models.Batch) -> bool:

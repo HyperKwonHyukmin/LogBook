@@ -35,6 +35,15 @@ export function overlapping(files, existing) {
   return files.filter((f) => have.has(f.relPath.toLowerCase()));
 }
 
+// 66 — '올리고 바로 확정' 마지막 선택(이 브라우저만, 못 읽으면 꺼짐)
+const AUTO_KEY = 'logbook.upload.autoConfirm';
+function readAutoConfirm() {
+  try { return window.localStorage.getItem(AUTO_KEY) === '1'; } catch { return false; }
+}
+function writeAutoConfirm(on) {
+  try { window.localStorage.setItem(AUTO_KEY, on ? '1' : '0'); } catch { /* 저장 못 해도 이번 선택은 그대로 */ }
+}
+
 export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = false, existing = null }) {
   const id = useId();
   const [checked, setChecked] = useState(() => initialChecked(plan));
@@ -43,6 +52,8 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = 
   const [zones, setZones] = useState([]);
   const [target, setTarget] = useState(null);
   const [assignees, setAssignees] = useState([]);
+  const [autoConfirm, setAutoConfirmState] = useState(() => readAutoConfirm());
+  const setAutoConfirm = (on) => { setAutoConfirmState(on); writeAutoConfirm(on); };
   // 56 — 공통 분류의 기본값은 폴더 이름과 비슷한 기존 자료의 구역·대상(6_Rudder → 이미 있는 Rudder 자료).
   // 담당자는 넣지 않는다. 사람이 먼저 고친 칸은 덮지 않는다.
   // '하위 폴더마다'를 고르면 한 값이 모든 초안에 맞지 않으니 채우지 않는다 — 서버가 초안마다 자기 폴더 이름으로 찾는다
@@ -92,7 +103,7 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = 
     const empty = !zones.length && !target && !assignees.length;
     // 56 — '전체 1건' 은 비워도 보낸다({} — 자동 채움을 지운 것이니 서버도 채우지 않는다).
     // '하위 폴더마다' 를 비워 두면 보내지 않는다 — 서버가 초안마다 자기 폴더 이름으로 비슷한 자료를 찾는다
-    onSubmit({ relPaths: checked, preset: splitTop && empty ? null : preset, splitTop });
+    onSubmit({ relPaths: checked, preset: splitTop && empty ? null : preset, splitTop, autoConfirm: !attach && autoConfirm });
   }
 
   return createPortal(
@@ -210,10 +221,21 @@ export default function FolderUploadDialog({ plan, onSubmit, onCancel, attach = 
           </div>
         </section>
 
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+          {/* 66 — '올리고 바로 확정'(기본 꺼짐, 마지막 선택을 이 브라우저에 기억). 사람이 볼 것이 있는 초안은 올리기와 확정에 남는다 */}
+          {!attach && (
+            <label className="mr-auto flex cursor-pointer items-start gap-2 text-ui text-n-800">
+              <input type="checkbox" checked={autoConfirm} onChange={(e) => setAutoConfirm(e.target.checked)}
+                     className="mt-0.5 h-4 w-4 shrink-0 accent-brand" />
+              <span>
+                올리고 바로 확정
+                <span className="block text-meta text-n-500">분류 확인 단계를 건너뜁니다. 같은 파일이 이미 있는 초안 등 확인이 필요한 것만 올리기와 확정에 남습니다.</span>
+              </span>
+            </label>
+          )}
           <Button variant="secondary" onClick={onCancel}>취소</Button>
           <Button variant="primary" disabled={!chosen.length} onClick={submit}>
-            {!attach && drafts.length > 1 ? `초안 ${drafts.length}건으로 올리기` : '올리기'} ({chosen.length}개)
+            {!attach && autoConfirm ? '올리고 확정' : !attach && drafts.length > 1 ? `초안 ${drafts.length}건으로 올리기` : '올리기'} ({chosen.length}개)
           </Button>
         </div>
       </div>

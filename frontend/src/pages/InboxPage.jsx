@@ -30,7 +30,7 @@ const TABS = [
 const tabOf = (v) => (TABS.some((t) => t.id === v) ? v : 'mine');
 const PANEL_ID = 'inbox-tabpanel';
 // 올리던 중에 이 화면을 떠났다가 끝나면 셸이 띄우는 토스트(올리기는 셸 저장소에서 계속된다)
-const INBOX_AWAY = { title: '올리기', message: '올렸습니다. 올리기와 확정에서 묶음 제안을 확인하세요.', to: '/inbox', label: '올리기와 확정으로' };
+const INBOX_AWAY = { title: '올리기', message: '올렸습니다. 다음 단계는 올리기와 확정에서 이어집니다.', to: '/inbox', label: '올리기와 확정으로' };
 const POLL_MS = 5000;
 /** BDF 3D 변환만 기다릴 때는 느긋하게 — 변환은 한 건에 수십 초~분 걸린다. */
 const CONVERT_POLL_MS = 15000;

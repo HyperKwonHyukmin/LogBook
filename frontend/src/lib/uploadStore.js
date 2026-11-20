@@ -173,7 +173,7 @@ export function createUploadStore({
         set({ checked: 0, checkTotal: items.length });
         return upload(items, {
           targetEntryId: opts.targetEntryId, targetEntryStatus: opts.targetEntryStatus, force: !!opts.force,
-          preset: opts.preset || null, splitTop: !!opts.splitTop, whole: !!opts.whole,
+          preset: opts.preset || null, splitTop: !!opts.splitTop, whole: !!opts.whole, autoConfirm: !!opts.autoConfirm,
           signal: ctrl.signal,
           onPhase: (p) => set(p.phase === 'checking' ? { phase: 'checking', checked: p.checked, checkTotal: p.total }
             : { phase: 'uploading' }),
