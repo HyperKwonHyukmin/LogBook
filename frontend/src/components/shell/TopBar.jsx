@@ -224,10 +224,11 @@ export default function TopBar({ user, onLogout }) {
         <Button variant="inverse" size="md" onClick={() => navigate('/inbox')}><Upload size={14} aria-hidden="true" />올리기</Button>
       )}
       {/* 2026-11-20 — 새 탭 대신 오른쪽 패널(앱을 그대로 쓰면서 본다). 다시 누르면 닫는다 */}
-      <button type="button" onClick={() => setManualOpen((v) => !v)} aria-label="사용 설명서" aria-expanded={manualOpen}
-              title={manualOpen ? '사용 설명서 닫기' : '사용 설명서'}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-on-navy-muted transition-colors duration-150 ease-out hover:bg-navy-700 hover:text-on-navy aria-expanded:bg-navy-700 aria-expanded:text-on-navy">
-        <CircleHelp size={18} aria-hidden="true" />
+      {/* 2026-11-20 — ? 아이콘만으로는 알아보기 어렵다(사용자) → 글자 '설명서 보기' */}
+      <button type="button" onClick={() => setManualOpen((v) => !v)} aria-expanded={manualOpen}
+              title={manualOpen ? '설명서 닫기' : '사용 설명서를 오른쪽에 엽니다'}
+              className="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-ui font-medium text-on-navy ring-1 ring-navy-500 transition-colors duration-150 ease-out hover:bg-navy-700 aria-expanded:bg-navy-700">
+        <CircleHelp size={15} aria-hidden="true" />설명서 보기
       </button>
       <Menu
         width={232}

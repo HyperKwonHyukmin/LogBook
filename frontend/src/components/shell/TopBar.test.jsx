@@ -200,7 +200,7 @@ describe('사용 설명서 링크', () => {
 
 test('2026-11-20 — ? 는 새 탭 대신 오른쪽 패널로 설명서를 열고, 다시 누르거나 닫기로 닫는다', async () => {
   renderTopBar();
-  const help = screen.getByRole('button', { name: '사용 설명서' });
+  const help = screen.getByRole('button', { name: '설명서 보기' });
   await userEvent.click(help);
   const panel = screen.getByRole('complementary', { name: '사용 설명서' });
   expect(within(panel).getByTitle('사용 설명서 본문')).toHaveAttribute('src', `${MANUAL_URL}#search`);
@@ -213,11 +213,15 @@ test('2026-11-20 — ? 는 새 탭 대신 오른쪽 패널로 설명서를 열�
   expect(screen.queryByRole('complementary', { name: '사용 설명서' })).toBeNull();
 });
 
-test('설명서 패널 폭은 키보드로도 조절되고 설명서 웹판 경계(720px) 안에 머문다', async () => {
+test('설명서 패널은 처음에 화면의 절반, 키보드로 넓히고 좁히되 85% 를 넘지 않는다', async () => {
+  window.localStorage.removeItem('logbook.manual.ratio');
   renderTopBar();
-  await userEvent.click(screen.getByRole('button', { name: '사용 설명서' }));
+  await userEvent.click(screen.getByRole('button', { name: '설명서 보기' }));
+  expect(screen.getByRole('complementary', { name: '사용 설명서' })).toHaveStyle({ width: '50vw' });
   const handle = screen.getByRole('separator', { name: '설명서 폭 조절' });
   handle.focus();
-  for (let i = 0; i < 10; i += 1) await userEvent.keyboard('{ArrowLeft}');
-  expect(handle).toHaveAttribute('aria-valuenow', '720');
+  for (let i = 0; i < 12; i += 1) await userEvent.keyboard('{ArrowLeft}');
+  expect(handle).toHaveAttribute('aria-valuenow', '85');
+  await userEvent.keyboard('{ArrowRight}');
+  expect(handle).toHaveAttribute('aria-valuenow', '80');
 });
