@@ -7,7 +7,7 @@ import TrashPage from './TrashPage.jsx';
 
 const ROWS = [
   { entry_id: 'E000001', title: '9999 연결시험', trash_rel: 'E000001_20260929-123305', restorable: true, updated_at: '2026-09-29T12:33:05' },
-  { entry_id: 'E000002', title: '버린 초안', trash_rel: 'draft_E000002_20260929-130000', restorable: false, updated_at: '2026-09-29T13:00:00' },
+  { entry_id: 'E000002', title: '초안 자료', trash_rel: 'draft_E000002_20260929-130000', kind: 'draft', restorable: true, updated_at: '2026-09-29T13:00:00' },
 ];
 
 // 제목과 복원 안내가 자료 링크라 라우터 안에서 그린다.
@@ -22,17 +22,24 @@ function mock(map) {
   }));
 }
 
-test('확정 자료는 복원하고, 버린 초안은 복원 불가로 표시한다', async () => {
+test('확정 자료는 복원하고 자료 화면으로 안내한다', async () => {
   mock({ 'GET /api/trash': ROWS, 'POST /api/entries/E000001/restore': { entry_id: 'E000001', status: 'confirmed' } });
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
   render(<TrashPage />);
   const row1 = (await screen.findByText('9999 연결시험')).closest('li');
   await userEvent.click(within(row1).getByRole('button', { name: '복원' }));
   expect(fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`)).toContain('POST /api/entries/E000001/restore');
-  const row2 = screen.getByText('버린 초안').closest('li');
-  expect(within(row2).queryByRole('button', { name: '복원' })).toBeNull();
-  expect(within(row2).getByText('초안이라 복원할 수 없음')).toBeInTheDocument();
   expect(await screen.findByRole('status')).toHaveTextContent('E000001 을 복원했습니다');
+});
+
+test('2026-11-20 — 버린 초안도 복원하고, 올리기와 확정으로 안내한다', async () => {
+  mock({ 'GET /api/trash': ROWS, 'POST /api/entries/E000002/restore': { entry_id: 'E000002', status: 'draft' } });
+  render(<TrashPage />);
+  const row2 = (await screen.findByText('초안 자료')).closest('li');
+  expect(within(row2).getByText('버린 초안')).toBeInTheDocument();
+  await userEvent.click(within(row2).getByRole('button', { name: '복원' }));
+  const note = await screen.findByRole('status');
+  expect(note).toHaveTextContent('E000002 초안을 되돌렸습니다');
+  expect(within(note).getByRole('link', { name: '올리기와 확정에서 보기' })).toHaveAttribute('href', '/inbox');
 });
 
 test('복원 실패 사유를 보여 준다', async () => {

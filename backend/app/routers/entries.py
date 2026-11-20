@@ -222,8 +222,10 @@ def restore_entry(entry_id: str, request: Request, db: Session = Depends(get_db)
 def list_trash(db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
     rows = (db.query(models.Entry).filter(models.Entry.status == "trashed", access.visible_entries_filter(user))
             .order_by(models.Entry.updated_at.desc(), models.Entry.id.desc()).limit(200))
+    # 2026-11-20 — 버린 초안도 복원할 수 있다(kind='draft', 복원하면 올리기와 확정으로 돌아간다)
     return [{"entry_id": e.entry_id, "title": e.title, "trash_rel": e.trash_rel,
-             "restorable": bool(e.vault_rel), "updated_at": e.updated_at.isoformat(),
+             "kind": "entry" if e.vault_rel else "draft",
+             "restorable": bool(e.vault_rel) or service.is_restorable_draft(e), "updated_at": e.updated_at.isoformat(),
              "can_restore": access.can_edit_entry(user, e), **access.access_brief(e)} for e in rows]
 
 

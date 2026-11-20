@@ -55,6 +55,61 @@ def test_discard_draft_only_by_uploader(db, storage, make_user, setup_entry_with
     assert db.query(models.AuditLog).filter_by(action="DRAFT_DISCARD").count() == 1
 
 
+def test_restore_discarded_draft(db, storage, make_user, setup_entry_with_files):
+    """2026-11-20 — 버린 초안을 휴지통에서 되돌린다: 파일은 원래 묶음 자리로, 상태는 '확정 전', 끝난 묶음은 다시 연다."""
+    u = make_user("A100001")
+    other = make_user("B200002")
+    b, e = setup_entry_with_files()
+    names = sorted(p.relative_to(storage.staging / b.key).as_posix() for p in (storage.staging / b.key).rglob("*") if p.is_file())
+    service.trash(db, storage, e, u)
+    db.expire_all()
+    e, b = db.get(models.Entry, e.id), db.get(models.Batch, b.id)
+    assert e.status == "trashed" and b.state == "done" and service.is_restorable_draft(e)
+    trash_dir = storage.trash / e.trash_rel
+
+    with pytest.raises(HTTPException) as ei:   # 올린 사람(또는 관리자)만
+        service.restore(db, storage, e, other)
+    assert ei.value.status_code == 403
+    db.rollback()
+
+    service.restore(db, storage, db.get(models.Entry, e.id), u)
+    db.expire_all()
+    e, b = db.get(models.Entry, e.id), db.get(models.Batch, b.id)
+    assert e.status == "draft" and e.trash_rel is None and b.state == "processed"
+    assert sorted(p.relative_to(storage.staging / b.key).as_posix()
+                  for p in (storage.staging / b.key).rglob("*") if p.is_file()) == names
+    assert {f.location for f in db.query(models.File).filter_by(entry_id=e.id)} == {"staging"}
+    assert not trash_dir.exists()   # 비운 휴지통 폴더는 지운다
+    assert db.query(models.AuditLog).filter_by(action="DRAFT_RESTORE").count() == 1
+
+
+def test_restore_draft_conflict_keeps_trash(db, storage, make_user, setup_entry_with_files):
+    """그 사이 같은 자리에 다른 파일이 생겼으면 덮어쓰지 않고 409, 휴지통 쪽은 그대로."""
+    u = make_user("A100001")
+    b, e = setup_entry_with_files()
+    service.trash(db, storage, e, u)
+    db.expire_all()
+    e = db.get(models.Entry, e.id)
+    f = db.query(models.File).filter_by(entry_id=e.id).first()
+    spot = storage.staging / b.key / f.rel_path
+    spot.parent.mkdir(parents=True, exist_ok=True)
+    spot.write_text("다른 파일", encoding="utf-8")
+    with pytest.raises(HTTPException) as ei:
+        service.restore(db, storage, e, u)
+    assert ei.value.detail == "staging_conflict"
+    assert (storage.trash / e.trash_rel / f.rel_path).is_file() and spot.read_text(encoding="utf-8") == "다른 파일"
+
+
+def test_trash_list_marks_drafts_restorable(client, db, storage, make_user, auth_headers, setup_entry_with_files):
+    u = make_user("A100001")
+    _, e = setup_entry_with_files()
+    service.trash(db, storage, e, u)
+    [row] = client.get("/api/trash", headers=auth_headers("A100001")).json()
+    assert row["kind"] == "draft" and row["restorable"] is True and row["can_restore"] is True
+    r = client.post(f"/api/entries/{e.entry_id}/restore", headers=auth_headers("A100001"))
+    assert r.status_code == 200 and r.json()["status"] == "draft"
+
+
 def test_split_merge_and_move(db, storage, make_user, setup_entry_with_files):
     u = make_user("A100001")
     b, e = setup_entry_with_files()

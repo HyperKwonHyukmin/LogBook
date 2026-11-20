@@ -41,7 +41,7 @@ export default function TrashPage() {
     setBusyId(r.entry_id); setError(''); setNotice(null); setPurged('');
     try {
       await api(`/entries/${r.entry_id}/restore`, { method: 'POST' });
-      setNotice(r.entry_id);
+      setNotice({ id: r.entry_id, draft: r.kind === 'draft' });
       load();
     } catch (err) { setError(errorText(err, '복원하지 못했습니다.')); } finally { setBusyId(''); }
   }
@@ -96,7 +96,12 @@ export default function TrashPage() {
         description={<>삭제한 자료는 <span className="font-mono">95_Trash</span> 에 보관되며 여기서 복원할 수 있습니다.</>} />
       {notice && (
         <OkNote className="mb-4">
-          {notice} 을 복원했습니다. <Link to={`/e/${notice}`} className="font-medium underline underline-offset-2 hover:no-underline">열기</Link>
+          {/* 2026-11-20 — 버린 초안은 '확정 전'으로 올리기와 확정에 돌아간다 */}
+          {notice.draft ? (
+            <>{notice.id} 초안을 되돌렸습니다. <Link to="/inbox" className="font-medium underline underline-offset-2 hover:no-underline">올리기와 확정에서 보기</Link></>
+          ) : (
+            <>{notice.id} 을 복원했습니다. <Link to={`/e/${notice.id}`} className="font-medium underline underline-offset-2 hover:no-underline">열기</Link></>
+          )}
         </OkNote>
       )}
       {purged && <OkNote className="mb-4">{purged}</OkNote>}
@@ -111,7 +116,10 @@ export default function TrashPage() {
           <ul>
             {rows.map((r) => (
               <li key={r.entry_id} className={`group ${cols} h-11 border-b border-n-200 text-ui transition-colors duration-150 last:border-0 hover:bg-n-50`}>
-                <Link to={`/e/${r.entry_id}`} className="truncate font-medium text-n-900 hover:underline">{r.title}</Link>
+                <span className="flex min-w-0 items-center gap-2">
+                  <Link to={`/e/${r.entry_id}`} className="truncate font-medium text-n-900 hover:underline">{r.title}</Link>
+                  {r.kind === 'draft' && <span className="shrink-0 rounded-xs bg-n-100 px-1.5 text-micro font-medium text-n-600">버린 초안</span>}
+                </span>
                 <span className="font-mono text-meta text-n-600">{r.entry_id}</span>
                 <span className="font-mono text-meta text-n-500">{r.updated_at ? r.updated_at.replace('T', ' ').slice(0, 16) : '—'}</span>
                 <span className="flex items-center justify-end gap-1.5">
@@ -122,7 +130,7 @@ export default function TrashPage() {
                             loading={busyId === r.entry_id} onClick={() => restore(r)}>
                       {busyId !== r.entry_id && <RotateCcw size={14} aria-hidden="true" />}복원
                     </Button>
-                  ) : <span className="text-meta text-n-500">초안이라 복원할 수 없음</span>}
+                  ) : <span className="text-meta text-n-500">복원할 수 없음</span>}
                   {isAdmin && (
                     <Button variant="danger" size="sm" className={busyId === r.entry_id ? '' : reveal}
                             disabled={busyId === r.entry_id || !!emptying} onClick={() => purge(r)}>

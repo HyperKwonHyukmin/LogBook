@@ -10,7 +10,7 @@ export const ACTION_LABELS = {
   ENTRY_REVIEW: '검토 서명', ENTRY_REVIEW_CANCEL: '검토 서명 취소',   // 53
   ENTRY_FILES_REMOVED: '파일 삭제', ENTRY_FILES_RESTORED: '파일 되돌리기',   // 37
   FILES_PURGE: '뺀 파일 영구 삭제',
-  ENTRY_TRASH: '휴지통으로', ENTRY_RESTORE: '복원', DRAFT_DISCARD: '초안 버림',
+  ENTRY_TRASH: '휴지통으로', ENTRY_RESTORE: '복원', DRAFT_DISCARD: '초안 버림', DRAFT_RESTORE: '초안 복원',
   TAG_ALIAS: '동의어 묶기', TAG_UNALIAS: '동의어 풀기', HULL_UPDATE: '호선 정보 수정', HULL_PLM: '선박 정보(PLM) 반영',
   PERSON_UPDATE: '담당자 명부 수정',   // 46
   TRASH_PURGE: '영구 삭제', JOB_RETRY: '작업 다시 시도', COMMENT_DELETE: '의견 삭제(관리자)',   // 63

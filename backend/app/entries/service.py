@@ -834,8 +834,10 @@ def restore(db: Session, storage: StoragePaths, entry: models.Entry, user: model
 
     entry = _lock(db, entry)
     access.ensure_can_edit(user, entry)   # 13 — 올린 사람 또는 관리자 이상
-    if entry.status != "trashed" or not entry.vault_rel:
+    if entry.status != "trashed":
         raise HTTPException(status_code=409, detail="not_restorable")
+    if not entry.vault_rel:
+        return _restore_draft(db, storage, entry, user, ip)   # 2026-11-20 — 버린 초안
     dest = entry_dir(storage, entry)
     # 자리에 폴더가 있어도 휴지통 쪽 폴더가 없으면 앞선 복원이 옮기고 멈춘 것이다 — move_all 이 이어서 끝낸다(리뷰 7)
     if os.path.exists(to_long(dest)) and os.path.exists(to_long(storage.trash / entry.trash_rel)):
@@ -857,6 +859,54 @@ def restore(db: Session, storage: StoragePaths, entry: models.Entry, user: model
     _reenqueue_extract(db, entry)
     _reenqueue_convert(db, entry)
     _write_meta_or_queue(db, storage, entry)
+    return entry
+
+
+def is_restorable_draft(entry: models.Entry) -> bool:
+    """버린 초안인가 — 확정된 적이 없고(vault_rel 없음) 원래 묶음과 휴지통 폴더(draft_…)가 남아 있다."""
+    return (entry.status == "trashed" and not entry.vault_rel and bool(entry.batch_id)
+            and bool(entry.trash_rel) and entry.trash_rel.startswith("draft_"))
+
+
+def _restore_draft(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User,
+                   ip: str | None = None) -> models.Entry:
+    """2026-11-20 — 버린 초안 되돌리기(사용자 요청: 올리기와 확정에서 버린 것을 복원할 수 없었다).
+    95_Trash/draft_<번호>_<시각>/ 의 파일을 원래 묶음의 staging/<묶음>/ 같은 자리로 되돌리고 '확정 전'으로 둔다.
+    마지막 초안을 버려 묶음이 done 이 됐으면 processed 로 다시 연다. 감사 DRAFT_RESTORE.
+    초안에서 뺀 파일(removed_from_id)은 entry_id 가 비어 있어 따라오지 않는다(그 파일은 휴지통 폴더에 남는다).
+    그 사이 같은 자리에 다른 파일이 생겼으면 409 staging_conflict — 덮어쓰지 않는다."""
+    from .files import move_all, rel_move_pairs, remove_empty_dirs
+
+    if not is_restorable_draft(entry):
+        raise HTTPException(status_code=409, detail="not_restorable")
+    batch = db.get(models.Batch, entry.batch_id)
+    if batch is None:
+        raise HTTPException(status_code=409, detail="not_restorable")
+    src_root, dst_root = storage.trash / entry.trash_rel, storage.staging / batch.key
+    files = db.query(models.File).filter_by(entry_id=entry.id).all()
+    for f in files:
+        # 휴지통 쪽이 있는데 자리에도 있으면 다른 파일이다. 휴지통 쪽이 없으면 앞선 복원이 옮기고 멈춘 것(move_all 이 이어 간다)
+        if (os.path.exists(long_join(dst_root, f.rel_path)) and os.path.exists(long_join(src_root, f.rel_path))):
+            raise HTTPException(status_code=409, detail="staging_conflict")
+    undo = move_all(rel_move_pairs(src_root, dst_root, [(f, f.rel_path) for f in files]))
+    try:
+        for f in files:
+            f.location = "staging"
+        entry.status, entry.trash_rel = "draft", None
+        entry.version += 1
+        if batch.state == "done":
+            batch.state = "processed"
+        db.flush()
+        audit.record(db, storage, actor=user.employee_id, action="DRAFT_RESTORE", target_type="entry",
+                     target_id=entry.entry_id, after={"batch": batch.key}, ip=ip)
+    except Exception:
+        db.rollback()
+        undo()
+        raise
+    try:
+        remove_empty_dirs(src_root)
+    except OSError:
+        pass
     return entry
 
 
