@@ -174,6 +174,7 @@ export function createUploadStore({
         return upload(items, {
           targetEntryId: opts.targetEntryId, targetEntryStatus: opts.targetEntryStatus, force: !!opts.force,
           preset: opts.preset || null, splitTop: !!opts.splitTop, whole: !!opts.whole, autoConfirm: !!opts.autoConfirm,
+          joinBatch: opts.joinBatch || null,
           signal: ctrl.signal,
           onPhase: (p) => set(p.phase === 'checking' ? { phase: 'checking', checked: p.checked, checkTotal: p.total }
             : { phase: 'uploading' }),
@@ -225,12 +226,19 @@ export function createUploadStore({
       Object.entries(jobs).filter(([, j]) => j.busy).forEach(([scope]) => patch(scope, { notice: BUSY_NOTICE }));
     },
 
-    /** 17 LV3 '그래도 올리기' — 막힌 BDF 와 함께 빠진 INCLUDE 를 force 로 새 배치에 올린다. */
+    /**
+     * 17 LV3 '그래도 올리기' — 막힌 BDF 와 함께 빠진 INCLUDE 를 force 로 다시 올린다.
+     * 2026-11-20 — 처음 묶음이 있으면(나머지 파일이 올라감) 그 key 를 함께 보내 서버가 그 묶음의 초안에 붙인다
+     * (예전에는 새 묶음이라 폴더 하나가 초안 2건이 됐다). 바로 확정은 하지 않는다 — 붙인 뒤 사람이 확정한다.
+     */
     forceBlocked(scope) {
       const rt = runtime[scope];
-      const paths = new Set(blockedPaths(getJob(scope).result?.blocked));
+      const first = getJob(scope).result;
+      const paths = new Set(blockedPaths(first?.blocked));
       const items = (rt?.items || []).filter((it) => paths.has(it.relPath));
-      if (items.length) store.start(scope, items, { ...rt.opts, force: true });
+      if (items.length) {
+        store.start(scope, items, { ...rt.opts, force: true, autoConfirm: false, joinBatch: first?.key || null });
+      }
     },
 
     /** 셸이 사라질 때(로그아웃) — 보내던 요청을 끊는다. 배치는 서버가 하루 뒤 정리한다. */

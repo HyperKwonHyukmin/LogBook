@@ -50,7 +50,8 @@ def run(db: Session, storage: StoragePaths, batch: models.Batch) -> dict | None:
     """process_batch 끝(묶음 processed 커밋 뒤)에서 부른다. 초안마다 따로 확정해 하나가 실패해도 나머지는 간다."""
     from ..entries import service
 
-    if not wanted(batch) or batch.state != "processed":
+    # 다른 초안에 붙는 묶음(파일 추가, '그래도 올리기')은 붙이기가 맡는다 — 여기서 확정하지 않는다
+    if not wanted(batch) or batch.state != "processed" or batch.target_entry_id is not None:
         return None
     user = db.query(models.User).filter_by(employee_id=batch.uploader).first() if batch.uploader else None
     drafts = (db.query(models.Entry).filter_by(batch_id=batch.id, status="draft")

@@ -207,6 +207,14 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
         excluded.extend(blocked_records)
         infos = [i for i in infos if i.key in rows]
 
+    if batch.target_entry_id is None:
+        # 2026-11-20 — '그래도 올리기' 묶음은 처음 묶음의 초안에 붙인다(정리 뒤 워커의 auto_merge_batch 가 옮긴다)
+        from ..entries.draft_attachments import join_target
+
+        joined = join_target(db, batch, [rows[i.key].rel_path for i in infos])
+        if joined is not None:
+            batch.target_entry_id = joined.id
+
     known = {h for (h,) in db.query(models.Hull.hull_no)}
     created = 0
     draft_hulls: set[str] = set()   # 43 — 초안에 붙은 호선은 확정을 기다리지 않고 PLM 조회

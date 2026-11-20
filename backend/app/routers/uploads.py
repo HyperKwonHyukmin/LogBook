@@ -23,6 +23,8 @@ class BeginBody(BaseModel):
     whole: bool = False   # '폴더 전체를 자료 1건' — 하위 폴더 호선이 달라도 나누지 않는다
     # 66 — '올리고 바로 확정': 정리가 끝나면 사람이 볼 것이 없는 초안을 곧바로 확정한다(기존 자료에 파일 추가에는 쓰지 않는다)
     auto_confirm: bool = False
+    # 2026-11-20 — LV3 '그래도 올리기': 처음 묶음 key. 정리 때 그 묶음의 초안에 붙인다
+    join_batch: str | None = None
 
 
 class DeclaredFile(BaseModel):
@@ -47,7 +49,8 @@ def begin(body: BeginBody, db: Session = Depends(get_db), storage: StoragePaths 
           user: models.User = Depends(require_writer)):
     b = service.begin(db, storage, user, name=body.name, target_entry_id=body.target_entry_id,
                       target_status=body.target_status, preset=body.preset, split_top=body.split_top,
-                      whole=body.whole, auto_confirm=body.auto_confirm)
+                      whole=body.whole, auto_confirm=body.auto_confirm,
+                      join_batch=body.join_batch)
     return {"key": b.key, "state": b.state}
 
 

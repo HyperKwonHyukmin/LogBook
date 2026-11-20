@@ -246,6 +246,7 @@ export async function uploadBatch(items, {
   onProgress = () => {}, onPhase = () => {}, chunkSize = CHUNK_SIZE, targetEntryId, targetEntryStatus,
   sleep = defaultSleep, force = false, signal, parallel = SMALL_PARALLEL, largeParallel = LARGE_PARALLEL, preset = null,
   splitTop = false, whole = false, autoConfirm = false,   // 66 — '올리고 바로 확정'
+  joinBatch = null,   // 2026-11-20 — '그래도 올리기': 처음 묶음 key(서버가 그 묶음의 초안에 붙인다)
 } = {}) {
   const { good, rejected, skipped } = await scanItems(items, {
     signal, onScan: (checked) => onPhase({ phase: 'checking', checked, total: items.length }),
@@ -259,7 +260,8 @@ export async function uploadBatch(items, {
     name: batchName(items), target_entry_id: targetEntryId || null,
     ...(targetEntryStatus ? { target_status: targetEntryStatus } : {}),
     ...(preset ? { preset } : {}), ...(splitTop ? { split_top: true } : {}), ...(whole ? { whole: true } : {}),
-    ...(autoConfirm && !targetEntryId ? { auto_confirm: true } : {}) } }), { sleep, signal });
+    ...(autoConfirm && !targetEntryId ? { auto_confirm: true } : {}),
+    ...(joinBatch && !targetEntryId ? { join_batch: joinBatch } : {}) } }), { sleep, signal });
   const session = {
     key,
     items: good,

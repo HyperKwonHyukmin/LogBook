@@ -65,7 +65,7 @@ def clean_preset(db: Session, user: models.User, preset: dict | None) -> dict | 
 def begin(db: Session, storage: StoragePaths, user: models.User, *, name: str,
           target_entry_id: str | None, target_status: str | None = None,
           preset: dict | None = None, split_top: bool = False, whole: bool = False,
-          auto_confirm: bool = False) -> models.Batch:
+          auto_confirm: bool = False, join_batch: str | None = None) -> models.Batch:
     if not storage.check_reachable():
         raise HTTPException(status_code=503, detail="storage_unreachable")
     target = None
@@ -87,6 +87,11 @@ def begin(db: Session, storage: StoragePaths, user: models.User, *, name: str,
         from ..ingest.auto_confirm import KEY as AUTO_KEY
 
         preset = {**(preset or {}), AUTO_KEY: True}
+    if target is None and join_batch:
+        # 2026-11-20 — '그래도 올리기'는 처음 묶음의 초안에 붙는다(정리 때 entries.draft_attachments.join_target)
+        from ..entries.draft_attachments import JOIN_KEY
+
+        preset = {**(preset or {}), JOIN_KEY: join_batch.strip()[:64]}
     key = new_batch_key()
     os.makedirs(to_long(storage.web_inbox / key), exist_ok=True)
     batch = models.Batch(key=key, source="web", original_name=(name or "").strip()[:255] or key,

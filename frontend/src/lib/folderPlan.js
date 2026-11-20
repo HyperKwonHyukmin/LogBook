@@ -21,6 +21,9 @@ function globMatch(pattern, name) {
   return re.test(name.toLowerCase());
 }
 
+/** 빈 파일의 요약 이름(형식 자리에 쓴다 — '빈 파일 1개 빠짐 [포함]'). */
+export const EMPTY_EXT = '빈 파일';
+
 export const extOf = (name) => {
   const i = name.lastIndexOf('.');
   return i > 0 ? name.slice(i).toLowerCase() : '';
@@ -61,8 +64,10 @@ export function planFolder(items, rules = FALLBACK_RULES) {
     if (!it.file) continue; // 읽을 수 없는 파일은 올리기가 '건너뜀'으로 알린다
     const name = baseName(it.relPath);
     if (patterns.some((p) => globMatch(p, name))) { junk.push(it.relPath); continue; }
-    const ext = skipExtOf(name);
-    files.push({ relPath: it.relPath, name, size: it.file.size || 0, ext, dir: dirOf(it.relPath), skip: skipExts.has(ext) });
+    // 2026-11-20 — 0바이트 파일(Nastran 이 남긴 빈 파일 등)은 내용이 없어 처음에 체크를 푼다. 요약은 '빈 파일' 한 줄로 묶는다
+    const size = it.file.size || 0;
+    const ext = size === 0 ? EMPTY_EXT : skipExtOf(name);
+    files.push({ relPath: it.relPath, name, size, ext, dir: dirOf(it.relPath), skip: size === 0 || skipExts.has(ext) });
   }
   // Abaqus 작업(job.inp)과 이름이 같은 job.dat 은 해석 결과다
   const inpStems = new Set(files.filter((f) => f.ext === '.inp').map((f) => `${f.dir}/${stemOf(f.name)}`.toLowerCase()));

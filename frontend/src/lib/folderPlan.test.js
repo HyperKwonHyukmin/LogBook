@@ -37,6 +37,13 @@ describe('planFolder', () => {
       { ext: '.log', count: 1 }, { ext: '.023', count: 1 }]);
   });
 
+  it("2026-11-20 — 0바이트 파일은 체크가 풀리고 '빈 파일' 로 묶인다(포함하면 올라간다)", () => {
+    const plan = planFolder([item('r/a.bdf'), item('r/model/3252_skid', 0), item('r/b.pdf', 0)]);
+    const checked = initialChecked(plan);
+    expect([...checked]).toEqual(['r/a.bdf']);
+    expect(skippedByExt(plan, checked)).toEqual([{ ext: '빈 파일', count: 2 }]);
+  });
+
   it('임시 파일은 목록에 넣지 않고 따로 센다', () => {
     const plan = planFolder(Y2025);
     expect(plan.junk).toEqual(['2025/manifold_support_8182/fe_model/~$calc.xlsm']);

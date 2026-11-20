@@ -183,10 +183,12 @@ test('17 모두 막히면 key 는 null(배치 없음), force 는 마무리 본�
     if (url.endsWith('/finish')) return ok({ key: null, state: 'blocked', blocked: [DUP], deferred: 0 });
     throw new Error(url);
   });
-  const res = await uploadBatch([{ file: file('copy.bdf', 'G'), relPath: '9999_시험/copy.bdf' }], { force: true });
+  const res = await uploadBatch([{ file: file('copy.bdf', 'G'), relPath: '9999_시험/copy.bdf' }], { force: true, joinBatch: 'K0' });
   expect(res.key).toBeNull();
   expect(res.uploaded).toBe(0);
   const finish = fetch.mock.calls.find(([u]) => u.endsWith('/finish'));
   expect(JSON.parse(finish[1].body).force).toBe(true);
+  const begin = fetch.mock.calls.find(([u, i]) => u === '/api/uploads' && i?.method === 'POST');
+  expect(JSON.parse(begin[1].body).join_batch).toBe('K0');   // 2026-11-20 — 처음 묶음의 초안에 붙인다
   expect(fetch.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
 });

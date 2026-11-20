@@ -81,6 +81,8 @@ test('UploadZone: LV3 [그래도 올리기] 는 막힌 파일(+INCLUDE)만 force
   const [items, opts] = uploadBatch.mock.calls[1];
   expect(items.map((i) => i.relPath)).toEqual(['9999_새/copy.bdf', '9999_새/mesh.inc']);
   expect(opts.force).toBe(true);
+  expect(opts.joinBatch).toBe('K1');   // 2026-11-20 — 처음 묶음의 초안에 붙는다(새 초안 2건째가 생기지 않게)
+  expect(opts.autoConfirm).toBe(false);
   expect(screen.queryByRole('region', { name: '올리지 않은 BDF' })).toBeNull();
 });
 
