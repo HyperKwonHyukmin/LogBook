@@ -15,7 +15,7 @@ import Spinner from '../ui/Spinner.jsx';
 import { EntryLink, SameModelChips } from '../preview/SameModel.jsx';
 import { changedFields, editErrors, editValues, patchBody } from '../../lib/entryEdit.js';
 import { ACCESS_OPTIONS, AccessSelect } from '../access/AccessPanel.jsx';
-import { accessOf, isAdminLevel } from '../../lib/levels.js';
+import { ACCESS_LADDER, accessOf, isAdminLevel } from '../../lib/levels.js';
 import { AuthContext } from '../../auth/AuthContext.jsx';
 import { DuplicateTargets } from './DuplicateBlocked.jsx';
 import DraftAttachments from './DraftAttachments.jsx';
@@ -296,23 +296,34 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
     });
   }
 
-  /** 초안 버리기 — 초안은 휴지통에서 복원할 수 없어 확인 대화상자를 거친다. */
-  async function discard() {
-    const ok = await confirm({
-      title: `${entry.entry_id} 초안을 버릴까요?`,
-      body: '파일은 휴지통으로 가며, 초안은 복원할 수 없습니다.',
-      confirmLabel: '버리기',
-    });
-    if (!ok) return;
-    // 2026-11-19 — 확인하면 카드를 곧바로 목록에서 뺀다(사용자 신고: 휴지통에 간다고 했는데 카드가 남아 멈춘 것처럼 보였다).
-    // 서버는 파일을 하나씩 휴지통 폴더로 옮겨 파일이 많으면 몇 초 걸린다. 실패하면(저장 실패 포함) 카드를 다시 보이고 오류를 적는다.
+  /**
+   * 초안 버리기. 2026-11-20 — 버린 초안도 휴지통에서 되돌릴 수 있게 되어(서버 restore) 확인 대화상자를 빼고
+   * 토스트의 [되돌리기]로 바꿨다(DESIGN.md: 확인 대화상자는 되돌릴 수 없는 동작에만).
+   * 2026-11-19 — 누르면 카드를 곧바로 목록에서 뺀다(서버는 파일을 하나씩 휴지통으로 옮겨 몇 초 걸린다).
+   * 실패하면(저장 실패 포함) 카드를 다시 보이고 오류를 적는다.
+   */
+  function discard() {
     const id = entry.entry_id;
     let done = false;
     setDiscarding(true);
     act(async () => {
       const r = await api(`/entries/${id}`, { method: 'DELETE' });
       done = true;
-      toast.show({ message: `${id} 초안을 버렸습니다. 파일은 휴지통으로 옮겼습니다.` });
+      toast.show({
+        message: `${id} 초안을 버렸습니다. 휴지통에서도 되돌릴 수 있습니다.`,
+        action: {
+          label: '되돌리기',
+          onClick: async () => {
+            try {
+              await api(`/entries/${id}/restore`, { method: 'POST' });
+              toast.show({ message: `${id} 초안을 되돌렸습니다.` });
+            } catch (err) {
+              toast.show({ tone: 'err', message: errorText(err, '되돌리지 못했습니다. 휴지통에서 다시 시도해 주세요.') });
+            }
+            onChanged();
+          },
+        },
+      });
       return r;
     }, '버리지').finally(() => { if (!done) setDiscarding(false); });
   }
@@ -484,6 +495,7 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
             <span className="font-normal text-n-500">
               {ACCESS_OPTIONS.find((o) => o.value === accessOf(entry)).help}
             </span>
+            <span className="font-normal text-n-500">{ACCESS_LADDER}</span>
           </div>
         )}
       </div>

@@ -50,7 +50,10 @@ test('올린 사람은 공유로 바꾸고 확인한 뒤 적용한다(취소하�
   expect(screen.getByText('허락 0명')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '바꾸기' }));   // 2026-11-19 — 접혀 있다
   const select = screen.getByRole('combobox', { name: '공개 범위' });
-  expect(within(select).queryByRole('option', { name: '블록' })).toBeNull();
+  expect(within(select).queryByRole('option', { name: /블록/ })).toBeNull();
+  // 2026-11-20 — 선택지마다 볼 수 있는 등급
+  expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['공유 (LV1 이상)', '일반 (LV2 이상)']);
+  expect(screen.getByText(/등급이 높을수록 더 넓게 봅니다: LV1 은 공유만, LV2 는 공유와 일반, LV3 은 전부/)).toBeInTheDocument();
   const apply = screen.getByRole('button', { name: '적용' });
   expect(apply).toBeDisabled();
   await userEvent.selectOptions(select, 'shared');

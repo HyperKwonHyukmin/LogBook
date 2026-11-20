@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import DraftCard from './DraftCard.jsx';
+import { ToastProvider } from '../ui/Toast.jsx';
 import { invalidateVocab } from '../../lib/vocab.js';
 
 const ENTRY = {
@@ -91,23 +92,22 @@ test('확정과 버리기', async () => {
   const onChanged = vi.fn();
   render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={onChanged} />);
   await userEvent.click(screen.getByRole('button', { name: '확정' }));
+  // 2026-11-20 — 버린 초안도 되돌릴 수 있어 확인 대화상자 없이 바로 버린다(되돌리기는 토스트·휴지통)
   await userEvent.click(screen.getByRole('button', { name: '버리기' }));
-  // 초안은 복원할 수 없어 확인 대화상자를 거친다.
-  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '버리기' }));
+  expect(screen.queryByRole('alertdialog')).toBeNull();
   const calls = fetch.mock.calls.map(([u, i = {}]) => `${i.method || 'GET'} ${u}`);
   expect(calls).toContain('POST /api/entries/E000010/confirm');
   expect(calls).toContain('DELETE /api/entries/E000010');
   expect(onChanged).toHaveBeenCalledTimes(2);
 });
 
-test('2026-11-19 — 버리기를 확인하면 카드가 목록에서 바로 빠지고, 실패하면 다시 보이며 오류를 적는다', async () => {
+test('2026-11-19 — 버리기를 누르면 카드가 목록에서 바로 빠지고, 실패하면 다시 보이며 오류를 적는다', async () => {
   let release;
   const gate = new Promise((r) => { release = r; });
   mockFetch({ 'DELETE /api/entries/E000010': () => gate.then(() => ({ ...ENTRY, status: 'trashed' })) });
   const onChanged = vi.fn();
   const { unmount } = render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={onChanged} />);
   await userEvent.click(screen.getByRole('button', { name: '버리기' }));
-  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '버리기' }));
   // 서버가 아직 답하지 않았어도 카드는 이미 빠졌다
   expect(screen.queryByRole('article', { name: /E000010/ })).toBeNull();
   release();
@@ -117,9 +117,21 @@ test('2026-11-19 — 버리기를 확인하면 카드가 목록에서 바로 빠
   mockFetch({ 'DELETE /api/entries/E000010': { __status: 500, detail: 'x' } });
   render(<DraftCard entry={READY} siblings={[]} canEdit onChanged={() => {}} />);
   await userEvent.click(screen.getByRole('button', { name: '버리기' }));
-  await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '버리기' }));
   const card = await screen.findByRole('article', { name: /E000010/ });
   expect(card).toBeInTheDocument();
+});
+
+test('2026-11-20 — 버린 뒤 토스트의 [되돌리기]로 초안을 복원하고 목록을 다시 읽는다', async () => {
+  mockFetch({ 'DELETE /api/entries/E000010': { ...ENTRY, status: 'trashed' },
+              'POST /api/entries/E000010/restore': { ...ENTRY, status: 'draft' } });
+  const onChanged = vi.fn();
+  render(<ToastProvider><DraftCard entry={READY} siblings={[]} canEdit onChanged={onChanged} /></ToastProvider>);
+  await userEvent.click(screen.getByRole('button', { name: '버리기' }));
+  expect(await screen.findByText(/E000010 초안을 버렸습니다/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '되돌리기' }));
+  await vi.waitFor(() => expect(fetch.mock.calls.some(([u, i = {}]) => u === '/api/entries/E000010/restore' && i.method === 'POST')).toBe(true));
+  expect(await screen.findByText('E000010 초안을 되돌렸습니다.')).toBeInTheDocument();
+  expect(onChanged).toHaveBeenCalledTimes(2);   // 버린 뒤 한 번, 되돌린 뒤 한 번
 });
 
 test('남의 초안은 고칠 수 없다', () => {

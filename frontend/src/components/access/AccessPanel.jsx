@@ -6,7 +6,7 @@ import { useConfirm } from '../ui/ConfirmDialog.jsx';
 import { inputClass, selectClass } from '../ui/Field.jsx';
 import { SectionTitle } from '../ui/Page.jsx';
 import { errorText } from '../../lib/labels.js';
-import { ACCESS_OPTIONS, accessLabel, accessOf, levelName } from '../../lib/levels.js';
+import { ACCESS_LADDER, ACCESS_OPTIONS, accessLabel, accessOf, accessOptionText, levelName } from '../../lib/levels.js';
 
 export { ACCESS_OPTIONS };
 
@@ -35,7 +35,7 @@ export function AccessSelect({ value, onChange, disabled, id, className = '', ca
   return (
     <select id={id} aria-label="공개 범위" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}
             className={selectClass(className)}>
-      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      {options.map((o) => <option key={o.value} value={o.value}>{accessOptionText(o)}</option>)}
     </select>
   );
 }
@@ -64,8 +64,8 @@ export default function AccessPanel({ entry, onChanged, disabled = false }) {
   async function apply() {
     if (value === current || busy) return;
     const ok = await confirm({
-      title: `공개 범위를 ‘${next.label}’ 으로 바꿀까요?`,
-      body: `${next.help} 바꾸는 즉시 검색·호선·즐겨찾기 등 모든 화면에 반영되고 변경 이력에 남습니다.`,
+      title: `공개 범위를 ‘${accessOptionText(next)}’ 으로 바꿀까요?`,
+      body: `${next.help} 바꾸는 즉시 검색, 호선, 즐겨찾기 등 모든 화면에 반영되고 변경 이력에 남습니다.`,
       confirmLabel: '바꾸기', tone: 'primary',
     });
     if (!ok) { setValue(current); return; }
@@ -90,6 +90,7 @@ export default function AccessPanel({ entry, onChanged, disabled = false }) {
         <SectionTitle>공개 범위</SectionTitle>
         <span className="inline-flex min-w-0 items-center gap-1.5 text-ui text-n-900" title={opt.help}>
           <Icon size={14} className="shrink-0 text-n-400" aria-hidden="true" />{opt.label}
+          <span className="text-meta text-n-500">{opt.who}</span>
         </span>
         {manage && current !== 'shared' && <span className="shrink-0 text-meta text-n-500">허락 {grantCount}명</span>}
         {manage && (
@@ -112,6 +113,7 @@ export default function AccessPanel({ entry, onChanged, disabled = false }) {
           </Button>
         </div>
       )}
+      {manage && open && <p className="mt-1.5 text-meta text-n-500">{ACCESS_LADDER}</p>}
       {error && <p role="alert" className="mt-2 text-meta text-err">{error}</p>}
       {/* 공유 자료는 누구나 보므로 개별 허락이 필요 없다(행은 남아 있다가 단계를 바꾸면 다시 효력이 난다) */}
       {manage && open && current !== 'shared' && (

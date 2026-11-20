@@ -52,11 +52,22 @@ export function assignableLevels(me, target) {
 
 // ---- 자료 공개 단계 ----
 
+// 2026-11-20 — 선택지마다 볼 수 있는 등급(who)을 붙인다(사용자: "어느 정도의 보안인지 파악이 안 된다").
+// 구조시스템연구실은 로그인하면 LV2(2026-11-19), 그 밖의 WorkBench 사용자는 LV1 이다.
 export const ACCESS_OPTIONS = [
-  { value: 'shared', label: '공유', help: 'LV1(게스트)을 포함한 모든 사용자가 봅니다.' },
-  { value: 'normal', label: '일반', help: 'LV2 이상과 작성자, 열람을 허락받은 사람이 봅니다.' },
-  { value: 'blocked', label: '블록', help: '관리자(LV3)와 작성자, 관리자가 허락한 사람만 봅니다. 관리자만 지정·해제합니다.' },
+  { value: 'shared', label: '공유', who: 'LV1 이상',
+    help: 'LV1 이상: 로그인한 모든 사용자(다른 부서 WorkBench 사용자 포함)가 봅니다.' },
+  { value: 'normal', label: '일반', who: 'LV2 이상',
+    help: 'LV2 이상: 구조시스템연구실과 관리자, 작성자, 열람을 허락받은 사람이 봅니다.' },
+  { value: 'blocked', label: '블록', who: 'LV3만',
+    help: 'LV3만: 관리자와 작성자, 관리자가 허락한 사람만 봅니다. 관리자만 지정하고 풉니다.' },
 ];
+
+/** 고르기 칸 아래 한 줄 — 등급이 높을수록 아래 범위도 본다(2026-11-20 사용자 확인). */
+export const ACCESS_LADDER = '등급이 높을수록 더 넓게 봅니다: LV1 은 공유만, LV2 는 공유와 일반, LV3 은 전부.';
+
+/** 고르기 칸에 보이는 글자 — '일반 (LV2 이상)'. 배지는 짧게 label 만 쓴다. */
+export const accessOptionText = (o) => `${o.label} (${o.who})`;
 
 export const accessOf = (item) => (item?.access === 'shared' || item?.access === 'blocked' ? item.access : 'normal');
 
