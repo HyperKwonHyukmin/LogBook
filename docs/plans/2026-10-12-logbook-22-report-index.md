@@ -134,3 +134,7 @@ npm run build    # frontend/dist
 5. **초기 색인 확인**: `backend` 에서 `.venv\Scripts\python.exe -m app.report_index.worker --status`(documents·chunks·vectors 증가, `worker.last_error` 없음), 보고서 화면 상태 띠(완료 수 증가·의미 추천 준비), 로그 `backend\logs\report-index-console.log`. 보고서가 많으면 처음에만 `LOGBOOK_REPORT_BATCH_SIZE=200`·`LOGBOOK_REPORT_INTERVAL=60`(13-2).
 
 기술 참조: [Ollama 임베딩 API](https://docs.ollama.com/api/embed), [Ollama 채팅 API](https://docs.ollama.com/api/chat), [SQLite FTS5 trigram](https://sqlite.org/fts5.html#the_trigram_tokenizer).
+
+## 2026-11-20 — 145 '문서 요약을 지금 사용할 수 없습니다' (원인 미확정)
+- 사용자 신고: [이 보고서 근거로 요약]이 늘 위 문구로 실패. 서버는 Ollama 꺼짐, 모델(qwen2.5:7b) 없음, 출처 [S#] 없는 답, 시간 초과를 모두 503 하나로 뭉치고 로그를 남기지 않아 원인을 가르지 못했다.
+- 다음: 145 에서 색인 상태 줄 문구와 실패까지 걸린 시간을 받고(`ollama list`), 서버가 실패 사유를 로그와 응답 코드로 나눠 남기게 고친다.
