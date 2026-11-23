@@ -2,6 +2,7 @@
 import logging
 import os
 import re
+import time
 from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 
@@ -559,7 +560,7 @@ def auto_merge_batch(db: Session, storage: StoragePaths, batch: models.Batch) ->
         if draft.merge_into_id != batch.target_entry_id:
             continue
         try:
-            confirm(db, storage, draft, user)
+            with_deadlock_retry(db, lambda: confirm(db, storage, draft, user))
             merged += 1
         except Exception as exc:  # noqa: BLE001 — 합치기 실패는 배치 처리 실패가 아니다(초안이 남는다)
             db.rollback()
@@ -749,6 +750,31 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
     db.commit()
     _write_meta_or_queue(db, storage, entry)
     return entry
+
+
+DEADLOCK = 1213   # MySQL ER_LOCK_DEADLOCK — 다시 시도하면 되는 오류(MySQL 안내)
+
+
+def is_deadlock(exc: BaseException) -> bool:
+    from sqlalchemy.exc import OperationalError
+
+    orig = getattr(exc, "orig", None)
+    return isinstance(exc, OperationalError) and bool(getattr(orig, "args", None)) and orig.args[0] == DEADLOCK
+
+
+def with_deadlock_retry(db: Session, fn, attempts: int = 3):
+    """fn() 을 MySQL 1213 교착이면 되돌린 뒤 다시 시도한다(2026-11-23, 올린 직후 확정이 500 이던 결함의 안전망).
+    확정은 파일을 먼저 옮기지만 move_all 이 멱등이라(이미 옮긴 파일은 옮긴 것으로 봄) 다시 시도해도 안전하다.
+    근본 원인(추출 작업의 잠금 순서)은 extract/job.run_extract 에서 고쳤다 — 이것은 다른 경로의 교착에 대비한 것."""
+    for i in range(attempts):
+        try:
+            return fn()
+        except Exception as exc:
+            if not is_deadlock(exc) or i == attempts - 1:
+                raise
+            db.rollback()
+            logger.warning("MySQL 교착(1213) — 다시 시도합니다(%d/%d)", i + 1, attempts - 1)
+            time.sleep(0.2 * (i + 1))
 
 
 def _stamp() -> str:

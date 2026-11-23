@@ -66,7 +66,7 @@ def run(db: Session, storage: StoragePaths, batch: models.Batch) -> dict | None:
             kept.append({"entry_id": e.entry_id, "reason": reason})
             continue
         try:
-            service.confirm(db, storage, e, user)
+            service.with_deadlock_retry(db, lambda: service.confirm(db, storage, e, user))   # 2026-11-23 교착 안전망
             confirmed.append(e.entry_id)
         except HTTPException as exc:
             db.rollback()

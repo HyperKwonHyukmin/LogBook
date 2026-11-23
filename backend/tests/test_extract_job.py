@@ -243,3 +243,30 @@ def test_restore_reenqueues_extract(db, storage, make_user, make_entry_file):
     assert [j.target_id for j in db.query(models.Job).filter_by(type="extract_file")] == [f.id]
     assert db.get(models.FileExtract, f.id).state == "queued"
     assert db.get(models.FileExtract, g.id).state == "done"
+
+
+def test_doc_hull_locks_entry_before_writing_extract_rows(db, storage, make_entry_file):
+    """2026-11-23 — 확정은 자료 행을 잠그고 파일 행을 고친다. 추출 작업이 file_texts·file_extracts 를 먼저 쓰면(외래 키 검사로
+    파일 행 공유 잠금) 그 뒤 자료 행을 잠그려다 확정과 서로 기다려 MySQL 1213 교착이 났다(올린 직후 확정하면 500).
+    호선을 찾은 추출은 자료 행을 먼저 잠근 뒤 자식 행을 쓴다(확정과 같은 순서)."""
+    from sqlalchemy import event
+    from app.database import engine
+
+    e, f = make_entry_file(status="draft", hulls=(), name="r.pptx", sha="7" * 64)
+    db.commit()
+    _write(db, storage, f, _pptx(title="HULL NO. 9999 검토"))
+    seen = []
+
+    def before(_conn, _cur, statement, *_a):
+        seen.append(" ".join(statement.split()).upper())
+
+    event.listen(engine, "before_cursor_execute", before)
+    try:
+        run_extract(db, storage, f)
+    finally:
+        event.remove(engine, "before_cursor_execute", before)
+    lock = next(i for i, s in enumerate(seen) if "FROM ENTRIES" in s and "FOR UPDATE" in s)
+    writes = [i for i, s in enumerate(seen) if s.startswith(("INSERT INTO FILE_TEXTS", "INSERT INTO FILE_EXTRACTS",
+                                                             "UPDATE FILE_EXTRACTS", "DELETE FROM FILE_TEXTS"))]
+    assert writes and lock < min(writes)
+    assert [h.hull_no for h in db.query(models.EntryHull).filter_by(entry_id=e.id)] == ["9999"]

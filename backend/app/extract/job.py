@@ -86,12 +86,18 @@ def find_doc_hull(chunks: list[tuple[str, str]]) -> str | None:
     return None
 
 
-def _apply_doc_hull(db: Session, f: models.File, hull_no: str) -> None:
+def _lock_entry(db: Session, f: models.File) -> models.Entry | None:
+    """확정·사용자 수정(PATCH)과 겹치지 않게 Entry 행을 잠그고, 잠근 뒤의 최신 상태로 다시 본다
+    (populate_existing 이 없으면 이 세션에 먼저 올라온 오래된 status 를 그대로 쓴다)."""
     if not f.entry_id:
-        return
-    # 확정·사용자 수정(PATCH)과 겹치지 않게 Entry 행을 잠그고, 잠근 뒤의 최신 상태로 다시 본다
-    # (populate_existing 이 없으면 이 세션에 먼저 올라온 오래된 status 를 그대로 쓴다).
-    entry = db.get(models.Entry, f.entry_id, with_for_update=True, populate_existing=True)
+        return None
+    return db.get(models.Entry, f.entry_id, with_for_update=True, populate_existing=True)
+
+
+def _apply_doc_hull(db: Session, f: models.File, hull_no: str, entry: models.Entry | None = None) -> None:
+    """entry = 이미 잠근 자료(run_extract 가 자식 행을 쓰기 전에 잠가 넘긴다). 없으면 여기서 잠근다."""
+    if entry is None:
+        entry = _lock_entry(db, f)
     if entry is None or entry.status != "draft":
         return
     reason = f"보고서 본문: {f.name}"
@@ -113,8 +119,8 @@ def _apply_doc_hull(db: Session, f: models.File, hull_no: str) -> None:
 
 
 def run_extract(db: Session, storage: StoragePaths, f: models.File) -> None:
-    row = _row(db, f)
     if f.location == "trash":
+        row = _row(db, f)
         # 휴지통에 간 파일은 복원될 수 있다 — 이미 뽑아 둔 본문은 지우지 않고 그대로 둔다
         # (지우면 복원 뒤 검색에서 영영 빠진다). 뽑은 적이 없으면 건너뜀으로만 기록한다.
         if row.state != "done":
@@ -122,9 +128,9 @@ def run_extract(db: Session, storage: StoragePaths, f: models.File) -> None:
         db.commit()
         return
     if f.drm_encrypted:
-        return _finish(db, row, "skipped", "drm")
+        return _finish(db, _row(db, f), "skipped", "drm")
     if f.size > MAX_FILE_BYTES:
-        return _finish(db, row, "skipped", "too_large")
+        return _finish(db, _row(db, f), "skipped", "too_large")
 
     result = load_cached(storage, f.sha256)
     if result is None:
@@ -134,20 +140,25 @@ def run_extract(db: Session, storage: StoragePaths, f: models.File) -> None:
         status, value = isolated.run(extract_path, path, f.ext, timeout=settings.extract_timeout)
         if status == "drm":
             f.drm_encrypted = True
-            return _finish(db, row, "skipped", "drm")
+            return _finish(db, _row(db, f), "skipped", "drm")
         if status == "failed":  # 문서가 깨졌다 — 다시 돌려도 같으니 실패로 기록하고 끝낸다
             log.warning("본문 추출 실패: file=%s %s — %s", f.id, f.name, value)
-            return _finish(db, row, "failed", value)
+            return _finish(db, _row(db, f), "failed", value)
         result = value
         save_cached(storage, f.sha256, result)
 
+    # 2026-11-23 — 확정과 같은 순서(자료 행 → 파일 행)로 잠근다. file_texts·file_extracts 를 먼저 쓰면 외래 키 검사로 파일 행에
+    # 공유 잠금이 걸리고, 그 뒤 자료 행을 잠그려다 확정(자료 행 잠금 → 파일 행 수정)과 서로 기다려 MySQL 1213 교착이 났다
+    # (올린 직후 확정하면 500). 그래서 호선을 찾았으면 자식 행을 쓰기 전에 자료 행부터 잠근다.
+    hull_no = find_doc_hull(result.chunks)
+    entry = _lock_entry(db, f) if hull_no else None
+    row = _row(db, f)
     db.query(models.FileText).filter_by(file_id=f.id).delete(synchronize_session=False)
     for seq, (loc, text) in enumerate(result.chunks):
         db.add(models.FileText(file_id=f.id, seq=seq, locator=loc[:120], text=text))
     row.state, row.error = "done", None
     row.summary = {**result.summary, "truncated": result.truncated}
     row.chars = result.chars
-    hull_no = find_doc_hull(result.chunks)
     if hull_no:
-        _apply_doc_hull(db, f, hull_no)
+        _apply_doc_hull(db, f, hull_no, entry=entry)
     db.commit()

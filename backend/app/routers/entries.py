@@ -160,7 +160,9 @@ def unreview_entry(entry_id: str, request: Request, db: Session = Depends(get_db
 def confirm_entry(entry_id: str, request: Request, force: bool = False, db: Session = Depends(get_db),
                   storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
     # 17 — 완전 동일 BDF 가 그 사이 생겼으면 409 duplicate_model. force=true 는 LV3 만(감사 after.duplicates_forced)
-    e = service.confirm(db, storage, _entry(db, entry_id, user), user, client_ip(request), force=force)
+    # 2026-11-23 — MySQL 1213 교착이면 한 번 더(service.with_deadlock_retry). 자료는 시도마다 다시 읽는다
+    e = service.with_deadlock_retry(
+        db, lambda: service.confirm(db, storage, _entry(db, entry_id, user), user, client_ip(request), force=force))
     return _detail(db, storage, e, user)
 
 
