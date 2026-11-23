@@ -63,6 +63,8 @@ test('머리말·파일 트리·첫 보고서 미리보기·변경 이력', asyn
   expect(await screen.findByTitle('PDF 미리보기')).toBeInTheDocument();
   const tree = screen.getByRole('tree', { name: '파일' });
   expect(within(tree).getByText('model')).toBeInTheDocument();
+  // 2026-11-23 — 미리보기가 파일 트리보다 위(자료를 열면 먼저 보이게)
+  expect(screen.getByTitle('PDF 미리보기').compareDocumentPosition(tree) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   const hist = screen.getByRole('list', { name: '변경 이력' });
   expect(await within(hist).findByText('김해석')).toBeInTheDocument();
   expect(within(hist).getByText('제목: 옛 제목 → 계류 구조 검토')).toBeInTheDocument();

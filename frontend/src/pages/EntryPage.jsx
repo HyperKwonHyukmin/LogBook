@@ -895,18 +895,19 @@ export default function EntryPage() {
               {notice && <p role="status" className="mt-2 text-meta text-ok">{notice}</p>}
             </div>
           )}
+          {/* 2026-11-23 — 자료를 열면 먼저 "이 모델이 맞나"를 보므로 미리보기를 파일 트리 위에 둔다(파일이 많으면 1366px 에서 스크롤해야 보였다) */}
+          <div className="mb-4">
+            {file && <SameModelNotice model={file.model} />}
+            {file ? <FilePreview key={file.id} file={file} vaultUnc={entry.vault_unc} trashed={trashed} hideTitles={[entry.title]} showName
+                                    hull={entry.hulls[0]?.hull_no || ''} />
+              : <p className="text-ui text-n-500">파일이 없습니다.</p>}
+          </div>
           <ul role="tree" aria-label="파일" onKeyDown={onTreeKeyDown} className="flex flex-col gap-px">
             <TreeNodes nodes={buildTree(entry.files)} selectedId={file?.id} onPick={setPicked} entryId={entry.entry_id}
                        removal={editing ? { marked: removing, toggle: toggleRemove, lastLeft: entry.files.length - removeIds.length <= 1 } : null}
                        newIds={addedIds} />
           </ul>
           {editable && <RemovedFiles files={entry.removed_files} busy={restoring || editing} onRestore={restoreFiles} />}
-          <div className="mt-4">
-            {file && <SameModelNotice model={file.model} />}
-            {file ? <FilePreview key={file.id} file={file} vaultUnc={entry.vault_unc} trashed={trashed} hideTitles={[entry.title]} showName
-                                    hull={entry.hulls[0]?.hull_no || ''} />
-              : <p className="text-ui text-n-500">파일이 없습니다.</p>}
-          </div>
           {/* 63 — 자료 의견과 이슈(확정 자료만) */}
           <EntryComments entryId={entry.entry_id} status={entry.status} onCounts={setCommentCounts} />
         </div>
