@@ -220,21 +220,57 @@ def test_warm_fills_cache_so_graph_request_does_not_recompute(db, make_entry_fil
     assert rf.warm(None) == 0
 
 
-def test_warm_in_batches_with_pause(db, make_entry_file, monkeypatch):
-    """2026-11-19 — 끊어 계산하고 사이에 쉰다(검색 요청에 틈을 준다). 끊어도 모두 캐시에 들어간다."""
-    e, a = make_entry_file(title="끊어 계산", name="가.pdf")
-    files = [a] + [make_entry_file(entry=e, name=f"{n}.pdf")[1] for n in ("나", "다", "라", "마", "바")]
+def test_warm_computes_in_child_process(db, make_entry_file, monkeypatch):
+    """2026-11-23 — 미리 계산을 API 프로세스 안의 스레드에서 하면 파이썬 잠금(GIL)을 쥐고 있어 같은 프로세스의 검색이
+    수십 배 느려졌다(145 측정: Update 60초 뒤 검색 27.8초). 많이 계산할 때는 별도 프로세스에서 하고 이 프로세스는 받기만 한다."""
+    e, a = make_entry_file(title="별도 프로세스", name="가.pdf")
+    files = [a] + [make_entry_file(entry=e, name=f"{n}.pdf")[1] for n in ("나", "다")]
     store = None
     for i, f in enumerate(files):
-        store = _index(f, e, _text(20 + i))
+        store = _index(f, e, _text(30 + i))
     rf.clear_cache()
-    sleeps = []
-    import time as time_mod
-    monkeypatch.setattr(time_mod, "sleep", lambda s: sleeps.append(s))
-    assert rf.warm(store, pause=0.05) >= 6
-    assert sleeps and all(s == 0.05 for s in sleeps)   # 6건 이상 = 4건씩 끊어 사이에 쉼
-    monkeypatch.setattr(rf, "_build", lambda *a, **k: pytest.fail("미리 계산한 보고서를 다시 계산했다"))
-    assert {f.id for f in files} <= set(rf.features(store, [f.id for f in files]))
+    expected = {fid: feat for fid, (_k, feat) in rf._compute(store, [f.id for f in files]).items()}
+    rf.clear_cache()
+    monkeypatch.setattr(rf, "CHILD_MIN", 2)
+    # 이 프로세스에서 계산하면 실패(자식 프로세스는 이 바꿔치기를 모른다)
+    monkeypatch.setattr(rf, "_compute", lambda *a, **k: pytest.fail("API 프로세스 안에서 계산했다"))
+    assert rf.warm(store) >= 3   # 같은 파일의 앞 시험이 넣은 보고서도 색인에 남아 있다
+    got = rf.features(store, [f.id for f in files])
+    for fid, feat in expected.items():
+        assert np.array_equal(got[fid].minhash, feat.minhash) and got[fid].pages == feat.pages
+
+
+def test_child_timeout_kills_child_instead_of_waiting():
+    """Codex 검토(2026-11-23) — with ProcessPoolExecutor 는 빠져나갈 때 자식이 끝날 때까지 기다려 타임아웃이 무의미했다.
+    시간을 넘기면 자식을 끝내고 바로 돌아와야 한다(그래야 이 프로세스에서 다시 계산하는 대체 경로로 간다)."""
+    import time
+    started = time.monotonic()
+    with pytest.raises(TimeoutError):
+        rf._run_child(time.sleep, (60,), timeout=2)
+    assert time.monotonic() - started < 20
+
+
+def test_few_misses_are_computed_in_process(db, make_entry_file, monkeypatch):
+    """새로 계산할 것이 적으면(색인 워커가 한두 건 다시 색인) 프로세스를 띄우지 않고 바로 계산한다."""
+    e, a = make_entry_file(title="적게", name="가.pdf")
+    store = _index(a, e, _text(40))
+    rf.clear_cache()
+    monkeypatch.setattr(rf, "_compute_out_of_process", lambda *a, **k: pytest.fail("한 건에 프로세스를 띄웠다"))
+    assert a.id in rf.features(store, [a.id])
+
+
+def test_child_failure_falls_back_to_in_process(db, make_entry_file, monkeypatch):
+    e, a = make_entry_file(title="자식 실패", name="가.pdf")
+    _, b = make_entry_file(entry=e, name="나.pdf")
+    _index(a, e, _text(41))
+    store = _index(b, e, _text(42))
+    rf.clear_cache()
+    monkeypatch.setattr(rf, "CHILD_MIN", 1)
+
+    def boom(*_a, **_k):
+        raise OSError("spawn 실패")
+    monkeypatch.setattr(rf, "_compute_out_of_process", boom)
+    assert {a.id, b.id} <= set(rf.features(store, [a.id, b.id]))
 
 
 def test_startup_warmup_switch(monkeypatch):
@@ -242,7 +278,7 @@ def test_startup_warmup_switch(monkeypatch):
     from app import main
     from app.report_index import features as feats_mod
     called = threading.Event()
-    monkeypatch.setattr(feats_mod, "warm", lambda store, pause=0.0: called.set() or 0)
+    monkeypatch.setattr(feats_mod, "warm", lambda store: called.set() or 0)
     monkeypatch.setenv("LOGBOOK_GRAPH_WARMUP_DELAY", "0")
     monkeypatch.setenv("LOGBOOK_GRAPH_WARMUP", "0")
     main._start_report_features_warmup()

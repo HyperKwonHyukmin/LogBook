@@ -7,10 +7,12 @@
 
 저장하지 않는다. API 프로세스 안에 파일별로 (색인 행의 sha256·indexed_at·벡터 수·모델) 열쇠와 함께 들고 있다가,
 열쇠가 바뀐 파일만 다시 계산한다(색인 워커가 다시 색인하면 indexed_at 이 바뀐다). 서버를 다시 띄운 뒤에는 모든 보고서의
-조각 본문을 한 번 읽어야 해서(보고서 232건에 약 30초) 서버 시작 때 백그라운드에서 미리 계산한다(warm, main.lifespan).
+조각 본문을 한 번 읽어야 해서(보고서 232건에 약 30초) 서버 시작 때 미리 계산한다(warm, main.lifespan).
+많이 계산할 때는 별도 프로세스에서 한다(CHILD_MIN — API 프로세스 안에서 돌면 같은 프로세스의 요청이 수십 배 느려졌다, 2026-11-23).
 
 권한·현재성은 이 모듈이 보지 않는다 — 부르는 쪽이 볼 수 있고 '현재'인(search.current_document) 파일만 넘긴다.
 """
+import logging
 import re
 import threading
 import zlib
@@ -19,6 +21,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from .store import GROUP
+
+log = logging.getLogger(__name__)
 
 SHINGLE = 5            # 글자 조각 길이 — 한국어 낱말 2~3개 정도
 PERMS = 64             # MinHash 개수(자카드 추정 오차 약 ±0.06)
@@ -112,45 +116,39 @@ def features(store, file_ids) -> dict[int, Feature]:
         return _features(store, ids)
 
 
-WARM_BATCH = 4   # 미리 계산을 이만큼씩 끊어 하고 사이에 쉰다(아래 pause)
+# 2026-11-23 — 새로 계산할 보고서가 이만큼 이상이면 별도 프로세스에서 계산한다. 계산은 파이썬 반복(본문 글자마다 crc32)이라
+# API 프로세스 안의 스레드에서 돌면 파이썬 잠금(GIL)을 거의 놓지 않고, 그동안 같은 프로세스의 요청은 DB 를 한 번 오갈 때마다
+# 잠금을 다시 기다린다. 145 측정: Update 60초 뒤 미리 계산이 돈 35초 동안 검색 0.25 → 27.8초, 화면 JS 0.1 → 3.0초(흰 화면).
+# 적게(색인 워커가 한두 건 다시 색인) 바뀐 것은 프로세스를 띄우는 비용(약 1~2초)이 더 커서 이 프로세스에서 바로 계산한다.
+CHILD_MIN = 8
+CHILD_TIMEOUT = 180   # 145 보고서 232건 약 30초. 넘기면 자식을 끝내고 이 프로세스에서 계산한다
 
 
-def warm(store, pause: float = 0.0) -> int:
+def warm(store) -> int:
     """색인된 모든 보고서의 특징을 미리 계산해 캐시에 넣는다(서버 시작 때 백그라운드에서 한 번). 넣은 수를 돌려준다.
-    이것이 없으면 서버를 다시 띄운 뒤 관계 지도를 처음 연 사람이 모든 보고서 본문을 읽는 시간을 기다린다(145 보고서 232건에서 약 30초, 2026-11-18 사용자 신고 — 본문 글자당 약 1.2µs).
-    pause(초) — WARM_BATCH 건마다 쉰다(2026-11-19). 계산은 파이썬 반복이라 도는 동안 같은 프로세스의 검색, 썸네일 요청과
-    처리 시간을 나눠 쓴다(업데이트 직후 검색이 느리다는 신고). 쉬는 틈에 요청이 먼저 돈다. 끊어도 캐시는 건마다 쌓인다."""
-    import time
-
+    이것이 없으면 서버를 다시 띄운 뒤 관계 지도를 처음 연 사람이 모든 보고서 본문을 읽는 시간을 기다린다(145 보고서 232건에서 약 30초,
+    2026-11-18 사용자 신고 — 본문 글자당 약 1.2µs). 2026-11-23 — 한 번에 넘겨 별도 프로세스가 계산한다(CHILD_MIN).
+    예전(11-19)의 '4건씩 끊고 쉬기'로는 잠금 문제가 풀리지 않았다."""
     if store is None:
         return 0
     with store.read() as db:
         ids = [row["file_id"] for row in db.execute(
             "SELECT file_id FROM documents WHERE active=1 AND state IN ('ready', 'partial') AND chunk_count > 0")]
-    done = 0
-    for i in range(0, len(ids), WARM_BATCH):
-        done += len(features(store, ids[i:i + WARM_BATCH]))
-        if pause > 0 and i + WARM_BATCH < len(ids):
-            time.sleep(pause)
-    return done
+    return len(features(store, ids))
 
 
-def _features(store, ids: list[int]) -> dict[int, Feature]:
-    path = str(store.path.resolve())
-    out: dict[int, Feature] = {}
+def _docs(store, ids, db=None) -> dict:
+    """색인 행 중 특징을 계산할 수 있는 것(ready·partial 이고 조각이 있음)."""
+    return {fid: d for fid, d in store.document_rows(ids, db=db).items()
+            if d["state"] in ("ready", "partial") and d["chunk_count"]}
+
+
+def _compute(store, ids: list[int]) -> dict[int, tuple[tuple, Feature]]:
+    """ids 의 특징을 색인 조각에서 새로 계산한다(캐시를 보지도 채우지도 않는다). file_id → (열쇠, 특징)."""
+    fresh: dict[int, tuple[tuple, Feature]] = {}
     with store.read() as db:
-        docs = {fid: d for fid, d in store.document_rows(ids, db=db).items()
-                if d["state"] in ("ready", "partial") and d["chunk_count"]}
-        with _lock:
-            cached = dict(_cache.get(path, {}))
-        todo = []
-        for fid, d in docs.items():
-            hit = cached.get(fid)
-            if hit and hit[0] == _key(d):
-                out[fid] = hit[1]
-            else:
-                todo.append(fid)
-        fresh: dict[int, tuple[tuple, Feature]] = {}
+        docs = _docs(store, ids, db=db)
+        todo = [fid for fid in ids if fid in docs]
         for i in range(0, len(todo), GROUP):
             group = todo[i:i + GROUP]
             marks = ",".join("?" * len(group))
@@ -174,10 +172,68 @@ def _features(store, ids: list[int]) -> dict[int, Feature]:
                     vec = (vec / norm).astype(np.float32) if norm > 0 else None
                 feat = _build(chunks[fid], vec, docs[fid]["embedding_model"] if vec is not None else None)
                 fresh[fid] = (_key(docs[fid]), feat)
-                out[fid] = feat
+    return fresh
+
+
+def _compute_child(index_path: str, ids: list[int]) -> dict[int, tuple[tuple, Feature]]:
+    """별도 프로세스(spawn)에서 돈다 — 색인을 경로로 다시 열어 계산하고 결과만 돌려준다."""
+    from .store import open_store
+    return _compute(open_store(index_path), ids)
+
+
+def _run_child(fn, args: tuple, timeout: float):
+    """fn(*args) 를 새 프로세스(spawn) 하나에서 돌려 결과를 돌려준다. 기다리는 동안 이 프로세스는 잠금(GIL)을 놓고 있어 다른 요청이 그대로 돈다.
+    timeout 을 넘기면 자식을 끝내고 TimeoutError — `with ProcessPoolExecutor` 는 빠져나갈 때 자식이 끝날 때까지 기다려
+    타임아웃이 무의미했다(Codex 검토 2026-11-23). 3.11 에는 실행 중인 작업을 끝내는 공개 API 가 없어 풀의 프로세스를 직접 끝낸다.
+    API 프로세스가 강제로 꺼지면(Server Manager Update/Stop) 자식은 남아 계산을 마치고(최대 약 30초) 부모가 없어 스스로 끝난다."""
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor
+
+    pool = ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn"))
+    try:
+        return pool.submit(fn, *args).result(timeout=timeout)
+    except TimeoutError:
+        for proc in list((getattr(pool, "_processes", None) or {}).values()):
+            proc.terminate()
+        raise
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
+def _compute_out_of_process(store, ids: list[int]) -> dict[int, tuple[tuple, Feature]]:
+    """새로 계산할 것을 별도 프로세스에서 계산한다(CHILD_MIN)."""
+    return _run_child(_compute_child, (str(store.path), ids), CHILD_TIMEOUT)
+
+
+def _features(store, ids: list[int]) -> dict[int, Feature]:
+    path = str(store.path.resolve())
+    out: dict[int, Feature] = {}
+    with store.read() as db:
+        docs = _docs(store, ids, db=db)
     with _lock:
-        bucket = _cache.setdefault(path, {})
-        bucket.update(fresh)
+        cached = dict(_cache.get(path, {}))
+    todo = []
+    for fid, d in docs.items():
+        hit = cached.get(fid)
+        if hit and hit[0] == _key(d):
+            out[fid] = hit[1]
+        else:
+            todo.append(fid)
+    if not todo:
+        return out
+    fresh = None
+    if len(todo) >= CHILD_MIN:
+        try:
+            fresh = _compute_out_of_process(store, todo)
+        except Exception:  # noqa: BLE001 — 프로세스를 못 띄우면(권한, 보안 프로그램 등) 예전처럼 이 프로세스에서
+            log.warning("보고서 특징을 별도 프로세스에서 계산하지 못해 이 프로세스에서 계산합니다", exc_info=True)
+    if fresh is None:
+        fresh = _compute(store, todo)
+    fresh = {fid: v for fid, v in fresh.items() if fid in docs}
+    for fid, (_k, feat) in fresh.items():
+        out[fid] = feat
+    with _lock:
+        _cache.setdefault(path, {}).update(fresh)
     return out
 
 

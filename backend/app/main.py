@@ -79,8 +79,9 @@ def _start_report_features_warmup() -> None:
     """관계 지도의 문서 관계(32)에 쓰는 보고서 본문 특징을 서버 시작 직후 백그라운드에서 미리 계산한다.
     안 하면 재시작 뒤 관계 지도를 처음 연 사람이 약 30초 기다린다(report_index.features.warm).
     LOGBOOK_GRAPH_WARMUP=0 이면 끈다(테스트). 실패해도 기동·화면에는 영향이 없다 — 그때는 첫 요청이 계산한다.
-    2026-11-19 — 업데이트 직후 검색이 느리다는 신고: 시작 직후(사람들이 새로고침하는 때)를 피해 LOGBOOK_GRAPH_WARMUP_DELAY 초
-    (기본 60) 뒤에 시작하고, 보고서 몇 건마다 쉬며 계산한다(features.warm pause)."""
+    2026-11-19 — 업데이트 직후 검색이 느리다는 신고로 60초 뒤에 시작하고 끊어 쉬며 계산하게 했지만 풀리지 않았다(오히려 Update 뒤
+    1분쯤 화면을 여는 때와 겹쳤다). 2026-11-23 — 원인은 이 프로세스 안의 파이썬 계산이 잠금(GIL)을 쥐는 것이라 계산을 별도 프로세스로
+    옮겼다(features.CHILD_MIN). 시작은 LOGBOOK_GRAPH_WARMUP_DELAY 초(기본 5) 뒤."""
     import os
     import threading
     import time
@@ -89,9 +90,9 @@ def _start_report_features_warmup() -> None:
         return
 
     try:
-        delay = max(0.0, float(os.getenv("LOGBOOK_GRAPH_WARMUP_DELAY", "60")))
+        delay = max(0.0, float(os.getenv("LOGBOOK_GRAPH_WARMUP_DELAY", "5")))
     except ValueError:
-        delay = 60.0
+        delay = 5.0
 
     def run():
         from .report_index import features as report_features
@@ -100,7 +101,7 @@ def _start_report_features_warmup() -> None:
         time.sleep(delay)
         started = time.perf_counter()
         try:
-            count = report_features.warm(get_report_index(), pause=0.05)
+            count = report_features.warm(get_report_index())
             log.info("보고서 본문 특징 미리 계산: %d건, %.1f초", count, time.perf_counter() - started)
         except Exception:  # noqa: BLE001
             log.warning("보고서 본문 특징 미리 계산 실패 — 첫 관계 지도 요청이 계산합니다", exc_info=True)
