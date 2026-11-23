@@ -21,6 +21,7 @@ const EXACT = {
   '/compares': '최근 비교',
   '/comments': '새 의견',   // 63
   '/notes': '나의 메모',    // 64
+  '/targets': '업무별 모음',   // 69
 };
 
 /** pathname(+ 화면이 아는 이름) → 탭 제목. name 은 자료 제목·파일 이름처럼 그 화면만 아는 값(없으면 번호로). */
@@ -32,10 +33,12 @@ export function pageTitle(pathname, name = '') {
     const entry = path.match(/^\/e\/([^/]+)$/);
     const file = path.match(/^\/v\/([^/]+)$/);
     const person = path.match(/^\/p\/([^/]+)$/);   // 67 — 담당자 프로필 카드
+    const target = path.match(/^\/t\/([^/]+)$/);   // 69 — 업무별 모음
     if (hull) label = `${decodeURIComponent(hull[1])} 호선`;
     else if (entry) label = name || decodeURIComponent(entry[1]);
     else if (file) label = name || '파일 보기';
     else if (person) label = name ? `${name} 담당자` : '담당자';
+    else if (target) label = `${decodeURIComponent(target[1])} 업무`;
     else if (path.startsWith('/admin')) label = '관리';
   }
   return label ? `${label} - ${APP_NAME}` : APP_NAME;

@@ -22,6 +22,7 @@ import Spinner from '../components/ui/Spinner.jsx';
 import { ErrorNote, Page, SectionTitle } from '../components/ui/Page.jsx';
 import { Bar } from '../components/ui/Skeleton.jsx';
 import { FilterLink, StatusDot, TagLink } from '../components/ui/Status.jsx';
+import { OTHER_TARGET, targetHref } from '../lib/targets.js';
 import { filterHref } from '../lib/search.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import { copyText } from '../lib/files.js';
@@ -969,7 +970,15 @@ export default function EntryPage() {
                             valueHref={(v) => filterHref('zone', v)} />
               </Prop>
               <Prop label="대상">
-                {entry.target ? <FilterLink field="target" value={entry.target} /> : <span className="text-n-500">—</span>}
+                {entry.target ? (
+                  <span className="inline-flex min-w-0 items-center gap-2">
+                    <FilterLink field="target" value={entry.target} />
+                    {/* 69 — 같은 업무의 실적, 기초 자료, 담당자를 모은 화면 */}
+                    {entry.target !== OTHER_TARGET && (
+                      <Link to={targetHref(entry.target)} className="shrink-0 text-meta text-brand hover:underline">업무별 모음</Link>
+                    )}
+                  </span>
+                ) : <span className="text-n-500">—</span>}
               </Prop>
               <Prop label="태그">
                 {entry.tags.length ? <span className="flex flex-wrap gap-1">{entry.tags.map((t) => <TagLink key={t} tag={t} />)}</span>

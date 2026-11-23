@@ -4,6 +4,8 @@ test('화면마다 탭 제목이 다르다', () => {
   expect(pageTitle('/')).toBe(`검색 - ${APP_NAME}`);
   expect(pageTitle('/inbox')).toBe(`올리기와 확정 - ${APP_NAME}`);
   expect(pageTitle('/h/3515')).toBe(`3515 호선 - ${APP_NAME}`);
+  expect(pageTitle('/targets')).toBe(`업무별 모음 - ${APP_NAME}`);   // 69
+  expect(pageTitle('/t/Module%20Unit')).toBe(`Module Unit 업무 - ${APP_NAME}`);
   expect(pageTitle('/e/E000019')).toBe(`E000019 - ${APP_NAME}`);
   expect(pageTitle('/e/E000019', '3515 sidepassage')).toBe(`3515 sidepassage - ${APP_NAME}`);
   expect(pageTitle('/p/7')).toBe(`담당자 - ${APP_NAME}`);   // 67

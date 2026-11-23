@@ -1,5 +1,5 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Anchor, Grid2x2Check, History, Inbox, NotebookPen, ScanSearch, Search, Settings, Trash2 } from 'lucide-react';
+import { Anchor, Grid2x2Check, History, Inbox, Library, NotebookPen, ScanSearch, Search, Settings, Trash2 } from 'lucide-react';
 import Spinner from '../ui/Spinner.jsx';
 import { useInboxSummary } from './InboxSummary.jsx';
 
@@ -14,6 +14,8 @@ const GROUPS = [
     { to: '/', label: '검색', icon: Search,
       match: (path) => path === '/' || IN_SEARCH.some((p) => path.startsWith(p)) },
     { to: '/hulls', label: '호선', icon: Anchor, also: ['/h/'] }, // 호선 화면(/h/9999)도 '호선' 메뉴 아래
+    // 69 — 업무별 모음(대상 화면 /t/Unit). 2026-11-23 사용자 결정으로 메뉴 8 → 9(호선과 같은 목적지 화면이라 탭으로 숨기면 찾지 못한다)
+    { to: '/targets', label: '업무별 모음', icon: Library, also: ['/t/'] },
     { to: '/similar', label: '비슷한 모델 찾기', icon: ScanSearch }, // 27 — 기준 BDF 와 비슷한 확정 모델
     { to: '/graph', label: '자료 현황', icon: Grid2x2Check, also: ['/coverage'] }, // 25 관계 지도 · 26 갖춤 현황(첫 탭이 관계 지도, 2026-11-06)
     // 64 — 나의 메모(개인 지식 노트). 2026-11-19 사용자 결정으로 메뉴 7 → 8(날마다 따로 찾아 들어가는 화면이라)

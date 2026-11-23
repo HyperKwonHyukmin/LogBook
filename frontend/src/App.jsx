@@ -10,6 +10,8 @@ import BrowsePage from './pages/BrowsePage.jsx';
 import EntryPage from './pages/EntryPage.jsx';
 import HullPage from './pages/HullPage.jsx';
 import PersonPage from './pages/PersonPage.jsx';
+import TargetsPage from './pages/TargetsPage.jsx';
+import TargetPage from './pages/TargetPage.jsx';
 import HullsPage from './pages/HullsPage.jsx';
 import InboxPage from './pages/InboxPage.jsx';
 import RecentComparesPage from './pages/RecentComparesPage.jsx';
@@ -59,6 +61,8 @@ export default function App() {
             <Route path="hulls" element={<HullsPage />} />
             <Route path="h/:hullNo" element={<HullPage />} />
             <Route path="e/:entryId" element={<EntryPage />} />
+            <Route path="targets" element={<TargetsPage />} />   {/* 69 — 업무별 모음 */}
+            <Route path="t/:value" element={<TargetPage />} />
             <Route path="p/:personKey" element={<PersonPage />} />   {/* 67 — 담당자 프로필 카드 */}
             <Route path="v/:fileId" element={<ViewerPage />} />
             <Route path="compare" element={<Suspense fallback={null}><ComparePage /></Suspense>} />
