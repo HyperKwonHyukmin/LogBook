@@ -87,6 +87,7 @@ export const ERROR_LABELS = {
   bdf_model_error: 'BDF 를 모델로 읽지 못했습니다. 카드 형식을 확인해 주세요.',
   version_conflict: '다른 사람이 먼저 고쳤습니다. 최신 내용으로 다시 불러왔습니다.',
   not_uploader: '작성자만 할 수 있습니다.',
+  owner_required: '초안 사이에서 파일을 옮기거나 합치는 일은 올린 사람만 할 수 있습니다.',
   // 53 — 검토 서명
   conclusion_required: '결론 한 줄이 있어야 검토 서명을 할 수 있습니다.',
   own_entry: '작성자 본인은 검토 서명을 할 수 없습니다.',

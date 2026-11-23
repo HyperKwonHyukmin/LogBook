@@ -1,9 +1,10 @@
 import { CircleAlert } from 'lucide-react';
 
-/** 표준 페이지 컨테이너 1종 — 검색(3-pane)을 뺀 모든 화면이 이것을 쓴다. */
-export function Page({ children, className = '' }) {
+/** 표준 페이지 컨테이너 1종 — 검색(3-pane)을 뺀 모든 화면이 이것을 쓴다.
+ * wide(68) — 목록 + 상세 두 칸 화면(올리기와 확정). 상세 칸이 예전 한 칸 카드 폭을 지키게 넓힌다. */
+export function Page({ children, className = '', wide = false }) {
   return (
-    <div className={`mx-auto w-full max-w-[1200px] px-6 py-6 min-[1441px]:px-8 ${className}`}>{children}</div>
+    <div className={`mx-auto w-full ${wide ? 'max-w-[1680px]' : 'max-w-[1200px]'} px-6 py-6 min-[1441px]:px-8 ${className}`}>{children}</div>
   );
 }
 

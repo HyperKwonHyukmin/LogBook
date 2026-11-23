@@ -25,6 +25,7 @@ from .routers import people as people_router
 from .routers import comments as comments_router
 from .routers import notes as notes_router
 from .routers import updates as updates_router
+from .routers import inbox as inbox_router
 from .spa import mount_spa
 from .vocab import safe_seed
 from .wb_targets import safe_seed as safe_seed_wb_rules
@@ -116,6 +117,7 @@ def create_app(frontend_dist: Path | None | object = _USE_DEFAULT) -> FastAPI:
     app.include_router(users.router)
     app.include_router(system.router)
     app.include_router(batches.router)
+    app.include_router(inbox_router.router)   # 68 — 올리기와 확정 줄 목록
     app.include_router(entries.router)
     app.include_router(people_router.router)   # 46 — 담당자 명부
     app.include_router(draft_attachments_router.router)

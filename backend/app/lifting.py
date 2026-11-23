@@ -53,12 +53,13 @@ def is_wire_model(f: models.File, summary: models.ModelSummary | None) -> bool:
     return name_is_lifting(f.name)
 
 
-def is_mu(db: Session, target: str | None, programs) -> bool:
+def is_mu(db: Session, target: str | None, programs, target_vocab: "vocab.Vocab | None" = None) -> bool:
+    """target_vocab — 여러 자료를 한 번에 볼 때(68 줄 목록) 미리 읽은 대상 어휘(없으면 읽는다)."""
     if any(p in MU_PROGRAMS for p in programs or []):
         return True
     if not target:
         return False
-    canon = vocab.Vocab(db, "target").canon(target) or target
+    canon = (target_vocab or vocab.Vocab(db, "target")).canon(target) or target
     return vocab.key(canon) in {vocab.key(t) for t in MU_TARGETS}
 
 

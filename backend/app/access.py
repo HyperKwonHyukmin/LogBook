@@ -21,7 +21,7 @@
 """
 from fastapi import HTTPException
 from sqlalchemy import and_, false, func, or_, select, true
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from . import models
 
@@ -90,6 +90,8 @@ def visible_entries_filter(user):
         and_(E.uploaded_by.isnot(None), E.uploaded_by == user.employee_id),
         E.id.in_(select(models.EntryGrant.entry_id).where(models.EntryGrant.employee_id == user.employee_id)),
         and_(E.status == "confirmed", E.id.in_(_wb_runner_entry_ids(user.employee_id))),
+        # 68 — 사번이 연결된 담당자는 자기가 맡은 초안을 본다(확정되면 다른 자료와 같은 규칙)
+        and_(E.status == "draft", E.id.in_(_draft_assignee_ids(user.employee_id))),
     ]
     if lv >= 2:
         conds.append(E.access != "blocked")
@@ -104,6 +106,27 @@ def _wb_runner_entry_ids(employee_id):
     return (select(F.entry_id).join(B, B.id == F.batch_id)
             .where(B.wb_analysis_id.isnot(None), F.entry_id.isnot(None), F.location != "trash",
                    owner == (employee_id or "").strip().upper()))
+
+
+def _draft_assignee_ids(employee_id):
+    """68 — 이 사번이 담당자(명부의 사번 연결)로 붙은 Entry id(SQL 부분 질의). 초안 조건은 부르는 쪽이 붙인다.
+    명부 사번은 people._from_wb 가 대문자로 남긴다."""
+    EA, P = models.EntryAssignee, models.Person
+    eid = (employee_id or "").strip().upper()
+    return (select(EA.entry_id).join(P, P.id == EA.person_id)
+            .where(P.employee_id.isnot(None), P.employee_id == eid))
+
+
+def is_draft_assignee(user, entry: models.Entry | None, db: Session | None = None) -> bool:
+    """68 결정 1 — 이 사용자가 이 **초안**의 담당자인가(사번이 연결된 명부 사람만). 확정·휴지통 자료는 늘 거짓.
+    담당자는 그 초안을 보고, 고치고, 파일을 첨부하고, 확정할 수 있다(버리기와 공개 범위는 올린 사람과 LV3 만)."""
+    if user is None or entry is None or entry.status != "draft" or not getattr(user, "employee_id", None):
+        return False
+    db = db or object_session(entry)
+    if db is None or entry.id is None:
+        return False
+    sub = _draft_assignee_ids(user.employee_id).where(models.EntryAssignee.entry_id == entry.id).limit(1)
+    return db.execute(sub).first() is not None
 
 
 def is_wb_runner(db: Session, user, entry: models.Entry) -> bool:
@@ -131,6 +154,8 @@ def can_view_entry(user, entry: models.Entry | None, grants=None, db: Session | 
     if entry.uploaded_by and entry.uploaded_by == user.employee_id:
         return True
     if lv >= 2 and a != "blocked":
+        return True
+    if is_draft_assignee(user, entry, db):   # 68
         return True
     if grants is None:
         grants = _grant_holders(db, entry) if db is not None else set()
@@ -185,7 +210,15 @@ def can_unreview(user, entry: models.Entry) -> bool:
 
 
 def can_edit_entry(user, entry: models.Entry) -> bool:
-    """Entry 수정·휴지통·복원·파일 추가·판 정리 — 올린 사람(LV1 이상) 또는 LV3."""
+    """Entry 수정·휴지통·복원·파일 추가·판 정리 — 올린 사람(LV1 이상) 또는 LV3.
+    68 — 초안이면 담당자도(고치기, 첨부, 나누기와 합치기). 초안 버리기와 공개 범위는 can_own_entry 로 따로 막는다."""
+    if user is None or not can_write(user):
+        return False
+    return is_admin(user) or is_uploader(user, entry) or is_draft_assignee(user, entry)
+
+
+def can_own_entry(user, entry: models.Entry) -> bool:
+    """68 — 담당자에게는 주지 않는 일(초안 버리기, 공개 범위와 허락) — 올린 사람(LV1 이상) 또는 LV3."""
     if user is None or not can_write(user):
         return False
     return is_admin(user) or is_uploader(user, entry)
@@ -198,8 +231,8 @@ def ensure_can_edit(user, entry: models.Entry) -> None:
 
 
 def can_manage_access(user, entry: models.Entry) -> bool:
-    """공유/일반 바꾸기·개별 허락 — 올린 사람 + LV3. 블록된 자료는 LV3 만(올린 사람도 못 바꾼다)."""
-    if not can_edit_entry(user, entry):
+    """공유/일반 바꾸기·개별 허락 — 올린 사람 + LV3. 블록된 자료는 LV3 만(올린 사람도 못 바꾼다). 68 — 담당자는 아니다."""
+    if not can_own_entry(user, entry):
         return False
     return is_admin(user) or access_of(entry) != "blocked"
 
@@ -207,6 +240,8 @@ def can_manage_access(user, entry: models.Entry) -> bool:
 def ensure_can_manage_access(user, entry: models.Entry, new_access: str | None = None) -> None:
     """공개 단계 바꾸기·허락 주기/회수 권한. new_access='blocked' 이거나 지금 블록이면 LV3 만(403 level3_required)."""
     ensure_can_edit(user, entry)
+    if not can_own_entry(user, entry):   # 68 — 초안 담당자는 고칠 수는 있어도 공개 범위는 못 바꾼다
+        raise HTTPException(status_code=403, detail="not_uploader")
     if not is_admin(user) and (access_of(entry) == "blocked" or new_access == "blocked"):
         raise HTTPException(status_code=403, detail="level3_required")
 

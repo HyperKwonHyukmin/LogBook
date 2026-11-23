@@ -72,7 +72,11 @@ def test_summary_counts_my_drafts_and_in_flight(client, db, make_user, auth_head
     """62 — 메뉴 배지·다른 창 안내·같은 이름 경고용 요약. 남의 것·오래된 올리기·확정만 남은 묶음은 세지 않는다."""
     from datetime import datetime, timedelta
     make_user("A100001")
-    _batch(db, "k-mine", "A100001")                       # 초안 1
+    _b1, e1 = _batch(db, "k-mine", "A100001")             # 초안 1
+    # 68 — 배지는 파일이 있는 초안만 센다(파일 0개 '파일 기다림' 초안은 늘 큰 숫자가 되어 빼므로 파일을 하나 붙인다)
+    db.add(models.File(batch_id=_b1.id, entry_id=e1.id, rel_path="a.pdf", name="a.pdf", ext=".pdf", kind="report",
+                       size=1, sha256="1" * 64, location="staging"))
+    _batch(db, "k-empty", "A100001")                      # 68 — 파일 0개 초안은 세지 않는다
     b2, e2 = _batch(db, "k-done", "A100001")              # 초안을 확정해 할 일 없음
     e2.status = "confirmed"
     _batch(db, "k-other", "B200002")
@@ -85,5 +89,5 @@ def test_summary_counts_my_drafts_and_in_flight(client, db, make_user, auth_head
     assert r.status_code == 200
     d = r.json()
     assert (d["drafts"], d["staged"], d["uploading"]) == (1, 1, 1)
-    assert sorted(n["name"] for n in d["names"]) == ["6_Rudder", "7_Skeg", "k-mine"]
+    assert sorted(n["name"] for n in d["names"]) == ["6_Rudder", "7_Skeg", "k-empty", "k-mine"]
     assert client.get("/api/batches/summary").status_code == 401

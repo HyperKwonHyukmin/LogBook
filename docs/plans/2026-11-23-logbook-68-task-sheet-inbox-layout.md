@@ -170,6 +170,21 @@
   그 뒤 보고서 호선을 넣으려 자료 행을 잠갔다. 확정은 자료 행 잠금 → 파일 행 수정이라 서로 기다렸다. 추출이 호선을 찾으면 자식 행을 쓰기 전에 자료 행부터 잠근다
   (시험: SQL 순서 확인). 안전망으로 확정 API, 자동 확정, 기존 자료로 자동 합치기가 1213 이면 다시 시도한다(`service.with_deadlock_retry`, 최대 3번, `move_all` 멱등).
 - 미확정이던 추천 2, 3 은 사용자가 구현을 지시해(2026-11-23) 추천안대로 간다: 금액, 기여도, M/H, 직책과장 제외 / 기본 체크는 완료, 진행 중, 자체수행.
+- **1단계 구현(2026-11-23, 커밋 전)**:
+  - 결정 1 권한: `access.is_draft_assignee`(명부 사번이 연결된 담당자, 초안일 때만)가 열람(`visible_entries_filter`, `can_view_entry`), 수정과 첨부와 나누기, 합치기(`can_edit_entry`),
+    확정(`service._check_confirmer`)을 준다. 초안 버리기와 공개 범위는 새 `access.can_own_entry`(올린 사람과 LV3)로 막는다. 응답 `can_discard`.
+  - 상태 판정 한 곳: `entries/inbox_rows.py` `draft_state`(처리 중, 첨부 중, 첨부 실패, 파일 기다림, 확인 필요, 확정 가능). 확인 필요 이유는 화면 `bulkConfirmPlan` 과 같은 이름.
+    '파일 기다림' 은 표시만 하고 확정은 아직 막지 않는다(서버 `no_files` 는 3단계).
+  - API: `GET /api/inbox/drafts?scope=&who=&state=&batch=&q=`(`routers/inbox.py`), `GET /api/batches?lite=1`(초안 없이 `draft_count`). 전체 응답은 남겨 두었다(상세의 [파일 추가] 진행 등).
+  - 배지(`/api/batches/summary` drafts): 내가 올린 묶음 + 내가 담당한 초안 중 살아 있는 파일이 있는 것, 임시 첨부 초안 제외.
+  - 화면: `InboxPage` 목록(`InboxList`) + 상세(`DraftDetail` → `DraftCard`), 1100px 미만은 목록만 보이고 줄을 누르면 상세가 화면 전체([목록으로]).
+    `Page wide`(최대 1680px)로 상세 칸이 예전 카드 폭을 지킨다. 상세를 떠날 때 저장 안 한 변경이 있으면 [저장하고 이동] [버리고 이동] [머무르기](`DraftCard` ref `saveForLeave`).
+    줄에 탐색기 파일을 놓으면 그 초안에 첨부(scope `draft:E…` 를 상세 카드의 첨부와 같이 써서 상세에서 진행이 이어 보인다), 첨부 중인 줄은 받지 않고 안내.
+    한꺼번에 확정은 줄 체크(확정 가능만) + [고른 것 확정], 묶음 머리의 [이 묶음 모두 확정](확정 가능 2건 이상).
+  - Codex 검토(2026-11-23)로 고친 것: 담당자의 초안 사이 파일 옮기기와 합치기는 공개 범위를 넓힐 수 있어 올린 사람과 LV3 만(`service._require_reorganizer`, 403 `owner_required`),
+    창을 좁혀도 고친 상세를 내리지 않음, 열린 초안 줄에 놓은 파일은 상세 카드의 첨부로 넘김(같은 올리기 칸을 두 곳이 붙잡아 완료 처리가 덮이던 것),
+    첨부 칸이 진행, 오류, 동일 BDF 안내가 있으면 저절로 펼쳐짐, 볼 수 없는 합치기 대상은 줄 상태에서도 없는 것으로(예전 화면과 같게), 폴링은 앞 요청이 끝난 뒤에만.
+  - 시험: `tests/test_inbox_rows_68.py`(10), `test_batches_api.py` 배지 기준 갱신, 프런트 `inboxRows.test.js`, `InboxPage.test.jsx` 다시 씀(21).
 
 ## 구현 전에 확인할 것
 - 145 `00_Inbox` 에 탐색기로 복사한 이 엑셀이 평문이 되는지(설계 문서와 UnLock 폴더 사례로 추정만 함).

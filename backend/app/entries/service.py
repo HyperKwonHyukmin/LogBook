@@ -193,6 +193,8 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
         if not merge_into:
             d["merge_into_id"] = None
         d["can_edit"] = access.can_edit_entry(viewer, entry)
+        # 68 — 초안 버리기는 올린 사람과 LV3 만(담당자는 고치고 확정만)
+        d["can_discard"] = entry.status == "draft" and access.can_own_entry(viewer, entry)
         d["can_review"] = access.can_review(viewer, entry) and not entry.reviewed_by   # 53
         d["can_unreview"] = access.can_unreview(viewer, entry)
         # 49 — Module Unit 권상 자료면 Wire 모델이 있는지(없으면 화면이 올려 달라고 요청한다)
@@ -238,18 +240,19 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
     return d
 
 
-def blocked_models(db: Session, entry: models.Entry, files: list[models.File], viewer) -> list[dict]:
-    """49 — 이 초안의 묶음에서 '이미 있는 BDF 와 똑같아' 받지 않은 BDF(17)와 그 BDF 가 있는 자료(보는 사람 권한으로).
+def blocked_records(db: Session, batch: models.Batch | None, files: list[models.File],
+                    drafts: int | None = None) -> list[dict]:
+    """49 — 이 초안 몫의 '이미 있는 BDF 와 똑같아 받지 않은' 제외 기록(batch.excluded 의 항목 그대로).
     묶음의 초안이 하나면(WorkBench 묶음 등) 모두 이 초안 몫, 여럿이면 최상위 폴더가 같은 것만.
-    정리 대기 카드가 '똑같은 모델이 이미 있음'·[그 자료에 추가]·비슷한 후보의 기준으로 쓴다."""
+    drafts = 묶음의 초안 수(68 줄 목록이 묶음마다 한 번 세어 넘긴다, 없으면 센다)."""
     from ..ingest import duplicates
 
-    batch = db.get(models.Batch, entry.batch_id) if entry.batch_id else None
     excluded = (batch.excluded or []) if batch is not None else []
     recs = [r for r in excluded if isinstance(r, dict) and r.get("reason") == duplicates.REASON_MODEL]
     if not recs:
         return []
-    drafts = db.query(models.Entry.id).filter_by(batch_id=batch.id, status="draft").count()
+    if drafts is None:
+        drafts = db.query(models.Entry.id).filter_by(batch_id=batch.id, status="draft").count()
     # 52 — 과제 폴더마다 나눈 묶음(split_top)은 고른 폴더 바로 아래 폴더가 초안 단위다
     depth = 2 if batch.split_top else 1
 
@@ -258,11 +261,18 @@ def blocked_models(db: Session, entry: models.Entry, files: list[models.File], v
         return "/".join(parts[:depth]) if len(parts) > depth else parts[0]
 
     tops = {top(f.rel_path) for f in files if "/" in f.rel_path}
+    return [r for r in recs if drafts <= 1 or top(str(r.get("name") or "")) in tops]
+
+
+def blocked_models(db: Session, entry: models.Entry, files: list[models.File], viewer) -> list[dict]:
+    """49 — blocked_records 와 그 BDF 가 있는 자료(보는 사람 권한으로).
+    정리 대기 카드가 '똑같은 모델이 이미 있음'·[그 자료에 추가]·비슷한 후보의 기준으로 쓴다."""
+    from ..ingest import duplicates
+
+    batch = db.get(models.Batch, entry.batch_id) if entry.batch_id else None
     out = []
-    for r in recs:
+    for r in blocked_records(db, batch, files):
         name = str(r.get("name") or "")
-        if drafts > 1 and top(name) not in tops:
-            continue
         desc = duplicates.describe(db, r.get("same_as_files") or [], viewer)
         out.append({"name": name, "lifting": lifting.name_is_lifting(name.rsplit("/", 1)[-1]),
                     "matches": desc["matches"], "hidden": desc["hidden"]})
@@ -535,6 +545,8 @@ def _check_confirmer(db: Session, user: models.User, entry: models.Entry) -> mod
     access.require_writer(user)
     batch = db.get(models.Batch, entry.batch_id) if entry.batch_id else None
     if entry.uploaded_by and entry.uploaded_by == user.employee_id:
+        return batch
+    if access.is_draft_assignee(user, entry, db):   # 68 결정 1 — 사번이 연결된 담당자도 확정
         return batch
     if access.is_admin(user) and batch and batch.received_at <= datetime.now() - timedelta(days=ADMIN_TAKEOVER_DAYS):
         return batch
@@ -823,7 +835,7 @@ def trash(db: Session, storage: StoragePaths, entry: models.Entry, user: models.
         undo = move_all([(entry_dir(storage, entry), storage.trash / rel)])
         action = "ENTRY_TRASH"
     else:
-        if not can_edit_draft(user, entry):
+        if not access.can_own_entry(user, entry):   # 68 — 담당자는 초안을 버리지 못한다(올린 사람과 LV3)
             raise HTTPException(status_code=403, detail="not_uploader")
         batch = db.get(models.Batch, entry.batch_id)
         rel = f"draft_{entry.entry_id}_{_stamp()}"
@@ -1077,6 +1089,14 @@ def _reenqueue_convert(db: Session, entry: models.Entry) -> None:
     db.commit()
 
 
+def _require_reorganizer(user: models.User, *entries: models.Entry) -> None:
+    """68 — 초안 사이에서 파일을 옮기거나 합치는 일은 올린 사람과 LV3 만. 담당자는 고칠 수는 있어도
+    공개 범위가 다른 초안(또는 다른 열람 허락) 사이로 파일을 옮기면 공개 범위를 넓히는 셈이 된다(Codex 검토 2026-11-23)."""
+    for e in entries:
+        if not access.can_own_entry(user, e):
+            raise HTTPException(status_code=403, detail="owner_required")
+
+
 def _require_draft_owner(user: models.User, *entries: models.Entry) -> None:
     access.require_writer(user)
     for e in entries:
@@ -1144,6 +1164,7 @@ def merge(db: Session, entry: models.Entry, other: models.Entry, user: models.Us
     else:
         other, entry = _lock(db, other), _lock(db, entry)
     _require_draft_owner(user, entry, other)
+    _require_reorganizer(user, entry, other)
     from .draft_attachments import ensure_no_pending
     ensure_no_pending(db, entry)
     ensure_no_pending(db, other)
@@ -1166,6 +1187,8 @@ def move_file(db: Session, f: models.File, target: models.Entry, user: models.Us
     source = _lock(db, source)
     target = _lock(db, target)
     _require_draft_owner(user, source, target)
+    if source.id != target.id:
+        _require_reorganizer(user, source, target)
     from .draft_attachments import ensure_no_pending
     ensure_no_pending(db, source)
     ensure_no_pending(db, target)

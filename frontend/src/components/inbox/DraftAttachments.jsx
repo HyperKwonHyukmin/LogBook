@@ -58,6 +58,9 @@ const DraftAttachments = forwardRef(function DraftAttachments({ entry, disabled,
     away: { title: `${entry.entry_id} 초안에 첨부`, message: '초안에 붙일 파일을 올렸습니다. 올리기와 확정에서 첨부 결과를 확인하세요.', to: '/inbox', label: '올리기와 확정으로' },
     disabled: disabled || pending.length > 0 || watch.state === 'working' });
   const busy = u.busy || watch.state === 'working' || releasing;
+  // 68 — 목록 줄에 놓아 시작한 올리기(같은 칸 draft:E…)도 진행, 오류, 동일 BDF 안내, LV3 [그래도 올리기]가 보이게 펼친다
+  const speaks = u.busy || u.resumable || !!u.error || u.result?.blocked?.length > 0 || u.result?.rejected?.length > 0;
+  useEffect(() => { if (speaks) setOpen(true); }, [speaks]);
   useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
   useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
 

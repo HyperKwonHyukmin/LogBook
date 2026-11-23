@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import String, and_, cast, exists, or_
+from sqlalchemy import String, and_, cast, exists, or_, select
 from sqlalchemy.orm import Session
 
 from .. import access, audit, models
@@ -50,13 +50,15 @@ def _staged_info(db: Session, b: models.Batch, ctx: dict) -> dict:
     }
 
 
-def batch_to_dict(db: Session, b: models.Batch, ctx: dict | None = None, viewer=None) -> dict:
+def batch_to_dict(db: Session, b: models.Batch, ctx: dict | None = None, viewer=None, lite: bool = False) -> dict:
     """배치 한 덩어리. viewer 를 주면 그가 볼 수 없는 초안(비공개로 둔 남의 초안)은 빼고(13),
-    초안 안의 다른 Entry 참조(합치기 제안 등)도 그의 권한으로 거른다."""
+    초안 안의 다른 Entry 참조(합치기 제안 등)도 그의 권한으로 거른다.
+    68 — lite 면 초안과 파일을 싣지 않고 보이는 초안 수(draft_count)만 싣는다(줄 목록 화면의 묶음 머리, 진행 카드용)."""
     q = db.query(models.Entry).filter_by(batch_id=b.id, status="draft")
     if viewer is not None:
         q = q.filter(access.visible_entries_filter(viewer))
-    drafts = q.order_by(models.Entry.id).all()
+    drafts = [] if lite else q.order_by(models.Entry.id).all()
+    draft_count = q.count() if lite else len(drafts)
     d = {"key": b.key, "source": b.source, "original_name": b.original_name, "state": b.state,
          "uploader": b.uploader, "uploader_guess": b.uploader_guess, "owner_account": b.owner_account,
          "received_at": b.received_at.isoformat(),
@@ -66,7 +68,10 @@ def batch_to_dict(db: Session, b: models.Batch, ctx: dict | None = None, viewer=
          # 66 — '올리고 바로 확정'을 켰는지와 결과 {confirmed: [E…], kept: [{entry_id, reason}]}(정리가 끝난 뒤)
          "auto_confirm": bool(isinstance(b.preset, dict) and b.preset.get("auto_confirm")),
          "auto_result": b.preset.get("auto_result") if isinstance(b.preset, dict) else None,
-         "target_entry_id": b.target_entry_id, "entries": [entry_to_dict(db, e, viewer=viewer) for e in drafts]}
+         "target_entry_id": b.target_entry_id, "draft_count": draft_count,
+         "entries": [entry_to_dict(db, e, viewer=viewer) for e in drafts]}
+    if lite:
+        d.pop("entries")
     if b.state == "staged" or drafts:
         ctx = ctx or queue_context(db)
     if b.state == "staged":
@@ -88,13 +93,18 @@ def batch_to_dict(db: Session, b: models.Batch, ctx: dict | None = None, viewer=
         if target is not None and target.status == "draft" and (viewer is None or access.can_view_entry(viewer, target, db=db)):
             d["attachment_target"] = target.entry_id
             # Proposals are temporary attachment work, not another item to approve.
-            d["entries"] = []
+            d["draft_count"] = 0
+            if not lite:
+                d["entries"] = []
     return d
 
 
 @router.get("")
 def list_batches(scope: str = Query(default="mine", pattern="^(mine|unclaimed|all)$"),
+                 lite: bool = Query(default=False),
                  db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
+    """lite(68) — 초안과 파일 없이 묶음 머리, 진행(queue, progress), 제외 파일, 자동 확정 결과, 첨부 대상만.
+    초안 줄은 GET /api/inbox/drafts 가 따로 준다."""
     # 17 — 완전 동일 BDF 만 있어 초안 하나 없이 끝난(done) 배치도 며칠은 보인다 — 탐색기로 넣은 사람이 왜 사라졌는지
     # 알 수 있게(일부만 빠지고 나머지를 확정한 배치는 남기지 않는다)
     recent = datetime.now() - timedelta(days=DUPLICATE_DONE_DAYS)
@@ -113,9 +123,9 @@ def list_batches(scope: str = Query(default="mine", pattern="^(mine|unclaimed|al
     rows = q.order_by(models.Batch.received_at.desc(), models.Batch.id.desc()).limit(200).all()
     rows = [b for b in rows if b.state != "done" or _has_duplicate_exclusion(b) or _auto_result(b)]
     ctx = queue_context(db) if rows else None
-    out = [batch_to_dict(db, b, ctx, viewer=user) for b in rows]
+    out = [batch_to_dict(db, b, ctx, viewer=user, lite=lite) for b in rows]
     # 13 — 남의 배치인데 남은 초안이 모두 볼 수 없는 것이면 배치째 뺀다(이름도 드러내지 않는다)
-    return [d for d, b in zip(out, rows) if d["entries"] or not _has_hidden_drafts(db, b, user)]
+    return [d for d, b in zip(out, rows) if d["draft_count"] or not _has_hidden_drafts(db, b, user)]
 
 
 AUTO_DONE_HOURS = 24
@@ -149,12 +159,13 @@ SUMMARY_NAMES = 50   # 62 — 같은 이름 경고에 쓰는 내 진행 중 묶�
 @router.get("/summary")
 def batch_summary(db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
     """62 — 내 정리 대기 요약(메뉴 배지·다른 창에서 올리는 중 안내·폴더 창의 같은 이름 경고).
-    drafts = 확정하지 않은 내 초안 수, staged = 서버가 정리 중인 묶음 수, uploading = 브라우저가 아직 보내는 중인 묶음 수
+    drafts = 확정하지 않은 내 초안 수(68 — 내가 담당한 초안 포함, 파일 0개 초안과 임시 첨부 초안은 빼고), staged = 서버가 정리 중인 묶음 수, uploading = 브라우저가 아직 보내는 중인 묶음 수
     (STALE_AFTER 가 지나면 cleanup_stale 이 지우므로 그 안의 것만), names = 진행 중 묶음 [{name, state, received_at}]."""
     from ..uploads.service import STALE_AFTER
     me = user.employee_id
-    drafts = (db.query(models.Entry.id).join(models.Batch, models.Batch.id == models.Entry.batch_id)
-              .filter(models.Entry.status == "draft", models.Batch.uploader == me).count())
+    from ..entries.inbox_rows import draft_query
+    live = select(models.File.entry_id).where(models.File.entry_id.isnot(None), models.File.location != "trash")
+    drafts = draft_query(db, user, "mine").filter(models.Entry.id.in_(live)).count()
     fresh = datetime.now() - STALE_AFTER
     rows = (db.query(models.Batch.original_name, models.Batch.state, models.Batch.received_at)
             .filter(models.Batch.uploader == me, or_(

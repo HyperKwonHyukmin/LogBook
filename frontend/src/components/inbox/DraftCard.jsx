@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from 'react';
+import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Copy, GripVertical, Layers, Lock, Paperclip, Rotate3d, Save, Scissors, Trash2, Wand2 } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import ChipInput from '../ui/ChipInput.jsx';
@@ -50,7 +50,7 @@ const entryKey = (e) => `${e.entry_id}|${e.version}|${e.files.map((f) => f.id).j
 /**
  * onConfirmed({ entry_id, title, merged }) — 확정이 끝나면 부른다(카드는 목록에서 사라지므로 부모가 토스트로 알린다).
  */
-export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirtyChange, onConfirmed }) {
+const DraftCard = forwardRef(function DraftCard({ entry, siblings, canEdit, onChanged, onDirtyChange, onConfirmed }, ref) {
   const [values, setValues] = useState(() => editValues(entry)); // 고치는 값
   const [base, setBase] = useState(() => editValues(entry));     // 마지막으로 맞춘 서버 값(바뀐 칸을 가린다)
   const [selected, setSelected] = useState([]);
@@ -127,6 +127,24 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
     if (res?.entry_id === entry.entry_id) setBase(editValues(res));
     return true;
   }
+
+  /**
+   * 68 — 상세를 떠나기 전 [저장하고 이동]: 바뀐 칸을 저장하고 성공 여부를 돌려준다(실패하면 카드에 사유가 남고 화면은 머문다).
+   */
+  function saveForLeave() {
+    if (!dirty) return Promise.resolve(true);
+    if (invalid) {
+      setError('고칠 칸을 확인해 주세요. 저장하지 못해 옮기지 않았습니다.');
+      return Promise.resolve(false);
+    }
+    setBusy(true);
+    return enqueue(async () => {
+      setError('');
+      try { await saveNow(); onChanged(); return true; } catch (err) { fail(err); return false; }
+    }).finally(() => setBusy(false));
+  }
+  // 68 — 목록 줄에 놓은 파일이 지금 열린 이 초안 것이면 카드의 첨부로 넘긴다(같은 올리기 칸을 두 곳이 붙잡지 않게)
+  useImperativeHandle(ref, () => ({ saveForLeave, dropFiles: (dt) => attachRef.current?.drop(dt) }));
 
   /** [변경 저장] */
   function save() {
@@ -374,9 +392,10 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
         )}
         {!canEdit && <span className="inline-flex items-center gap-1 text-meta text-n-500"><Lock size={12} aria-hidden="true" />작성자만 수정</span>}
         <div className="flex-1" />
-        <Button variant="ghost" size="sm" disabled={disabled} onClick={discard} className="hover:text-err">
+        {/* 68 — 담당자는 고치고 확정할 수 있지만 버리지는 못한다(서버 can_discard, 옛 응답에는 없어 canEdit 을 따른다) */}
+        {entry.can_discard !== false && <Button variant="ghost" size="sm" disabled={disabled} onClick={discard} className="hover:text-err">
           <Trash2 size={14} aria-hidden="true" />버리기
-        </Button>
+        </Button>}
         <Button size="sm" disabled={disabled || confirmBlocked}
                 aria-describedby={confirmBlocked ? checksId : undefined}
                 title={confirmBlocked ? `확정할 수 없음: ${blocking.map((c) => c.text.split(': ')[0]).join(', ')}`
@@ -702,7 +721,9 @@ export default function DraftCard({ entry, siblings, canEdit, onChanged, onDirty
       {error && <p role="alert" className="border-t border-err-line bg-err-bg px-4 py-2 text-ui text-err">{error}</p>}
     </article>
   );
-}
+});
+
+export default DraftCard;
 
 /** 고친 칸 표시(11) — 작은 남색 점 + 화면 읽기용 글자. */
 function ChangedDot() {
