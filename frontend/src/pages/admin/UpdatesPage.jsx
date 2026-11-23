@@ -14,6 +14,7 @@ import {
   KINDS, RECENT_PERIODS, anchorOf, groupByMonth, itemKey, listMonths, listYears, matchesUpdate, newIndexes,
   validPeriod, viewYearFor,
 } from '../../lib/updateHistory.js';
+import { notePath } from '../../lib/updateNotes.js';
 
 /**
  * 46 — 업데이트 이력(관리 › 업데이트 이력, LV3). LogBook 에 더해지고 바뀐 것을 최근 것부터 — 달 묶음 점 타임라인.
@@ -101,6 +102,11 @@ function Item({ it, index, showDate, isNew, q, targeted }) {
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-n-500">
           {it.no && <span className="font-mono" title="계획 문서 번호(docs/plans)">#{it.no}</span>}
           {it.requester && <span>요청 <TermHighlight text={it.requester} terms={terms} /></span>}
+          {it.page && (
+            <Link to={notePath(it.page)} className="inline-flex items-center gap-0.5 font-medium text-brand underline-offset-2 hover:underline">
+              사용자 안내<ArrowUpRight size={12} aria-hidden="true" />
+            </Link>
+          )}
           {it.path && (
             <Link to={it.path} className="inline-flex items-center gap-0.5 font-medium text-brand underline-offset-2 hover:underline">
               {it.screen || '화면'} 열기<ArrowUpRight size={12} aria-hidden="true" />

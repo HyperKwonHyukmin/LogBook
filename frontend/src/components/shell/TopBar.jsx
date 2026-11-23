@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { CircleHelp, History as HistoryIcon, LogOut, MessageSquare, Search, Upload, X, UserRound } from 'lucide-react';
+import { CircleHelp, History as HistoryIcon, LogOut, Megaphone, MessageSquare, Search, Upload, X, UserRound } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import Logo from '../ui/Logo.jsx';
 import Menu from '../ui/Menu.jsx';
@@ -9,6 +9,7 @@ import { canWriteLevel, levelName, levelOf } from '../../lib/levels.js';
 import { api } from '../../api/client.js';
 import { FACET_LABELS } from '../../lib/labels.js';
 import { useUnreadComments } from '../../lib/useUnreadComments.js';
+import { useUnseenNotes } from '../../lib/useUnseenNotes.js';
 
 const DEBOUNCE_MS = 200;
 // 19 — 자동완성: 종류마다 몇 개까지, 순서는 호선 · 구역 · 태그
@@ -70,6 +71,7 @@ export default function TopBar({ user, onLogout }) {
   const suggestReq = useRef(0);
   const open = focused && !dismissed && options.length > 0;
   const unread = useUnreadComments();   // 63 — 새 의견 수(계정 메뉴와 아바타 점)
+  const newNotes = useUnseenNotes();   // 70 — 아직 안 본 업데이트 안내 수
 
   // 입력이 멈추면 호선·구역·태그 후보를 한 번에 묻는다. 늦게 온 옛 응답은 버린다. 실패하면 후보 없이 그냥 검색창이다
   useEffect(() => {
@@ -261,6 +263,8 @@ export default function TopBar({ user, onLogout }) {
           { label: '최근 비교', icon: HistoryIcon, onSelect: () => navigate('/compares') },
           // 63 — 내 자료에 온 의견과 내 글에 달린 답글
           { label: unread ? `새 의견 ${unread > 99 ? '99+' : unread}` : '받은 의견', icon: MessageSquare, onSelect: () => navigate('/comments') },
+          // 70 — 업데이트 안내(공유 주소 /update-notes/<id>), 이 브라우저에서 안 본 안내가 있으면 수를 붙인다
+          { label: newNotes ? `업데이트 안내 (새 글 ${newNotes})` : '업데이트 안내', icon: Megaphone, onSelect: () => navigate('/update-notes') },
           { label: '사용 설명서', icon: CircleHelp, onSelect: () => setManualOpen(true) },
           { label: '로그아웃', icon: LogOut, onSelect: onLogout },
         ]}

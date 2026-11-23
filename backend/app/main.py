@@ -25,6 +25,7 @@ from .routers import people as people_router
 from .routers import comments as comments_router
 from .routers import notes as notes_router
 from .routers import updates as updates_router
+from .routers import update_notes as update_notes_router
 from .routers import inbox as inbox_router
 from .routers import targets as targets_router
 from .spa import mount_spa
@@ -151,6 +152,7 @@ def create_app(frontend_dist: Path | None | object = _USE_DEFAULT) -> FastAPI:
     app.include_router(wb_targets_router.admin_router)
     dist = settings.frontend_dist if frontend_dist is _USE_DEFAULT else frontend_dist
     app.include_router(updates_router.router)   # 46 — 개선·업데이트 이력(/updates, LV3)
+    app.include_router(update_notes_router.router)   # 70 — 업데이트 안내(/api/update-notes, 공유 주소 /update-notes/<id>)
     mount_spa(app, dist)  # 반드시 마지막 — 나머지 경로를 index.html 로 받는다
     return app
 

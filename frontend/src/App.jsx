@@ -29,6 +29,8 @@ import UsersPage from './pages/admin/UsersPage.jsx';
 import VocabPage from './pages/admin/VocabPage.jsx';
 import WbRulesPage from './pages/admin/WbRulesPage.jsx';
 import UpdatesPage from './pages/admin/UpdatesPage.jsx';
+import UpdateNotesAdminPage from './pages/admin/UpdateNotesAdminPage.jsx';
+import UpdateNotesPage from './pages/UpdateNotesPage.jsx';
 import ViewerPage from './pages/ViewerPage.jsx';
 
 // 비교 화면(07)은 뷰어 상태·표 묶음이 커서 따로 묶는다.
@@ -45,6 +47,7 @@ const ADMIN_TABS = [
   { to: '/admin/vocab', label: '분류 목록' }, { to: '/admin/wb-targets', label: 'WorkBench 연결 규칙' },
   { to: '/admin/stats', label: '자료 현황' }, { to: '/admin/entries', label: '자료 목록' },
   { to: '/admin/cleanup', label: '자료 정비' }, { to: '/admin/updates', label: '업데이트 이력' },
+  { to: '/admin/update-notes', label: '업데이트 안내' },
 ];
 
 export default function App() {
@@ -72,6 +75,9 @@ export default function App() {
             <Route path="comments" element={<CommentsPage />} />
             {/* 64 — 나의 메모(왼쪽 메뉴) */}
             <Route path="notes" element={<NotesPage />} />
+            {/* 70 — 업데이트 안내(누구나 읽음, 주소가 공유 링크) */}
+            <Route path="update-notes" element={<UpdateNotesPage />} />
+            <Route path="update-notes/:noteId" element={<UpdateNotesPage />} />
             {/* 살펴보기 — 갖춤 현황·관계 지도를 메뉴 하나 아래 탭으로(2026-11-05) */}
             <Route element={<SectionTabs label="자료 현황" items={EXPLORE_TABS} />}>
               <Route path="coverage" element={<Suspense fallback={null}><CoveragePage /></Suspense>} />
@@ -97,6 +103,7 @@ export default function App() {
                 <Route path="admin/entries" element={<EntryTablePage />} />   {/* 57 — 자료 목록 */}
                 <Route path="admin/cleanup" element={<CleanupPage />} />
                 <Route path="admin/updates" element={<UpdatesPage />} />   {/* 46 — 업데이트 이력(옛 /updates 는 서버가 넘긴다) */}
+                <Route path="admin/update-notes" element={<UpdateNotesAdminPage />} />   {/* 70 — 업데이트 안내와 공유 주소 */}
               </Route>
             </Route>
           </Route>
