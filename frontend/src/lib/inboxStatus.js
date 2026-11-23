@@ -4,6 +4,7 @@
  * (backend app/ingest/progress.py · routers/batches.py). 순수 함수 — 화면은 BatchCard·DraftCard.
  */
 import { JOB_TYPE_LABELS } from './labels.js';
+import { hasModelView } from './files.js';
 
 /** 서버 처리 단계(process_batch 순서 그대로). detail 은 '무엇을 하나요?' 펼침에 쓴다. */
 export const BATCH_STEPS = [
@@ -74,7 +75,8 @@ export function stagedStatus(batch) {
 
 /** BDF 3D 변환 상태 — 파일 하나. 모델 파일이 아니거나 기록이 없으면 null. */
 export function modelConvertState(f) {
-  if (f.kind !== 'model' || !f.model) return null;
+  // .inp·.fem(보기 전용 모델)도 3D 변환 상태를 보인다 — 초안 카드의 3D 미리보기와 변환 대기 다시 부르기가 같이 따라온다
+  if (!hasModelView(f) || !f.model) return null;
   if (f.drm_encrypted) return 'skipped';
   const s = f.model.state;
   if (s === 'queued') return f.model.running ? 'running' : 'queued';

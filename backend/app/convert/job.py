@@ -18,7 +18,7 @@ from ..entries.files import entry_dir
 from ..entries.locate import FileUnavailable
 from ..bdf.wires import wire_summary
 from ..abaqus.inp import InpReader, build_inp_model
-from ..ingest.rules import VIEWER_EXTS, has_model_view, is_abaqus_input
+from ..ingest.rules import VIEWER_EXTS, has_model_view, is_abaqus_input, is_optistruct_input
 from ..lifting import control_is_lifting, summary_has_wires
 from ..storage.paths import StoragePaths, long_join, to_long
 
@@ -52,7 +52,7 @@ def model_paths(storage: StoragePaths, key: str, version: int | None = LBM_VERSI
 
 
 def model_file_filter():
-    """3D 변환 대상 파일(BDF 류 + Abaqus .inp, 61) — 쿼리 조건."""
+    """3D 변환 대상 파일(BDF 류 + Abaqus .inp(61) + OptiStruct .fem) — 쿼리 조건."""
     return or_(models.File.kind == "model", models.File.ext.in_(VIEWER_EXTS))
 
 
@@ -319,7 +319,9 @@ def convert_deck(root: str, rel_path: str, storage_root: str, max_bytes: int) ->
         lbm = write_lbm(model)
         png = render_thumbnail(model)
         fp = fingerprint(model)
-        sig = compute_signature(cards, reader.control, reader.sol)
+        # 2026-11-23 — OptiStruct .fem 은 BDF 파서로 읽지만 내용 서명(같은 BDF 막기, 같은 모델 칩)과 권상 판정은 BDF 전용이라 하지 않는다
+        bdf = not is_optistruct_input(rel_path)
+        sig = compute_signature(cards, reader.control, reader.sol) if bdf else None
     except ModelError as exc:
         return {**out, "status": "model_error", "error": exc.code}
     except MemoryError:
@@ -337,7 +339,9 @@ def convert_deck(root: str, rel_path: str, storage_root: str, max_bytes: int) ->
     wires = None
     # 2026-11-06 — 제목 표식이 없어도 Wire 를 찾아본다. WorkBench 가 원래 이름(hydro5.bdf)·표식 없이 보낸 권상 모델을
     # 내용으로 알아본다(summary_has_wires). CROD 가 없는 모델은 요약을 건너뛴다(대부분의 모델 — 비용 없음)
-    if is_lifting or model.counts().get("CROD"):
+    if not bdf:
+        is_lifting = False
+    elif is_lifting or model.counts().get("CROD"):
         try:
             found = wire_summary(model)
             if found and not is_lifting and summary_has_wires(found):

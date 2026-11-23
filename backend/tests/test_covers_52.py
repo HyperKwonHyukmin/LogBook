@@ -95,3 +95,21 @@ def test_drm_file_is_skipped(db, storage):
     rows["r.pdf"].drm_encrypted = True
     db.commit()
     assert covers.cover_files(db, [e.id]) == {}
+
+
+def test_search_never_uses_report_cover_for_bdf_entries(client, db, make_user, auth_headers, make_entry_file):
+    """2026-11-23 사용자 확인 — BDF 가 있는 자료는 3D 변환이 아직(올린 직후)이거나 실패, DRM, 너무 큼, INCLUDE 뿐이어도
+    결과 그림이 보고서 첫 쪽이 되면 안 된다. 보고서 그림은 BDF 가 없는 자료에만(52 의 원래 뜻)."""
+    make_user("A100001")
+    pending, _ = make_entry_file(title="표지 시험 변환 대기", name="m.bdf", kind="model")
+    make_entry_file(entry=pending, name="보고서.pdf", kind="report")
+    failed, fm = make_entry_file(title="표지 시험 변환 실패", name="f.bdf", kind="model")
+    make_entry_file(entry=failed, name="보고서.pdf", kind="report")
+    db.add(models.ModelSummary(file_id=fm.id, state="failed", error="boom"))
+    only_doc, _ = make_entry_file(title="표지 시험 보고서만", name="보고서.pdf", kind="report")
+    db.commit()
+    items = {i["entry_id"]: i for i in client.get("/api/search", params={"q": "표지 시험"},
+                                                   headers=auth_headers("A100001")).json()["items"]}
+    assert items[pending.entry_id]["thumb"] is None and items[pending.entry_id]["cover"] is None
+    assert items[failed.entry_id]["cover"] is None
+    assert items[only_doc.entry_id]["cover"] is not None   # BDF 없는 자료는 그대로 보고서 그림

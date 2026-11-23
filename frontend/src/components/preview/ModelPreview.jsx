@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw, Rotate3d, ScanSearch } from 'lucide-react';
 import { api } from '../../api/client.js';
-import { isAbaqusInput } from '../../lib/files.js';
+import { isViewerOnly } from '../../lib/files.js';
 import { MODEL_STATE_LABELS, errorText } from '../../lib/labels.js';
 import { isModelPending, modelStaleNote, modelStateMessage } from '../../lib/modelState.js';
 import Button, { buttonClass } from '../ui/Button.jsx';
@@ -53,8 +53,8 @@ function SummaryLine({ summary }) {
 const INITIAL = { data: null, error: '', errors: 0, fatal: false, polls: 0, seq: 0 };
 
 function ModelPreviewBody({ file, inline, compare }) {
-  // 61 Abaqus .inp — 보기만 한다. 해석 검증(Nastran 실행)·선례 찾기(BDF 내용 서명)는 BDF 전용이라 숨긴다
-  const nastran = !isAbaqusInput(file.name);
+  // 61 Abaqus .inp, 2026-11-23 OptiStruct .fem — 보기만 한다. 해석 검증(Nastran 실행)·선례 찾기(BDF 내용 서명)는 BDF 전용이라 숨긴다
+  const nastran = !isViewerOnly(file.name);
   const [st, setSt] = useState(INITIAL);
   const [tick, setTick] = useState(0);
 
@@ -195,6 +195,6 @@ function ModelPreviewBody({ file, inline, compare }) {
  */
 export default function ModelPreview({ file, inline = true, hull = '' }) {
   // 비교 화면은 BDF 끼리만 연다(ComparePane 이 kind 'model' 만 그린다)
-  const compare = isAbaqusInput(file.name) ? null : <CompareToggle file={{ id: file.id, name: file.name, hull }} />;
+  const compare = isViewerOnly(file.name) ? null : <CompareToggle file={{ id: file.id, name: file.name, hull }} />;
   return <ModelPreviewBody key={file.id} file={file} inline={inline} compare={compare} />;
 }

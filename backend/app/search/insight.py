@@ -10,9 +10,11 @@
 해석 검증이 이미 세어 둔 값(solve_checks.groups)만 쓴다."""
 from collections import Counter
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .. import models
+from ..ingest.rules import VIEWER_EXTS   # 61·2026-11-23 — .inp·.fem 도 3D 썸네일(대표 모델)이 된다
 
 CHUNK = 1000
 SUMMARY_TOP = 6
@@ -64,7 +66,7 @@ def rep_models(db: Session, entry_ids) -> dict[int, dict]:
                       SC.state, SC.model_key, SC.error_types, SC.groups)
              .join(MS, MS.file_id == F.id)
              .outerjoin(SC, SC.file_id == F.id)
-             .filter(F.entry_id.in_(part), F.kind == "model", F.location != "trash",
+             .filter(F.entry_id.in_(part), or_(F.kind == "model", F.ext.in_(VIEWER_EXTS)), F.location != "trash",
                      MS.key.isnot(None), MS.state != "include"))
         for eid, fid, size, key, counts, bbox, sol, s_state, s_key, s_types, s_groups in q:
             rank = (int((counts or {}).get("GRID") or 0), size or 0, -fid)

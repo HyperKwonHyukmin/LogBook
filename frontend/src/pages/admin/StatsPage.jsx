@@ -121,7 +121,7 @@ export default function StatsPage() {
             <Stat label="용량" value={formatBytes(s.bytes)} />
             <Stat label="호선" value={num(s.hulls)} />
             <Stat label="해석 모델"
-                  value={num(data.categories.filter((c) => c.key === 'nastran' || c.key === 'abaqus').reduce((a, c) => a + c.files, 0))}
+                  value={num(data.categories.filter((c) => c.key === 'nastran' || c.key === 'abaqus' || c.key === 'optistruct').reduce((a, c) => a + c.files, 0))}
                   hint="Nastran + Abaqus 파일" />
           </section>
           <section>

@@ -189,10 +189,11 @@ def enqueue_convert_all(db: Session, *, force: bool = False, outdated: bool = Fa
             if r is not None and r.state == "done" and (r.format_version or 1) < VERSION:
                 n += enqueue_convert(db, f)
         elif missing_signature:
-            if r is not None and r.state == "done" and (r.sig_geometry is None or r.sig_version != SIG_VERSION):
+            # 내용 서명은 BDF(kind model) 만 만든다 — .inp·.fem 은 늘 비어 있어 넣으면 돌릴 때마다 다시 변환된다
+            if f.kind == "model" and r is not None and r.state == "done" and (r.sig_geometry is None or r.sig_version != SIG_VERSION):
                 n += enqueue_convert(db, f)
         elif wire_check:
-            if r is not None and r.state == "done" and not r.lifting and (r.counts or {}).get("CROD"):
+            if f.kind == "model" and r is not None and r.state == "done" and not r.lifting and (r.counts or {}).get("CROD"):
                 n += enqueue_convert(db, f)
         elif force or r is None or r.state == "failed" or (r.state == "skipped" and r.error == "trashed"):
             n += enqueue_convert(db, f)

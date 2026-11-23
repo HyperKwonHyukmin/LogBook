@@ -27,7 +27,7 @@ from . import naming
 CATEGORY_EXTS = {
     "report": (".pdf", ".ppt", ".pptx", ".doc", ".docx", ".hwp", ".hwpx"),
     "excel": (".xls", ".xlsx", ".xlsm", ".csv"),
-    "model": (".bdf", ".dat", ".nas", ".blk", ".inp"),
+    "model": (".bdf", ".dat", ".nas", ".blk", ".inp", ".fem"),
 }
 CATEGORY_LABELS = {"report": "보고서", "excel": "엑셀", "model": "모델"}
 MAX_LIMIT = 500

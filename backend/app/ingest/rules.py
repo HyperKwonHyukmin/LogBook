@@ -32,16 +32,33 @@ SKIP_WITH_INP_EXTS = (".dat",)
 
 # 61 — 3D 뷰어로 여는 Abaqus 입력. kind 는 other 그대로 둔다 — kind 'model' 은 Nastran 실행·WorkBench 보내기·
 # 내용 서명(같은 모델·판 비교)·권상 판정이 BDF 로 읽기 때문이다. 변환·뷰어만 이 확장자도 받는다.
-VIEWER_EXTS = (".inp",)
+ABAQUS_EXTS = (".inp",)
+# 2026-11-23 — HyperMesh 가 쓴 OptiStruct 입력(.fem). Bulk 카드가 Nastran 과 같아 BDF 파서로 읽는다(운영 보관소 E000099 의
+# 실제 .fem 으로 확인 — 요소 59,547개, 경고 없음). Nastran 으로 돌지 않으므로 .inp 처럼 보기 전용(kind other)
+OPTISTRUCT_EXTS = (".fem",)
+VIEWER_EXTS = ABAQUS_EXTS + OPTISTRUCT_EXTS
+
+
+def _ext(name: str) -> str:
+    return os.path.splitext(name or "")[1].lower()
 
 
 def is_abaqus_input(name: str) -> bool:
-    return os.path.splitext(name)[1].lower() in VIEWER_EXTS
+    return _ext(name) in ABAQUS_EXTS
+
+
+def is_optistruct_input(name: str) -> bool:
+    return _ext(name) in OPTISTRUCT_EXTS
+
+
+def is_viewer_only(name: str) -> bool:
+    """3D 로 보기만 하는 모델 입력(.inp, .fem) — Nastran 실행, 내용 서명, 권상 판정, WorkBench 보내기는 하지 않는다."""
+    return _ext(name) in VIEWER_EXTS
 
 
 def has_model_view(kind: str, name: str) -> bool:
-    """3D 변환·뷰어 대상인가 — BDF 류(kind 'model') 또는 Abaqus .inp."""
-    return kind == "model" or is_abaqus_input(name)
+    """3D 변환·뷰어 대상인가 — BDF 류(kind 'model') 또는 보기 전용 입력(Abaqus .inp, OptiStruct .fem)."""
+    return kind == "model" or is_viewer_only(name)
 
 
 def is_excluded(name: str) -> bool:

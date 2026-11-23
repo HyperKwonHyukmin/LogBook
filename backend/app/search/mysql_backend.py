@@ -741,9 +741,15 @@ class MySqlSearch:
         if reps is None:
             reps = insight.rep_models(db, ids)
         reports = insight.report_lines(db, ids)
-        # 52 — BDF 썸네일이 없는 자료의 대표 그림 대체(PDF 첫 쪽·PPTX 썸네일·이미지)
+        # 52 — BDF 가 **없는** 자료의 대표 그림 대체(PDF 첫 쪽·PPTX 썸네일·이미지).
+        # 2026-11-23 — BDF 가 있는데 3D 변환이 아직(올린 직후)이거나 실패, DRM, 너무 큼, INCLUDE 뿐이면 보고서 첫 쪽을 쓰지 않고
+        # 모델 아이콘으로 둔다(사용자 확인 — 모델 자료의 그림이 보고서가 되면 안 된다). 변환이 끝나면 BDF 썸네일로 바뀐다
         from ..covers import cover_files
-        covers = cover_files(db, [i for i in ids if i not in reps])
+        from ..ingest.rules import VIEWER_EXTS
+        viewer = {eid for (eid,) in db.query(models.File.entry_id).filter(
+            models.File.entry_id.in_(ids or [0]), models.File.location != "trash", models.File.ext.in_(VIEWER_EXTS))}
+        no_model = {r["id"] for r in page if not r["kind_counts"].get("model") and r["id"] not in viewer}
+        covers = cover_files(db, [i for i in ids if i not in reps and i in no_model])
         revs = revision_counts(db, ids)   # 14 — '판 3개 · 최신 R2'(페이지당 한 번의 질의)
         wanted = set(ids)
         groups: dict[int, set[int]] = defaultdict(set)

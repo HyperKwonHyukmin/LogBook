@@ -289,6 +289,6 @@ def missing_signature_count(db: Session) -> int:
     """변환이 끝났는데 서명이 없거나 옛 규칙인 모델 수(휴지통 밖) — 운영 화면 안내용."""
     S, F = models.ModelSummary, models.File
     return (db.query(S.file_id).join(F, F.id == S.file_id)
-            .filter(S.state == "done", F.location != "trash",
+            .filter(S.state == "done", F.location != "trash", F.kind == "model",   # .inp·.fem 은 서명을 만들지 않는다
                     or_(S.sig_geometry.is_(None), S.sig_version.is_(None), S.sig_version != SIG_VERSION))
             .count())

@@ -14,6 +14,7 @@ from . import access, models
 CATEGORIES = (
     ("nastran", "해석 모델 (Nastran)", {".bdf", ".dat", ".nas", ".blk"}),
     ("abaqus", "해석 모델 (Abaqus)", {".inp"}),
+    ("optistruct", "해석 모델 (OptiStruct)", {".fem"}),   # 2026-11-23
     ("result", "해석 결과", {".f06", ".op2", ".h5", ".xdb", ".pch", ".h3d", ".odb", ".sta", ".msg", ".log", ".mvw",
                           ".hwsession"}),
     ("report", "보고서", {".pdf", ".pptx", ".ppt", ".docx", ".doc", ".hwp", ".hwpx"}),

@@ -23,7 +23,7 @@ const MISSING = [
   { id: 'hulls', label: '호선 없음(공용 아님)', test: (r) => !r.hulls.length && !r.no_hull },
 ];
 // 파일 열 — 묶음 키 → 짧은 이름
-const FILE_SHORT = [['nastran', 'Nastran'], ['abaqus', 'Abaqus'], ['report', '보고서'], ['excel', '엑셀'], ['result', '결과']];
+const FILE_SHORT = [['nastran', 'Nastran'], ['abaqus', 'Abaqus'], ['optistruct', 'OptiStruct'], ['report', '보고서'], ['excel', '엑셀'], ['result', '결과']];
 
 const Missing = () => <span className="rounded bg-err-bg px-1.5 py-0.5 text-meta font-medium text-err">빠짐</span>;
 const personRef = (p) => (p.id ? { id: p.id } : { employee_id: p.employee_id });
