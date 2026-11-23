@@ -25,6 +25,8 @@ const HANDOVER_FIRST = 5;
 const RAIL_LIMIT = 6;
 const NO_TARGET = '대상 없음';
 const NO_HULL = '공용(호선 없음)';
+// 2026-11-23 — '기타'는 분류를 못 한 값이라 그 사람의 주력을 말해 주지 못한다. 주력 칩에서만 빼고 오른쪽 분포에는 그대로 둔다
+const VAGUE = new Set(['기타']);
 // 2026-11-23 — 묶는 기준. 과거 자료를 한 달에 몰아 올려 월별은 한 덩어리가 되기 쉬워 기본은 대상별(사용자 결정)
 const GROUPS = [{ id: 'target', label: '대상별' }, { id: 'hull', label: '호선별' }, { id: 'month', label: '월별' }];
 
@@ -165,7 +167,7 @@ export default function PersonPage() {
   const mixedRoles = new Set(rows.map(roleText)).size > 1;
   const hullCount = new Set(d.timeline.flatMap((m) => m.entries.flatMap((e) => e.hulls))).size;
   const focus = [
-    ...t.targets.slice(0, 3).map((r) => ({ label: r.value, count: r.count, to: searchBy('target')(r) })),
+    ...t.targets.filter((r) => !VAGUE.has(r.value)).slice(0, 3).map((r) => ({ label: r.value, count: r.count, to: searchBy('target')(r) })),
     ...t.ship_kinds.slice(0, 2).map((r) => ({ label: r.value, count: r.count, to: null })),
   ];
   const meta = [p.department, p.position].filter(Boolean);

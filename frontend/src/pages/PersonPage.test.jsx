@@ -91,7 +91,7 @@ const MANY = {
   ...RETIRED,
   person: { ...RETIRED.person, employed: true },
   counts: { assigned: 3, primary: 3, authored: 0, same_sets: false },
-  traits: { ...RETIRED.traits, targets: [{ value: 'Manifold', count: 2 }, { value: 'PSD', count: 1 }] },
+  traits: { ...RETIRED.traits, targets: [{ value: 'Manifold', count: 2 }, { value: '기타', count: 2 }, { value: 'PSD', count: 1 }] },
   handover: [],
   timeline: [
     { month: '2026-11', entries: [row('E000011', '매니폴드 1', ['primary'], { target: 'Manifold', hulls: ['3012'] }),
@@ -107,6 +107,10 @@ test('명함 머리말 — 이니셜, 수치 한 줄, 자료로 본 주력 칩',
   const focus = screen.getByRole('group', { name: '자료로 본 주력' });
   expect(within(focus).getByRole('link', { name: /Manifold/ })).toHaveAttribute('href', '/?assignee=7&target=Manifold');
   expect(within(focus).getByText('LNG')).toBeInTheDocument();          // 선종은 링크 없이
+  // '기타'는 주력 칩에서 빼고 다음 대상(PSD)을 보인다. 오른쪽 분포에는 남는다
+  expect(within(focus).queryByText('기타')).toBeNull();
+  expect(within(focus).getByRole('link', { name: /PSD/ })).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: '대상' })).toHaveTextContent('기타');
   // 모든 행이 주 담당이면 행마다 쓰지 않는다
   expect(screen.queryByText('주 담당')).toBeNull();
 });
