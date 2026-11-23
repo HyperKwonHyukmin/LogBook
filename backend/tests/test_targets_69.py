@@ -43,6 +43,7 @@ def test_cards_and_page(make_user, db, client, auth_headers, make_entry_file):
     assert [c["value"] for c in cards] == ["Unit", "Manifold", "기타"]   # 건수 순, 기타는 맨 뒤
     unit = cards[0]
     assert unit["entries"] == 4 and unit["hulls"] == 3 and unit["thumb"]["file_id"] in (fa.id, fb.id)
+    assert unit["base_docs"] == 1 and unit["conclusions"] == 1 and unit["lead"] == {"name": "구조가", "count": 2}
     p = client.get("/api/targets/page", params={"value": "Unit"}, headers=h).json()
     assert p["counts"]["entries"] == 4 and p["counts"]["assignees"] == 1
     assert p["start"][0]["entry_id"] == a.entry_id   # 모델과 보고서가 다 있고 결론이 있는 자료 먼저
@@ -52,10 +53,11 @@ def test_cards_and_page(make_user, db, client, auth_headers, make_entry_file):
     assert len(p["models"]) == 1 and p["models"][0]["same"] == 1   # 같은 모델 내용은 한 칸
     assert p["people"][0]["name"] == "구조가" and p["people"][0]["count"] == 2
     assert b.entry_id in [x["entry_id"] for x in p["gaps"]["no_report"]["items"]]
-    assert p["gaps"]["no_conclusion"]["count"] == 3
+    assert p["gaps"]["no_conclusion"]["count"] == 3 and p["can_fix"] is True
+    assert "zones" in p["records"][0] and "tags" in p["records"][0]
     # 열람 권한: LV1 은 블록 자료가 숫자에도 들지 않는다(일반 자료도 안 보인다)
     lv1 = client.get("/api/targets/page", params={"value": "Unit"}, headers=auth_headers(LV1)).json()
-    assert lv1["counts"]["entries"] == 0
+    assert lv1["counts"]["entries"] == 0 and lv1["can_fix"] is False
     assert all(c["value"] != "Unit" for c in client.get("/api/targets", headers=auth_headers(LV1)).json()["targets"])
 
 

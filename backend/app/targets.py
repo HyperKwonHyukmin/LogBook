@@ -13,7 +13,7 @@ from .search import SearchQuery, get_search
 
 ALL_LIMIT = 5000      # 확정 자료가 수천 건을 넘지 않는다는 전제(검색 한 번으로 읽는다)
 START_N = 5
-GAP_N = 20
+GAP_N = 200      # 빈 곳 목록(고칠 수 있는 사람에게만 펼쳐 보인다)
 
 
 def _items(db: Session, user, target: str | None = None) -> list[dict]:
@@ -37,7 +37,13 @@ def list_targets(db: Session, user) -> dict:
     for value, its in groups.items():
         hulls = {h for it in its for h in it.get("hulls") or []}
         thumb = next((_thumb(it) for it in its if _thumb(it)), None)
+        # 행 요약 문장의 재료 — 기초 자료(공용) 수, 주 담당(맡은 자료가 가장 많은 사람), 결론 수
+        people = Counter(a["name"] for it in its for a in it.get("assignees") or [] if a.get("name"))
+        lead = people.most_common(1)[0] if people else None
         cards.append({"value": value, "entries": len(its), "hulls": len(hulls),
+                      "base_docs": sum(1 for it in its if it.get("no_hull")),
+                      "conclusions": sum(1 for it in its if it.get("conclusion")),
+                      "lead": {"name": lead[0], "count": lead[1]} if lead else None,
                       "latest": max((it.get("posted_at") or "" for it in its), default="") or None,
                       "thumb": thumb, "other": value == other})
     cards.sort(key=lambda c: (c["other"], -c["entries"], c["value"]))
@@ -47,7 +53,8 @@ def list_targets(db: Session, user) -> dict:
 def _row(it: dict) -> dict:
     """화면 한 줄 — 검색 행에서 이 화면이 쓰는 칸만."""
     return {k: it.get(k) for k in ("entry_id", "title", "posted_at", "hulls", "ship_types", "assignees", "conclusion",
-                                   "reviewed", "kind_counts", "thumb", "cover", "no_hull", "report", "label")} | {
+                                   "reviewed", "kind_counts", "thumb", "cover", "no_hull", "report", "label",
+                                   "zones", "tags")} | {
         "elements": (it.get("model") or {}).get("elements"),
         "solve": ((it.get("model") or {}).get("solve") or {}).get("status")}
 
@@ -99,8 +106,12 @@ def target_page(db: Session, user, value: str) -> dict:
         "no_model": [r["entry_id"] for r in with_hull if kc(r, "report") and not kc(r, "model")],
     }
     titles = {r["entry_id"]: r["title"] for r in rows}
+    from . import access
+
     return {
         "value": canon, "synonyms": synonyms, "other": canon == vocab.OTHER,
+        # 빈 곳 목록은 고칠 수 있는 사람(LV2 이상)에게 펼쳐 보인다 — 그 밖에는 숫자만(할 일 목록처럼 보이지 않게)
+        "can_fix": access.can_write_shared(user),
         "counts": {"entries": len(rows), "hulls": len(hulls), "assignees": len(people),
                    "latest": max((r["posted_at"] or "" for r in rows), default="") or None},
         "start": start,
