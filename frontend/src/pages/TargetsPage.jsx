@@ -38,7 +38,7 @@ export default function TargetsPage() {
   return (
     <Page>
       <PageHeader title="업무별 모음"
-        description="업무(대상)마다 기준 문서, 대표 예제, 지난 실적, 물어볼 사람을 한 화면에 모았습니다. 처음 맡은 해석이나 복습할 때 여기서 시작하세요." />
+        description="업무(대상)마다 기준 문서, 먼저 볼 예제, 지난 실적, 물어볼 사람을 한 화면에 모았습니다. 처음 맡은 해석이나 복습할 때 여기서 시작하세요." />
       {error && <ErrorNote>{error}</ErrorNote>}
       {!data && !error && <BlockSkeleton className="h-40" />}
       {data && all.length === 0 && (

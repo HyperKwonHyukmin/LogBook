@@ -45,7 +45,7 @@ const PAGE = {
   models: [], people: [{ id: 7, name: '구조가', department: '구조해석부', employed: true, count: 12 }],
   gaps: { no_conclusion: { count: 13, items: [{ entry_id: 'E000002', title: 't' }] }, no_report: { count: 0, items: [] }, no_model: { count: 0, items: [] } } };
 
-test('69 — 대상 화면: 소개 문장, 시작 순서, 대표 예제, 기준 문서, 실적(거르기, 10건 뒤 펼치기), 레일', async () => {
+test('69 — 대상 화면: 소개 문장, 시작 순서, 먼저 볼 예제, 기준 문서, 실적(거르기, 10건 뒤 펼치기), 레일', async () => {
   stub({ '/api/targets/page?value=Unit': PAGE });
   at('/t/Unit');
   expect(await screen.findByRole('heading', { level: 1, name: 'Unit' })).toBeInTheDocument();
@@ -53,7 +53,7 @@ test('69 — 대상 화면: 소개 문장, 시작 순서, 대표 예제, 기준 
   expect(screen.getByText(/주 담당은 구조가 님\(12건\)입니다/)).toBeInTheDocument();
   const nav = screen.getByRole('navigation', { name: '처음이면 이 순서로' });
   expect(within(nav).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['#base', '#example', '#conclusions', '#records', '#people']);
-  const ex = screen.getByRole('region', { name: '대표 예제' });
+  const ex = screen.getByRole('region', { name: '먼저 볼 예제' });
   expect(within(ex).getByRole('link', { name: 'E000001 제목' })).toHaveAttribute('href', '/e/E000001');
   expect(within(ex).getByText('권상 보고서, 32쪽')).toBeInTheDocument();
   expect(within(screen.getByRole('region', { name: '기준부터 읽기' })).getByText('권상 지침')).toBeInTheDocument();

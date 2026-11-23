@@ -60,7 +60,7 @@ export function reportText(rep) {
 export function steps(d) {
   const s = [];
   if (d.base_docs?.length) s.push({ id: 'base', label: '기준 문서', count: d.base_docs.length });
-  if (d.start?.length) s.push({ id: 'example', label: '대표 예제', count: null });
+  if (d.start?.length) s.push({ id: 'example', label: '먼저 볼 예제', count: null });
   if (d.conclusions?.length) s.push({ id: 'conclusions', label: '지난 결론', count: d.conclusions.length });
   if (d.records?.length) s.push({ id: 'records', label: '실적', count: d.records.length });
   if (d.people?.length) s.push({ id: 'people', label: '물어볼 사람', count: d.people.length });

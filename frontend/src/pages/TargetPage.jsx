@@ -73,7 +73,7 @@ function EntryRow({ r, reasons = false, big = false }) {
   );
 }
 
-/** 대표 예제 한 건 — 왼쪽 3D 그림, 오른쪽 사실 목록과 동작. 카드가 아니라 헤어라인으로 나눈 영역. */
+/** 먼저 볼 예제 한 건(자동으로 고름, 2단계에서 사람이 고정하면 그것이 대표 예제) — 왼쪽 3D 그림, 오른쪽 사실 목록과 동작. 카드가 아니라 헤어라인으로 나눈 영역. */
 function Featured({ r }) {
   const facts = [
     ['호선', r.hulls?.length ? <span className="flex flex-wrap gap-1.5">{r.hulls.map((h) => <HullChip key={h} hull={h} />)}</span> : '공용'],
@@ -90,7 +90,7 @@ function Featured({ r }) {
       <Thumb r={r} className="aspect-[16/10] w-full rounded-md" />
       <div className="flex min-w-0 flex-col gap-3">
         <div>
-          <h2 id="example-h" className="text-meta font-medium text-n-600">대표 예제</h2>
+          <h2 id="example-h" className="text-meta font-medium text-n-600">먼저 볼 예제</h2>
           <Link to={`/e/${r.entry_id}`} className="mt-1 block text-[18px] leading-7 font-semibold tracking-[-0.01em] text-n-900 hover:text-brand">{r.title}</Link>
           {reasons.length > 0 && <p className="mt-0.5 text-meta text-n-600">고른 이유: {reasons.join(', ')}</p>}
         </div>
@@ -238,7 +238,7 @@ function Rail({ d }) {
 }
 
 /**
- * 69 — 대상 화면(/t/Unit): 업무 안내. 머리(이름, 소개 문장, 시작 순서) → 대표 예제 → 본문(기준 문서, 다른 예제, 결론, 실적) + 레일(사람, 선종, 갖춤).
+ * 69 — 대상 화면(/t/Unit): 업무 안내. 머리(이름, 소개 문장, 시작 순서) → 먼저 볼 예제 → 본문(기준 문서, 비슷한 최근 예제, 결론, 실적) + 레일(사람, 선종, 갖춤).
  * 한 자료는 한 곳에서만 크게 보인다. 확정 자료만, 보는 사람의 열람 권한대로(GET /api/targets/page).
  */
 export default function TargetPage() {
@@ -312,7 +312,7 @@ export default function TargetPage() {
                 ) : <p className="text-meta text-n-600">아직 없습니다. 지침, 사내 기준, 참고 논문을 '호선 없음(공용)'으로 올리면 여기에 모입니다.</p>}
               </Section>
               {examples.length > 0 && (
-                <Section id="examples" title="다른 예제" hint="대표 예제 다음으로 볼 자료">
+                <Section id="examples" title="비슷한 최근 예제" hint="같은 기준으로 고른 다음 자료">
                   <ul className="divide-y divide-n-200">{examples.map((r) => <EntryRow key={r.entry_id} r={r} reasons big />)}</ul>
                 </Section>
               )}
