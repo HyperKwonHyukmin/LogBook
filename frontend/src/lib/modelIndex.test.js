@@ -1,5 +1,5 @@
 import { buildGeometry } from './modelGeometry.js';
-import { elementNodeIndices, elementTable, listRigids, rigidNodes } from './modelIndex.js';
+import { SECTION_KEYS, elementNodeIndices, elementTable, listRigids, rigidNodes } from './modelIndex.js';
 import { beamOrientInfo, nodeInfo, rigidInfo } from './elementInfo.js';
 import { classifyNodes } from './nodeCheck.js';
 import { computeGroups } from './modelGroups.js';
@@ -27,4 +27,16 @@ test('요소 절점·요소표·방향 정보·절점 정보', () => {
   expect(beamOrientInfo(m, g, 5)).toBeNull();
   const info = nodeInfo(m, g, 0, { check: classifyNodes(m), groups: computeGroups(m) });
   expect(info).toEqual({ id: 101, xyz: [0, 0, 0], degree: 1, cls: 1, group: 0, spc: 123456, mass: null });
+});
+
+test('솔리드 겉면은 단면 종류가 솔리드', () => {
+  const m = sampleModel();
+  m.header.cards.tri = [...m.header.cards.tri, 'CTETRA'];
+  m.blocks.tri_cards = new Uint8Array([3]);
+  const t = elementTable(m, buildGeometry(m));
+  const tri = t.cards.indexOf('CTETRA');
+  const shell = t.cards.indexOf('CQUAD4');
+  const sectionOfCard = (c) => SECTION_KEYS[t.section[Array.from(t.card).indexOf(c)]];
+  expect(sectionOfCard(tri)).toBe('SOLID');
+  expect(sectionOfCard(shell)).toBe('SHELL');
 });

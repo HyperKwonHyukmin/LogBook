@@ -4,6 +4,7 @@
 [초안 만들기]는 묶음 행을 잠그고 review 일 때만 한 번(두 번 누름, 두 창 동시 요청 방지) → 만든 초안이 있으면 processed, 없으면 done.
 원본은 staging 폴더의 `_task_sheet.xlsx`, 만든 기록은 `_task_import.json`(재구축 원천 — 파일 없는 초안은 이것 없이는 재구축 때 사라진다).
 다시 넣기: 행 열쇠(과제의뢰서 NO., 없으면 '연도-#NO')가 이미 있으면(초안, 확정, 휴지통) 만들지 않는다 — entry_tasks.task_key 고유 제약이 최종으로 막는다.
+휴지통에 있는 행은 알림을 '휴지통에 있음(번호), 휴지통에서 되돌리세요'로 따로 보인다(버린 초안은 되돌리기로 살린다).
 금액, 기여도, M/H, 직책과장은 파서가 읽지 않는다.
 """
 import json
@@ -145,7 +146,11 @@ def _plan(db: Session, batch: models.Batch, viewer=None) -> list[dict]:
         exists = None
         if hit:
             t, e = hit
-            if e.id in seen:
+            if e.id in seen and e.status == "trashed":
+                # 버린 초안(또는 지운 자료)도 열쇠를 쥐고 있다 — 새로 만들면 휴지통에서 되돌릴 때 같은 과제가 둘이 된다(2026-11-24)
+                exists = {"entry_id": e.entry_id, "status": e.status}
+                notices.insert(0, f"휴지통에 있음({e.entry_id}), 휴지통에서 되돌리세요")
+            elif e.id in seen:
                 exists = {"entry_id": e.entry_id, "status": e.status}
                 changed = _changed(e, t, r, category)
                 notices.insert(0, f"이미 있음({e.entry_id})" + (f", 바뀐 칸: {', '.join(changed)}" if changed else ""))

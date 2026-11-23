@@ -46,6 +46,7 @@ export function groupColor(index) {
 export const SECTION_COLORS = {
   L: '#3DC584', I: '#4D8FEF', H: '#9A79F2', T: '#EDAE3B', BOX: '#EE7D3E', CHAN: '#D865C2',
   TUBE: '#E3CF72', ROD: '#E8587D', BAR: '#9FCB55', OTHER: '#B5BFCC', LINE: '#7A8196', SHELL: SHELL_STEEL,
+  SOLID: '#5FB3D9',
 };
 
 export function sectionColor(type) {
@@ -57,7 +58,12 @@ export const CARD_COLORS = {
   CBAR: '#9FCB55', CBEAM: '#4D8FEF', CROD: '#E8587D', CONROD: '#D865C2', CBUSH: '#E3CF72',
   CTRIA3: '#2DB5A3', CTRIA6: '#3DC584', CTRIAR: '#B5BFCC',
   CQUAD4: '#6E7FD8', CQUAD8: '#9A79F2', CQUADR: '#EDAE3B',
+  // 솔리드는 겉면만 그린다(백엔드 bdf/solids.py) — 면의 카드 이름이 원래 솔리드 카드다
+  CTETRA: '#5FB3D9', CPENTA: '#C98B5B', CHEXA: '#8E9E4F', CPYRAM: '#B07FC0',
 };
+
+/** 솔리드 카드 — 겉면 삼각형, 사각형으로 들어오지만 범례와 단면 색은 '솔리드'로 묶는다. */
+export const SOLID_CARDS = new Set(['CTETRA', 'CPENTA', 'CHEXA', 'CPYRAM']);
 
 export function cardColor(card) {
   return CARD_COLORS[card] || '#B5BFCC';

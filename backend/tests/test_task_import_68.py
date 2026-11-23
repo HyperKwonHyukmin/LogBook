@@ -237,6 +237,11 @@ def test_discarded_task_draft_is_not_rebuilt(world, db, storage, client, auth_he
     with open(long_join(storage.staging / b.key, task_import.IMPORT_FILE), encoding="utf-8") as fh:
         data = json.load(fh)
     assert data["gone"] == created
+    # 같은 엑셀을 다시 넣으면 버린 초안 행은 '휴지통에 있음'으로 보이고 새로 만들지 않는다
+    b2 = _batch(db, storage, key="20261123-task-0010")
+    row = next(x for x in client.get("/api/batches", params={"lite": 1}, headers=h).json() if x["key"] == b2.key)["task_sheet"]["rows"][0]
+    assert row["exists"] == {"entry_id": created[0], "status": "trashed"} and not row["checked"]
+    assert row["notices"][0] == f"휴지통에 있음({created[0]}), 휴지통에서 되돌리세요"
     nb = models.Batch(key="20261123-task-0009", source="web", original_name="x", uploader=LV2, state="processed")
     db.add(nb)
     db.commit()

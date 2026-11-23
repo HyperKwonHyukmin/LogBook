@@ -42,7 +42,7 @@ import { computeFrame, nodeBounds, perspectiveDistance, VIEW_PRESETS } from '../
 import { decodePick } from '../../lib/modelGeometry.js';
 import {
   AXIS_COLORS, DIFF_COLORS, GROUP_COLORS, MARKER_COLORS, NO_GROUP_COLOR, NODE_CLASS_COLORS, SELECTION_COLORS,
-  cardColor, pidColor, sectionColor,
+  SOLID_CARDS, cardColor, pidColor, sectionColor,
 } from '../../lib/pidPalette.js';
 import { fillBeamFrames } from '../../lib/beamFrame.js';
 import { elementNodeIndices, rigidNodes } from '../../lib/modelIndex.js';
@@ -612,7 +612,7 @@ export function createViewerEngine(container) {
     for (const [pid, o] of groupObjs) {
       const ranges = plan?.ranges.get(pid) || [];
       o.beamMats.forEach((m, i) => m.color.set(rangeColor(pid, o.beamCards[i], ranges[i]?.type || 'LINE')));
-      o.shellMats.forEach((m, i) => m.color.set(rangeColor(pid, o.shellCards[i], 'SHELL')));
+      o.shellMats.forEach((m, i) => m.color.set(rangeColor(pid, o.shellCards[i], SOLID_CARDS.has(o.shellCards[i]) ? 'SOLID' : 'SHELL')));
       if (o.edgeMat) {
         // 경계선은 은은하게 — 면 색을 어둡게 한 선(PID) 또는 바탕 쪽 어두운 선.
         if (colorMode === 'pid' && !diff) o.edgeMat.color.set(pidColor(pid)).multiplyScalar(0.4);

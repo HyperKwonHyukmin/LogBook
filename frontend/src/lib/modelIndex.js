@@ -6,6 +6,7 @@
  */
 import { ELEM_BEAM, ELEM_TRI } from './modelGeometry.js';
 import { SECTION_TYPES, sectionOf } from './sectionProfile.js';
+import { SOLID_CARDS } from './pidPalette.js';
 
 export const RBE_KIND_CARDS = ['RBE2', 'RBE3'];
 
@@ -103,11 +104,11 @@ export function createIdIndex(lbm, geometry, rigids) {
   };
 }
 
-/** 요소 순번 → 단면 종류 이름(1D: SECTION_TYPES 또는 'LINE', 쉘: 'SHELL'). */
-export const SECTION_KEYS = [...SECTION_TYPES, 'LINE', 'SHELL'];
+/** 요소 순번 → 단면 종류 이름(1D: SECTION_TYPES 또는 'LINE', 쉘: 'SHELL', 솔리드 겉면: 'SOLID'). */
+export const SECTION_KEYS = [...SECTION_TYPES, 'LINE', 'SHELL', 'SOLID'];
 export const SECTION_LABELS = {
   L: 'L', I: 'I', H: 'H', T: 'T', BOX: 'BOX', CHAN: 'CHAN', TUBE: 'TUBE', ROD: 'ROD', BAR: 'BAR',
-  OTHER: '기타 단면', LINE: '단면 없음', SHELL: '쉘',
+  OTHER: '기타 단면', LINE: '단면 없음', SHELL: '쉘', SOLID: '솔리드',
 };
 
 /**
@@ -131,6 +132,7 @@ export function elementTable({ header, blocks }, geometry) {
   const secCache = new Map();
   const shellKey = SECTION_KEYS.indexOf('SHELL');
   const lineKey = SECTION_KEYS.indexOf('LINE');
+  const solidKey = SECTION_KEYS.indexOf('SOLID');
   for (let e = 0; e < total; e += 1) {
     const row = geometry.elemRow[e];
     const kind = geometry.elemKind[e];
@@ -149,12 +151,14 @@ export function elementTable({ header, blocks }, geometry) {
       section[e] = s;
     } else if (kind === ELEM_TRI) {
       pid[e] = blocks.tris[row * 5 + 1];
-      card[e] = cardOf(header.cards?.tri?.[blocks.tri_cards?.[row]]);
-      section[e] = shellKey;
+      const name = header.cards?.tri?.[blocks.tri_cards?.[row]];
+      card[e] = cardOf(name);
+      section[e] = SOLID_CARDS.has(name) ? solidKey : shellKey;
     } else {
       pid[e] = blocks.quads[row * 6 + 1];
-      card[e] = cardOf(header.cards?.quad?.[blocks.quad_cards?.[row]]);
-      section[e] = shellKey;
+      const name = header.cards?.quad?.[blocks.quad_cards?.[row]];
+      card[e] = cardOf(name);
+      section[e] = SOLID_CARDS.has(name) ? solidKey : shellKey;
     }
   }
   return { pid, card, cards, section };

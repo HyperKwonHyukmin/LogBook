@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from .coords import CoordSystem, resolve_coords
 from .deck import Card
 from .fields import is_real, parse_float, parse_int
+from .solids import SOLID_CARDS, outer_faces
 
 BEAM_CARDS = ("CBAR", "CBEAM", "CROD", "CONROD", "CBUSH")
 TRI_CARDS = ("CTRIA3", "CTRIA6", "CTRIAR")
@@ -85,14 +86,21 @@ class Model:
     sol: str | None = None
     warnings: list[str] = field(default_factory=list)
     unsupported: dict[str, int] = field(default_factory=dict)
+    solid_counts: dict[str, int] = field(default_factory=dict)   # 솔리드 카드 → 요소 수(tris·quads 에는 겉면만 든다)
     includes: list[str] = field(default_factory=list)
     missing_includes: list[str] = field(default_factory=list)
 
     def element_total(self) -> int:
         return len(self.beams) + len(self.tris) + len(self.quads)
 
+    def element_counts(self) -> Counter:
+        """카드별 요소 수 — 솔리드는 겉면 수가 아니라 요소 수로 센다."""
+        c = Counter(e.card for e in (*self.beams, *self.tris, *self.quads) if e.card not in self.solid_counts)
+        c.update(self.solid_counts)
+        return c
+
     def counts(self) -> dict[str, int]:
-        c = Counter(e.card for e in (*self.beams, *self.tris, *self.quads))
+        c = self.element_counts()
         c.update(r.card for r in self.rigids)
         if self.masses:
             c["CONM2"] = len(self.masses)
@@ -343,6 +351,18 @@ def _check_ids(m: Model) -> None:
             raise ModelError("id_out_of_range")
 
 
+def _add_solids(m: Model, raw: list[tuple]) -> int:
+    """솔리드의 겉면을 m.tris·m.quads 에 더하고 m.solid_counts 를 채운다. 절점이 빠진 솔리드 수를 돌려준다.
+    쉘보다 뒤에 불러야 한다 — 쉘이 이미 덮은 면은 빼고 넣는다(solids.outer_faces)."""
+    ok = [s for s in raw if all(nid is not None and nid in m.nodes for nid in s[3])]
+    m.solid_counts = dict(Counter(s[2] for s in ok))
+    shell_faces = {tuple(sorted(e.nodes)) for e in (*m.tris, *m.quads)}
+    tris, quads = outer_faces(ok, shell_faces)
+    m.tris += [Element(eid, card, pid, nodes) for eid, pid, card, nodes in tris]
+    m.quads += [Element(eid, card, pid, nodes) for eid, pid, card, nodes in quads]
+    return len(raw) - len(ok)
+
+
 def build_model(cards: list[Card], *, sol: str | None = None, warnings=(), includes=(), missing=()) -> Model:
     m = Model(sol=sol, warnings=list(warnings), includes=list(includes), missing_includes=list(missing))
     raw_grids: dict[int, tuple[int | None, float, float, float]] = {}
@@ -420,6 +440,12 @@ def build_model(cards: list[Card], *, sol: str | None = None, warnings=(), inclu
                 pid = parse_int(f[1])
                 put(eid, "tri" if k == 3 else "quad",
                     Element(eid, n, eid if pid is None else pid, tuple(parse_int(x) for x in f[2:2 + k])))
+        elif n in SOLID_CARDS:
+            eid = parse_int(f[0])
+            k = SOLID_CARDS[n]
+            if eid is not None:
+                pid = parse_int(f[1])
+                put(eid, "solid", (eid, eid if pid is None else pid, n, tuple(parse_int(x) for x in f[2:2 + k])))
         elif n == "RBE2":
             eid, gn = parse_int(f[0]), parse_int(f[1])
             if eid is not None and gn is not None:
@@ -476,6 +502,7 @@ def build_model(cards: list[Card], *, sol: str | None = None, warnings=(), inclu
     raw_quads = [o for k, o in elements.values() if k == "quad"]
     raw_rigids = [o for k, o in elements.values() if k == "rigid"]
     raw_masses = [o for k, o in elements.values() if k == "mass"]
+    raw_solids = [o for k, o in elements.values() if k == "solid"]
     del elements
 
     missing = 0
@@ -491,6 +518,8 @@ def build_model(cards: list[Card], *, sol: str | None = None, warnings=(), inclu
             m.rigids.append(Rigid(r.eid, r.card, r.center, others))
         else:
             missing += 1
+    if raw_solids:
+        missing += _add_solids(m, raw_solids)
     m.masses = [x for x in raw_masses if x[1] in m.nodes]
     missing += len(raw_masses) - len(m.masses)
     m.spcs = {g: comp for g, comp in m.spcs.items() if g in m.nodes}
