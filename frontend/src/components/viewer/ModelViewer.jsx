@@ -3,6 +3,7 @@ import { Link, useInRouterContext } from 'react-router-dom';
 import { ChevronDown, ChevronRight, CircleAlert, Expand, Focus, Info, LocateFixed, PanelRightClose, Scan, X } from 'lucide-react';
 import { COLOR_MODES, COLOR_MODE_LABELS } from '../../lib/legend.js';
 import { MARKER_COLORS } from '../../lib/pidPalette.js';
+import { elementCount } from '../../lib/modelIndex.js';
 import { VIEW_PRESETS } from '../../lib/viewFrame.js';
 import SolveCheckCard from '../preview/SolveCheckCard.jsx';
 import Button, { buttonClass } from '../ui/Button.jsx';
@@ -233,7 +234,7 @@ function FullViewer({ v, className, fileId, fileName, solve: solveSummary, model
   };
 
   const status = !m ? '' : tab === 'model'
-    ? `PID ${num(m.geometry.groups.length)} · 요소 ${num(m.geometry.total)} · 절점 ${num(m.geometry.positions.length / 3)}`
+    ? `PID ${num(m.geometry.groups.length)} · 요소 ${num(elementCount(m.lbm, m.table))} · 절점 ${num(m.geometry.positions.length / 3)}`
     : tab === 'group'
       ? (m.groups.count > 1 ? `그룹 ${num(m.groups.count)} · 주 구조에서 떨어진 그룹 ${num(m.groups.count - 1)}` : `그룹 ${num(m.groups.count)} · 모두 이어져 있습니다`)
       : `자유단 ${num(m.check.counts.free)} · 고립 ${num(m.check.counts.orphan)}`;

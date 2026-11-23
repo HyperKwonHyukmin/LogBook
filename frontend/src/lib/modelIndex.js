@@ -108,7 +108,7 @@ export function createIdIndex(lbm, geometry, rigids) {
 export const SECTION_KEYS = [...SECTION_TYPES, 'LINE', 'SHELL', 'SOLID'];
 export const SECTION_LABELS = {
   L: 'L', I: 'I', H: 'H', T: 'T', BOX: 'BOX', CHAN: 'CHAN', TUBE: 'TUBE', ROD: 'ROD', BAR: 'BAR',
-  OTHER: '기타 단면', LINE: '단면 없음', SHELL: '쉘', SOLID: '솔리드',
+  OTHER: '기타 단면', LINE: '단면 없음', SHELL: '쉘', SOLID: '솔리드 겉면',
 };
 
 /**
@@ -162,4 +162,15 @@ export function elementTable({ header, blocks }, geometry) {
     }
   }
   return { pid, card, cards, section };
+}
+
+/** 요소 수 — 솔리드는 겉면 수가 아니라 솔리드 요소 수(header.counts)로 센다. */
+export function elementCount({ header }, table) {
+  let faces = 0;
+  const solidCard = table.cards.map((c) => SOLID_CARDS.has(c));
+  for (let e = 0; e < table.card.length; e += 1) if (solidCard[table.card[e]]) faces += 1;
+  if (!faces) return table.card.length;
+  let solids = 0;
+  for (const c of SOLID_CARDS) solids += header.counts?.[c] || 0;
+  return table.card.length - faces + solids;
 }

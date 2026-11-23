@@ -7,6 +7,7 @@
 import gzip
 import json
 import struct
+from collections import Counter
 
 import numpy as np
 
@@ -51,6 +52,7 @@ def build_blocks(m: Model, cards: dict[str, list[str]] | None = None) -> dict[st
     ids = sorted(m.nodes)
     idx = {nid: i for i, nid in enumerate(ids)}
     rigid_lines, rigid_kinds = [], []
+    solid_use = Counter(n for s in m.solids for n in s[3])
     for r in m.rigids:
         for o in r.others:
             rigid_lines.append((r.eid, idx[r.center], idx[o]))
@@ -71,6 +73,8 @@ def build_blocks(m: Model, cards: dict[str, list[str]] | None = None) -> dict[st
         "masses": _arr([(eid, idx[g]) for eid, g, _ in m.masses], "<i4", 2),
         "mass_values": _arr([mass for _, _, mass in m.masses], "<f4", 1),
         "spcs": _arr([(idx[g], int(comp)) for g, comp in sorted(m.spcs.items()) if comp.isdigit()], "<i4", 2),
+        # 솔리드가 쓰는 절점(순번, 솔리드 수) — 겉면에 안 나오는 속 절점이 절점 점검에서 '고립'이 되지 않게(2026-11-24)
+        "solid_nodes": _arr([(idx[n], c) for n, c in sorted(solid_use.items())], "<i4", 2),
     }
 
 

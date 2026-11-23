@@ -16,6 +16,7 @@ from collections import OrderedDict
 import numpy as np
 
 from ..bdf.lbm import read_lbm
+from ..bdf.solids import SOLID_CARDS
 from ..convert.job import SERVABLE_STATES, model_paths
 from ..storage.paths import StoragePaths, to_long
 
@@ -100,7 +101,11 @@ def _element(m: dict, eid: int) -> dict | None:
         idx = [int(x) for x in rows[r, 2:]]
         k = int(b[card_block][r]) if card_block in b else 0
         names = cards.get(card_list) or []
-        out = {"card": names[k] if k < len(names) else f"?{k}", "pid": int(rows[r, 1]),
+        card = names[k] if k < len(names) else f"?{k}"
+        if card in SOLID_CARDS:
+            # lbm 에는 솔리드의 겉면만 있어 절점이 요소 것이 아니다 — 이웃이 바뀌면 첫 겉면도 바뀌어 거짓 변경이 된다
+            return {"card": card, "pid": int(rows[r, 1])}
+        out = {"card": card, "pid": int(rows[r, 1]),
                "nodes": [int(node_ids[i]) for i in idx], "coords": [_xyz(m, i) for i in idx]}
         if block == "beams":
             orient, offsets = b.get("beam_orient"), b.get("beam_offsets")

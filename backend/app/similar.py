@@ -26,6 +26,7 @@ from . import access, models
 from .bdf.deck import DeckReader, DeckTooLarge
 from .bdf.fingerprint import fingerprint
 from .bdf.model import BEAM_CARDS, QUAD_CARDS, RIGID_CARDS, TRI_CARDS, ModelError, build_model
+from .bdf.solids import SOLID_CARDS
 from .bdf.signature import VERSION as SIG_VERSION, compute_signature
 from .vocab import Vocab
 
@@ -66,7 +67,8 @@ def sections_of(fp: str | None) -> list[str]:
 def features(counts: dict | None, bbox: dict | None, fp: str | None, sol: str | None, sig_geometry: str | None) -> dict | None:
     counts = counts or {}
     beams = sum(counts.get(c, 0) for c in BEAM_CARDS)
-    shells = sum(counts.get(c, 0) for c in (*TRI_CARDS, *QUAD_CARDS))
+    # 솔리드(2026-11-24)는 쉘과 같은 면 요소 칸에 센다 — mix 칸 수를 바꾸면 저장된 특징과 비교가 어긋난다
+    shells = sum(counts.get(c, 0) for c in (*TRI_CARDS, *QUAD_CARDS, *SOLID_CARDS))
     rigids = sum(counts.get(c, 0) for c in RIGID_CARDS)
     masses = counts.get("CONM2", 0)
     elems = beams + shells

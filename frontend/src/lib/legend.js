@@ -6,7 +6,7 @@
  *   visible = 지금 보이는 요소 수(PID 숨김·그룹 숨김을 둘 다 반영)
  *   hidden  = 요소가 있는데 하나도 안 보임 → 범례에 '숨김' 으로 표시한다(색만으로 알리지 않는다)
  */
-import { cardColor, groupColor, pidColor, sectionColor } from './pidPalette.js';
+import { SOLID_CARDS, cardColor, groupColor, pidColor, sectionColor } from './pidPalette.js';
 import { SECTION_KEYS, SECTION_LABELS } from './modelIndex.js';
 
 /** 처음 열 때의 색 기준은 PID(BDF 에는 배관·구조 구분이 없어 한 색으로는 모델이 읽히지 않는다). */
@@ -40,7 +40,7 @@ export function legendItems({ mode, table, elemGroup, groupCount = 0, hiddenPids
     order = (a, b) => a - b;
   } else if (mode === 'type') {
     keyOf = (e) => table.card[e];
-    labelOf = (k) => table.cards[k];
+    labelOf = (k) => (SOLID_CARDS.has(table.cards[k]) ? `${table.cards[k]} 겉면` : table.cards[k]);   // 개수가 요소가 아니라 겉면 수
     colorOf = (k) => cardColor(table.cards[k]);
     order = (a, b) => table.cards[a].localeCompare(table.cards[b]);
   } else {

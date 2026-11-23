@@ -33,19 +33,19 @@ def connected_groups(model: Model) -> list[set[int]]:
             else:
                 parent[ra] = rb
 
-    elements = (*model.beams, *model.tris, *model.quads)
-    for e in elements:
-        first = e.nodes[0]
+    elements = model.connected_nodes()     # 솔리드는 겉면이 아니라 요소 자체(속 절점까지)
+    for nodes in elements:
+        first = nodes[0]
         add(first)
-        for n in e.nodes[1:]:
+        for n in nodes[1:]:
             union(first, n)
     for r in model.rigids:
         for n in r.others:
             union(r.center, n)
 
     elem_count: dict[int, int] = {}
-    for e in elements:
-        root = _find(parent, e.nodes[0])
+    for nodes in elements:
+        root = _find(parent, nodes[0])
         elem_count[root] = elem_count.get(root, 0) + 1
     members: dict[int, set[int]] = {root: set() for root in elem_count}
     for n in parent:

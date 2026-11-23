@@ -3,12 +3,13 @@
 뷰어와 lbm 은 보, 삼각형, 사각형만 안다. 솔리드는 다른 솔리드와 나누지 않는 면(모델 겉면)만 골라
 삼각형, 사각형 쉘처럼 넘긴다. 속 면은 겉에서 보이지 않고 수가 요소의 몇 배라 그리지 않는다.
 겉면은 원래 솔리드의 EID, PID, 카드 이름을 그대로 달고 나가므로 같은 EID 가 여러 면에 붙는다
-(면을 누르면 그 솔리드의 정보가 보인다). 2차 요소(CTETRA 10절점 등)는 꼭짓점만 쓴다.
+(면을 누르면 그 솔리드의 정보가 보인다). 2차 요소(CTETRA 10절점 등)의 겉면은 꼭짓점만으로 그린다.
 """
 import numpy as np
 
-# 카드 → 꼭짓점 수(MSC QRG 의 G1 부터 꼭짓점이 먼저 온다)
+# 카드 → 꼭짓점 수(MSC QRG 의 G1 부터 꼭짓점이 먼저 온다)와 중간 절점까지 센 최대 절점 수
 SOLID_CARDS = {"CTETRA": 4, "CPYRAM": 5, "CPENTA": 6, "CHEXA": 8}
+SOLID_MAX_NODES = {"CTETRA": 10, "CPYRAM": 13, "CPENTA": 15, "CHEXA": 20}
 
 # 꼭짓점 수 → (삼각형 면, 사각형 면). 순번은 꼭짓점 순번(0부터).
 FACES: dict[int, tuple[tuple, tuple]] = {
@@ -33,18 +34,18 @@ def _outer(faces: list[np.ndarray], owners: list[np.ndarray], width: int):
 
 def outer_faces(solids: list[tuple[int, int, str, tuple[int, ...]]],
                 skip: set[tuple[int, ...]] | None = None) -> tuple[list[tuple], list[tuple]]:
-    """solids = [(eid, pid, card, 꼭짓점 절점 번호)] → (삼각형 겉면, 사각형 겉면), 각 항목 (eid, pid, card, 절점).
+    """solids = [(eid, pid, card, 절점 번호 — 꼭짓점이 앞)] → (삼각형 겉면, 사각형 겉면), 각 항목 (eid, pid, card, 절점).
 
     skip: 이미 쉘 요소가 있는 면(절점 번호 정렬 튜플) — 같은 자리에 두 번 그리면 면이 깜박인다."""
     by_k: dict[int, list[int]] = {}
     for i, s in enumerate(solids):
-        by_k.setdefault(len(s[3]), []).append(i)
+        by_k.setdefault(SOLID_CARDS.get(s[2], 0), []).append(i)
     tri_f, tri_o, quad_f, quad_o = [], [], [], []
     for k, rows in by_k.items():
         if k not in FACES:
             continue
         idx = np.asarray(rows, np.int64)
-        nodes = np.asarray([solids[i][3] for i in rows], np.int64)
+        nodes = np.asarray([solids[i][3][:k] for i in rows], np.int64)
         tris, quads = FACES[k]
         for face in tris:
             tri_f.append(nodes[:, face])

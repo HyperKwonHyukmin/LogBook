@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from .coords import CoordSystem, resolve_coords
 from .deck import Card
 from .fields import is_real, parse_float, parse_int
-from .solids import SOLID_CARDS, outer_faces
+from .solids import SOLID_CARDS, SOLID_MAX_NODES, outer_faces
 
 BEAM_CARDS = ("CBAR", "CBEAM", "CROD", "CONROD", "CBUSH")
 TRI_CARDS = ("CTRIA3", "CTRIA6", "CTRIAR")
@@ -87,6 +87,7 @@ class Model:
     warnings: list[str] = field(default_factory=list)
     unsupported: dict[str, int] = field(default_factory=dict)
     solid_counts: dict[str, int] = field(default_factory=dict)   # 솔리드 카드 → 요소 수(tris·quads 에는 겉면만 든다)
+    solids: list[tuple] = field(default_factory=list)            # (eid, pid, card, 절점 — 꼭짓점이 앞) — 연결 판단용, lbm 에는 겉면만
     includes: list[str] = field(default_factory=list)
     missing_includes: list[str] = field(default_factory=list)
 
@@ -98,6 +99,12 @@ class Model:
         c = Counter(e.card for e in (*self.beams, *self.tris, *self.quads) if e.card not in self.solid_counts)
         c.update(self.solid_counts)
         return c
+
+    def connected_nodes(self) -> list[tuple[int, ...]]:
+        """요소마다 절점 묶음(보, 쉘, 솔리드). 솔리드는 겉면이 아니라 요소 자체 — 속 절점까지 이어지게."""
+        out = [e.nodes for e in (*self.beams, *self.tris, *self.quads) if e.card not in self.solid_counts]
+        out += [s[3] for s in self.solids]
+        return out
 
     def counts(self) -> dict[str, int]:
         c = self.element_counts()
@@ -356,6 +363,7 @@ def _add_solids(m: Model, raw: list[tuple]) -> int:
     쉘보다 뒤에 불러야 한다 — 쉘이 이미 덮은 면은 빼고 넣는다(solids.outer_faces)."""
     ok = [s for s in raw if all(nid is not None and nid in m.nodes for nid in s[3])]
     m.solid_counts = dict(Counter(s[2] for s in ok))
+    m.solids = ok
     shell_faces = {tuple(sorted(e.nodes)) for e in (*m.tris, *m.quads)}
     tris, quads = outer_faces(ok, shell_faces)
     m.tris += [Element(eid, card, pid, nodes) for eid, pid, card, nodes in tris]
@@ -445,7 +453,10 @@ def build_model(cards: list[Card], *, sol: str | None = None, warnings=(), inclu
             k = SOLID_CARDS[n]
             if eid is not None:
                 pid = parse_int(f[1])
-                put(eid, "solid", (eid, eid if pid is None else pid, n, tuple(parse_int(x) for x in f[2:2 + k])))
+                # 꼭짓점 k 개(빈칸이면 None — 절점 누락으로 빠진다) + 적힌 중간 절점(빈칸은 생략 가능)
+                mids = (parse_int(x) for x in f[2 + k:2 + SOLID_MAX_NODES[n]])
+                nodes = tuple(parse_int(x) for x in f[2:2 + k]) + tuple(g for g in mids if g is not None)
+                put(eid, "solid", (eid, eid if pid is None else pid, n, nodes))
         elif n == "RBE2":
             eid, gn = parse_int(f[0]), parse_int(f[1])
             if eid is not None and gn is not None:

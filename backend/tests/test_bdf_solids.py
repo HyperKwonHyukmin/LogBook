@@ -2,7 +2,11 @@
 from app.bdf.deck import DeckReader
 from app.bdf.fingerprint import fingerprint
 from app.bdf.lbm import read_lbm, write_lbm
+from app.bdf.groups import connected_groups
 from app.bdf.model import build_model
+from app.revisions.item import _element
+from app.similar import features
+from app.solve.deck import fixed_nodes
 
 
 def _model(text: str):
@@ -57,3 +61,30 @@ def test_solid_with_missing_node_is_dropped():
     m = _model("GRID,1,,0.,0.,0.\nGRID,2,,1.,0.,0.\nGRID,3,,0.,1.,0.\nCTETRA,1,1,1,2,3,99\n")
     assert m.element_total() == 0 and "CTETRA" not in m.counts()
     assert "missing_node: 1" in m.warnings
+
+
+TET10 = ("GRID,1,,0.,0.,0.\nGRID,2,,1.,0.,0.\nGRID,3,,0.,1.,0.\nGRID,4,,0.,0.,1.\n"
+         + "".join(f"GRID,{i},,0.5,0.5,0.5\n" for i in range(5, 11))
+         + "GRID,11,,2.,2.,2.\nCTETRA,1,7,1,2,3,4,5,6\n,7,8,9,10\n")
+
+
+def test_groups_and_solve_use_whole_solid():
+    # 겉면에 안 나오는 중간 절점 5 에 붙은 CROD 도 솔리드와 한 그룹이다(겉면만 보면 두 그룹)
+    m = _model(TET10 + "CROD,50,9,5,11\n")
+    groups = connected_groups(m)
+    assert len(groups) == 1 and {5, 11} <= groups[0]
+    nodes, count = fixed_nodes(m)
+    assert count == 1 and 1 in nodes and 11 not in nodes     # 그룹 하나, 맨 아래 절점 쪽만 고정
+
+
+def test_lbm_solid_nodes_and_revision_item():
+    m = _model(TET10)
+    header, blocks = read_lbm(write_lbm(m))
+    assert blocks["solid_nodes"].tolist() == [[i, 1] for i in range(10)]
+    # 판 비교 상세 — 솔리드는 겉면 절점을 요소 절점처럼 비교하지 않는다
+    assert _element({"header": header, "blocks": blocks}, 1) == {"card": "CTETRA", "pid": 7}
+
+
+def test_similar_features_count_solids():
+    f = features({"CTETRA": 2, "GRID": 5}, {"min": [0, 0, 0], "max": [1, 1, 1]}, "", "101", None)
+    assert f is not None and f["elems"] == 2 and f["mix"][1] == 1.0

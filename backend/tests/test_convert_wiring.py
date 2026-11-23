@@ -164,6 +164,21 @@ def test_cli_enqueue_convert_wire_check(db, make_entry_file, capsys):
     assert enqueue_convert_all(db, wire_check=True) == 0      # 이미 대기 중
 
 
+def test_cli_enqueue_convert_no_elements(db, make_entry_file, capsys):
+    """2026-11-24 — --no-elements 는 '요소 없음'으로 건너뛴 모델만 다시 넣는다(솔리드만 든 BDF 를 겉면 미리보기로)."""
+    from app.cli import enqueue_convert_all, main
+
+    a, b, c = [make_entry_file(name=f"{n}.bdf", kind="model")[1] for n in "abc"]
+    db.add_all([models.ModelSummary(file_id=a.id, state="skipped", error="no_elements"),
+                models.ModelSummary(file_id=b.id, state="skipped", error="drm"),
+                models.ModelSummary(file_id=c.id, state="done", key="k" * 64)])
+    db.commit()
+    assert main(["enqueue-convert", "--no-elements"]) == 0
+    assert "1건" in capsys.readouterr().out
+    assert {j.target_id for j in db.query(models.Job).filter_by(type="convert_model")} == {a.id}
+    assert enqueue_convert_all(db, no_elements=True) == 0      # 이미 대기 중
+
+
 def test_cli_main_enqueue_convert_outdated(db, make_entry_file, capsys):
     from app.cli import main
 

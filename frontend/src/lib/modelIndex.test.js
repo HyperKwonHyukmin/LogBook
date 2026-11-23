@@ -1,5 +1,5 @@
 import { buildGeometry } from './modelGeometry.js';
-import { SECTION_KEYS, elementNodeIndices, elementTable, listRigids, rigidNodes } from './modelIndex.js';
+import { SECTION_KEYS, elementCount, elementNodeIndices, elementTable, listRigids, rigidNodes } from './modelIndex.js';
 import { beamOrientInfo, nodeInfo, rigidInfo } from './elementInfo.js';
 import { classifyNodes } from './nodeCheck.js';
 import { computeGroups } from './modelGroups.js';
@@ -39,4 +39,14 @@ test('솔리드 겉면은 단면 종류가 솔리드', () => {
   const sectionOfCard = (c) => SECTION_KEYS[t.section[Array.from(t.card).indexOf(c)]];
   expect(sectionOfCard(tri)).toBe('SOLID');
   expect(sectionOfCard(shell)).toBe('SHELL');
+});
+
+test('요소 수는 솔리드 겉면 대신 솔리드 요소 수', () => {
+  const m = sampleModel();
+  const g = buildGeometry(m);
+  expect(elementCount(m, elementTable(m, g))).toBe(3);
+  m.header.cards.tri = [...m.header.cards.tri, 'CTETRA'];
+  m.blocks.tri_cards = new Uint8Array([3]);
+  m.header.counts = { CTETRA: 5 };
+  expect(elementCount(m, elementTable(m, buildGeometry(m)))).toBe(2 - 0 + 5);
 });

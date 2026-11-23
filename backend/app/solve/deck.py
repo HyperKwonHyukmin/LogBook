@@ -85,8 +85,8 @@ def fixed_nodes(model: Model, tol: float = FIX_TOL) -> tuple[list[int], int]:
         else:
             dependent.update(r.others)
     element_nodes: set[int] = set()
-    for e in (*model.beams, *model.tris, *model.quads):
-        element_nodes.update(e.nodes)
+    for nodes in model.connected_nodes():
+        element_nodes.update(nodes)
     groups = connected_groups(model)
     out: list[int] = []
     for nodes in groups:
