@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from .. import models, people
+from .. import models, people, profile
+from ..favorites import favorite_entry_ids
 from ..database import get_db
 from ..dependencies import client_ip, get_storage, require_auth
 from ..storage.paths import StoragePaths
@@ -35,6 +36,29 @@ def search_people(q: str = "", db: Session = Depends(get_db), user: models.User 
 def create_person(body: PersonBody, db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
     """WorkBench 에 없는 사람(퇴사자·외부 인원 등)을 이름·부서·직책으로 만든다."""
     return people.person_to_dict(people.create(db, user, body.model_dump()))
+
+
+def _with_favorites(db: Session, user: models.User, d: dict) -> dict:
+    """10 — 목록 행마다 내 즐겨찾기 여부(한 번의 질의, 호선 화면과 같다)."""
+    rows = [e for m in d["timeline"] for e in m["entries"]]
+    mine = favorite_entry_ids(db, user.employee_id, [e["entry_id"] for e in rows])
+    for e in rows:
+        e["favorite"] = e["entry_id"] in mine
+    return d
+
+
+@router.get("/by-employee/{employee_id}/profile")
+def profile_by_employee(employee_id: str, db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
+    """67 — 사번으로 프로필 카드(작성자, 호선 참여자처럼 사번만 아는 곳). 명부에 없으면 사용자 정보로."""
+    person, user_row = profile.resolve(db, employee_id=employee_id)
+    return _with_favorites(db, user, profile.person_profile(db, person, user_row, user))
+
+
+@router.get("/{person_id}/profile")
+def person_profile(person_id: int, db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
+    """67 — 담당자 프로필 카드(명부 번호). 숫자는 보는 사람이 볼 수 있는 확정 자료로만 센다."""
+    person, user_row = profile.resolve(db, person_id=person_id)
+    return _with_favorites(db, user, profile.person_profile(db, person, user_row, user))
 
 
 @router.patch("/{person_id}")

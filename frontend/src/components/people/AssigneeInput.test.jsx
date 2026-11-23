@@ -63,12 +63,12 @@ test('명부 고치기는 LV2 이상 — 바로 저장하고 목록 값을 바�
   expect(screen.queryByRole('button', { name: '김퇴사 명부 고치기' })).toBeNull();
 });
 
-test('읽기 목록 — 퇴사 표시와 주 담당자, 이름은 검색 링크', () => {
+test('읽기 목록 — 퇴사 표시와 주 담당자, 이름은 프로필 카드 또는 검색 링크', () => {
   render(<MemoryRouter><AssigneeList people={[LEE, KIM]} /></MemoryRouter>);
   expect(screen.getByRole('link', { name: '이구조' })).toHaveAttribute('href', '/?q=%EC%9D%B4%EA%B5%AC%EC%A1%B0');
   expect(screen.getByText('주')).toBeInTheDocument();
   expect(screen.getByText('(퇴사)')).toBeInTheDocument();   // 2026-11-19 — 칩 대신 이름 옆 글자
   expect(screen.getByText('선체설계부 · 수석')).toBeInTheDocument();
-  // 46 — 명부에 있는 사람은 담당자 필터로(같은 이름도 가른다)
-  expect(screen.getByRole('link', { name: '김퇴사' })).toHaveAttribute('href', '/?assignee=3');
+  // 67 — 명부에 있는 사람은 프로필 카드로(카드 안에 '담당 자료 검색' = 46 담당자 필터)
+  expect(screen.getByRole('link', { name: '김퇴사' })).toHaveAttribute('href', '/p/3');
 });

@@ -31,9 +31,11 @@ export function pageTitle(pathname, name = '') {
     const hull = path.match(/^\/h\/([^/]+)$/);
     const entry = path.match(/^\/e\/([^/]+)$/);
     const file = path.match(/^\/v\/([^/]+)$/);
+    const person = path.match(/^\/p\/([^/]+)$/);   // 67 — 담당자 프로필 카드
     if (hull) label = `${decodeURIComponent(hull[1])} 호선`;
     else if (entry) label = name || decodeURIComponent(entry[1]);
     else if (file) label = name || '파일 보기';
+    else if (person) label = name ? `${name} 담당자` : '담당자';
     else if (path.startsWith('/admin')) label = '관리';
   }
   return label ? `${label} - ${APP_NAME}` : APP_NAME;

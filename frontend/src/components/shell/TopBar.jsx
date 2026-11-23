@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { CircleHelp, History as HistoryIcon, LogOut, MessageSquare, Search, Upload, X } from 'lucide-react';
+import { CircleHelp, History as HistoryIcon, LogOut, MessageSquare, Search, Upload, X, UserRound } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import Logo from '../ui/Logo.jsx';
 import Menu from '../ui/Menu.jsx';
@@ -256,6 +256,8 @@ export default function TopBar({ user, onLogout }) {
         )}
         items={[
           // 2026-11-18 — 화면 오른쪽 아래에 늘 떠 있던 [최근 비교] 단추를 여기로 옮겼다(내용을 가렸다)
+          // 67 — 내 프로필 카드(명부에 없으면 작성한 자료만 보이는 카드)
+          { label: '내 프로필', icon: UserRound, onSelect: () => navigate(`/p/${encodeURIComponent(user.employee_id)}`) },
           { label: '최근 비교', icon: HistoryIcon, onSelect: () => navigate('/compares') },
           // 63 — 내 자료에 온 의견과 내 글에 달린 답글
           { label: unread ? `새 의견 ${unread > 99 ? '99+' : unread}` : '받은 의견', icon: MessageSquare, onSelect: () => navigate('/comments') },

@@ -16,6 +16,8 @@ import { errorText } from '../lib/labels.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import { sizeClassOf } from '../components/hull/HullPlmLookup.jsx';
 import BackButton from '../components/ui/BackButton.jsx';
+import Distribution from '../components/ui/Distribution.jsx';
+import { profileHref } from '../lib/people.js';
 
 /** '2026-09' → '2026년 9월' */
 const monthLabel = (m) => {
@@ -74,31 +76,6 @@ function SeriesLine({ hullNo, series, readOnly, onSave }) {
       )}
       {series?.manual && <span className="text-n-500">(직접 정함)</span>}
     </div>
-  );
-}
-
-/** 분포 목록 — 값을 누르면 그 필터로 이 호선을 검색한다. 막대는 중립색. */
-function Distribution({ title, rows, hullNo, filterKey }) {
-  const max = Math.max(1, ...rows.map((r) => r.count));
-  return (
-    <section aria-label={title}>
-      <SectionTitle className="mb-2">{title}</SectionTitle>
-      {rows.length === 0 && <p className="text-meta text-n-500">없음</p>}
-      <ul className="flex flex-col gap-px">
-        {rows.map((r) => (
-          <li key={r.value}>
-            <Link to={`/?hull=${encodeURIComponent(hullNo)}&${filterKey}=${encodeURIComponent(r.value)}`}
-                  className="grid h-7 grid-cols-[minmax(0,1fr)_64px_24px] items-center gap-2 rounded-md px-1.5 text-ui text-n-700 transition-colors duration-150 hover:bg-n-100 hover:text-n-900">
-              <span className="truncate" title={r.value}>{r.value}</span>
-              <span className="h-1.5 rounded-full bg-n-100">
-                <span className="block h-full rounded-full bg-n-300" style={{ width: `${(r.count / max) * 100}%` }} />
-              </span>
-              <span className="text-right font-mono text-meta text-n-600">{r.count}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
   );
 }
 
@@ -245,17 +222,27 @@ export default function HullPage() {
           ))}
         </ol>
         <aside className="flex min-w-0 flex-col gap-6">
-          <Distribution title="구역 분포" rows={s.zones} hullNo={hull.hull_no} filterKey="zone" />
+          <Distribution title="구역 분포" rows={s.zones}
+                        hrefOf={(r) => `/?hull=${encodeURIComponent(hull.hull_no)}&zone=${encodeURIComponent(r.value)}`} />
           <section aria-label="참여자">
             <SectionTitle className="mb-2">참여자</SectionTitle>
             {s.people.length === 0 && <p className="text-meta text-n-500">없음</p>}
             <ul className="flex flex-col gap-px">
-              {s.people.map((p) => (
-                <li key={p.employee_id} className="flex h-7 items-center justify-between px-1.5 text-ui text-n-700">
-                  <span title={p.employee_id}>{p.name || <span className="font-mono">{p.employee_id}</span>}</span>
-                  <span className="text-meta text-n-500"><span className="font-mono">{p.count}</span>건</span>
-                </li>
-              ))}
+              {/* 67 — 담당자(명부)를 세고, 담당자가 없는 자료만 작성자로 센다. 이름을 누르면 프로필 카드 */}
+              {s.people.map((p) => {
+                const href = profileHref(p);
+                const name = p.name || <span className="font-mono">{p.employee_id}</span>;
+                return (
+                  <li key={`${p.role || 'author'}:${p.person_id ?? p.employee_id}`} className="flex h-7 items-center justify-between gap-2 px-1.5 text-ui text-n-700">
+                    <span className="min-w-0 truncate" title={p.employee_id || undefined}>
+                      {href ? <Link to={href} className="hover:underline">{name}</Link> : name}
+                      {p.employed === false && <span className="ml-1 text-n-500">(퇴사)</span>}
+                      {p.role === 'author' && <span className="ml-1.5 text-micro text-n-500">작성</span>}
+                    </span>
+                    <span className="shrink-0 text-meta text-n-500"><span className="font-mono">{p.count}</span>건</span>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         </aside>

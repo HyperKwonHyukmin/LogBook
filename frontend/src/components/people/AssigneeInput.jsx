@@ -9,6 +9,7 @@ import { errorText } from '../../lib/labels.js';
 import { personKey } from '../../lib/entryEdit.js';
 import { canWriteShared } from '../../lib/levels.js';
 import { writeSearch } from '../../lib/search.js';
+import { profileHref } from '../../lib/people.js';
 
 /**
  * 46 — 담당자(과제를 한 사람). 올린 사람(작성자)과 따로 둔다. 여러 명, 첫 사람이 주 담당자.
@@ -32,8 +33,9 @@ export function AssigneeList({ people }) {
       {people.map((p, i) => (
         <li key={personKey(p)} className="min-w-0">
           <span className="block truncate" title={p.employee_id || undefined}>
-            <Link to={p.id ? `/?${writeSearch({ filters: { assignee: [String(p.id)] } })}` : `/?${writeSearch({ q: p.name })}`}
-                  title={`담당자 ‘${p.name}’ 의 자료`} className="hover:underline">{p.name}</Link>
+            {/* 67 — 명부 번호가 있으면 프로필 카드(카드 안에 '담당 자료 검색'), 없으면 이름으로 검색 */}
+            <Link to={p.id != null ? profileHref(p) : `/?${writeSearch({ q: p.name })}`}
+                  title={p.id != null ? `담당자 ‘${p.name}’ 프로필` : `담당자 ‘${p.name}’ 의 자료`} className="hover:underline">{p.name}</Link>
             <RetiredBadge person={p} />
             {people.length > 1 && i === 0 && <span className="ml-1.5 text-micro text-n-500">주</span>}
           </span>

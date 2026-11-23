@@ -77,12 +77,20 @@ def hull_detail(db: Session, hull_no: str, user=None) -> dict:
     zone_v = Vocab(db, "zone")
     for eid, values in zones_by_entry.items():
         zones_by_entry[eid] = sorted({zone_v.canon(v) for v in values})
-    zones, people = Counter(), Counter()
+    # 67 — 참여자 = 담당자(명부). 담당자가 없는 자료만 작성자로 센다(2026-11-23 사용성 검토 4번: 작성자만 세어 실제 담당자가 안 보였다)
+    assignees: dict[int, list[int]] = defaultdict(list)
+    if ids:
+        for eid, pid in (db.query(models.EntryAssignee.entry_id, models.EntryAssignee.person_id)
+                         .filter(models.EntryAssignee.entry_id.in_(ids))):
+            assignees[eid].append(pid)
+    zones, people, assigned = Counter(), Counter(), Counter()
     months: dict[str, list] = defaultdict(list)
     for e in entries:
         z = zones_by_entry[e.id]
         zones.update(z)
-        if e.uploaded_by:
+        if assignees[e.id]:
+            assigned.update(set(assignees[e.id]))
+        elif e.uploaded_by:
             people[e.uploaded_by] += 1
         months[_month(e)].append({"entry_id": e.entry_id, "title": e.title,
                                   "zones": z, "uploaded_by": e.uploaded_by,
@@ -90,6 +98,12 @@ def hull_detail(db: Session, hull_no: str, user=None) -> dict:
                                   "kinds": sorted(kinds_by_entry[e.id]), **access.access_brief(e)})
     names = dict(db.query(models.User.employee_id, models.User.name)
                  .filter(models.User.employee_id.in_(list(people) or [""])))
+    roster = {p.id: p for p in db.query(models.Person).filter(models.Person.id.in_(list(assigned) or [0]))}
+    participants = ([{"person_id": pid, "employee_id": roster[pid].employee_id, "name": roster[pid].name,
+                      "employed": bool(roster[pid].employed), "role": "assignee", "count": n}
+                     for pid, n in sorted(assigned.items(), key=lambda x: (-x[1], roster[x[0]].name))]
+                    + [{"person_id": None, "employee_id": p, "name": names.get(p), "employed": True, "role": "author",
+                        "count": n} for p, n in sorted(people.items(), key=lambda x: (-x[1], x[0]))])
 
     def ranked(c: Counter) -> list[dict]:
         return [{"value": v, "count": n} for v, n in sorted(c.items(), key=lambda x: (-x[1], x[0]))]
@@ -101,8 +115,7 @@ def hull_detail(db: Session, hull_no: str, user=None) -> dict:
         "drafts": drafts,
         "stats": {"entries": len(entries), "files": files, "kinds": dict(kinds),
                   "zones": ranked(zones),
-                  "people": [{"employee_id": p, "name": names.get(p), "count": n}
-                             for p, n in sorted(people.items(), key=lambda x: (-x[1], x[0]))]},
+                  "people": participants},
         "timeline": [{"month": m, "entries": months[m]} for m in sorted(months, reverse=True)],
     }
 
