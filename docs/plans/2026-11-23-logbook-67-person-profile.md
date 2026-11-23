@@ -82,6 +82,11 @@
 - 시험: 백엔드 `tests/test_profile_67.py`(6), 프런트 `PersonPage.test.jsx`(4), `HullPage.test.jsx`, `AssigneeInput.test.jsx`, `pageTitle.test.js`.
 - 145: `.env` 새 키 없음, `server_manager.py` 안 바꿈. 프런트를 바꿨으니 `frontend/dist` 를 같이 커밋한다.
 
+### 디자인 다듬기(2026-11-23, /design)
+- 명함형 머리말(이니셜, 이름, 퇴사 칩, 소속, 수치 한 줄, '자료로 본 주력' 칩)과 대상별 목록(호선별, 월별로 바꿀 수 있음). 과거 자료를 한 달에 몰아 올려 월별은 한 덩어리라 기본을 대상별로(사용자 결정).
+- 행의 호선과 구역 칸을 뺐다(제목에 이미 있고, 1100px 에서 제목이 잘렸다). 역할은 섞여 있을 때만 행에 쓴다. 레일 분포는 상위 6개 + '모두 보기'(`Distribution` `limit`).
+- 퇴사자인데 남긴 결론이 없으면 채우는 법을 안내한다. 별도 페이지 유지(모달 아님): 주소 공유와 뒤로 가기, 89건 목록.
+
 ## 2단계 — 본인 편집
 
 - 새 표 `person_profiles`(person_id PK, intro 200자, contact_topics 문의 받을 수 있는 분야, expertise JSON = 분류 목록(구역, 대상)의 대표 값,
