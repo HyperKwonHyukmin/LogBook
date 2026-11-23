@@ -2,12 +2,14 @@
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import String, and_, cast, exists, or_, select
 from sqlalchemy.orm import Session
 
 from .. import access, audit, models
 from ..database import get_db
 from ..dependencies import client_ip, get_storage, require_auth, require_writer
+from ..entries import task_import
 from ..entries.service import entry_to_dict
 from ..ingest import duplicates
 from ..ingest.progress import read_progress
@@ -69,6 +71,8 @@ def batch_to_dict(db: Session, b: models.Batch, ctx: dict | None = None, viewer=
          "auto_confirm": bool(isinstance(b.preset, dict) and b.preset.get("auto_confirm")),
          "auto_result": b.preset.get("auto_result") if isinstance(b.preset, dict) else None,
          "target_entry_id": b.target_entry_id, "draft_count": draft_count,
+         # 68 — 과제 엑셀 묶음: 미리보기(review) 또는 만든 결과
+         **({"task_sheet": task_import.preview(db, b, viewer)} if task_import.is_task_batch(b) else {}),
          "entries": [entry_to_dict(db, e, viewer=viewer) for e in drafts]}
     if lite:
         d.pop("entries")
@@ -109,19 +113,22 @@ def list_batches(scope: str = Query(default="mine", pattern="^(mine|unclaimed|al
     # 알 수 있게(일부만 빠지고 나머지를 확정한 배치는 남기지 않는다)
     recent = datetime.now() - timedelta(days=DUPLICATE_DONE_DAYS)
     q = db.query(models.Batch).filter(or_(
-        models.Batch.state.in_(("staged", "processed", "failed")),
+        models.Batch.state.in_(("staged", "processed", "failed", "review")),   # 68 — review = 과제 엑셀 미리보기 대기
         and_(models.Batch.state == "done", models.Batch.processed_at >= recent,
              cast(models.Batch.excluded, String).like(f"%{duplicates.REASON_MODEL}%"),
              ~exists().where(models.Entry.batch_id == models.Batch.id)),
         # 66 — 자동 확정한 묶음은 하루 동안 남겨 '3단계 확정 완료'와 확정한 자료를 보인다
         and_(models.Batch.state == "done", models.Batch.processed_at >= datetime.now() - timedelta(hours=AUTO_DONE_HOURS),
-             cast(models.Batch.preset, String).like('%"auto_result"%'))))
+             cast(models.Batch.preset, String).like('%"auto_result"%')),
+        # 68 — 과제 엑셀로 만들기가 모두 실패해 끝난 묶음도 하루 남겨 행별 사유를 보인다
+        and_(models.Batch.state == "done", models.Batch.processed_at >= datetime.now() - timedelta(hours=AUTO_DONE_HOURS),
+             cast(models.Batch.preset, String).like('%"task_result"%'))))
     if scope == "mine":
         q = q.filter(models.Batch.uploader == user.employee_id)
     elif scope == "unclaimed":
         q = q.filter(models.Batch.uploader.is_(None))
     rows = q.order_by(models.Batch.received_at.desc(), models.Batch.id.desc()).limit(200).all()
-    rows = [b for b in rows if b.state != "done" or _has_duplicate_exclusion(b) or _auto_result(b)]
+    rows = [b for b in rows if b.state != "done" or _has_duplicate_exclusion(b) or _auto_result(b) or _task_failed(b)]
     ctx = queue_context(db) if rows else None
     out = [batch_to_dict(db, b, ctx, viewer=user, lite=lite) for b in rows]
     # 13 — 남의 배치인데 남은 초안이 모두 볼 수 없는 것이면 배치째 뺀다(이름도 드러내지 않는다)
@@ -133,6 +140,11 @@ AUTO_DONE_HOURS = 24
 
 def _auto_result(b: models.Batch) -> dict | None:
     return b.preset.get("auto_result") if isinstance(b.preset, dict) else None
+
+
+def _task_failed(b: models.Batch) -> bool:
+    r = b.preset.get(task_import.RESULT_KEY) if isinstance(b.preset, dict) else None
+    return bool(isinstance(r, dict) and r.get("failed") and not r.get("created"))
 
 
 def _has_duplicate_exclusion(b: models.Batch) -> bool:
@@ -179,7 +191,9 @@ def batch_summary(db: Session = Depends(get_db), user: models.User = Depends(req
                           models.Entry.status == "draft").distinct()}
     names = [{"name": n, "state": s, "received_at": r.isoformat() if r else None}
              for n, s, r in rows if s != "processed" or n in open_names][:SUMMARY_NAMES]
-    return {"drafts": drafts,
+    # 68 — 초안 만들기를 기다리는 과제 엑셀 묶음도 할 일로 센다
+    review = db.query(models.Batch.id).filter(models.Batch.uploader == me, models.Batch.state == "review").count()
+    return {"drafts": drafts + review,
             "staged": sum(1 for _n, s, _r in rows if s == "staged"),
             "uploading": sum(1 for _n, s, _r in rows if s == "uploading"),
             "names": names}
@@ -195,6 +209,29 @@ def get_batch(key: str, db: Session = Depends(get_db), user: models.User = Depen
     if not d["entries"] and _has_hidden_drafts(db, b, user):
         raise HTTPException(status_code=404, detail="batch_not_found")   # 13 — 볼 수 없는 초안뿐
     return d
+
+
+class TaskDraftsBody(BaseModel):
+    rows: list[int] = Field(default_factory=list, max_length=2000)
+
+
+@router.post("/{key}/task-drafts")
+def task_drafts(key: str, body: TaskDraftsBody, request: Request, db: Session = Depends(get_db),
+                storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    """68 — 과제 엑셀 미리보기에서 고른 행으로 파일 없는 초안을 만든다(LV2 이상인 올린 사람, LV3). 한 번만(review 일 때)."""
+    if not body.rows:
+        raise HTTPException(status_code=422, detail="no_rows_selected")
+    out = task_import.create_drafts(db, storage, key, user, body.rows, client_ip(request))
+    b = db.query(models.Batch).filter_by(key=key).first()
+    return {**out, "batch": batch_to_dict(db, b, viewer=user, lite=True)}
+
+
+@router.post("/{key}/task-discard")
+def task_discard(key: str, request: Request, db: Session = Depends(get_db),
+                 storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    """68 — 과제 엑셀 묶음을 초안 없이 끝낸다(올린 사람, LV3). 원본 엑셀은 휴지통 폴더로."""
+    task_import.discard(db, storage, key, user, client_ip(request))
+    return {"ok": True}
 
 
 @router.post("/{key}/claim")

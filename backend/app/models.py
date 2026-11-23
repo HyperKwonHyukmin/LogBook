@@ -12,6 +12,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -237,6 +238,30 @@ class Person(Base):
     source = Column(String(10), nullable=False, default="manual")
     created_by = Column(String(20), nullable=True)
     created_at = Column(DateTime, nullable=False, default=_now)
+    updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
+
+
+class EntryTask(Base):
+    """68 — 과제 정보(선택 칸, 자료당 하나). 과제 엑셀(구조솔루션팀 통합과제)에서 오거나 손으로 넣는다.
+    칸이 모두 비면 행이 없다. task_key = 과제 엑셀 다시 넣기의 열쇠(68 3단계 가져오기만 채운다, 손 입력은 비움).
+    금액, 기여도, M/H, 직책과장은 넣지 않는다(엑셀이 원본, 원가가 사번 로그인 화면에 퍼지지 않게)."""
+
+    __tablename__ = "entry_tasks"
+
+    entry_id = Column(Integer, ForeignKey("entries.id", ondelete="CASCADE"), primary_key=True)
+    task_key = Column(String(80), unique=True, nullable=True)
+    source_batch = Column(String(64), nullable=True)   # 가져온 묶음 키(3단계)
+    request_no = Column(String(80), nullable=True)     # 과제의뢰서 NO.
+    category = Column(String(40), nullable=True)       # tasks.CATEGORIES 중 하나
+    request_dept = Column(String(60), nullable=True)   # 의뢰 부서
+    requester = Column(String(60), nullable=True)      # 의뢰자(다른 부서 사람이라 명부와 잇지 않는다)
+    target_text = Column(String(200), nullable=True)   # 엑셀 '대상' 원문(대상 분류 목록과 안 맞을 때 남김)
+    key_point = Column(String(300), nullable=True)
+    purpose = Column(String(300), nullable=True)
+    criteria = Column(String(300), nullable=True)      # 평가 기준
+    effect_note = Column(Text, nullable=True)          # 유/무형 효과 설명
+    started_on = Column(Date, nullable=True)
+    finished_on = Column(Date, nullable=True)
     updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
 
 

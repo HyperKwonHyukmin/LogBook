@@ -68,7 +68,8 @@ test('52 — [이 묶음 모두 확정]: 물어야 하는 초안은 건너뛰고
     return { ok: true, status: 200, json: () => Promise.resolve(body) };
   }));
   const draft = (id, title, extra = {}) => ({ entry_id: id, status: 'draft', title, version: 1, hulls: [], zones: [],
-    hull_evidence: [], suggested_entry: null, merge_into: null, uploaded_by: 'A100001', files: [], ...extra });
+    hull_evidence: [], suggested_entry: null, merge_into: null, uploaded_by: 'A100001',
+    files: [{ id: Number(id.slice(1)), rel_path: 'r.pdf', name: 'r.pdf', kind: 'report', size: 1, location: 'staging' }], ...extra });
   const onChanged = vi.fn();
   render(<BatchCard batch={{ ...base, state: 'processed', entries: [
     draft('E000011', 'closed chock'), draft('E000012', 'manifold support'), draft('E000013', ''),

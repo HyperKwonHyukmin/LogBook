@@ -124,6 +124,46 @@ def _block_duplicates(db: Session, storage: StoragePaths, batch: models.Batch,
     return duplicates.records(blocked, sizes, kept=True), signatures
 
 
+TASK_SHEET_EXTS = (".xlsx", ".xlsm")
+
+
+def _try_task_sheet(db: Session, batch: models.Batch, root, long_root: str, listing: list) -> bool:
+    """68 — 묶음에 (임시 파일을 빼고) xlsx 하나만 있고 머리 서명이 맞으면 과제 엑셀 묶음으로: 원본을 staging 의
+    _task_sheet.xlsx 로 옮기고, 행 목록을 batch.preset['task_sheet'] 에 두고 review 로 끝낸다(File 행·초안을 만들지 않는다).
+    다른 파일과 섞였거나, DRM 암호문이거나, 서명이 없으면 False(지금처럼 일반 자료). 파싱은 자식 프로세스에서 제한 시간 안에."""
+    from .. import isolated
+    from ..config import settings
+    from ..entries.task_import import SHEET_FILE, SHEET_KEY
+    from .task_sheet import probe
+
+    cands = [(d, n) for d, n in listing if not is_excluded(n)]
+    if len(cands) != 1 or not cands[0][1].lower().endswith(TASK_SHEET_EXTS):
+        return False
+    full = os.path.join(*cands[0])
+    try:
+        with open(to_long(full), "rb") as fh:
+            if fh.read(16).startswith(DRM_MAGIC):
+                return False
+        res = isolated.run(probe, to_long(full), timeout=settings.extract_timeout)
+    except Exception:   # noqa: BLE001 — 읽지 못하면 일반 자료로
+        logger.warning("배치 %s 과제 엑셀 확인 실패 — 일반 자료로 처리", batch.key, exc_info=True)
+        return False
+    if res.get("kind") not in ("task", "error"):
+        return False
+    sheet = res.get("data") or {"error": res.get("message"), "rows": []}
+    sheet["file"] = cands[0][1]
+    dest = os.path.join(long_root, SHEET_FILE)
+    if os.path.normcase(full) != os.path.normcase(dest):
+        os.replace(full, dest)
+    batch.preset = {**(batch.preset if isinstance(batch.preset, dict) else {}), SHEET_KEY: sheet}
+    batch.state = "review"
+    batch.processed_at = datetime.now().replace(microsecond=0)
+    db.commit()
+    remove_empty_dirs(root)
+    logger.info("배치 %s — 과제 엑셀 %d행, 미리보기 대기", batch.key, len(sheet.get("rows") or []))
+    return True
+
+
 def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progress=None) -> None:
     """progress(step, done, total, force=False) — 정리 대기 화면에 보일 진행 상황(ingest.progress).
     단계: scan(파일 목록) → files(파일마다 제외·분류·DRM·해시·중복) → propose(묶음·호선 추정) → queue(추출·변환 예약)."""
@@ -148,6 +188,9 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
     # 먼저 목록만 훑는다 — 전체 개수를 알아야 화면에 n/N 을 보일 수 있다(이름만 읽어 값싸다).
     progress("scan", 0, 0, force=True)
     listing = [(dirpath, name) for dirpath, _dirs, files in os.walk(long_root, onerror=_onerror) for name in files]
+    # 68 — 과제 엑셀 하나만 든 묶음은 초안을 바로 만들지 않고 미리보기(review)로 둔다
+    if batch.target_entry_id is None and batch.wb_analysis_id is None and _try_task_sheet(db, batch, root, long_root, listing):
+        return
     total = len(listing)
     progress("files", 0, total, force=True)
     for done, (dirpath, name) in enumerate(listing):

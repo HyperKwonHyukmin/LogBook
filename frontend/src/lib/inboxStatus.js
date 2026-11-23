@@ -118,6 +118,8 @@ export function draftChecks(form, entry) {
   const out = [];
   if (!(form.title || '').trim()) out.push({ id: 'title', text: '제목 없음: 확정하려면 필요합니다', blocking: true });
   const files = entry.files || [];
+  // 68 — 파일이 하나도 없는 초안(과제 엑셀로 만든 초안)은 확정하지 않는다(서버 no_files)
+  if (!files.some((f) => f.location !== 'trash')) out.push({ id: 'files', text: '파일 없음: 파일을 넣어야 확정할 수 있습니다', blocking: true });
   const bdf = !entry.merge_into && files.some((f) => f.kind === 'model' && f.location !== 'trash');
   const noHull = !(form.hulls || []).length && !form.no_hull;
   if (bdf) {
@@ -159,9 +161,9 @@ export function bulkConfirmPlan(drafts, dirtyIds = new Set()) {
   const skip = [];
   for (const e of drafts) {
     const hulls = (e.hulls || []).map((h) => h.hull_no || h);
-    const blocking = draftChecks({ title: e.title, hulls, no_hull: e.no_hull }, e).some((c) => c.blocking);
+    const blocking = draftChecks({ title: e.title, hulls, no_hull: e.no_hull }, e).find((c) => c.blocking);
     const reason = dirtyIds.has(e.entry_id) ? '저장하지 않은 변경'
-      : blocking ? '제목 없음'
+      : blocking ? blocking.text.split(':')[0]
         : (e.blocked_models || []).length ? '똑같은 BDF 가 이미 있음'
           : needsLiftingWire(e, e.target) ? '권상 Wire 모델 확인'
             : '';

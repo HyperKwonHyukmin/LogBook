@@ -21,6 +21,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .. import audit, jobs, models
+from ..entries import task_import
 from ..convert.job import enqueue_convert
 from ..entries.service import HULL_PATTERN, set_tags
 from ..extract.job import enqueue_extract
@@ -197,6 +198,15 @@ def _restore_entry(db: Session, storage: StoragePaths, data: dict, *, status: st
     if data.get("assignees"):   # 46 — 담당자(명부 행을 찾거나 만든다)
         from ..people import restore_assignees
         restore_assignees(db, e, data["assignees"])
+    if isinstance(data.get("task"), dict):   # 68 — 과제 정보(가져오기 열쇠 포함)
+        from ..entries.tasks import restore as restore_task
+        sp = db.begin_nested()   # 과제 정보 하나(옛 Category, 겹친 열쇠)로 자료 전체가 빠지지 않게 따로 되돌린다
+        try:
+            restore_task(db, e, data["task"])
+            sp.commit()
+        except Exception:   # noqa: BLE001
+            sp.rollback()
+            log.warning("과제 정보 되살리기 실패(건너뜀): %s", entry_id, exc_info=True)
     set_tags(db, e, "free", [str(t) for t in data.get("tags") or []])
     files: list[models.File] = []
     missing = 0
@@ -362,9 +372,73 @@ def _has_files(path: str) -> bool:
     return False
 
 
+def _restore_task_batch(db: Session, storage: StoragePaths, key: str, deferred: list) -> int:
+    """68 — 과제 엑셀 묶음 폴더: _task_import.json 의 초안을 같은 번호로 되살린다(열쇠가 이미 있으면 건너뜀).
+    그 폴더에 첨부된 다른 파일(24 초안 첨부로 들어온 보고서 등)은 어느 초안 것인지 기록이 없어 '재구축으로 되살린 첨부 파일'
+    초안 하나에 모은다 — 사람이 [다른 초안으로 옮기기]로 나눈다. 넣은 작업 수(본문 추출, 3D 변환)를 돌려준다."""
+    folder = long_join(storage.staging, key)
+    try:
+        with open(os.path.join(folder, task_import.IMPORT_FILE), encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        log.warning("재구축: %s 의 %s 를 읽지 못함 — 건너뜀", key, task_import.IMPORT_FILE, exc_info=True)
+        return 0
+    b = models.Batch(key=key, source="inbox", original_name=str(data.get("file") or key)[:255], state="processed",
+                     uploader=data.get("by") or None,
+                     preset={task_import.SHEET_KEY: {"file": data.get("file"), "sheet": data.get("sheet"),
+                                                     "year": data.get("year"), "rows": []},
+                             task_import.RESULT_KEY: {"created": [], "failed": [], "skipped": [], "rebuilt": True}})
+    db.add(b)
+    db.flush()
+    made = task_import.restore_import(db, b, data)
+    skip = {task_import.SHEET_FILE.casefold(), task_import.IMPORT_FILE.casefold()}
+    others = [(d, n) for d, _dirs, files in os.walk(folder) for n in files
+              if n.casefold() not in skip and not n.casefold().endswith(".tmp")]
+    if others:
+        # 첨부 파일 모음 초안은 자동 번호를 쓴다 — 다른 과제 묶음의 정해진 번호를 먼저 다 되살린 뒤에 만든다(Codex 검토)
+        deferred.append((b, folder, others))
+    elif made == 0:
+        b.state = "done"
+    db.flush()
+    return 0
+
+
+def _restore_task_attachments(db: Session, b: models.Batch, folder: str, others: list) -> int:
+    """_restore_task_batch 가 미뤄 둔 첨부 파일 모음 초안. 넣은 작업 수를 돌려준다."""
+    queued = 0
+    if others:
+        from ..convert.job import enqueue_convert
+        from ..extract.job import enqueue_extract
+        from ..ingest.hashing import sha256_of
+        from ..ingest.rules import classify
+
+        e = models.Entry(title="재구축으로 되살린 첨부 파일", status="draft", batch_id=b.id, uploaded_by=b.uploader,
+                         access="normal")
+        db.add(e)
+        db.flush()
+        e.entry_id = f"E{e.id:06d}"
+        for d, n in others:
+            full = os.path.join(d, n)
+            rel = full[len(folder) + 1:].replace("\\", "/")
+            try:
+                f = models.File(batch_id=b.id, entry_id=e.id, rel_path=rel, name=n[:255], ext=safe_ext(n), kind=classify(n),
+                                size=os.path.getsize(full), sha256=sha256_of(full), location="staging")
+            except OSError:
+                continue
+            db.add(f)
+            db.flush()
+            enqueue_extract(db, f)
+            enqueue_convert(db, f)
+            queued += 2
+    b.state = "processed"
+    db.flush()
+    return queued
+
+
 def _restore_staging(db: Session, storage: StoragePaths) -> tuple[int, int]:
     known = {k for (k,) in db.query(models.Batch.key)}
     batches = queued = 0
+    deferred: list = []
     for key in _dirs(storage.staging):
         if key in known or len(key) > 24:
             if len(key) > 24:
@@ -372,12 +446,19 @@ def _restore_staging(db: Session, storage: StoragePaths) -> tuple[int, int]:
             continue
         if not _has_files(long_join(storage.staging, key)):
             continue  # 확정 뒤 남은 빈 폴더
+        if os.path.isfile(long_join(storage.staging / key, task_import.IMPORT_FILE)):
+            # 68 — 과제 엑셀로 만든 파일 없는 초안을 기록(_task_import.json)으로 되살린다
+            batches += 1
+            queued += _restore_task_batch(db, storage, key, deferred)
+            continue
         b = models.Batch(key=key, source="inbox", original_name=key, state="staged", uploader=None)
         db.add(b)
         db.flush()
         jobs.enqueue(db, "process_batch", b.id)
         batches += 1
         queued += 1
+    for b, folder, others in deferred:
+        queued += _restore_task_attachments(db, b, folder, others)
     db.flush()
     return batches, queued
 
@@ -472,6 +553,8 @@ def rebuild(db: Session, storage: StoragePaths, *, force: bool = False) -> dict:
         log.warning("재구축: 보고서 정보·연결을 되살리지 못함 — %s", exc)
     db.commit()
 
+    # 68 — 과제 엑셀 초안(정해진 번호)을 먼저 되살려야 registry 의 공개 범위, 열람 허락, 의견이 그 초안에도 입혀진다(Codex 검토)
+    result["staging_batches"], result["jobs"] = _restore_staging(db, storage)
     result["access_entries"], result["grants"] = _restore_access(db, registry)
     result["alias_tags"] = _restore_aliases(db, registry)
     result["vocab_terms"] = _restore_vocab(db, registry)
@@ -480,7 +563,6 @@ def rebuild(db: Session, storage: StoragePaths, *, force: bool = False) -> dict:
     result["audit"], result["audit_bad"] = _restore_audit(db, storage)
     db.commit()
 
-    result["staging_batches"], result["jobs"] = _restore_staging(db, storage)
     # 파생물 — 본문 추출·BDF 변환을 다시 건다(휴지통 파일은 복원될 때 다시 건다).
     # 중간 커밋으로 만료된 객체를 하나씩 다시 읽지 않도록 한 번에 읽는다.
     live_files = (db.query(models.File).filter(models.File.batch_id == batch.id, models.File.location == "vault")

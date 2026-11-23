@@ -8,7 +8,13 @@
 // 38 — 대상 구조물(target, 하나·선택). 42 — 해석 종류(analysis_type)는 없앴다
 // 46 — 담당자(assignees, 명부 사람 목록 — 순서대로, 첫 사람이 주 담당자)
 // 53 — 결론 한 줄(conclusion)·주의점(caveats)
-export const EDIT_FIELDS = ['title', 'conclusion', 'description', 'caveats', 'hulls', 'no_hull', 'zones', 'target', 'tags', 'assignees'];
+export const EDIT_FIELDS = ['title', 'conclusion', 'description', 'caveats', 'hulls', 'no_hull', 'zones', 'target', 'tags', 'assignees', 'task'];
+// 68 — 과제 정보(선택 칸 묶음, 서버 entries/tasks.py FIELDS 와 같은 순서). 통째로 보낸다(빈 칸은 지움)
+export const TASK_FIELDS = ['request_no', 'category', 'request_dept', 'requester', 'target_text', 'key_point', 'purpose',
+  'criteria', 'effect_note', 'started_on', 'finished_on'];
+const TASK_SET = new Set(['task']);
+const taskValues = (t) => Object.fromEntries(TASK_FIELDS.map((k) => [k, t?.[k] ?? '']));
+const taskText = (f, v) => (f === 'effect_note' ? String(v ?? '').trim() : String(v ?? '').split(/\s+/).filter(Boolean).join(' '));
 const LIST_FIELDS = new Set(['hulls', 'zones', 'tags']);
 const BOOL_FIELDS = new Set(['no_hull']);
 const PEOPLE_FIELDS = new Set(['assignees']);
@@ -29,6 +35,7 @@ export function editValues(entry) {
     target: entry?.target || '',
     tags: [...(entry?.tags || [])],
     assignees: [...(entry?.assignees || [])],
+    task: taskValues(entry?.task),
   };
 }
 
@@ -37,6 +44,8 @@ const norm = (k, v) => {
   // 명부를 고쳐(퇴사 표시 등) 이름·부서가 바뀌어도 같은 사람이면 같은 값이다
   if (PEOPLE_FIELDS.has(k)) return JSON.stringify((v || []).map(personKey));
   if (BOOL_FIELDS.has(k)) return v ? '1' : '';
+  // 서버 tasks.clean 과 같게 — 효과 설명 말고는 안쪽 공백도 하나로(아니면 저장 뒤에도 '저장 안 한 변경'이 남는다)
+  if (TASK_SET.has(k)) return JSON.stringify(TASK_FIELDS.map((f) => taskText(f, v?.[f])));
   return String(v ?? '').trim();
 };
 
@@ -52,6 +61,7 @@ export function patchBody(base, draft) {
     if (LIST_FIELDS.has(k)) body[k] = [...draft[k]];
     else if (PEOPLE_FIELDS.has(k)) body[k] = draft[k].map((p) => (p.id ? { id: p.id } : { employee_id: p.employee_id }));
     else if (BOOL_FIELDS.has(k)) body[k] = !!draft[k];
+    else if (TASK_SET.has(k)) body[k] = Object.fromEntries(TASK_FIELDS.map((f) => [f, taskText(f, draft.task?.[f]) || null]));
     else body[k] = String(draft[k] ?? '').trim() || null;
   }
   return body;

@@ -204,6 +204,7 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry, b
     if not entry.vault_rel:
         return
     from .service import entry_to_dict
+    from . import tasks
 
     d = entry_to_dict(db, entry)
     meta = {k: d[k] for k in ("entry_id", "title", "description",   # 42 — 해석 종류는 쓰지 않는다
@@ -234,6 +235,9 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry, b
             meta[k] = d[k]
     if d["review"]:
         meta["reviewed_by"], meta["reviewed_at"] = d["review"]["by"], d["review"]["at"]
+    # 68 — 과제 정보(재구축 원천, 있을 때만, 가져오기 열쇠 포함)
+    if d.get("task"):
+        meta["task"] = d["task"]
     # 21 — 프로젝트(자료의 소속, 있을 때만)
     meta["files"] = [{k: f[k] for k in ("rel_path", "kind", "size", "sha256")} for f in d["files"]]
     # 14 — 사용자가 정리한 판 배치(재구축 원천). 정리한 것이 없으면 쓰지 않는다(자동 추정은 다시 계산된다)
@@ -257,6 +261,7 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry, b
             + (f"대상: {d['target']}\n" if d["target"] else "")
             + f"태그: {', '.join(d['tags']) or '-'}\n"
             + (f"담당자: {', '.join(people.label(p) for p in d['assignees'])}\n" if d["assignees"] else "")
+            + (f"과제: {tasks.summary_line(d['task'])}\n" if tasks.summary_line(d.get("task")) else "")   # 68
             + f"공개 범위: {d['label'] or '일반'}\n"
             f"올린 사람: {d['uploaded_by'] or '-'}  확정: {d['confirmed_by'] or '-'} {d['confirmed_at'] or ''}\n"
             f"파일 {len(d['files'])}개 — 원본은 files 폴더. 이 폴더는 Hi-TESS LogBook 이 관리합니다(직접 수정 금지).\n")

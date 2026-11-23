@@ -23,6 +23,7 @@ import DraftSimilar from './DraftSimilar.jsx';
 import HullPlmLookup, { HullPlmSummary } from '../hull/HullPlmLookup.jsx';
 import ModelPreview from '../preview/ModelPreview.jsx';
 import AssigneeInput, { AssigneeList, RunnerList } from '../people/AssigneeInput.jsx';
+import { TaskFields, TaskSummary } from '../tasks/TaskInfo.jsx';
 import { DROP_ZONE_ATTR, isOsFileDrag, useOsFileDragActive } from './UploadZone.jsx';
 
 const DRAG_TYPE = 'application/x-logbook-file';
@@ -39,9 +40,9 @@ const hullRule = (v) => /^\d{4}$/.test(v) || '호선은 숫자 4자리입니다.
 // 15 — 해석 시기는 없앴다
 // 20 — '호선 없음(공용)'(no_hull). 29 — 프로젝트(21)는 없앴다. 42 — 해석 종류는 없앴다
 // 46 — 담당자(과제를 한 사람, 올린 사람과 따로)
-const CARD_FIELDS = ['title', 'hulls', 'no_hull', 'zones', 'target', 'conclusion', 'description', 'assignees'];   // 53 — 결론
+const CARD_FIELDS = ['title', 'hulls', 'no_hull', 'zones', 'target', 'conclusion', 'description', 'assignees', 'task'];   // 68 — 과제 정보   // 53 — 결론
 const FIELD_LABELS = { title: '제목', hulls: '호선', no_hull: '호선 없음(공용)', zones: '구역',
-  target: '대상', conclusion: '결론', description: '설명', assignees: '담당자' };
+  target: '대상', conclusion: '결론', description: '설명', assignees: '담당자', task: '과제 정보' };
 // 20 — 바뀌면 (사람이 고치지 않은) 초안 제목이 따라 바뀌는 칸(서버 update_entry 의 TITLE_VALUE_FIELDS 와 같다)
 const TITLE_VALUE_FIELDS = ['hulls', 'no_hull', 'zones', 'target'];
 /** 서버 쪽 내용이 실제로 바뀌었을 때만 달라지는 열쇠 — 폴링으로 같은 내용의 새 객체가 와도 입력을 지우지 않는다. */
@@ -517,6 +518,11 @@ const DraftCard = forwardRef(function DraftCard({ entry, siblings, canEdit, onCh
             <span className="font-normal text-n-500">{ACCESS_LADDER}</span>
           </div>
         )}
+      </div>
+      {/* 68 — 과제 정보(선택 칸 묶음). 값이 있으면 펼친 채로 연다 */}
+      <div className="mx-4 mb-4">
+        {canEdit ? <TaskFields value={values.task} onChange={set('task')} changed={changed.includes('task')} disabled={fieldDisabled} />
+          : <TaskSummary task={entry.task} />}
       </div>
       {canEdit && dirty && (
         // 11 — 저장하지 않은 변경. [확정] 을 눌러도 먼저 저장한다

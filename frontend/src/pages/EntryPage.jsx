@@ -45,6 +45,7 @@ import { needsLiftingWire } from '../lib/inboxStatus.js';
 import AssigneeInput, { AssigneeList, RunnerList } from '../components/people/AssigneeInput.jsx';
 import EntryComments, { CommentsLink } from '../components/comments/EntryComments.jsx';
 import EntryNote from '../components/notes/EntryNote.jsx';
+import { TaskFields, TaskSummary, taskSummary } from '../components/tasks/TaskInfo.jsx';
 
 // 15 — 해석 시기는 없앴다(옛 이력의 해석 시기 변경 줄은 보이지 않는다)
 // 21 — 프로젝트(있을 때만 기록). 29 — 칸은 없앴지만 옛 이력 줄을 읽을 수 있게 이름은 남긴다
@@ -52,11 +53,14 @@ import EntryNote from '../components/notes/EntryNote.jsx';
 const FIELD_LABELS = { title: '제목', analysis_type: '해석 종류', description: '설명',
   hulls: '호선', no_hull: '호선 없음(공용)', project: '프로젝트', zones: '구역', target: '대상', tags: '태그',
   assignees: '담당자',   // 46
-  conclusion: '결론', caveats: '주의점', reviewed_by: '검토자' };   // 53
+  conclusion: '결론', caveats: '주의점', reviewed_by: '검토자',   // 53
+  task: '과제 정보' };   // 68
 // 감사 기록에서 '참/값일 때만' 실리는 칸 — before 에만 있으면 지운 것이다
-const OPTIONAL_KEYS = new Set(['no_hull', 'project', 'target', 'assignees', 'conclusion', 'caveats', 'reviewed_by']);
+const OPTIONAL_KEYS = new Set(['no_hull', 'project', 'target', 'assignees', 'conclusion', 'caveats', 'reviewed_by', 'task']);
 const hullRule = (v) => /^\d{4}$/.test(v) || '호선은 숫자 4자리입니다.';
-const show = (v) => (v === true ? '예' : (Array.isArray(v) ? v.join(', ') : v) || '(없음)');
+// 68 — 과제 정보는 칸 묶음(객체)이라 '의뢰서 NO., Category, 의뢰 부서' 요약으로
+const show = (v) => (v === true ? '예' : (Array.isArray(v) ? v.join(', ')
+  : v && typeof v === 'object' ? (taskSummary(v) || '과제 정보') : v) || '(없음)');
 const HISTORY_FILES_SHOWN = 5;
 // 2026-11-19 — 권상 Wire 안내를 자료마다 숨긴다(이 브라우저에만, 저장이 막혀도 안내가 다시 보일 뿐)
 const WIRE_HINT_KEY = 'lb.wireHintHidden';
@@ -825,6 +829,8 @@ export default function EntryPage() {
               <textarea aria-label="주의점" rows={2} value={draft.caveats} onChange={(e) => set('caveats')(e.target.value)}
                         className={inputClass('h-auto w-full py-1.5 text-body')} />
             </label>
+            {/* 68 — 과제 정보(선택 칸 묶음) */}
+            <TaskFields value={draft.task} onChange={set('task')} changed={isChanged('task')} />
             {entry.review && <p className="text-meta text-n-500">결론이나 주의점을 바꾸면 {entry.review.name || entry.review.by} 님의 검토 서명이 풀립니다.</p>}
           </div>
         ) : (
@@ -844,6 +850,7 @@ export default function EntryPage() {
                 <span className="mr-2 text-meta font-medium text-n-500">주의점</span>{entry.caveats}
               </p>
             )}
+            <TaskSummary task={entry.task} />
           </>
         )}
         {entry.status === 'draft' && (

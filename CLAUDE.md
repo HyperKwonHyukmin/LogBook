@@ -13,6 +13,9 @@ Hi-TESS LogBook(구조해석 자료 창고). 무엇·어떻게 쓰는지는 `REA
     탭 제목은 `lib/pageTitle.js` 한 곳 — 메뉴 이름을 바꾸면 같이. 설명회 데모는 `npm run demo` 로 다시 만든다(데모 메뉴 `demo/DemoShell.jsx`).
   - 같은 날 다듬기: 최근 비교는 계정 메뉴로(바구니가 비면 떠 있는 단추 없음) · 활동 코드 라벨 누락은 `labels.test.js` 가 서버 코드와 대조해 잡는다 ·
     BDF 범례는 1280px 미만이면 접힌 채로 연다 · 자료 검색이 비면 '문서 본문에서 찾기' 링크. 기록 `.impeccable/critique/2026-11-18T06-15-00Z__logbook-frontend.md`.
+  - **올리기와 확정 = 목록 + 상세(68, 2026-11-23)**: 초안 상태(확정 가능, 확인 필요 등)는 서버 `entries/inbox_rows.py` 한 곳에서 정한다. 확정 규칙을 바꾸면 여기와 화면 `inboxStatus.js` 를 같이.
+    담당자 권한: 사번 연결 담당자는 초안을 보고, 고치고, 첨부하고, 확정한다(`access.is_draft_assignee`). 버리기, 공개 범위, 초안 사이 옮기기와 합치기는 `can_own_entry`(올린 사람과 LV3) — 담당자에게 열면 공개 범위를 넓히는 길이 된다.
+    과제 엑셀 묶음(68 3단계)은 상태 `review`, staging 폴더의 `_task_import.json` 이 파일 없는 초안의 재구축 원천이다 — 그 폴더를 손으로 지우지 말 것.
   - 관계 지도 첫 열기 30초(2026-11-18 신고) = 서버 재시작 뒤 보고서 본문 특징(MinHash·평균 벡터, 메모리 캐시뿐)을 232건 모두 계산하던 것. 이제 서버 시작 5초 뒤 미리 계산한다(`report_index.features.warm`, `main._start_report_features_warmup`, 끄기 `LOGBOOK_GRAPH_WARMUP=0`). 재시작 직후 약 30초 안에 관계 지도를 열면 그만큼은 기다린다.
     **계산은 별도 프로세스에서 한다**(`features.CHILD_MIN` 8건 이상, `_run_child` spawn, 180초 넘기면 자식을 끝내고 이 프로세스에서 계산). 2026-11-23 Update 직후 흰 화면 신고 = API 프로세스 안 스레드에서 돌던 이 계산이 파이썬 잠금(GIL)을 쥐어, 같은 프로세스의 모든 요청이 느려진 것(145 측정: Update 60초 뒤 약 35초 동안 검색 0.25 → 27.8초, JS 0.11 → 3.0초). 이 계산을 다시 API 프로세스 안 스레드로 옮기지 말 것. 더 줄이려면 MinHash 를 한 순열 방식으로 바꾸는 안(약 10배)이 남아 있다 — 지도 결과 값이 조금 바뀌어 보류.
   - **파일 이름 검색 규칙(2026-11-18, 'post' 로 찾으면 권상 자료 28건이 나온 신고)**: 파일 이름은 부분 일치라 권상 보조 파일(`…_posture.json`, 종류 '기타')이 낱말 안에서 걸렸다. 이제 보조 파일(`.json`·`.csv`, `SIDECAR_EXTS`)의 이름 적중은 **파일 보기에서만** 찾고 자료 보기 결과에는 올리지 않는다(`search/mysql_backend.py` `_Hits.side`·`for_unit`). 종류 '기타' 전체로 넓히지 말 것 — `.hm`·`.fem`·`.inp`·`.stp`·`.zip` 이름으로 자료를 못 찾게 된다(커밋 전 리뷰). 자료 보기 행에는 이름이 맞은 파일을 `matched_files`(최대 3개)로 싣고 카드가 '파일 이름 …' 줄로 보인다(`ResultList.jsx`). 시험 `tests/test_search_sidecar_names.py`.

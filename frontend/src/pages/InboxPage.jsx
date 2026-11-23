@@ -10,6 +10,7 @@ import Spinner from '../components/ui/Spinner.jsx';
 import { Tabs } from '../components/ui/Tabs.jsx';
 import BatchCard from '../components/inbox/BatchCard.jsx';
 import DraftDetail from '../components/inbox/DraftDetail.jsx';
+import TaskSheetCard from '../components/inbox/TaskSheetCard.jsx';
 import InboxList from '../components/inbox/InboxList.jsx';
 import FixList from '../components/coverage/FixList.jsx';
 import { PageDropOverlay, UploadButtons, UploadCenterCard, UploadCenterStack, UploadFeedback, isOsFileDrag,
@@ -305,8 +306,15 @@ export default function InboxPage() {
   ) : selBatch ? (
     <div className="flex flex-col gap-3">
       {!wide && <div><button type="button" onClick={backToList} className="text-ui text-brand hover:underline">목록으로</button></div>}
-      <BatchCard batch={selBatch} me={user.employee_id} isAdmin={isAdmin} canWrite={canWrite} onChanged={reload} onClaim={claim}
-                 onDirtyChange={onDirtyChange} dirtyIds={new Set()} onConfirmed={onConfirmed} />
+      {/* 68 — 과제 엑셀 묶음: 미리보기(초안 만들기) 또는 만든 결과 */}
+      {selBatch.task_sheet && <TaskSheetCard key={`${selBatch.key}-${selBatch.state}`} batch={selBatch} onChanged={reload} />}
+      {selBatch.state !== 'review' && (
+        <BatchCard batch={selBatch} me={user.employee_id} isAdmin={isAdmin} canWrite={canWrite} onChanged={reload} onClaim={claim}
+                   onDirtyChange={onDirtyChange} dirtyIds={new Set()} onConfirmed={onConfirmed} />
+      )}
+      {selBatch.state === 'review' && !selBatch.uploader && canWrite && (
+        <div><button type="button" onClick={() => claim(selBatch.key)} className="text-ui text-brand hover:underline">내가 올렸어요</button></div>
+      )}
     </div>
   ) : null;
 

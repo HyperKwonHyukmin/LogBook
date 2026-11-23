@@ -34,7 +34,8 @@ export function groupRows(rows, batches, stateFilter = null) {
   for (const b of batches || []) {
     if (b.attachment_target) continue;
     if (b.state === 'done' && !(rows || []).some((r) => r.batch.key === b.key)) {
-      if (b.auto_result) map.set(b.key, { ...head(b), batch: b, rows: [] });
+      // 66 자동 확정 결과, 68 과제 엑셀 만들기 결과(모두 실패)는 머리를 남겨 결과를 보인다
+      if (b.auto_result || b.task_sheet?.result) map.set(b.key, { ...head(b), batch: b, rows: [] });
       else settled.push(b);
       continue;
     }

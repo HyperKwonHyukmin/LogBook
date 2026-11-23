@@ -1,11 +1,25 @@
-import { changedFields, editErrors, editValues, hasBdf, missingRequired, patchBody, sameEditable } from './entryEdit.js';
+import { changedFields, editErrors, editValues, hasBdf, missingRequired, patchBody, sameEditable, TASK_FIELDS } from './entryEdit.js';
 
 const E = { title: '제목', description: null, hulls: [{ hull_no: '9001' }, { hull_no: '9002' }], zones: ['선미부'],
   analysis_type: 'FE 해석', analysis_period: '2025-11', tags: [], version: 3, files: [] };   // 해석 시기(15)·해석 종류(42)는 쓰지 않는다
 
 test('서버 값 → 고칠 값', () => {
   expect(editValues(E)).toEqual({ title: '제목', conclusion: '', description: '', caveats: '', hulls: ['9001', '9002'], no_hull: false, zones: ['선미부'],
-    target: '', tags: [], assignees: [] });
+    target: '', tags: [], assignees: [], task: Object.fromEntries(TASK_FIELDS.map((k) => [k, ''])) });
+});
+
+test('68 — 과제 정보: 칸 묶음 하나로 비교하고, 바뀌면 통째로(빈 칸은 null) 보낸다', () => {
+  const base = editValues({ ...E, task: { request_no: '2026-01', category: '안전' } });
+  expect(base.task.request_no).toBe('2026-01');
+  expect(changedFields(base, { ...base, task: { ...base.task, request_no: ' 2026-01 ' } })).toEqual([]);
+  const draft = { ...base, task: { ...base.task, category: '', purpose: '신제품 개발' } };
+  expect(changedFields(base, draft)).toEqual(['task']);
+  const body = patchBody(base, draft).task;
+  expect(body).toMatchObject({ request_no: '2026-01', category: null, purpose: '신제품 개발', started_on: null });
+  expect(Object.keys(body)).toEqual(TASK_FIELDS);
+  // 서버처럼 안쪽 공백도 하나로 본다(효과 설명만 그대로) — 저장 뒤 '저장 안 한 변경'이 남지 않게
+  const saved = editValues({ ...E, task: { purpose: '구조 안전' } });
+  expect(changedFields(saved, { ...saved, task: { ...saved.task, purpose: '구조  안전' } })).toEqual([]);
 });
 
 test('46 — 담당자: 같은 사람이면 이름·재직이 바뀌어도 같은 값, 본문은 id 또는 WorkBench 사번', () => {

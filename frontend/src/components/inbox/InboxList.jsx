@@ -90,6 +90,8 @@ function GroupHead({ g, selected, onSelect, canWrite, onClaim, onBulk, bulkBusy 
           </span>
         ) : g.state === 'failed' ? (
           <span className="inline-flex items-center gap-1 text-err"><AlertCircle size={12} aria-hidden="true" />처리 실패</span>
+        ) : g.state === 'review' ? (
+          <span className="text-wait">과제 엑셀 <span className="font-mono">{b?.task_sheet?.total ?? 0}</span>행, 초안 만들기를 기다림</span>
         ) : g.state === 'done' && b?.auto_result ? (
           <span className="text-ok">자동 확정 끝</span>
         ) : g.state !== 'processed' ? <span>{BATCH_STATE_LABELS[g.state] || g.state}</span> : null}

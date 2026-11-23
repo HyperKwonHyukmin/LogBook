@@ -15,7 +15,7 @@ import re
 from collections import Counter, defaultdict
 from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
@@ -471,6 +471,13 @@ class MySqlSearch:
             h.entry(eid, S_CONCLUSION, "conclusion")
         for (eid,) in db.query(E.id).filter(live, E.caveats.like(like, escape="\\")):
             h.entry(eid, S_DESC, "caveats")
+        # 68 — 과제 정보(의뢰서 NO., Category, 의뢰 부서, 의뢰자, 대상 원문, Key point, 목적, 평가 기준, 효과 설명)
+        T = models.EntryTask
+        task_cols = [getattr(T, k) for k in ("request_no", "category", "request_dept", "requester", "target_text",
+                                             "key_point", "purpose", "criteria", "effect_note")]
+        for (eid,) in (db.query(T.entry_id).join(E, E.id == T.entry_id)
+                       .filter(live, or_(*[c.like(like, escape="\\") for c in task_cols]))):
+            h.entry(eid, S_DESC, "task")
         for fid, eid, fname in (db.query(F.id, F.entry_id, F.name).join(E, E.id == F.entry_id)
                                 .filter(live, F.location != "trash", F.name.like(like, escape="\\"))
                                 .order_by(F.id)):

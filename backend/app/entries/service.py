@@ -13,7 +13,7 @@ from .. import access, audit, jobs, lifting, models, people, vocab
 from ..storage.paths import StoragePaths, long_join, to_long
 from ..revisions.series import refresh as refresh_revisions, series_brief
 from .same_model import find_same_models
-from . import quality
+from . import quality, tasks
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +162,7 @@ def entry_to_dict(db: Session, entry: models.Entry, viewer=None) -> dict:
         "target": target,   # 38 — 대상 구조물
         "tags": tags_of(db, entry, "free"),
         "assignees": people.assignees_of(db, entry),   # 46 — 담당자(과제를 한 사람, 올린 사람과 따로)
+        "task": tasks.get(db, entry),   # 68 — 과제 정보(없으면 None)
         "hull_evidence": entry.hull_evidence or [],
         "uploaded_by": entry.uploaded_by, "confirmed_by": entry.confirmed_by,
         "confirmed_at": entry.confirmed_at.isoformat() if entry.confirmed_at else None,
@@ -284,7 +285,8 @@ def snapshot(db: Session, entry: models.Entry) -> dict:
     return {k: d[k] for k in ("title", "description", "zones", "tags")} | {
         "hulls": [h["hull_no"] for h in d["hulls"]]} | ({"no_hull": True} if d["no_hull"] else {}) | (
         {"target": d["target"]} if d["target"] else {}) | (   # 38 — 값이 있을 때만(no_hull 과 같은 방식)
-        {"assignees": [people.label(p) for p in d["assignees"]]} if d["assignees"] else {}) | {   # 46
+        {"assignees": [people.label(p) for p in d["assignees"]]} if d["assignees"] else {}) | (
+        {"task": {k: v for k, v in d["task"].items() if k in tasks.FIELDS}} if d["task"] else {}) | {   # 46, 68
         k: d[k] for k in REVIEWED_FIELDS if d[k]} | (   # 53 — 결론·주의점·검토자(값이 있을 때만)
         {"reviewed_by": d["review"]["name"] or d["review"]["by"]} if d["review"] else {})
 
@@ -441,6 +443,8 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
         set_tags(db, entry, "free", patch["tags"] or [])
     if "assignees" in patch:   # 46 — 담당자({id} 또는 WorkBench 사번 {employee_id})
         people.set_assignees(db, entry, people.resolve_refs(db, patch["assignees"] or []))
+    if "task" in patch:   # 68 — 과제 정보(통째로, 빈 칸은 지움)
+        tasks.put(db, entry, patch["task"])
     if "merge_into_id" in patch:
         _set_merge_into(db, entry, patch["merge_into_id"], user)
     if patch.get("access"):
@@ -614,6 +618,7 @@ def _clear_dangling_references(db: Session, entry_id: int) -> None:
     db.query(models.Favorite).filter_by(entry_id=entry_id).delete(synchronize_session=False)
     db.query(models.EntryNote).filter_by(entry_id=entry_id).delete(synchronize_session=False)   # 64 — 나의 메모
     db.query(models.EntryAssignee).filter_by(entry_id=entry_id).delete(synchronize_session=False)   # 46
+    db.query(models.EntryTask).filter_by(entry_id=entry_id).delete(synchronize_session=False)   # 68 — 옮길 것은 그 전에 carry 가 옮긴다
     # 63 — 의견과 이슈도 Entry 와 함께(답글 먼저 — 부모를 가리키는 FK)
     db.query(models.EntryComment).filter(models.EntryComment.entry_id == entry_id,
                                          models.EntryComment.parent_id.isnot(None)).delete(synchronize_session=False)
@@ -667,6 +672,9 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
     from .draft_attachments import ensure_no_pending
     ensure_no_pending(db, entry)
     files = db.query(models.File).filter_by(entry_id=entry.id).all()
+    if not any(f.location != "trash" for f in files):
+        # 68 — 파일이 하나도 없는 초안(과제 엑셀로 만든 초안이 파일을 기다리는 중)은 확정하지 않는다
+        raise HTTPException(status_code=422, detail="no_files")
     staging_root = storage.staging / batch.key
     forced = _recheck_duplicates(db, user, batch, files, force)
     extra = {"duplicates_forced": forced} if forced else {}
@@ -705,10 +713,14 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
             for f, r in plans:
                 f.entry_id, f.rel_path, f.location = target.id, r, "vault"
             people.copy_assignees(db, entry, target)   # 46 — 초안에 단 담당자도 대상 자료에
+            from .task_import import mark_gone
+            mark_gone(db, storage, entry)   # 68 — 이 초안은 사라진다(재구축이 과제 기록으로 다시 만들지 않게)
+            task_note = _carry_task(db, entry, target)   # 68 — 과제 정보(대상에 없을 때만 옮김)
+            task_row = _stage_task_audit(db, target, task_note, user.employee_id, ip)
             db.query(models.ModelRevision).filter_by(entry_id=entry.id).delete(synchronize_session=False)
             _clear_dangling_references(db, entry.id)
             db.delete(entry)
-            if plans:
+            if plans or task_note:   # 68 — 과제 정보만 옮겨도 다른 창의 옛 값 저장이 덮지 못하게
                 target.version += 1
             db.flush()
             if plans:
@@ -726,6 +738,7 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
         from ..convert.job import requeue_entry_models  # 순환 import 방지
         requeue_entry_models(db, target.id)
         db.commit()
+        _flush_task_audit(storage, task_row)
         refresh_revisions(db, target.id)   # 14 — 새 파일을 판 묶음에(변환이 끝나면 워커가 다시 맞춘다)
         _write_meta_or_queue(db, storage, target)
         return target
@@ -837,6 +850,8 @@ def trash(db: Session, storage: StoragePaths, entry: models.Entry, user: models.
     else:
         if not access.can_own_entry(user, entry):   # 68 — 담당자는 초안을 버리지 못한다(올린 사람과 LV3)
             raise HTTPException(status_code=403, detail="not_uploader")
+        from .task_import import mark_gone
+        mark_gone(db, storage, entry)   # 68 — 과제 엑셀 초안이면 재구축이 다시 만들지 않게
         batch = db.get(models.Batch, entry.batch_id)
         rel = f"draft_{entry.entry_id}_{_stamp()}"
         src_root = storage.staging / batch.key
@@ -935,6 +950,8 @@ def _restore_draft(db: Session, storage: StoragePaths, entry: models.Entry, user
         if batch.state == "done":
             batch.state = "processed"
         db.flush()
+        from .task_import import mark_gone
+        mark_gone(db, storage, entry, gone=False)   # 68 — 되돌린 과제 초안은 재구축 기록에서도 다시 살린다
         audit.record(db, storage, actor=user.employee_id, action="DRAFT_RESTORE", target_type="entry",
                      target_id=entry.entry_id, after={"batch": batch.key}, ip=ip)
     except Exception:
@@ -1106,6 +1123,37 @@ def _require_draft_owner(user: models.User, *entries: models.Entry) -> None:
             raise HTTPException(status_code=403, detail="not_uploader")
 
 
+def _carry_task(db: Session, src: models.Entry, dst: models.Entry) -> dict | None:
+    """68 — 합칠 때 과제 정보: dst 에 없으면 src 것을 옮기고, 있으면 dst 것을 두고 src 것은 버린다.
+    src 가 지워지기 전에(같은 트랜잭션) 불러야 열쇠가 고아로 남지 않는다. 감사 ENTRY_TASK 에 남길 내용(없으면 None)을
+    돌려준다 — audit.record 는 곧바로 커밋하므로 부르는 쪽이 본 트랜잭션을 커밋한 뒤에 남긴다(_record_task)."""
+    moved = db.get(models.EntryTask, src.id) is not None and db.get(models.EntryTask, dst.id) is None
+    dropped = tasks.carry(db, src, dst)
+    if not (dropped or moved):
+        return None
+    return {"from": src.entry_id, "moved": moved, **({"dropped": dropped} if dropped else {})}
+
+
+def _stage_task_audit(db: Session, dst: models.Entry, note: dict | None, actor: str, ip: str | None = None):
+    """68 — 과제 정보 합침 감사 행을 본 트랜잭션에 함께 넣는다(따로 커밋하면 그 사이에 멈출 때 버린 값이 어디에도 남지 않는다).
+    파일 사본(jsonl)은 커밋 뒤 _flush_task_audit 가 쓴다. 넣은 행(없으면 None)을 돌려준다."""
+    if not note:
+        return None
+    row = models.AuditLog(at=datetime.now().replace(microsecond=0), employee_id=actor, action="ENTRY_TASK",
+                          target_type="entry", target_id=dst.entry_id, before=None, after=note, ip=ip)
+    db.add(row)
+    return row
+
+
+def _flush_task_audit(storage: StoragePaths | None, row) -> None:
+    if row is None or storage is None:
+        return
+    try:
+        audit._append_jsonl(storage, audit._jsonl_line(row), row.at)
+    except Exception:  # noqa: BLE001 — DB 감사 행은 이미 커밋됐다
+        logger.warning("감사 로그 파일 기록 실패(DB 기록은 유지): ENTRY_TASK %s", row.target_id, exc_info=True)
+
+
 def _carry_meta(db: Session, src: models.Entry, dst: models.Entry) -> None:
     """쪼개기·합치기 — src 의 분류(구역·자유 태그는 합집합, 대상은 dst 에 없을 때만)·설명(dst 가 비었을 때만)·
     열람 허락(합집합)을 dst 에 옮긴다. 합치기에서 지워지는 초안의 값이 CASCADE 로 사라지지 않게(2026-11-05 검토).
@@ -1156,7 +1204,8 @@ def split(db: Session, entry: models.Entry, user: models.User, file_ids: list[in
     return new
 
 
-def merge(db: Session, entry: models.Entry, other: models.Entry, user: models.User) -> models.Entry:
+def merge(db: Session, entry: models.Entry, other: models.Entry, user: models.User,
+          storage: StoragePaths | None = None) -> models.Entry:
     # id 오름차순으로 잠근다 — merge(A,B) 와 merge(B,A) 가 동시에 들어오면 반대 순서로
     # 잠가 서로를 기다리는 교착(deadlock)이 날 수 있다.
     if entry.id <= other.id:
@@ -1173,11 +1222,15 @@ def merge(db: Session, entry: models.Entry, other: models.Entry, user: models.Us
     db.query(models.File).filter_by(entry_id=other.id).update({"entry_id": entry.id}, synchronize_session=False)
     people.copy_assignees(db, other, entry)   # 46
     _carry_meta(db, other, entry)
+    from .task_import import mark_gone
+    mark_gone(db, storage, other)   # 68 — 합쳐 없어지는 초안
+    task_row = _stage_task_audit(db, entry, _carry_task(db, other, entry), user.employee_id)   # 68
     _clear_dangling_references(db, other.id)
     db.query(models.ModelRevision).filter_by(entry_id=other.id).delete(synchronize_session=False)
     db.delete(other)
     entry.version += 1
     db.commit()
+    _flush_task_audit(storage, task_row)
     refresh_revisions(db, entry.id)
     return entry
 

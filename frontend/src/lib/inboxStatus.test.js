@@ -47,7 +47,11 @@ test('초안 확인할 것 — 제목은 확정을 막는다, (BDF 없는 자료
   const c = draftChecks({ title: ' ', hulls: [] }, entry);
   expect(c.map((x) => x.id)).toEqual(['title', 'hull', 'drm', 'dup']);
   expect(c.find((x) => x.id === 'title').blocking).toBe(true);
-  expect(draftChecks({ title: '검토', hulls: [{ hull_no: '3496' }] }, { files: [] })).toEqual([]);
+  const one = { files: [{ kind: 'report', location: 'staging' }] };
+  expect(draftChecks({ title: '검토', hulls: [{ hull_no: '3496' }] }, one)).toEqual([]);
+  // 68 — 파일이 하나도 없는 초안(과제 엑셀로 만든 초안)은 확정을 막는다
+  const none = draftChecks({ title: '검토', hulls: [{ hull_no: '3496' }] }, { files: [{ location: 'trash' }] });
+  expect(none.map((x) => [x.id, x.blocking])).toEqual([['files', true]]);
 });
 
 test('43 — BDF 자료의 빈 호선은 확정을 막지 않고 보완 필요를 알린다, 구역·대상은 선택(42 — 해석 종류는 없다)', () => {
@@ -77,7 +81,7 @@ test('49 — needsLiftingWire: 대상 Module Unit 또는 WB 권상 출처인데 
 });
 
 describe('52 — bulkConfirmPlan', () => {
-  const d = (id, extra = {}) => ({ entry_id: id, title: `t${id}`, hulls: [], files: [], merge_into: null, ...extra });
+  const d = (id, extra = {}) => ({ entry_id: id, title: `t${id}`, hulls: [], files: [{ kind: 'report', name: 'r.pdf' }], merge_into: null, ...extra });
   it('물어야 하는 초안은 이유와 함께 건너뛰고, 호선 없음은 확정한다', () => {
     const { go, skip } = bulkConfirmPlan([
       d('E1'), d('E2', { title: '' }), d('E3', { blocked_models: [{ name: 'a.bdf' }] }),
@@ -86,6 +90,11 @@ describe('52 — bulkConfirmPlan', () => {
     expect(go.map((e) => e.entry_id)).toEqual(['E1']);
     expect(skip.map((s) => [s.entry.entry_id, s.reason])).toEqual([
       ['E2', '제목 없음'], ['E3', '똑같은 BDF 가 이미 있음'], ['E4', '권상 Wire 모델 확인'], ['E5', '저장하지 않은 변경']]);
+  });
+  it('68 — 파일 없는 초안은 건너뛴다', () => {
+    const { go, skip } = bulkConfirmPlan([d('E1', { files: [] }), d('E2')]);
+    expect(go.map((e) => e.entry_id)).toEqual(['E2']);
+    expect(skip.map((s) => [s.entry.entry_id, s.reason])).toEqual([['E1', '파일 없음']]);
   });
 });
 

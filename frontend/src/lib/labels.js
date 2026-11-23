@@ -6,7 +6,8 @@ export const ACTION_LABELS = {
   USER_DISABLE: '계정 비활성화', USER_ENABLE: '계정 재활성화',
   USER_ADMIN_GRANT: '관리자 지정', USER_ADMIN_REVOKE: '관리자 해제', ADMIN_BOOTSTRAP: '관리자 초기 설정',
   BATCH_RECEIVED: '자료 받음', BATCH_CLAIM: '묶음 가져감',
-  ENTRY_UPDATE: '정보 수정', ENTRY_CONFIRM: '확정', ENTRY_FILES_ADDED: '파일 추가',
+  ENTRY_UPDATE: '정보 수정', ENTRY_CONFIRM: '확정', ENTRY_FILES_ADDED: '파일 추가', ENTRY_TASK: '과제 정보 합침',
+  TASK_IMPORT: '과제 엑셀로 초안 만들기', TASK_SHEET_DISCARD: '과제 엑셀 버리기',   // 68
   ENTRY_REVIEW: '검토 서명', ENTRY_REVIEW_CANCEL: '검토 서명 취소',   // 53
   ENTRY_FILES_REMOVED: '파일 삭제', ENTRY_FILES_RESTORED: '파일 되돌리기',   // 37
   FILES_PURGE: '뺀 파일 영구 삭제',
@@ -60,6 +61,7 @@ export const KIND_LABELS = { model: 'BDF', result: '결과', report: '문서', d
 
 export const BATCH_STATE_LABELS = {
   staged: '분석 중', processed: '확정 전', failed: '처리 실패', done: '완료', uploading: '올리는 중',
+  review: '초안 만들기 대기',   // 68 — 과제 엑셀 미리보기
 };
 
 export const EXCLUDE_REASON_LABELS = {
@@ -104,6 +106,11 @@ export const ERROR_LABELS = {
   attachment_target_not_draft: '이 자료는 이미 확정되었거나 올리기와 확정에서 제외되었습니다.',
   attachment_still_processing: '파일을 처리 중입니다. 잠시 뒤 상태를 다시 확인해 주세요.',
   already_claimed: '이미 다른 사람이 가져갔습니다.',
+  no_files: '파일이 없는 초안은 확정할 수 없습니다. 먼저 파일을 넣어 주세요.',   // 68
+  task_sheet_not_review: '이미 초안을 만들었거나 버린 과제 엑셀입니다. 목록을 새로 고쳐 주세요.',
+  level2_uploader_required: 'LV2 이상인 올린 사람만 초안을 만들 수 있습니다.',
+  no_rows_selected: '초안으로 만들 행을 하나 이상 고르세요.',
+  storage_unavailable: '공유 폴더에 기록을 쓰지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
   entry_trashed: '휴지통에 있는 자료입니다.',
   // 37 — 파일 삭제·되돌리기
   last_file: '파일을 모두 뺄 수는 없습니다. 자료 전체를 지우려면 휴지통으로 보내 주세요.',
@@ -231,6 +238,7 @@ export const MATCH_LABELS = { entry_id: 'Entry 번호', hull: '호선', title: '
   target: '대상', description: '설명', file: '파일명', body: '본문',
   wb_origin: 'WorkBench 해석',   // 39 — 'WB #123' 검색
   assignee: '담당자',   // 46
+  task: '과제 정보',   // 68
   document_type: '문서 분류' };   // 21
 
 // 23 — 문서 분류 목록과 빠른 구분(보고서/발표자료/기타) 묶음은 프런트에 사본을 두지 않는다 — 서버(models.REPORT_DOCUMENT_TYPES·

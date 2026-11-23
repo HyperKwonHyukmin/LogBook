@@ -39,6 +39,7 @@ class EntryPatch(BaseModel):
     access: str | None = Field(default=None, pattern="^(shared|normal|blocked)$")   # 15 — 초안에서만
     no_hull: bool | None = None       # 20 — '호선 없음(공용)'
     title_auto: bool | None = None
+    task: dict | None = None   # 68 — 과제 정보(통째로, entries/tasks.clean 이 칸과 Category 를 검사)
     assignees: list[AssigneeRef] | None = Field(default=None, max_length=20)   # 46 — 담당자(순서대로, 첫 사람이 주)    # 20 — 제목을 형식대로 다시 만들기(호선·구역·대상 + 구별자)
 
 
@@ -86,6 +87,13 @@ def _detail(db: Session, storage: StoragePaths, e: models.Entry, user: models.Us
     d["vault_unc"] = str(entry_dir(storage, e)) if e.status == "confirmed" and e.vault_rel else None
     d["favorite"] = bool(e.id in favorite_pks(db, user.employee_id, [e.id]))
     return d
+
+
+@router.get("/tasks/options")
+def task_options(db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
+    """68 — 과제 정보 칸 선택지: Category 목록, 의뢰 부서 자동완성, 칸 이름."""
+    from ..entries import tasks
+    return tasks.options(db, user)
 
 
 @router.get("/entries/{entry_id}")
@@ -174,8 +182,8 @@ def split_entry(entry_id: str, body: SplitBody, db: Session = Depends(get_db),
 
 @router.post("/entries/{entry_id}/merge")
 def merge_entry(entry_id: str, body: MergeBody, db: Session = Depends(get_db),
-                user: models.User = Depends(require_auth)):
-    e = service.merge(db, _entry(db, entry_id, user), _entry(db, body.from_entry_id, user), user)
+                storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    e = service.merge(db, _entry(db, entry_id, user), _entry(db, body.from_entry_id, user), user, storage)
     return service.entry_to_dict(db, e, viewer=user)
 
 
