@@ -63,3 +63,11 @@ lbm 이름표가 BDF 와 같음, kind other, 변환 작업·`cli convert` 연결
   E000166 등 inp 3D 표시를 사용자가 확인했다. 개발 이력 61 의 `status: 운영 확인 전` 은 아직 지우지 않았다(요청 시 지움).
 - 후속(d8355a0): 검색 미리보기 패널의 기본 파일 · 목록 순서 = 3D 로 볼 수 있는 BDF → INP → PDF 보고서 → 그 밖의 보고서 → 나머지
   (`lib/files.previewRank`, 변환 결과 없는 모델은 같은 종류 뒤, 검색이 가리킨 파일이 있으면 그것 먼저). 자료 상세의 폴더 트리 순서는 그대로.
+
+## 덧붙임 — OptiStruct .fem (2026-11-23, `5a23f66`)
+- 사용자 요청으로 HyperMesh 가 쓴 OptiStruct 입력(.fem)도 3D 로 본다. Bulk 카드가 Nastran 과 같아 **BDF 파서(DeckReader)로 변환**한다
+  (운영 보관소 E000099 의 실제 .fem 을 읽기만 해서 확인 — 요소 59,547개, 경고 없음). `ingest/rules.py` `OPTISTRUCT_EXTS`, `is_viewer_only`.
+- .inp 처럼 보기 전용(kind other): 내용 서명, 권상 판정, 해석 검증, 비교, WorkBench 보내기는 하지 않는다(`convert_deck` 이 .fem 이면 서명과 권상을 건너뜀).
+- 같은 커밋에서 고친 것: 검색 결과 그림이 BDF(.inp·.fem 포함) 자료인데도 3D 변환 전, 실패, DRM 이면 보고서 첫 쪽이 되던 것(52 대표 그림 대체를
+  'BDF 없는 자료'로 좁힘), .inp·.fem 자료도 검색 3D 썸네일과 초안 카드 3D 미리보기, '서명 없는 모델' 숫자와 서명 다시 계산, Wire 다시 판정은 BDF 만.
+- 이미 올라온 .fem 은 145 관리 › 운영 [BDF 다시 변환](강제 없이)을 한 번 눌러야 변환된다(2026-11-23 사용자에게 안내, 실행 여부 미확인).
