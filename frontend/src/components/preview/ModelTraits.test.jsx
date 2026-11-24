@@ -46,3 +46,15 @@ test('처음 볼 파일 — 변환된 BDF(최신 판) > 첫 문서 > 첫 파일'
   expect(defaultFile({ files: [queued, report] }).id).toBe(9);              // 변환 전 BDF 뿐이면 문서
   expect(defaultFile({ files: [queued] }).id).toBe(3);
 });
+
+test('2026-11-25 — BDF 가 없으면 변환이 끝난 .inp·.fem 모델을 보고서보다 먼저 띄운다', () => {
+  const report = { id: 1, kind: 'report', name: 'r.pdf' };
+  const inp = { id: 2, kind: 'other', name: 'a.INP', size: 10, model: { state: 'done', counts: { GRID: 50 } } };
+  const fem = { id: 3, kind: 'other', name: 'b.fem', size: 10, model: { state: 'done', counts: { GRID: 900 } } };
+  const failed = { id: 4, kind: 'other', name: 'c.inp', size: 99, model: { state: 'failed' } };
+  expect(defaultFile({ files: [report, inp] })).toBe(inp);
+  expect(defaultFile({ files: [report, inp, fem] })).toBe(fem);       // 절점이 많은 것
+  expect(defaultFile({ files: [report, failed] })).toBe(report);      // 변환 실패면 보고서
+  const bdf = { id: 5, kind: 'model', name: 'm.bdf', model: { state: 'done', counts: { GRID: 1 } } };
+  expect(defaultFile({ files: [report, fem, bdf] })).toBe(bdf);       // BDF 가 있으면 BDF 먼저(그대로)
+});

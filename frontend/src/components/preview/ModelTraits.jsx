@@ -1,4 +1,5 @@
 import { STRUCTURES, familyCounts, formatSize, num, structureOf } from '../../lib/insight.js';
+import { isViewerOnly } from '../../lib/files.js';
 
 /**
  * 38 — 대표 BDF 고르기: 변환이 끝난(done) 모델 중 절점(GRID)이 가장 많은 것(검색 결과 행·썸네일과 같은 규칙,
@@ -28,7 +29,21 @@ const bboxSize = (bbox) => {
  */
 export function defaultFile(entry) {
   const files = entry?.files || [];
-  return representativeModel(files, entry?.revisions) || files.find((f) => f.kind === 'report') || files[0] || null;
+  return representativeModel(files, entry?.revisions) || viewerModel(files) || files.find((f) => f.kind === 'report') || files[0] || null;
+}
+
+/**
+ * 2026-11-25 — BDF 가 없으면 변환이 끝난 보기 전용 모델(Abaqus .inp, OptiStruct .fem)을 보고서보다 먼저 띄운다
+ * (절점이 가장 많은 것, 같으면 큰 파일). 변환 전이나 실패한 모델은 고르지 않는다(보고서가 더 쓸모 있다).
+ */
+function viewerModel(files) {
+  let best = null;
+  for (const f of files) {
+    if (!isViewerOnly(f.name) || f.model?.state !== 'done') continue;
+    const rank = [Number(f.model.counts?.GRID) || 0, f.size || 0];
+    if (!best || rank[0] > best.rank[0] || (rank[0] === best.rank[0] && rank[1] > best.rank[1])) best = { file: f, rank };
+  }
+  return best?.file || null;
 }
 
 /** 자료 사전 → 특성 조각 [{ key, text, title? }] — 모델 구성·절점·크기·판·선형. 순수 함수(테스트용). */

@@ -594,7 +594,7 @@ export default function EntryPage() {
     ? '작성자·관리자(LV3)만 고칠 수 있습니다.' : '';
   const trashed = entry.status === 'trashed';
   const offline = storage?.reachable === false;
-  // 처음 보는 파일 — 고른 파일(주소 ?file=)이 없으면 대표 BDF(3D), BDF 가 없으면 첫 문서
+  // 처음 보는 파일 — 고른 파일(주소 ?file=)이 없으면 대표 BDF(3D), BDF 가 없으면 변환된 INP/FEM(3D), 그것도 없으면 첫 문서
   const file = entry.files.find((f) => f.id === picked) || defaultFile(entry);
   const set = (k) => (v) => setDraft((d) => ({ ...d, [k]: v }));
   const isChanged = (k) => changed.includes(k);
