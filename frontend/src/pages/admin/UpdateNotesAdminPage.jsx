@@ -58,7 +58,7 @@ export default function UpdateNotesAdminPage() {
                     </div>
                     {it.summary && <p className="mt-0.5 text-meta text-n-600">{it.summary}</p>}
                   </td>
-                  <td className="py-3 pr-3 font-mono text-meta text-n-600 break-all">{noteUrl(it.id)}</td>
+                  <td className="max-w-[300px] py-3 pr-3"><span className="block truncate font-mono text-meta text-n-600" title={noteUrl(it.id)}>{noteUrl(it.id)}</span></td>
                   <td className="py-3"><CopyLinkButton id={it.id} label="복사" /></td>
                 </tr>
               ))}

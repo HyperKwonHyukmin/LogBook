@@ -62,7 +62,7 @@ export default function UpdateNotesPage() {
   return (
     <Page className="max-w-[1120px]">
       <PageHeader title="업데이트 안내"
-        description="LogBook 에 새로 생기거나 바뀐 사용법을 안내합니다. 안내마다 주소가 있어 그대로 공유할 수 있습니다." />
+        description="새로 생긴 기능과 바뀐 사용법을 화면과 함께 안내합니다." />
       {error && <ErrorNote className="mb-4" action={<Button size="sm" variant="secondary" onClick={loadList}>다시 시도</Button>}>{error}</ErrorNote>}
       {list === null && <RowsSkeleton rows={4} label="업데이트 안내를 불러오는 중" />}
       {list !== null && !error && list.length === 0 && (
@@ -70,7 +70,7 @@ export default function UpdateNotesPage() {
       )}
       {list?.length > 0 && (
         <div className="grid grid-cols-[232px_minmax(0,1fr)] gap-10 max-[900px]:grid-cols-1 max-[900px]:gap-6">
-          <nav aria-label="안내 목록" className="self-start min-[901px]:sticky min-[901px]:top-4">
+          <nav aria-label="안내 목록" className="self-start max-[900px]:order-2 max-[900px]:border-t max-[900px]:border-n-200 max-[900px]:pt-5 min-[901px]:sticky min-[901px]:top-4">
             {groupByMonth(list).map((g) => (
               <div key={g.month} className="mb-4">
                 <h2 className="mb-1 text-meta font-semibold text-n-600">{g.label}</h2>

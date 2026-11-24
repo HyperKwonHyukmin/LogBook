@@ -16,7 +16,7 @@
 `backend/app/update_notes/notes.json` 한 파일(새 안내가 맨 앞), 그림은 같은 폴더 `img/`. DB 표 없음. 작성 화면 없음(WorkBench 와 같은 결정): 파일을 고쳐 커밋하고 145 Update(프런트 빌드 불필요).
 
 한 건: `id`(영문 소문자, 숫자, 하이픈, `YYYY-MM-DD-주제`), `date`, `kind`(새 기능, 개선, 고침), `title`, `summary`, `links[{label, path}]`(앱 안 경로),
-`sections[{heading, body[], facts[{label, text}], steps[], points[], image{src, alt, caption} 또는 images[], note}]`.
+`sections[{heading, body[], steps[문장 또는 {text, image}], image{src, alt, caption} 또는 images[], facts[{label, text}], points[], note}]`(화면에 이 순서로 그린다).
 형식이 틀린 안내(잘못된 id, 날짜, 빈 제목, 겹친 id)는 서버가 건너뛴다. 시험(`tests/test_update_notes_70.py`)이 파일 모양, 그림 파일 존재, 가운뎃점과 em dash 금지를 잡는다.
 
 ## API
@@ -30,5 +30,7 @@
 - 로그인 없는 공개 페이지: LogBook 은 사번 로그인이고 안내의 '화면 열기'가 어차피 로그인을 요구한다.
 
 ## 새 안내 쓰는 법
+틀(2026-11-24 /design 재구성): 요약 첫 문장은 '무엇이 좋아졌나', 구획은 **어디서 여나**(번호 단계, 단계마다 캡처) → **화면 읽는 법**(캡처 한 장 + 번호 설명) → **알아 둘 점**(제한 사항). 단계 한 줄은 한 문장, 등급은 'LV3' 대신 '관리자'처럼 사용자 말로.
+캡처: 설명서용 가상 자료 서버(WorkBench `outputs/LB-manual/source`, `run_server.ps1 api` → 127.0.0.1:9096, DB `logbook_manual`)에서 찍는다. 실서버(145) 화면은 찍지 않는다(블록 자료와 실명이 섞인다). 설치된 Chrome headless 에 CDP 로 붙되 **`newContext({deviceScaleFactor: 2})`** 로 2배로 찍는다(연결한 뒤 `setViewportSize` 를 부르면 1배로 돌아간다). 필요한 부분만 자르고, 번호는 네이비 원 + 흰 숫자(빨간 네모 금지). 화면은 그림을 절반 폭(실제 화면 크기)으로 보이고 누르면 원래 크기로 연다. 9096 서버 화면은 작업 폴더의 `frontend/dist` 라 캡처 전에 빌드.
 사용자가 "업데이트 안내 써"라고 하면: 사용 방법이 바뀐 기능만 고른다(작은 수정은 changelog.json 에만). notes.json 맨 앞에 한 건, 그림은 화면을 찍어 `img/`.
 문장은 짧게, 화면 이름은 지금 이름(CLAUDE.md '화면 이름'), 가운뎃점과 em dash 금지. 커밋, 푸시, 145 Update 뒤 관리 › 업데이트 안내에서 주소를 복사해 보낸다.

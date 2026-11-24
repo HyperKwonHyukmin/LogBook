@@ -27,24 +27,47 @@ export function CopyLinkButton({ id, label = '링크 복사', className = '' }) 
   );
 }
 
-function Figure({ img }) {
+/** 화면 캡처 — 2배 해상도로 찍어 두었다. 누르면 새 탭에서 원래 크기로(좁은 칸에서 글자가 작을 때). */
+function Figure({ img, className = 'mt-3' }) {
+  const src = noteImageSrc(img.src);
+  // 2배로 찍은 캡처를 화면 크기 그대로(절반 폭) — 작은 캡처가 칸 폭만큼 늘어나 흐려지지 않게, 큰 캡처는 칸에 맞춰 줄인다
+  const [w, setW] = useState(null);
   return (
-    <figure className="mt-3">
-      <img src={noteImageSrc(img.src)} alt={img.alt || ''} loading="lazy"
-           className="w-full rounded-md border border-n-200 bg-n-50" />
-      {img.caption && <figcaption className="mt-1.5 text-meta text-n-600">{img.caption}</figcaption>}
+    <figure className={className}>
+      <a href={src} target="_blank" rel="noreferrer" title="원래 크기로 보기"
+         className="inline-block max-w-full cursor-zoom-in overflow-hidden rounded-md border border-n-200 bg-n-50 align-top transition-colors duration-150 ease-out hover:border-n-300">
+        <img src={src} alt={img.alt || ''} loading="lazy" onLoad={(e) => setW(Math.round(e.currentTarget.naturalWidth / 2))}
+             style={w ? { width: w } : undefined} className="block h-auto max-w-full" />
+      </a>
+      {img.caption && <figcaption className="mt-1.5 text-meta leading-5 text-n-600">{img.caption}</figcaption>}
     </figure>
   );
 }
 
+const stepText = (s) => (typeof s === 'string' ? s : s.text);
+
 function Section({ s }) {
   const images = [...(s.image ? [s.image] : []), ...(s.images || [])];
   return (
-    <section className="mt-8 first:mt-6">
+    <section className="mt-9 first:mt-7">
       {s.heading && <h3 className="text-body font-semibold text-n-900">{s.heading}</h3>}
-      {(s.body || []).map((p) => <p key={p} className="mt-2 text-ui leading-6 text-n-700">{p}</p>)}
+      {(s.body || []).map((p) => <p key={p} className="mt-2 text-body text-n-700">{p}</p>)}
+      {s.steps?.length > 0 && (
+        <ol className="mt-3 flex flex-col gap-4">
+          {s.steps.map((st, i) => (
+            <li key={stepText(st)} className="grid grid-cols-[24px_minmax(0,1fr)] gap-x-2.5">
+              <span aria-hidden="true" className="mt-px inline-flex h-6 w-6 items-center justify-center rounded-full bg-n-100 font-mono text-meta font-medium text-n-700">{i + 1}</span>
+              <div className="min-w-0">
+                <p className="pt-px text-body text-n-800"><span className="sr-only">{i + 1}. </span>{stepText(st)}</p>
+                {typeof st === 'object' && st.image && <Figure img={st.image} className="mt-2" />}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+      {images.map((img) => <Figure key={img.src} img={img} />)}
       {s.facts?.length > 0 && (
-        <dl className="mt-3 grid grid-cols-[minmax(120px,max-content)_minmax(0,1fr)] gap-x-4 gap-y-2 border-y border-n-200 py-3 text-ui max-[640px]:grid-cols-1 max-[640px]:gap-y-0.5">
+        <dl className="mt-3 grid grid-cols-[minmax(112px,max-content)_minmax(0,1fr)] gap-x-5 gap-y-2.5 border-y border-n-200 py-3 text-body max-[640px]:grid-cols-1 max-[640px]:gap-y-0.5">
           {s.facts.map((f) => (
             <div key={f.label} className="contents">
               <dt className="font-medium text-n-800 max-[640px]:mt-2">{f.label}</dt>
@@ -53,23 +76,17 @@ function Section({ s }) {
           ))}
         </dl>
       )}
-      {s.steps?.length > 0 && (
-        <ol className="mt-2 list-decimal pl-5 text-ui leading-6 text-n-700 marker:font-mono marker:text-meta marker:text-n-500">
-          {s.steps.map((t) => <li key={t} className="mt-1 pl-1 first:mt-0">{t}</li>)}
-        </ol>
-      )}
       {s.points?.length > 0 && (
-        <ul className="mt-2 list-disc pl-5 text-ui leading-6 text-n-700 marker:text-n-400">
-          {s.points.map((t) => <li key={t} className="mt-1 first:mt-0">{t}</li>)}
+        <ul className="mt-2 list-disc pl-5 text-body text-n-700 marker:text-n-400">
+          {s.points.map((t) => <li key={t} className="mt-1.5 first:mt-0">{t}</li>)}
         </ul>
       )}
-      {images.map((img) => <Figure key={img.src} img={img} />)}
-      {s.note && <p className="mt-3 border-l-2 border-n-300 bg-n-0 py-1.5 pl-3 pr-2 text-meta leading-5 text-n-700">{s.note}</p>}
+      {s.note && <p className="mt-3 rounded-md bg-n-50 px-3 py-2 text-ui text-n-700">{s.note}</p>}
     </section>
   );
 }
 
-/** 안내 한 건 — 머리(날짜, 분류, 제목, 요약, 화면 열기와 링크 복사)와 구획. */
+/** 안내 한 건 — 머리(날짜, 분류, 제목, 무엇이 좋아졌나, 화면 열기와 링크 복사)와 구획. */
 export default function NoteArticle({ note }) {
   return (
     <article aria-labelledby="note-title" className="min-w-0">
@@ -77,9 +94,9 @@ export default function NoteArticle({ note }) {
         <span className="font-mono">{note.date}</span>
         <KindBadge kind={note.kind} />
       </div>
-      <h2 id="note-title" className="mt-1.5 text-[20px] leading-7 font-semibold tracking-[-0.01em] text-n-900 [text-wrap:balance]">{note.title}</h2>
-      {note.summary && <p className="mt-2 text-ui leading-6 text-n-700">{note.summary}</p>}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <h2 id="note-title" className="mt-1.5 text-title font-semibold tracking-[-0.018em] text-n-900 [text-wrap:balance]">{note.title}</h2>
+      {note.summary && <p className="mt-2 text-body text-n-700">{note.summary}</p>}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
         {(note.links || []).map((l) => (
           <Link key={l.path} to={l.path} className={buttonClass('primary', 'sm')}>
             {l.label} 열기<ArrowUpRight size={14} aria-hidden="true" />

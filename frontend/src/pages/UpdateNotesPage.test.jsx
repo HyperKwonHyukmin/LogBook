@@ -10,7 +10,7 @@ const LIST = [
 ];
 const NOTES = {
   '2026-11-24-solid': { ...LIST[0], links: [{ label: '업무별 모음', path: '/targets' }], sections: [
-    { heading: '1. 바깥 면', body: ['본문 문단'], points: ['점 하나'], steps: ['첫 단계'],
+    { heading: '1. 바깥 면', body: ['본문 문단'], points: ['점 하나'], steps: ['첫 단계', { text: '둘째 단계', image: { src: 'step.png', alt: '단계 그림', caption: '① 여기' } }],
       facts: [{ label: '어디서', text: '자료 화면' }], image: { src: 'solid.png', alt: '솔리드 그림', caption: '그림 설명' },
       note: '주의 한 줄' }] },
   '2026-10-30-old': { ...LIST[1], sections: [{ heading: '옛 구획', body: ['옛 본문'] }] },
@@ -40,6 +40,8 @@ test('목록 주소는 최신 안내 — 구획(문단, 사실, 단계, 점, 그
   expect(screen.getByText('본문 문단')).toBeInTheDocument();
   expect(screen.getByText('자료 화면')).toBeInTheDocument();
   expect(screen.getByText('첫 단계')).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: '단계 그림' })).toHaveAttribute('src', '/api/update-notes/img/step.png');
+  expect(screen.getByRole('img', { name: '단계 그림' }).closest('a')).toHaveAttribute('href', '/api/update-notes/img/step.png');
   expect(screen.getByRole('img', { name: '솔리드 그림' })).toHaveAttribute('src', '/api/update-notes/img/solid.png');
   expect(screen.getByText('주의 한 줄')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /업무별 모음 열기/ })).toHaveAttribute('href', '/targets');
