@@ -61,3 +61,15 @@ test('행 제목은 구별자만 보이고 전체 제목은 title, 오른쪽에 
   expect(screen.getByLabelText('파일 BDF 2, 결과 1')).toBeInTheDocument();
   expect(screen.queryByText(/도면/)).toBeNull();
 });
+
+test('2026-11-25 — .inp·.fem(보기 전용 모델)만 있어도 모델+문서, 파일 수 줄은 INP/FEM', () => {
+  expect(contentKind(entry('f', counts(0, 1, { model_view: 1 })))).toBe('both');
+  expect(contentKind(entry('g', counts(0, 0, { model_view: 2 })))).toBe('model');
+  render(
+    <MemoryRouter>
+      <ResultList unit="entry" onSelect={() => {}} onOpen={() => {}} items={[entry('E000292', counts(0, 1, { model_view: 1 }))]} />
+    </MemoryRouter>,
+  );
+  expect(screen.getByTestId('content-kind')).toHaveTextContent('모델+문서');
+  expect(screen.getByLabelText('파일 INP/FEM 1, 문서 1')).toBeInTheDocument();
+});

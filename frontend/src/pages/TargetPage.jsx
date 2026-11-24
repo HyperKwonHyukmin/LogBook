@@ -25,7 +25,7 @@ const RECORDS_SHOWN = 10;
 function Thumb({ r, className }) {
   const icon = (
     <div aria-hidden="true" className={`flex items-center justify-center border border-n-200 bg-n-0 text-n-400 ${className}`}>
-      {r.kind_counts?.model ? <Box size={18} strokeWidth={1.5} /> : <FileText size={18} strokeWidth={1.5} />}
+      {r.kind_counts?.model || r.kind_counts?.model_view ? <Box size={18} strokeWidth={1.5} /> : <FileText size={18} strokeWidth={1.5} />}
     </div>
   );
   if (r.thumb) return <ModelThumb fileId={r.thumb.file_id} modelKey={r.thumb.model_key} alt="" className={className} />;

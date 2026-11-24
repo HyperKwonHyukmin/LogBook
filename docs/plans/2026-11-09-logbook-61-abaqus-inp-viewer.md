@@ -36,6 +36,10 @@ BDF 로 읽는 22곳이 본다. inp 를 model 로 바꾸면 그 길을 하나씩
 - 백엔드 `ingest.rules.has_model_view` / `convert.job.model_file_filter` — 변환 대기열·재변환(`cli convert`)·복원·INCLUDE 형제·파일 메타.
 - 프런트 `lib/files.hasModelView` — 파일 미리보기·전체 화면 뷰어(`/v/{id}`). inp 미리보기에서는 해석 검증·선례 찾기·비교 담기를 숨긴다.
 - 그래서 검색의 '모델' 수·필터에는 inp 가 들지 않는다(필요하면 따로 정한다).
+  → **2026-11-25 정함**: 145 에서 .inp·.fem 만 있는 자료 33건이 검색에서 '문서만'으로 보인다는 신고. 파일 종류(kind other)는 그대로 두고,
+  '모델이 있는가'를 셀 때만 `model_view`(화면 'INP/FEM')로 센다 — `ingest/rules.count_kind`. 검색 행 `kind_counts`·종류 필터(자료 보기, 파일 보기)·
+  구성 배지, 업무별 모음(먼저 볼 예제, 모델 없음), 자료 현황과 보완할 자료의 모델 수, 호선과 사람 화면의 종류. 해석 검증, 서명, 호선 필수(보완 필요), 비교 담기는 BDF 만.
+  시험 `tests/test_viewer_model_counts.py`.
 
 ## 아직 안 하는 것
 - **솔리드(C3D·SC)**: lbm 에 칸이 없어 그리지 않고 경고 `solid_elements: N`. 솔리드만 있으면 '요소 없음'으로 건너뛴다.

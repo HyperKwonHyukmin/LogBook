@@ -91,10 +91,12 @@ def person_profile(db: Session, person: models.Person | None, user_row: models.U
                              .order_by(models.EntryHull.is_primary.desc(), models.EntryHull.hull_no)):
             hulls[eid].append(hull_no)
         F, S = models.File, models.ModelSummary
-        for eid, kind, sol, lift, origin in (db.query(F.entry_id, F.kind, S.sol, S.lifting, models.Batch.origin)
+        from .ingest.rules import count_kind   # 2026-11-25 — .inp·.fem 은 보기 전용 모델(model_view)
+        for eid, raw, ext, sol, lift, origin in (db.query(F.entry_id, F.kind, F.ext, S.sol, S.lifting, models.Batch.origin)
                                              .outerjoin(S, S.file_id == F.id)
                                              .outerjoin(models.Batch, models.Batch.id == F.batch_id)
                                              .filter(F.entry_id.in_(pks), F.location != "trash")):
+            kind = count_kind(raw, ext)
             kinds_by_entry[eid].add(kind)
             if kind == "model" and sol:
                 sols[eid].add(str(sol))

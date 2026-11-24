@@ -13,7 +13,7 @@ import { FavoriteToggle } from '../favorites/Favorites.jsx';
 import { AccessBadge } from '../access/AccessPanel.jsx';
 import NeedsFixBadge from '../ui/NeedsFixBadge.jsx';
 import RevisionBrief from '../revisions/RevisionBrief.jsx';
-import { copyText } from '../../lib/files.js';
+import { copyText, hasModelView } from '../../lib/files.js';
 import { useToast } from '../ui/Toast.jsx';
 
 const stop = (e) => e.stopPropagation();
@@ -38,8 +38,8 @@ const Hulls = ({ hulls }) => hulls.map((h) => <HullChip key={h} hull={h} onClick
 const Sep = () => <span aria-hidden="true" className="text-n-300">·</span>;
 
 // 결과 행의 종류별 파일 수 순서 — 있는 종류만 보인다(2026-11-19, 없는 것은 구성 배지가 말한다).
-const COUNT_KINDS = ['model', 'report', 'drawing', 'result'];
-const KIND_ICONS = { model: Box, report: FileText, drawing: PenTool, result: BarChart3, other: File };
+const COUNT_KINDS = ['model', 'model_view', 'report', 'drawing', 'result'];
+const KIND_ICONS = { model: Box, model_view: Box, report: FileText, drawing: PenTool, result: BarChart3, other: File };
 const ROW_SNIPPETS = 2;
 
 // 결과 열이 좁으면(미리보기를 넓게 끌었을 때) 썸네일을 접어 글자 줄이 부서지지 않게 한다(컨테이너 질의)
@@ -131,16 +131,16 @@ function Assignees({ people }) {
 export function contentKind(item) {
   const c = item.kind_counts;
   const has = (k) => (c ? (c[k] || 0) > 0 : (item.kinds || []).includes(k));
-  const m = has('model');
+  const m = has('model') || has('model_view');   // 2026-11-25 — .inp·.fem 보기 전용 모델도 모델
   const r = has('report');
   return m && r ? 'both' : m ? 'model' : r ? 'report' : null;
 }
 // 2026-11-19 — 세 가지 모두 중성 바탕. 초록은 '확정' 전용, 남색 옅은 바탕은 선택 행 바탕과 같아 배지가 묻혔다.
 // 구분은 아이콘(상자, 문서)과 글자가 맡는다.
 const CONTENT = {
-  both: { label: '모델+문서', tip: 'BDF 모델과 문서(보고서, 발표자료)가 모두 있는 자료' },
-  model: { label: '모델만', tip: 'BDF 모델만 있고 문서는 없는 자료' },
-  report: { label: '문서만', tip: '문서(보고서, 발표자료)만 있고 BDF 모델은 없는 자료' },
+  both: { label: '모델+문서', tip: '모델(BDF, INP, FEM)과 문서(보고서, 발표자료)가 모두 있는 자료' },
+  model: { label: '모델만', tip: '모델(BDF, INP, FEM)만 있고 문서는 없는 자료' },
+  report: { label: '문서만', tip: '문서(보고서, 발표자료)만 있고 모델(BDF, INP, FEM)은 없는 자료' },
 };
 
 export function ContentBadge({ item }) {
@@ -314,7 +314,8 @@ function FileRow({ item, on }) {
   );
   // BDF 는 왼쪽에 썸네일(64×40)을 둔다. 변환이 끝났거나 이전 결과(model_key)가 있을 때만 —
   // 그 밖에는 서버에 그림이 없어 요청이 404 로 헛돈다.
-  if (item.kind !== 'model' || !(item.model_state === 'done' || item.model_key)) return body;
+  // 2026-11-25 — .inp·.fem(보기 전용 모델)도 3D 썸네일(비교 담기는 BDF 만)
+  if (!hasModelView(item) || !(item.model_state === 'done' || item.model_key)) return body;
   return (
     <div className="flex items-start gap-3">
       {/* 장식 그림 — 파일 이름이 바로 옆에 있다. */}

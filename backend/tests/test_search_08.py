@@ -120,7 +120,7 @@ def test_row_fields_kind_counts_and_thumb(db, make_entry_file):
     ])
     db.commit()
     item = _q(db)["items"][0]
-    assert item["kind_counts"] == {"model": 3, "report": 1, "drawing": 0, "result": 0, "other": 0}
+    assert item["kind_counts"] == {"model": 3, "model_view": 0, "report": 1, "drawing": 0, "result": 0, "other": 0}
     assert item["thumb"] == {"file_id": big.id, "model_key": "k2"}
     plain, _ = make_entry_file(title="모델 없음")
     row = next(i for i in _q(db)["items"] if i["entry_id"] == plain.entry_id)

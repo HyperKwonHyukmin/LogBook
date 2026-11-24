@@ -61,6 +61,12 @@ def has_model_view(kind: str, name: str) -> bool:
     return kind == "model" or is_viewer_only(name)
 
 
+def count_kind(kind: str, ext: str | None) -> str:
+    """'모델이 있는가'를 셀 때의 종류(2026-11-25). 보기 전용 입력(.inp, .fem)은 파일 종류가 other 지만 'model_view' 로 센다 —
+    검색 '모델+문서' 배지, 종류 필터, 업무별 모음, 자료 현황. 해석 검증, 서명, 호선 필수(보완 필요)는 BDF(kind 'model')만 본다."""
+    return "model_view" if kind == "other" and (ext or "").lower() in VIEWER_EXTS else kind
+
+
 def is_excluded(name: str) -> bool:
     lower = name.lower()
     return any(fnmatch.fnmatchcase(lower, pat) for pat in EXCLUDE_PATTERNS)

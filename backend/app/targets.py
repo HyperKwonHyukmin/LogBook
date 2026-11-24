@@ -85,9 +85,10 @@ def target_page(db: Session, user, value: str) -> dict:
     child_n = Counter(r["target"] for r in rows)
     children = [{"value": c.value, "entries": child_n.get(c.value, 0)} for c in v.children(term)]
     kc = lambda r, k: (r.get("kind_counts") or {}).get(k, 0)   # noqa: E731
+    has_model = lambda r: kc(r, "model") or kc(r, "model_view")   # noqa: E731 — 2026-11-25 .inp·.fem 도 모델
     with_hull = [r for r in rows if not r["no_hull"]]
     # 처음이면 여기부터(자동) — 호선 자료 중 모델과 보고서가 다 있는 것, 결론이 있는 것 먼저, 그다음 최근
-    full = [r for r in with_hull if kc(r, "model") and kc(r, "report")]
+    full = [r for r in with_hull if has_model(r) and kc(r, "report")]
     start = sorted(full, key=lambda r: (not r["conclusion"], not r["reviewed"]))[:START_N]
     if len(start) < START_N:
         start += [r for r in with_hull if r not in start][:START_N - len(start)]
@@ -120,7 +121,7 @@ def target_page(db: Session, user, value: str) -> dict:
     gaps = {
         "no_conclusion": [r["entry_id"] for r in rows if not r["conclusion"]],
         "no_report": [r["entry_id"] for r in with_hull if kc(r, "model") and not kc(r, "report")],
-        "no_model": [r["entry_id"] for r in with_hull if kc(r, "report") and not kc(r, "model")],
+        "no_model": [r["entry_id"] for r in with_hull if kc(r, "report") and not has_model(r)],
     }
     titles = {r["entry_id"]: r["title"] for r in rows}
     from . import access

@@ -57,7 +57,8 @@ export const JOB_TYPE_LABELS = {
 export const JOB_STATE_LABELS = { queued: '대기', running: '실행 중', done: '완료', failed: '실패' };
 
 // 23 — 파일 종류 report 의 화면 이름은 '문서'(PDF·PPT·DOC·XLS — 보고서·발표자료·계산서 등). 값 'report' 는 그대로
-export const KIND_LABELS = { model: 'BDF', result: '결과', report: '문서', drawing: '도면', other: '기타' };
+// 2026-11-25 — model_view = 3D 로 보는 보기 전용 모델 입력(Abaqus .inp, OptiStruct .fem). 파일 종류는 기타지만 '모델'로 센다
+export const KIND_LABELS = { model: 'BDF', model_view: 'INP/FEM', result: '결과', report: '문서', drawing: '도면', other: '기타' };
 
 export const BATCH_STATE_LABELS = {
   staged: '분석 중', processed: '확정 전', failed: '처리 실패', done: '완료', uploading: '올리는 중',

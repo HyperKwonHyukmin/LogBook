@@ -49,7 +49,24 @@ S_CONCLUSION = 60   # 53 — 결론 한 줄(제목 다음). 주의점은 설명�
 S_HULL_SERIES = 95   # 45 — 같은 시리즈 다른 호선(정확 일치 바로 아래)
 _EPOCH = datetime(1970, 1, 1)
 # 결과 행의 종류별 파일 수(08) — 화면은 BDF·보고서·도면·결과를 0 이어도, 기타는 있을 때만 보인다
-ROW_KINDS = ("model", "report", "drawing", "result", "other")
+ROW_KINDS = ("model", "model_view", "report", "drawing", "result", "other")   # model_view = .inp·.fem 보기 전용 모델
+
+
+def _file_kind_filter(kinds):
+    """파일 보기의 종류 거르기(2026-11-25). 'model_view' = 확장자 .inp·.fem 파일, 'other' 는 그 파일을 뺀 나머지 기타."""
+    from ..ingest.rules import VIEWER_EXTS
+
+    F = models.File
+    viewer = F.ext.in_(VIEWER_EXTS)
+    conds = []
+    plain = [k for k in kinds if k not in ("model_view", "other")]
+    if plain:
+        conds.append(F.kind.in_(plain))
+    if "other" in kinds:
+        conds.append((F.kind == "other") & ~viewer)
+    if "model_view" in kinds:
+        conds.append((F.kind == "other") & viewer)
+    return or_(*conds) if conds else F.kind.in_(list(kinds))
 
 
 def _like(term: str) -> str:
@@ -610,10 +627,12 @@ class MySqlSearch:
                          .filter(models.EntryAssignee.entry_id.in_(id_list))
                          .order_by(models.EntryAssignee.sort_order, models.EntryAssignee.person_id)):
             rows[eid]["assignees"].append(str(pid))
-        # 파일 행을 다 읽지 않고 (Entry, 종류) 별 개수만 센다
-        for eid, kind, n in (db.query(models.File.entry_id, models.File.kind, func.count(models.File.id))
-                             .filter(models.File.entry_id.in_(id_list), models.File.location != "trash")
-                             .group_by(models.File.entry_id, models.File.kind)):
+        # 파일 행을 다 읽지 않고 (Entry, 종류) 별 개수만 센다. 2026-11-25 — .inp·.fem 은 model_view(보기 전용 모델)로
+        from ..ingest.rules import count_kind
+        for eid, raw, ext, n in (db.query(models.File.entry_id, models.File.kind, models.File.ext, func.count(models.File.id))
+                                 .filter(models.File.entry_id.in_(id_list), models.File.location != "trash")
+                                 .group_by(models.File.entry_id, models.File.kind, models.File.ext)):
+            kind = count_kind(raw, ext)
             rows[eid]["kinds"].add(kind)
             rows[eid]["kind_counts"][kind] += n
             rows[eid]["file_count"] += n
@@ -833,7 +852,7 @@ class MySqlSearch:
         # 순위·거르기에는 가벼운 열만 쓴다 — 파일 행 전체는 이 페이지 몫만 읽는다
         q = db.query(F.id, F.entry_id, F.name).filter(F.entry_id.in_(list(by_entry)), F.location != "trash")
         if filters.get("kind"):
-            q = q.filter(F.kind.in_(filters["kind"]))   # 19 — 종류 여러 개(OR)
+            q = q.filter(_file_kind_filter(filters["kind"]))   # 19 — 종류 여러 개(OR)
         scored = []
         names: dict[int, str] = {}
         for fid, eid, fname in q:

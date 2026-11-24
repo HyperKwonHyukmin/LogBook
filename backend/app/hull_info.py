@@ -60,8 +60,10 @@ def hull_detail(db: Session, hull_no: str, user=None) -> dict:
     kinds = Counter()
     files = 0
     if ids:
-        for eid, kind in (db.query(models.File.entry_id, models.File.kind)
-                          .filter(models.File.entry_id.in_(ids), models.File.location != "trash")):
+        from .ingest.rules import count_kind   # 2026-11-25 — .inp·.fem 은 보기 전용 모델(model_view)
+        for eid, raw, ext in (db.query(models.File.entry_id, models.File.kind, models.File.ext)
+                              .filter(models.File.entry_id.in_(ids), models.File.location != "trash")):
+            kind = count_kind(raw, ext)
             kinds_by_entry[eid].add(kind)
             kinds[kind] += 1
             files += 1

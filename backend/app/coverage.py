@@ -108,6 +108,13 @@ def build_coverage(db: Session, user) -> dict:
         if state == "done" and (not sig_geometry or sig_version != SIG_VERSION):
             unsigned.add(eid)
 
+    # 2026-11-25 — 보기 전용 모델(.inp·.fem)도 '모델 있음'으로 센다(모델 없는 문서, 문서 없는 모델, 칸 색). 해석 검증과 호선 필수는 BDF 만
+    from .ingest.rules import VIEWER_EXTS
+    view_files: dict[int, int] = defaultdict(int)
+    for (eid,) in db.query(F.entry_id).filter(F.entry_id.in_(pks), F.kind == "other", F.ext.in_(VIEWER_EXTS),
+                                             F.location != "trash"):
+        view_files[eid] += 1
+
     def solve_of(eid: int) -> str:
         st = solve_states.get(eid) or []
         if "pass" in st:
@@ -123,7 +130,8 @@ def build_coverage(db: Session, user) -> dict:
     out = []
     for e in rows:
         t = tags.get(e.id) or {"zone": [], "target": []}
-        n_models = model_files.get(e.id, 0)
+        n_models = model_files.get(e.id, 0)   # BDF
+        n_view = view_files.get(e.id, 0)       # .inp·.fem
         row_keys = [f"h:{h}" for h in hulls.get(e.id, [])]
         if e.no_hull:
             row_keys.append(f"c:{COMMON_ROW}")
@@ -136,7 +144,7 @@ def build_coverage(db: Session, user) -> dict:
         out.append({
             "id": e.entry_id, "title": e.title,
             "rows": row_keys, "zones": t["zone"], "target": (t["target"] or [None])[0],
-            "models": n_models, "reports": kinds.get(e.id, {}).get("report", 0),
+            "models": n_models + n_view, "reports": kinds.get(e.id, {}).get("report", 0),
             "doc_linked": e.id in doc_linked, "model_linked": e.id in model_linked,
             "solve": solve_of(e.id) if n_models else None,
             "needs_fix": bool(missing), "unsigned": e.id in unsigned, "open_issues": issues.get(e.id, 0),

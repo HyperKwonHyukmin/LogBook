@@ -42,7 +42,7 @@ export function pickReasons(r) {
   const out = [];
   if (r.conclusion) out.push('결론 있음');
   if (r.reviewed) out.push('검토 서명');
-  if (kc(r, 'model') && kc(r, 'report')) out.push('모델과 보고서 모두 있음');
+  if ((kc(r, 'model') || kc(r, 'model_view')) && kc(r, 'report')) out.push('모델과 보고서 모두 있음');
   if (r.solve === 'pass') out.push('해석 검증 통과');
   return out;
 }

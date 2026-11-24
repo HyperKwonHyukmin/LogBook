@@ -5,7 +5,7 @@ const EXT_TONE = {
   pdf: 'pdf', ppt: 'ppt', pptx: 'ppt', xls: 'xls', xlsx: 'xls', xlsm: 'xls', csv: 'xls',
   bdf: 'bdf', dat: 'bdf', nas: 'bdf', f06: 'res', op2: 'res', h5: 'res', doc: 'doc', docx: 'doc',
 };
-const KIND_TONE = { model: 'bdf', result: 'res', report: 'doc', drawing: 'xls', other: null };
+const KIND_TONE = { model: 'bdf', model_view: 'bdf', result: 'res', report: 'doc', drawing: 'xls', other: null };
 const TONES = {
   pdf: 'bg-k-pdf-bg text-k-pdf', ppt: 'bg-k-ppt-bg text-k-ppt', xls: 'bg-k-xls-bg text-k-xls',
   bdf: 'bg-k-bdf-bg text-k-bdf', res: 'bg-k-res-bg text-k-res', doc: 'bg-k-doc-bg text-k-doc',
