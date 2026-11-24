@@ -5,7 +5,6 @@ import RequireAuth from './auth/RequireAuth.jsx';
 import AppShell from './components/shell/AppShell.jsx';
 import SectionTabs from './components/shell/SectionTabs.jsx';
 import LoginPage from './pages/LoginPage.jsx';
-import AuditLogPage from './pages/AuditLogPage.jsx';
 import BrowsePage from './pages/BrowsePage.jsx';
 import EntryPage from './pages/EntryPage.jsx';
 import HullPage from './pages/HullPage.jsx';
@@ -30,6 +29,7 @@ import VocabPage from './pages/admin/VocabPage.jsx';
 import WbRulesPage from './pages/admin/WbRulesPage.jsx';
 import UpdatesPage from './pages/admin/UpdatesPage.jsx';
 import UpdateNotesAdminPage from './pages/admin/UpdateNotesAdminPage.jsx';
+import AuditLogPage from './pages/admin/AuditLogPage.jsx';
 import UpdateNotesPage from './pages/UpdateNotesPage.jsx';
 import ViewerPage from './pages/ViewerPage.jsx';
 
@@ -43,7 +43,7 @@ const SimilarPage = lazy(() => import('./pages/SimilarPage.jsx'));
 
 const EXPLORE_TABS = [{ to: '/graph', label: '관계 지도' }, { to: '/coverage', label: '갖춤 현황' }];
 const ADMIN_TABS = [
-  { to: '/admin/users', label: '사용자' }, { to: '/admin/ops', label: '운영' },
+  { to: '/admin/users', label: '사용자' }, { to: '/admin/ops', label: '운영' }, { to: '/admin/log', label: '활동 로그' },
   { to: '/admin/vocab', label: '분류 목록' }, { to: '/admin/wb-targets', label: 'WorkBench 연결 규칙' },
   { to: '/admin/stats', label: '자료 현황' }, { to: '/admin/entries', label: '자료 목록' },
   { to: '/admin/cleanup', label: '자료 정비' }, { to: '/admin/updates', label: '업데이트 이력' },
@@ -90,13 +90,15 @@ export default function App() {
             <Route path="tags" element={<Navigate to="/browse?by=tag" replace />} />
             <Route path="tags/manage" element={<TagsPage />} />
             <Route path="trash" element={<TrashPage />} />
-            <Route path="log" element={<AuditLogPage />} />
+            {/* 2026-11-24 — 활동 로그는 관리 아래로(관리자만). 옛 주소 /log 는 넘긴다(관리자 아니면 검색으로) */}
+            <Route path="log" element={<Navigate to="/admin/log" replace />} />
             <Route element={<RequireAuth adminOnly />}>
               <Route path="admin" element={<Navigate to="/admin/users" replace />} />
               {/* 관리 6화면 — 사이드 메뉴 '관리' 하나 아래 탭으로(2026-11-05) */}
               <Route element={<SectionTabs label="관리" items={ADMIN_TABS} contained />}>
                 <Route path="admin/users" element={<UsersPage />} />
                 <Route path="admin/ops" element={<OpsPage />} />
+                <Route path="admin/log" element={<AuditLogPage />} />
                 <Route path="admin/vocab" element={<VocabPage />} />
                 <Route path="admin/wb-targets" element={<WbRulesPage />} />
                 <Route path="admin/stats" element={<StatsPage />} />   {/* 57 — 자료 현황 */}

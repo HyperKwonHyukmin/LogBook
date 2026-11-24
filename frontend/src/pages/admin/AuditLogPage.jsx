@@ -1,13 +1,13 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { History, Search } from 'lucide-react';
-import { api } from '../api/client.js';
-import { AuthContext } from '../auth/AuthContext.jsx';
-import EmptyState from '../components/ui/EmptyState.jsx';
-import { inputClass } from '../components/ui/Field.jsx';
-import { ErrorNote, Page, PageHeader } from '../components/ui/Page.jsx';
-import { RowsSkeleton } from '../components/ui/Skeleton.jsx';
-import { ACTION_LABELS } from '../lib/labels.js';
+import { api } from '../../api/client.js';
+import { AuthContext } from '../../auth/AuthContext.jsx';
+import EmptyState from '../../components/ui/EmptyState.jsx';
+import { inputClass } from '../../components/ui/Field.jsx';
+import { ErrorNote, Page, PageHeader } from '../../components/ui/Page.jsx';
+import { RowsSkeleton } from '../../components/ui/Skeleton.jsx';
+import { ACTION_LABELS } from '../../lib/labels.js';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 /** '2026-09-29' → '2026년 9월 29일 (화)' */
@@ -29,7 +29,7 @@ function Target({ target }) {
   return <span className="font-mono text-meta text-n-600">{target.id}</span>;
 }
 
-/** 활동 로그 — 날짜별 묶음. 사람은 알 수 있으면 이름으로(나), 아니면 사번으로 보인다. */
+/** 활동 로그(관리 › 활동 로그, LV3 — 2026-11-24 사이드 메뉴에서 옮김) — 날짜별 묶음. 사람은 알 수 있으면 이름으로(나), 아니면 사번으로 보인다. */
 export default function AuditLogPage() {
   const me = useContext(AuthContext)?.user;
   const [rows, setRows] = useState([]);

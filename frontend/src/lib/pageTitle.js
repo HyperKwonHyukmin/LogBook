@@ -16,7 +16,6 @@ const EXACT = {
   '/browse': '분류로 찾기',
   '/tags/manage': '태그 관리',
   '/trash': '휴지통',
-  '/log': '활동 로그',
   '/compare': '모델 비교',
   '/compares': '최근 비교',
   '/comments': '새 의견',   // 63

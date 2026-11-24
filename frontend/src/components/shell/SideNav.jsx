@@ -1,5 +1,5 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Anchor, Grid2x2Check, History, Inbox, Library, NotebookPen, ScanSearch, Search, Settings, Trash2 } from 'lucide-react';
+import { Anchor, Grid2x2Check, Inbox, Library, NotebookPen, ScanSearch, Search, Settings, Trash2 } from 'lucide-react';
 import Spinner from '../ui/Spinner.jsx';
 import { useInboxSummary } from './InboxSummary.jsx';
 
@@ -24,7 +24,7 @@ const GROUPS = [
   { label: '등록·정리', items: [
     { to: '/inbox', label: '올리기와 확정', icon: Inbox, badge: 'inbox' }, // 48 — 손볼 자료 탭 포함 · 62 배지
     { to: '/trash', label: '휴지통', icon: Trash2 },
-    { to: '/log', label: '활동 로그', icon: History },
+    // 2026-11-24 — 활동 로그는 관리 › 활동 로그로 옮겼다(관리자만, 사용자 결정). 메뉴 9 → 8
   ] },
 ];
 

@@ -228,11 +228,8 @@ def test_same_model_and_side_lists_matrix(role, world, client, auth_headers, db)
     assert set(allsug["hull"]) == {hn for k in seen for hn in HULLS[k]}
     allsug = client.get("/api/suggest/all", params={"q": "태그", "limit": 20}, headers=h).json()
     assert set(allsug["tag"]) == {f"태그{k}" for k in seen}
-    # 감사 로그 — 볼 수 없는 Entry·파일에 대한 기록은 빠진다
-    log = client.get("/api/audit", headers=h).json()
-    targets = {(x["target"]["type"], x["target"]["id"]) for x in log}
-    assert (("entry", world["e"]["bl"]) in targets) is ("bl" in seen)
-    assert (("file", str(world["f"]["bl"])) in targets) is ("bl" in seen)
+    # 감사 로그(활동 로그) — 2026-11-24 부터 관리자만(LV3, WorkBench 관리자)
+    assert client.get("/api/audit", headers=h).status_code == (200 if role in ("lv3", "wbadmin") else 403)
 
 
 def test_trash_list_hides(world, client, auth_headers, db):
@@ -285,7 +282,7 @@ def test_unowned_blocked_draft_hidden_and_not_claimable(world, client, auth_head
         hidden = {pk for (pk,) in db.query(models.Entry.id).filter(~access.visible_entries_filter(u))}
         assert d.id in hidden, role
         h = auth_headers(USERS[role])
-        assert d.entry_id not in {r["target"]["id"] for r in client.get("/api/audit", headers=h).json()}
+        assert client.get("/api/audit", headers=h).status_code == 403
         assert client.get(f"/api/batches/{key}", headers=h).status_code == 404
         r = client.post(f"/api/batches/{key}/claim", headers=h)
         assert r.status_code == 404 and r.json()["detail"] == "batch_not_found", role
