@@ -225,3 +225,14 @@ test('설명서 패널은 처음에 화면의 절반, 키보드로 넓히고 좁
   await userEvent.keyboard('{ArrowRight}');
   expect(handle).toHaveAttribute('aria-valuenow', '80');
 });
+
+test('로고를 누르면 검색 홈으로 간다', async () => {
+  render(
+    <MemoryRouter initialEntries={['/targets?q=x']}>
+      <TopBar user={{ name: '김철수', employee_id: 'A100001' }} onLogout={() => {}} />
+      <Routes><Route path="*" element={<LocationProbe />} /></Routes>
+    </MemoryRouter>,
+  );
+  await userEvent.click(screen.getByRole('link', { name: '검색 홈으로' }));
+  expect(screen.getByTestId('loc')).toHaveTextContent(/^\/$/);
+});

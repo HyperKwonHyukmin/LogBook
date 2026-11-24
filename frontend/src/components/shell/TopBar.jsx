@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { CircleHelp, History as HistoryIcon, LogOut, Megaphone, MessageSquare, Search, Upload, X, UserRound } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import Logo from '../ui/Logo.jsx';
@@ -182,7 +182,13 @@ export default function TopBar({ user, onLogout }) {
   return (
     <>
     <header className="on-navy flex h-12 shrink-0 items-center gap-3 bg-navy-900 px-3">
-      <div className="flex w-[196px] shrink-0 items-center pl-1"><Logo tone="navy" /></div>
+      {/* 2026-11-24 — 로고를 누르면 검색 홈(조건 없는 첫 화면)으로 */}
+      <div className="flex w-[196px] shrink-0 items-center pl-1">
+        <Link to="/" aria-label="검색 홈으로" title="검색 홈으로"
+              className="rounded-md px-1 py-0.5 transition-opacity duration-150 ease-out hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-on-navy">
+          <Logo tone="navy" />
+        </Link>
+      </div>
       <form role="search" className="relative min-w-0 max-w-[560px] flex-1" onSubmit={onSubmit}>
         {/* 네이비 위의 흰 검색칸 — 화면의 첫 진입점이라 크롬에서 가장 밝은 면이다 */}
         <label className="field group flex h-9 w-full items-center gap-2 rounded-md border border-n-0 bg-n-0 px-2.5 shadow-xs
