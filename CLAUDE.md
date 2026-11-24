@@ -29,7 +29,7 @@ Hi-TESS LogBook(구조해석 자료 창고). 무엇·어떻게 쓰는지는 `REA
 
 ## 규칙
 - **프런트를 고치면 `npm run build` 후 `frontend/dist` 도 커밋한다** — 145 에는 Node 가 없고 dist 를 그대로 쓴다.
-- **테스트 DB `logbook_test` 는 모든 세션이 같이 쓴다.** 다른 세션이 pytest 를 돌리는 중이면 기다린다(동시에 돌리면 잠겨서 멈춘다). 멈췄다고 중간에 끊으면 표 지우기가 반쯤 끝나 다음 실행이 `Can't DROP ...` 로 실패한다 → `SET FOREIGN_KEY_CHECKS=0` 후 `logbook_test` 의 표를 모두 DROP 하고 다시 돌린다(2026-10-19).
+- **테스트 DB `logbook_test` 는 모든 세션이 같이 쓴다.** 다른 세션이 pytest 를 돌리는 중이면 기다린다(동시에 돌리면 잠겨서 멈춘다). 같은 세션 안에서도 겹쳐 돌리지 말 것: pytest 는 시작할 때마다 표를 전부 지우고 다시 만든다(`conftest._test_schema`). DB 를 안 쓰는 시험 파일 하나만 따로 돌려도 그렇다(2026-11-24 전체 시험 도중 `test_serve.py` 를 따로 돌려 그 순간 돌던 `test_vocab.py` 가 DB 오류로 실패). 멈췄다고 중간에 끊으면 표 지우기가 반쯤 끝나 다음 실행이 `Can't DROP ...` 로 실패한다 → `SET FOREIGN_KEY_CHECKS=0` 후 `logbook_test` 의 표를 모두 DROP 하고 다시 돌린다(2026-10-19).
 - **작업 폴더도 여러 세션이 같이 쓴다** — 커밋할 때 `git add -A` 금지, 이 세션이 고친 파일만 골라 add 하고 커밋 전에 `git status` 로 확인한다(2026-10-19 다른 세션의 39 미커밋 작업이 섞여 푸시됨).
   - **dist 도 섞인다** — 다른 세션의 미커밋 프런트 변경이 있으면 `npm run build` 결과에 그 코드가 들어가 145 에 배포된다. 그때는 `git worktree add --detach <scratchpad>\wt HEAD` 로 깨끗한 사본을 만들고 이 세션이 고친 파일만 복사해 거기서 테스트·빌드한 뒤 그 `frontend/dist` 를 가져와 커밋한다(node_modules 는 junction, 끝나면 junction 부터 지우고 `git worktree remove`)(2026-11-06, 55·56 배포 때).
 - **사이드 메뉴를 늘리지 않는다** — 새 화면은 기존 메뉴 아래 위쪽 탭(`components/shell/SectionTabs.jsx`, 살펴보기·관리가 이 방식)이나 화면 안 단추로 넣는다. 메뉴는 9개 + 관리 1개(51, 2026-11-05 에 7개 → 2026-11-19 사용자 결정으로 '나의 메모'(64)를 더해 8개 — 날마다 따로 찾아 들어가는 개인 노트라 예외 → 2026-11-23 사용자 결정으로 '업무별 모음'(69)을 '호선' 아래에 더해 9개 — 호선처럼 목록에서 고르는 목적지 화면이라 탭으로 숨기면 처음 맡은 사람이 찾지 못한다).
@@ -50,6 +50,7 @@ Hi-TESS LogBook(구조해석 자료 창고). 무엇·어떻게 쓰는지는 `REA
 ## 배포 (145)
 개발 PC 에서 커밋·푸시 → 145 Server Manager ⟳ Update(git pull · requirements 바뀌면 pip install · 재시작).
 145 는 Server Manager 한 창이 API·Worker·보고서 색인 워커를 띄운다(작업 스케줄러 없음, 41). `server_manager.py`·`serverguard/` 를 바꾼 업데이트는 Update 뒤 **창을 X 로 닫고 다시 열도록** 알린다(Update 는 창 메모리의 옛 코드로 다시 띄운다).
+주소는 `http://logbook.hd.com`(= 10.14.42.145, 80번과 9095 를 API 프로세스 하나가 함께 연다 — `app/serve.py`, 2026-11-24). Windows 포트 전달(netsh portproxy)로 80번을 넘기지 말 것(모든 사용자가 127.0.0.1 로 보여 Windows 로그인 제한기가 한 사람으로 센다 — README 맨 위).
 `backend\.env` 는 git 밖이라 Update 로 바뀌지 않는다 — 새 설정 키가 생기면 145 `.env` 에 손으로 넣도록 알린다. 처음 설치·설정은 README '145 서버'.
 
 ## 145 데이터 검증 (사용자가 요청할 때만)

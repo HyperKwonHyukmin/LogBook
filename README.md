@@ -7,8 +7,9 @@
 - 설계: `docs/specs/2026-09-28-logbook-design.md` · 계획: `docs/plans/` · WorkBench 재사용 목록: `docs/reuse-inventory.md`
 - 데이터 원본: `\\storage.hpc.hd.com\a476854\00_PROJECT\AA_300_CF44\999_LogBook`
 - 서버: **http://logbook.hd.com** (사내 DNS → 10.14.42.145, 2026-11-24) = 10.14.42.145:9095 (개발 PC 에서 개발·테스트 → 커밋·푸시 → 145 에서 `git pull`)
-  - 80번은 145 의 Windows 포트 전달로 9095 에 넘긴다(LogBook 코드와 무관): `netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=80 connectaddress=127.0.0.1 connectport=9095` + 방화벽 인바운드 규칙 'LogBook 80'(TCP 80). IP Helper(iphlpsvc) 서비스가 켜져 있어야 한다. 되돌리기는 `netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=80`, `Remove-NetFirewallRule -DisplayName "LogBook 80"`.
-  - 80번으로 들어온 요청은 감사 기록 IP 가 127.0.0.1 이다(포트 전달은 원래 IP 를 넘기지 않는다). 사용자 IP 가 필요해지면 uvicorn 을 80번에 직접 띄운다(server_manager.py `API_CMD`, `HEALTH_URL`, `API_PORT`). 예전 :9095 주소와 WorkBench 연결은 그대로 동작한다.
+  - 80번도 LogBook API 가 직접 연다(2026-11-24, `backend/app/serve.py`): uvicorn 프로세스 하나가 9095 와 `LOGBOOK_EXTRA_PORTS`(기본 `80`, 쉼표로 여러 개, 빈 값이면 끔)를 함께 받는다. 80번을 못 열면(이미 쓰는 프로그램이 있음) 경고만 남기고 9095 로 계속 뜬다. Server Manager 로그에 `LogBook API 포트 9095, 80 에서 받습니다` 가 보이면 정상. 방화벽 인바운드 규칙 'LogBook 80'(TCP 80)이 있어야 한다.
+  - 처음에는 Windows 포트 전달(`netsh interface portproxy`, 80 을 9095 로)을 썼다가 뺐다. 그 길로 온 사용자는 모두 127.0.0.1 로 보여 Windows 로그인 제한기(IP 별 실패 20번, 모르는 실패 4번, 동시 협상 10개)가 80번 사용자 전체를 한 사람으로 세고 감사 IP 도 127.0.0.1 이 됐다. **포트 전달을 다시 넣지 말 것.** 남아 있으면 지운다: `netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=80`(확인 `netsh interface portproxy show all`).
+  - 예전 :9095 주소와 WorkBench 연결은 그대로 동작한다(WorkBench 는 `LOGBOOK_BASE_URL` 이 없으면 `http://<접속 호스트>:9095` 로 연다. 새 주소로 맞추려면 145 WorkBench `.env` 에 `LOGBOOK_BASE_URL=http://logbook.hd.com`).
 
 ## 개발 PC
 
@@ -128,7 +129,7 @@ SHOW GRANTS FOR '<logbook 계정>'@'<호스트>';
 - `LOGBOOK_AUTH_MODE` — 비움(기본) = 사번만 로그인도 열림(개발 PC·테스트). `windows` = 사번만 로그인을 닫는다(403 `employee_id_login_disabled`). 들어오는 길은 Windows 계정과 WorkBench(`/sso`)뿐이다.
 - `LOGBOOK_WINDOWS_LOGIN=0` 이면 Windows 계정 로그인을 끈다. `LOGBOOK_AD_DOMAIN` 기본 `HHI`.
 - 스크립트·관리 작업: `curl.exe --negotiate -u : -X POST http://10.14.42.145:9095/api/auth/windows` → `{token, user}`(본문 없이 보낸다).
-- ⚠ NTLM 상태를 프로세스 메모리에 두므로 API 는 uvicorn 하나로 돈다(`server_manager.py` `API_CMD` 에 `--workers` 를 넣지 않는다).
+- ⚠ NTLM 상태를 프로세스 메모리에 두므로 API 는 uvicorn 프로세스 하나로 돈다(`server_manager.py` `API_CMD` = `python -m app.serve`, 포트가 둘이어도 프로세스는 하나. `--workers` 나 포트별 서버를 따로 띄우지 않는다).
 
 ## WorkBench 해석 출처 (39, Hi-TESS Core 1단계)
 

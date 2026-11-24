@@ -57,6 +57,9 @@ class Settings:
     # 2026-11-19 — 이 부서(WorkBench 부서 이름과 글자 그대로) 사람은 로그인할 때 LV1 이면 LV2 로 올린다(내리지는 않는다).
     # 쉼표로 여러 개, 빈 값이면 끈다. 구조시스템연구실 설명회와 LogBook 오픈(31 의 '모델은 관리자만'을 이 부서에만 연다)
     lv2_departments: tuple[str, ...] = ("구조시스템연구실",)
+    # 2026-11-24 — API 가 9095 말고 함께 여는 포트(app/serve.py). 사내 DNS logbook.hd.com 이 포트 없이(80번) 들어온다.
+    # 쉼표로 여러 개, 빈 값이면 끈다. 못 열면 경고만 남기고 9095 로 계속 뜬다
+    extra_ports: tuple[int, ...] = (80,)
 
 
 def load_settings() -> Settings:
@@ -94,6 +97,8 @@ def load_settings() -> Settings:
         ad_domain=(os.getenv("LOGBOOK_AD_DOMAIN", "").strip() or "HHI").upper(),
         lv2_departments=tuple(d.strip() for d in os.getenv("LOGBOOK_LV2_DEPARTMENTS", "구조시스템연구실").split(",")
                               if d.strip()),
+        extra_ports=tuple(int(p) for p in (x.strip() for x in os.getenv("LOGBOOK_EXTRA_PORTS", "80").split(","))
+                          if p.isdigit() and 0 < int(p) < 65536 and int(p) != 9095),
     )
 
 

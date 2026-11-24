@@ -42,8 +42,9 @@ else:
     PYTHON = sys.executable
     PIP = str(Path(sys.executable).parent / "pip.exe")
 
-API_CMD = [PYTHON, "-m", "uvicorn", "app.main:app",
-           "--host", "0.0.0.0", "--port", "9095", "--no-access-log"]
+# 2026-11-24 — app/serve.py 가 uvicorn 프로세스 하나로 9095 와 덧붙인 포트(기본 80, LOGBOOK_EXTRA_PORTS)를 함께 연다.
+# 프로세스는 여전히 하나다(NTLM 상태가 메모리 — --workers 를 넣지 않는 것과 같은 이유). 이 창은 9095 로만 상태를 본다.
+API_CMD = [PYTHON, "-m", "app.serve"]
 WORKER_CMD = [PYTHON, "-m", "app.worker"]
 INDEX_CMD = [PYTHON, "-m", "app.report_index.worker", "--loop"]
 HEALTH_URL = "http://127.0.0.1:9095/api/system/health"

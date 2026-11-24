@@ -51,7 +51,11 @@ def _texts(it):
         yield s.get("note") or ""
         yield from s.get("body") or []
         yield from s.get("points") or []
-        yield from s.get("steps") or []
+        for st in s.get("steps") or []:
+            yield st if isinstance(st, str) else st["text"]
+            if isinstance(st, dict) and st.get("image"):
+                yield st["image"].get("alt") or ""
+                yield st["image"].get("caption") or ""
         for f in s.get("facts") or []:
             yield f["label"]
             yield f["text"]
@@ -73,7 +77,8 @@ def test_data_shape():
         for link in it.get("links") or []:
             assert link["path"].startswith("/") and not link["path"].startswith("//"), it["id"]
         for s in it.get("sections") or []:
-            for img in ([s["image"]] if s.get("image") else []) + (s.get("images") or []):
+            step_imgs = [st["image"] for st in s.get("steps") or [] if isinstance(st, dict) and st.get("image")]
+            for img in ([s["image"]] if s.get("image") else []) + (s.get("images") or []) + step_imgs:
                 assert (IMG_DIR / img["src"]).is_file() and img["alt"], img
         for t in _texts(it):
             assert "·" not in t and "—" not in t, (it["id"], t)
