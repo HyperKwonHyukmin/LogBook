@@ -180,6 +180,15 @@ def index_one(store, report, config, extractor=extract_file, embed=True, model_i
         return "missing" if missing else "failed"
 
 
+QUIET_OUTCOMES = {"unchanged", "backoff"}
+
+
+def worth_logging(outcomes: dict) -> bool:
+    """2026-11-25 — --loop 가 5분마다 '{"unchanged": 246, "backoff": 6}' 을 Server Manager 창에 쌓던 것.
+    바뀐 것 없이 건너뛰기(unchanged)와 재시도 대기(backoff)만 있는 주기는 찍지 않는다(새로 색인·실패·사라짐은 찍는다)."""
+    return any(n and k not in QUIET_OUTCOMES for k, n in (outcomes or {}).items())
+
+
 def run_cycle(config, source=registered_reports, extractor=extract_file, embed=True):
     store = IndexStore(config.index_path)
     started = time.time()
@@ -281,7 +290,9 @@ def main():
             return
         while True:
             try:
-                print(json.dumps(run_cycle(config, embed=not args.no_embeddings), ensure_ascii=False), flush=True)
+                outcomes = run_cycle(config, embed=not args.no_embeddings)
+                if not args.loop or worth_logging(outcomes):   # --once 는 늘 찍는다(손으로 돌릴 때 결과를 본다)
+                    print(json.dumps(outcomes, ensure_ascii=False), flush=True)
             except Exception:
                 if not args.loop:
                     raise

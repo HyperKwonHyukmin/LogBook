@@ -21,7 +21,7 @@ from app.report_index.config import IndexConfig
 from app.report_index.extractors import VERSION, _add, extract_file
 from app.report_index.search import _keyword, keyword_match, query_terms
 from app.report_index.store import SCHEMA_VERSION, IndexStore, normalize, retry_delay
-from app.report_index.worker import WorkerLock, index_one, run_cycle
+from app.report_index.worker import WorkerLock, index_one, run_cycle, worth_logging
 from app.routers.reports import get_report_index, rag_gate
 
 MODEL = "bge-m3:latest:sha256-test"
@@ -675,3 +675,10 @@ def test_scale_thousands_of_chunks(tmp_path):
     # 느슨한 상한(느린 PC 도 통과하게) — 예전 구조는 요청마다 벡터 JSON 전부(수십 MB)를 읽었다
     assert rare_s < 2.0 and common_s < 10.0 and first_s < 10.0 and cached_s < 2.0
     assert rare_peak < 20 * 1024 * 1024
+
+
+def test_loop_log_only_when_something_happened():
+    # 2026-11-25 — 바뀐 것 없는 주기(unchanged·backoff 만)는 Server Manager 창에 찍지 않는다
+    assert not worth_logging({"unchanged": 246, "backoff": 6})
+    assert not worth_logging({}) and not worth_logging({"unchanged": 0, "ready": 0})
+    assert worth_logging({"unchanged": 245, "ready": 1}) and worth_logging({"failed": 1}) and worth_logging({"missing": 2})

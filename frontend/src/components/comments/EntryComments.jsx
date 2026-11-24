@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CircleCheck, CircleDot, CornerDownRight, MessageSquare } from 'lucide-react';
 import { api } from '../../api/client.js';
 import Button from '../ui/Button.jsx';
@@ -198,6 +198,7 @@ export default function EntryComments({ entryId, status, onCounts }) {
   const [failed, setFailed] = useState(false);
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((n) => n + 1), []);
+  const jumped = useRef(false);
 
   useEffect(() => {
     if (status === 'draft') return undefined;
@@ -207,6 +208,15 @@ export default function EntryComments({ entryId, status, onCounts }) {
       .catch(() => { if (live) setFailed(true); });
     return () => { live = false; };
   }, [entryId, status, tick]);
+
+  // 2026-11-25 — 주소가 '#entry-comments' 면(나의 메모 › 의견과 이슈에서 눌러 옴) 글을 불러온 뒤 이 칸으로 한 번 내려간다
+  useEffect(() => {
+    if (!data || jumped.current || window.location.hash !== `#${COMMENTS_ANCHOR}`) return;
+    jumped.current = true;
+    const el = document.getElementById(COMMENTS_ANCHOR);
+    el?.scrollIntoView?.({ block: 'start' });
+    el?.focus?.({ preventScroll: true });
+  }, [data]);
 
   if (status === 'draft') return null;   // 초안은 올린 사람의 작업 공간 — 확정한 뒤에 의견을 받는다
 

@@ -315,6 +315,66 @@ def inbox(db: Session, user, limit: int = 50) -> dict:
     return {"items": items, "unread": unread_count(db, user), "seen_at": _iso(seen_at(db, user.employee_id))}
 
 
+# ---- 내가 쓴 글(나의 메모 › 의견과 이슈, 2026-11-25) ----
+
+def written(db: Session, user, *, kind: str | None = None, status: str | None = None, q: str = "",
+            limit: int = 200) -> dict:
+    """내가 쓴 의견, 이슈, 답글 — 최근 순. 지운 글과 지금 볼 수 없는 자료(휴지통 포함)의 글은 뺀다.
+
+    kind: comment | issue(답글은 의견으로 센다 — 답글의 kind 는 늘 comment), status: open | resolved(이슈만).
+    q 는 글 본문, 자료 제목, 자료 번호에서 찾는다(낱말 모두). counts 는 거르기 전 전체 수(탭 숫자)."""
+    P = aliased(C)
+    E = models.Entry
+    base = (db.query(C, E, P).join(E, E.id == C.entry_id).outerjoin(P, P.id == C.parent_id)
+            .filter(C.employee_id == user.employee_id, C.deleted_at.is_(None), E.status == "confirmed",
+                    access.visible_entries_filter(user)))
+    counts = {"total": 0, "comment": 0, "issue": 0, "open": 0}
+    for k, resolved, n in (base.with_entities(C.kind, C.resolved_at.isnot(None), func.count(C.id))
+                           .group_by(C.kind, C.resolved_at.isnot(None))):
+        counts["total"] += n
+        counts[k] = counts.get(k, 0) + n
+        if k == "issue" and not resolved:
+            counts["open"] += n
+    query = base
+    if kind in ("comment", "issue"):
+        query = query.filter(C.kind == kind)
+    if status == "open":
+        query = query.filter(C.kind == "issue", C.resolved_at.is_(None))
+    elif status == "resolved":
+        query = query.filter(C.kind == "issue", C.resolved_at.isnot(None))
+    for word in (q or "").split():
+        like = "%" + word.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        query = query.filter(or_(func.lower(C.body).like(like, escape="\\"), func.lower(E.title).like(like, escape="\\"),
+                                 func.lower(E.entry_id).like(like, escape="\\")))
+    rows = query.order_by(C.created_at.desc(), C.id.desc()).limit(limit).all()
+    ids = [e.id for _c, e, _p in rows]
+    hulls: dict[int, list[str]] = {}
+    if ids:
+        for eid, hull in (db.query(models.EntryHull.entry_id, models.EntryHull.hull_no)
+                          .filter(models.EntryHull.entry_id.in_(ids))
+                          .order_by(models.EntryHull.entry_id, models.EntryHull.is_primary.desc(), models.EntryHull.hull_no)):
+            hulls.setdefault(eid, []).append(hull)
+    tops = [c.id for c, _e, _p in rows if c.parent_id is None]
+    replies = dict(db.query(C.parent_id, func.count(C.id)).filter(C.parent_id.in_(tops or [0]), C.deleted_at.is_(None))
+                   .group_by(C.parent_id).all())
+    names = _names(db, {p.employee_id for _c, _e, p in rows if p is not None} | {c.resolved_by for c, _e, _p in rows})
+    items = []
+    for c, e, p in rows:
+        items.append({
+            "id": c.id, "kind": c.kind, "body": c.body,
+            "status": None if c.kind != "issue" else ("resolved" if c.resolved_at else "open"),
+            "resolved": ({"name": names.get(c.resolved_by or ""), "at": _iso(c.resolved_at)} if c.resolved_at else None),
+            "created_at": _iso(c.created_at), "edited_at": _iso(c.edited_at),
+            "replies": replies.get(c.id, 0) if c.parent_id is None else 0,
+            # 답글이면 어느 글에 단 것인지(앞부분만)
+            "reply_to": (None if p is None else {
+                "kind": p.kind, "name": names.get(p.employee_id), "mine": p.employee_id == user.employee_id,
+                "body": "" if p.deleted_at else (p.body if len(p.body) <= PREVIEW_CHARS else p.body[:PREVIEW_CHARS] + "…")}),
+            "entry": {"entry_id": e.entry_id, "title": e.title, "hulls": hulls.get(e.id, []), "no_hull": bool(e.no_hull)},
+        })
+    return {"items": items, "counts": counts}
+
+
 # ---- 갖춤 현황(보완할 자료 '열린 이슈') ----
 
 def open_issue_counts(db: Session, pks) -> dict[int, int]:

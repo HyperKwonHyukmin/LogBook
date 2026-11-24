@@ -32,6 +32,14 @@
 - 화면: `lib/markdown.js` · `components/notes/EntryNote.jsx` · `pages/NotesPage.jsx` · `components/shell/SideNav.jsx` · `App.jsx` · `lib/pageTitle.js` · `pages/EntryPage.jsx` · `index.css` `.md-body`
 - 시험: `tests/test_notes_64.py`(3) · `markdown.test.js` · `EntryNote.test.jsx` · `NotesPage.test.jsx` · `SideNav.test.jsx`(메뉴 8개)
 
+## 덧붙임 — 의견과 이슈 탭(2026-11-25)
+
+- 사용자 요청: "나의 메모에, 내가 댓글, 또는 이슈를 적은 항목들도 따로 볼 수 있도록". 메뉴는 늘리지 않고 '나의 메모' 안에 탭 둘: [메모] [의견과 이슈](`?tab=comments`).
+- API `GET /api/me/comments/written?kind=comment|issue&status=open|resolved&q=&limit=`(`comments.written`) — 내가 쓴 의견, 이슈, 답글(최근 순). 지운 글, 지금 볼 수 없는 자료(휴지통 포함)의 글은 뺀다. `counts`(전체, 의견, 이슈, 열린 이슈)는 거르기 전 수. 답글은 `reply_to`(누구의 어떤 글, 앞부분).
+  `/api/me/comments` 는 '내게 온 글'(받은 알림)이라 다르다.
+- 줄을 누르면 `/e/{id}#entry-comments` — 자료 화면이 글을 불러온 뒤 의견과 이슈 칸으로 한 번 내려간다(`EntryComments.jsx`).
+- 시험 `tests/test_my_written_comments.py`, `NotesPage.test.jsx`.
+
 ## 남은 것
 
 - 145 에서 실제 화면 확인(개발 PC 에서 화면을 띄워 보지 못함).

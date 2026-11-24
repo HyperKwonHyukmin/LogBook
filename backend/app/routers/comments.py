@@ -71,6 +71,14 @@ def my_comments(limit: int = Query(default=50, ge=1, le=200), db: Session = Depe
     return comments.inbox(db, user, limit=limit)
 
 
+@router.get("/me/comments/written")
+def my_written_comments(kind: Literal["comment", "issue"] | None = None, status: Literal["open", "resolved"] | None = None,
+                        q: str = Query(default="", max_length=200), limit: int = Query(default=200, ge=1, le=500),
+                        db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
+    """2026-11-25 — 내가 쓴 의견과 이슈(나의 메모 › 의견과 이슈 탭)."""
+    return comments.written(db, user, kind=kind, status=status, q=q, limit=limit)
+
+
 @router.get("/me/comments/summary")
 def my_comments_summary(db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
     return {"unread": comments.unread_count(db, user)}
