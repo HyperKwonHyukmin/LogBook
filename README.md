@@ -6,7 +6,9 @@
 
 - 설계: `docs/specs/2026-09-28-logbook-design.md` · 계획: `docs/plans/` · WorkBench 재사용 목록: `docs/reuse-inventory.md`
 - 데이터 원본: `\\storage.hpc.hd.com\a476854\00_PROJECT\AA_300_CF44\999_LogBook`
-- 서버: 10.14.42.145:9095 (개발 PC 에서 개발·테스트 → 커밋·푸시 → 145 에서 `git pull`)
+- 서버: **http://logbook.hd.com** (사내 DNS → 10.14.42.145, 2026-11-24) = 10.14.42.145:9095 (개발 PC 에서 개발·테스트 → 커밋·푸시 → 145 에서 `git pull`)
+  - 80번은 145 의 Windows 포트 전달로 9095 에 넘긴다(LogBook 코드와 무관): `netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=80 connectaddress=127.0.0.1 connectport=9095` + 방화벽 인바운드 규칙 'LogBook 80'(TCP 80). IP Helper(iphlpsvc) 서비스가 켜져 있어야 한다. 되돌리기는 `netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=80`, `Remove-NetFirewallRule -DisplayName "LogBook 80"`.
+  - 80번으로 들어온 요청은 감사 기록 IP 가 127.0.0.1 이다(포트 전달은 원래 IP 를 넘기지 않는다). 사용자 IP 가 필요해지면 uvicorn 을 80번에 직접 띄운다(server_manager.py `API_CMD`, `HEALTH_URL`, `API_PORT`). 예전 :9095 주소와 WorkBench 연결은 그대로 동작한다.
 
 ## 개발 PC
 
