@@ -20,6 +20,19 @@ function writeOpen(name, value) {
 }
 const byNumber = (a, b) => a.value.localeCompare(b.value, 'ko', { numeric: true });
 
+/** 71 — 대상 묶음: 하위 대상을 묶음 바로 아래로 옮긴다(묶음이 목록에 없으면 제자리). 순서는 그대로. */
+export function nestGroups(items) {
+  const present = new Set(items.map((f) => f.value));
+  const kids = new Map();
+  for (const f of items) if (f.group && present.has(f.group)) kids.set(f.group, [...(kids.get(f.group) || []), f]);
+  const out = [];
+  for (const f of items) {
+    if (f.group && present.has(f.group)) continue;
+    out.push(f, ...(kids.get(f.value) || []));
+  }
+  return out;
+}
+
 export function valueLabel(key, f) {
   if (key === 'kind') return KIND_LABELS[f.value] || f.value;
   if (key === 'uploaded_by' || key === 'assignee') return f.label || f.value;   // 사람은 이름(값은 사번·명부 번호)
@@ -58,7 +71,7 @@ function Facet({ name, items, selected, onPick, total }) {
   const byValue = new Map(items.map((f) => [f.value, f]));
   const picked = selected.map((v) => byValue.get(v) || { value: v, count: 0 });
   const others = items.filter((f) => !selected.includes(f.value));
-  const rest = grid ? [...others].sort(byNumber) : others;
+  const rest = grid ? [...others].sort(byNumber) : name === 'target' ? nestGroups(others) : others;
   const valueCount = picked.length + rest.length;
   const searchable = valueCount > show && (grid || more);
   const matched = find ? rest.filter((f) => matchesFilter(name, f, find)) : rest;
@@ -110,9 +123,9 @@ function Facet({ name, items, selected, onPick, total }) {
             {[...picked, ...shown].map((f) => {
               const on = selected.includes(f.value);
               return (
-                <li key={f.value} className="min-w-0">
+                <li key={f.value} className={`min-w-0 ${f.group && !on ? 'pl-3' : ''}`}>
                   <button type="button" onClick={() => onPick(f.value)} aria-pressed={on}
-                          title={grid && f.label ? `${f.value} ${f.label}` : undefined}
+                          title={grid && f.label ? `${f.value} ${f.label}` : f.group ? `묶음 ${f.group}` : f.children?.length ? `하위 대상 포함: ${f.children.join(', ')}` : undefined}
                           className={`group flex h-7 w-full items-center rounded-md text-left text-ui transition-colors duration-150 ease-out
                             ${grid ? 'gap-1 px-1.5' : 'gap-2 px-2'}
                             ${on ? 'bg-brand-subtle font-medium text-brand hover:bg-brand-muted' : 'text-n-700 hover:bg-n-100 hover:text-n-900 active:bg-n-150'}`}>

@@ -19,6 +19,21 @@ export function cardSentence(c) {
 }
 
 /**
+ * 71 — 대상 묶음: 하위 업무를 묶음 행 바로 아래로 모은다(묶음이 목록에 없으면 제자리). 찾는 중이면 평평하게.
+ * 반환: [{card, child}] — child 면 들여 쓴다.
+ */
+export function nestRows(cards) {
+  const byValue = new Map(cards.map((c) => [c.value, c]));
+  const out = [];
+  for (const c of cards) {
+    if (c.group && byValue.has(c.group)) continue;
+    out.push({ card: c, child: false });
+    for (const v of c.children || []) if (byValue.has(v)) out.push({ card: byValue.get(v), child: true });
+  }
+  return out;
+}
+
+/**
  * 69 — 업무별 모음 첫 화면: 업무(대상) 행 목록. 행 = 3D 그림 + 이름 + 요약 문장 + 최근 날짜. 위에 거르기 칸.
  * '기타'는 여러 업무가 섞인 분류라 목록 아래 글 링크 한 줄로(검색으로 본다). 숫자는 볼 수 있는 확정 자료만(GET /api/targets).
  */
@@ -34,7 +49,9 @@ export default function TargetsPage() {
   const all = data?.targets || [];
   const other = all.find((c) => c.other);
   const key = q.trim().toLowerCase();
-  const rows = all.filter((c) => !c.other && (!key || c.value.toLowerCase().includes(key)));
+  const listed = all.filter((c) => !c.other);
+  const rows = key ? listed.filter((c) => c.value.toLowerCase().includes(key) || (c.group || '').toLowerCase().includes(key))
+    .map((card) => ({ card, child: false })) : nestRows(listed);
   return (
     <Page>
       <PageHeader title="업무별 모음"
@@ -52,13 +69,19 @@ export default function TargetsPage() {
             <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="업무 이름으로 찾기" className={inputClass('w-full pl-8')} />
           </label>
           <ul aria-label="업무 목록" className="divide-y divide-n-200 border-y border-n-200">
-            {rows.map((c) => (
+            {rows.map(({ card: c, child }) => (
               <li key={c.value}>
-                <Link to={targetHref(c.value)} className="group grid grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-4 px-1 py-3 transition-colors duration-150 hover:bg-n-50">
-                  {c.thumb ? <ModelThumb fileId={c.thumb.file_id} modelKey={c.thumb.model_key} alt="" className="h-[60px] w-24 rounded-sm" />
-                    : <span aria-hidden="true" className="flex h-[60px] w-24 items-center justify-center rounded-sm border border-n-200 bg-n-0 text-n-400"><Box size={18} strokeWidth={1.5} /></span>}
+                <Link to={targetHref(c.value)}
+                      className={`group grid items-center gap-4 py-3 pr-1 transition-colors duration-150 hover:bg-n-50
+                        ${child ? 'grid-cols-[64px_minmax(0,1fr)_auto] pl-10' : 'grid-cols-[96px_minmax(0,1fr)_auto] pl-1'}`}>
+                  {c.thumb ? <ModelThumb fileId={c.thumb.file_id} modelKey={c.thumb.model_key} alt="" className={`${child ? 'h-10 w-16' : 'h-[60px] w-24'} rounded-sm`} />
+                    : <span aria-hidden="true" className={`flex ${child ? 'h-10 w-16' : 'h-[60px] w-24'} items-center justify-center rounded-sm border border-n-200 bg-n-0 text-n-400`}><Box size={child ? 15 : 18} strokeWidth={1.5} /></span>}
                   <span className="min-w-0">
-                    <span className="block text-body font-semibold text-n-900 group-hover:text-brand">{c.value}</span>
+                    <span className={`block font-semibold text-n-900 group-hover:text-brand ${child ? 'text-ui' : 'text-body'}`}>
+                      {c.value}
+                      {!child && c.children?.length > 0 && <span className="ml-2 text-meta font-normal text-n-500">하위 업무 {c.children.length}개 포함</span>}
+                      {key && c.group && <span className="ml-2 text-meta font-normal text-n-500">묶음 {c.group}</span>}
+                    </span>
                     <span className="block truncate text-meta text-n-600">{cardSentence(c)}</span>
                   </span>
                   <span className="flex items-center gap-2 text-meta text-n-500">

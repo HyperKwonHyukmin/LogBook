@@ -20,6 +20,7 @@ class TermBody(BaseModel):
 class TermPatch(BaseModel):
     value: str | None = Field(default=None, max_length=100)
     active: bool | None = None
+    parent: str | None = Field(default=None, max_length=100)   # 71 — 대상 묶음 이름(빈 글자 = 묶음에서 빼기, 없으면 그대로)
 
 
 class OrderBody(BaseModel):
@@ -62,8 +63,9 @@ def add_term(body: TermBody, request: Request, db: Session = Depends(get_db),
 @router.patch("/terms/{tag_id}")
 def update_term(tag_id: int, body: TermPatch, request: Request, db: Session = Depends(get_db),
                 storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_admin)):
+    extra = {"parent": body.parent} if "parent" in body.model_fields_set else {}
     t = vocab.update_term(db, storage, user.employee_id, _tag(db, tag_id), value=body.value, active=body.active,
-                          ip=client_ip(request))
+                          ip=client_ip(request), **extra)
     return _term_dict(t)
 
 

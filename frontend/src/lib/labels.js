@@ -159,6 +159,13 @@ export const ERROR_LABELS = {
   vocab_conflict: '다른 용어와 표기가 겹칩니다.',
   value_not_found: '데이터에서 그 값을 찾을 수 없습니다. 새로 고쳐 보세요.',
   term_not_found: '용어를 찾을 수 없습니다. 새로 고쳐 보세요.',
+  // 71 — 대상 묶음
+  group_target_only: '묶음은 대상에만 둘 수 있습니다.',
+  group_not_found: '그 묶음 용어를 찾을 수 없습니다. 새로 고쳐 보세요.',
+  group_self: '자기 자신을 묶음으로 고를 수 없습니다.',
+  group_other: '‘기타’는 묶음에 넣거나 묶음으로 쓸 수 없습니다.',
+  group_nested: '다른 묶음에 든 용어는 묶음이 될 수 없습니다. 묶음은 한 단계만 둡니다.',
+  group_has_children: '하위 대상이 있는 묶음은 다른 묶음에 넣을 수 없습니다. 묶음은 한 단계만 둡니다.',
   invalid_order: '목록이 바뀌었습니다. 새로 고친 뒤 다시 해 주세요.',
   // 13 — 등급·공개 범위
   read_only_role: '로그인한 사용자만 할 수 있습니다.',

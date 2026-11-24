@@ -105,3 +105,26 @@ test('오류를 보인다', async () => {
   await userEvent.click(screen.getByRole('button', { name: '추가' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('다른 용어의 동의어');
 });
+
+test('71 — 대상 탭: 묶음을 고르면 parent 를 보내고, 하위가 있는 용어와 기타는 고르기 칸이 없다', async () => {
+  const TARGET = { kind: 'target', other: '기타', terms: [
+    { id: 21, value: '배관', active: true, count: 1, synonyms: [], parent: null, children: ['Manifold'] },
+    { id: 22, value: 'Manifold', active: true, count: 20, synonyms: [], parent: '배관', children: [] },
+    { id: 23, value: 'Pipe', active: true, count: 2, synonyms: [], parent: null, children: [] },
+    { id: 24, value: '기타', active: true, count: 11, synonyms: [], parent: null, children: [] },
+  ] };
+  const fetch = renderPage({ 'GET /api/vocab?kind=target': TARGET, 'GET /api/vocab/unlisted?kind=target': [],
+    'PATCH /api/vocab/terms/23': { id: 23, kind: 'target', value: 'Pipe', active: true } });
+  await userEvent.click(await screen.findByRole('tab', { name: '대상' }));
+  const terms = await screen.findByRole('region', { name: '대상 용어' });
+  await within(terms).findByRole('combobox', { name: 'Pipe 묶음' });
+  expect(within(terms).getByTitle('Manifold')).toHaveTextContent('묶음, 하위 1');
+  expect(within(terms).queryByRole('combobox', { name: '배관 묶음' })).toBeNull();
+  expect(within(terms).queryByRole('combobox', { name: '기타 묶음' })).toBeNull();
+  const pick = within(terms).getByRole('combobox', { name: 'Pipe 묶음' });
+  expect(within(pick).getAllByRole('option').map((o) => o.textContent)).toEqual(['묶음 없음', '배관']);   // 묶음에 든 용어와 기타는 묶음 후보가 아니다
+  expect(within(terms).getByRole('combobox', { name: 'Manifold 묶음' })).toHaveValue('배관');
+  await userEvent.selectOptions(pick, '배관');
+  await waitFor(() => expect(bodyOf(fetch, 'PATCH', '/api/vocab/terms/23')).toEqual({ parent: '배관' }));
+  expect(await screen.findByText(/‘배관’ 로 거르면 ‘Pipe’ 자료도 함께 나옵니다/)).toBeInTheDocument();
+});

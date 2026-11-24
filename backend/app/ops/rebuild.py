@@ -290,6 +290,7 @@ def _restore_aliases(db: Session, registry: dict) -> int:
 def _restore_vocab(db: Session, registry: dict) -> int:
     """08 — 분류 목록 용어(순서·사용 여부). 동의어(alias)는 _restore_aliases 가 이미 되살렸다."""
     n = 0
+    parents: list[tuple[models.Tag, str]] = []
     for t in registry.get("vocab") or []:
         kind, value = t.get("kind"), str(t.get("value") or "")[:100]
         if kind not in ("zone", "target") or not value:   # 42 — atype 은 읽지 않는다
@@ -301,8 +302,17 @@ def _restore_vocab(db: Session, registry: dict) -> int:
         row.alias_of_id, row.listed = None, True
         row.sort_order = t.get("sort_order") if isinstance(t.get("sort_order"), int) else None
         row.active = t.get("active") is not False
+        row.parent_id = None
         db.flush()
+        if kind == "target" and isinstance(t.get("parent"), str) and t["parent"].strip():
+            parents.append((row, t["parent"].strip()[:100]))
         n += 1
+    # 71 — 대상 묶음은 용어를 다 되살린 뒤에 잇는다(묶음 용어가 뒤에 나와도 되게)
+    for row, parent in parents:
+        p = db.query(models.Tag).filter_by(kind="target", value=parent, listed=True, alias_of_id=None).first()
+        if p is not None and p.id != row.id:
+            row.parent_id = p.id
+    db.flush()
     return n
 
 

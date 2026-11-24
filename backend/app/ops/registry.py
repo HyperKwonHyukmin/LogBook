@@ -48,7 +48,13 @@ def build_registry(db: Session) -> dict:
             for t in db.query(models.Tag).filter(models.Tag.alias_of_id.isnot(None), models.Tag.kind != "atype")
             .order_by(models.Tag.kind, models.Tag.value)]
     # 08 — 구역·대상 목록 용어(순서·사용 여부). 동의어는 위 tags 에 함께 들어 있다. 42 — 남은 atype 행은 쓰지 않는다
+    # 71 — 대상 묶음(맞는 연결만 — vocab.Vocab 이 읽는 규칙 그대로)
+    from ..vocab import Vocab
+
+    tv = Vocab(db, "target")
+    parents = {t.id: tv.parent(t).value for t in tv.terms if tv.parent(t) is not None}
     vocab = [{"kind": t.kind, "value": t.value, "sort_order": t.sort_order, "active": bool(t.active)}
+             | ({"parent": parents[t.id]} if t.id in parents else {})
              for t in db.query(models.Tag).filter(models.Tag.listed.is_(True), models.Tag.alias_of_id.is_(None),
                                                   models.Tag.kind != "atype")
              .order_by(models.Tag.kind, models.Tag.sort_order, models.Tag.value)]

@@ -43,6 +43,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("tags", "listed", "TINYINT(1) NOT NULL DEFAULT 0"),   # 08 — 통제 어휘 용어
     ("tags", "sort_order", "INT NULL"),
     ("tags", "active", "TINYINT(1) NOT NULL DEFAULT 1"),
+    ("tags", "parent_id", "INT NULL"),   # 71 — 대상 묶음
     ("model_summaries", "sig_version", "INT NULL"),          # 12 — BDF 내용 서명
     ("model_summaries", "sig_geometry", "VARCHAR(64) NULL"),
     ("model_summaries", "sig_property", "VARCHAR(64) NULL"),

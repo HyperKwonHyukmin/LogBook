@@ -12,6 +12,7 @@ import ModelThumb from '../components/viewer/ModelThumb.jsx';
 import { filterHref } from '../lib/search.js';
 import { profileHref } from '../lib/people.js';
 import { pageTitle } from '../lib/pageTitle.js';
+import { targetHref } from '../lib/targets.js';
 import { introSentence, pickReasons, reportText, shipTypeCounts, steps } from '../lib/targetPage.js';
 
 const day = (s) => (s ? s.slice(0, 10) : '');
@@ -273,9 +274,23 @@ export default function TargetPage() {
         <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
           <h1 className="text-title font-semibold tracking-[-0.018em] text-n-900">{d.value}</h1>
           {d.synonyms.length > 0 && <span className="pb-1 text-ui text-n-600">같은 말 {d.synonyms.join(', ')}</span>}
+          {d.group && (
+            <span className="pb-1 text-ui text-n-600">묶음 <Link to={targetHref(d.group)} className="text-brand hover:underline">{d.group}</Link></span>
+          )}
           <Link to={filterHref('target', d.value)} className={`${buttonClass('ghost', 'sm')} ml-auto`}><Search size={14} aria-hidden="true" />검색에서 모두 보기</Link>
         </div>
         {intro && <p className="max-w-[72ch] text-body text-n-700 [text-wrap:pretty]">{intro}</p>}
+        {/* 71 — 묶음이면 하위 업무 자료까지 이 화면에 모인다. 하위 업무 화면으로 바로 가는 줄 */}
+        {d.children?.length > 0 && (
+          <nav aria-label="하위 업무" className="flex flex-wrap items-center gap-x-1 gap-y-1.5 text-ui">
+            <span className="mr-1.5 text-meta text-n-600">하위 업무 자료도 모았습니다</span>
+            {d.children.map((c) => (
+              <Link key={c.value} to={targetHref(c.value)} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-n-200 px-2 text-n-800 hover:border-n-300 hover:text-brand">
+                {c.value}<span className="font-mono text-meta text-n-500">{c.entries}</span>
+              </Link>
+            ))}
+          </nav>
+        )}
         {flow.length > 1 && (
           <nav aria-label="처음이면 이 순서로">
             <ol className="flex flex-wrap items-center gap-x-1 gap-y-1.5 text-ui">

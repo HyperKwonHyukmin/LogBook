@@ -2,7 +2,7 @@ import { vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import TargetsPage from './TargetsPage.jsx';
+import TargetsPage, { nestRows } from './TargetsPage.jsx';
 import TargetPage from './TargetPage.jsx';
 import { introSentence, pickReasons, reportText, steps } from '../lib/targetPage.js';
 
@@ -75,4 +75,41 @@ test('69 — 순수 함수: 고른 이유, 보고서 글자, 내용 있는 단�
   expect(reportText({ name: 'a.pptx', count: 12, unit: 'slide' })).toBe('a.pptx, 12장');
   expect(steps({ base_docs: [], start: [1], conclusions: [], records: [1], people: [] }).map((s) => s.id)).toEqual(['example', 'records']);
   expect(introSentence({ ...PAGE, people: [] })).toMatch(/^LNGC 9척, VLCC 3척, 호선 12척에서 한 해석 12건/);
+});
+
+test('71 — 묶음: 하위 업무를 묶음 아래로 들여 쓰고, 찾는 중이면 묶음 이름을 붙인다', async () => {
+  const card = (value, o = {}) => ({ value, entries: 1, hulls: 1, base_docs: 0, conclusions: 0, lead: null, latest: null, thumb: null, other: false, group: null, children: [], ...o });
+  const cards = [card('배관', { entries: 23, children: ['Manifold', 'Pipe'] }), card('Unit', { entries: 21 }),
+    card('Manifold', { entries: 20, group: '배관' }), card('Pipe', { entries: 2, group: '배관' })];
+  expect(nestRows(cards).map((r) => `${r.child ? '  ' : ''}${r.card.value}`)).toEqual(['배관', '  Manifold', '  Pipe', 'Unit']);
+  stub({ '/api/targets': { targets: cards } });
+  at('/targets');
+  const group = await screen.findByRole('link', { name: /^배관/ });
+  expect(group).toHaveTextContent('하위 업무 2개 포함');
+  const list = screen.getByRole('list', { name: '업무 목록' });
+  expect(within(list).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/t/%EB%B0%B0%EA%B4%80', '/t/Manifold', '/t/Pipe', '/t/Unit']);
+  await userEvent.type(screen.getByRole('searchbox', { name: '업무 찾기' }), 'pipe');
+  expect(within(list).getByRole('link', { name: /Pipe/ })).toHaveTextContent('묶음 배관');
+  vi.unstubAllGlobals();
+});
+
+test('71 — 대상 화면: 묶음 링크와 하위 업무 줄', async () => {
+  stub({ '/api/targets/page?value=Pipe': { ...PAGE, value: 'Pipe', synonyms: [], group: '배관', children: [] },
+         '/api/targets/page?value=%EB%B0%B0%EA%B4%80': { ...PAGE, value: '배관', synonyms: [], group: null,
+           children: [{ value: 'Manifold', entries: 20 }, { value: 'Pipe', entries: 2 }] } });
+  at('/t/Pipe');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Pipe' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '배관' })).toHaveAttribute('href', '/t/%EB%B0%B0%EA%B4%80');
+  expect(screen.queryByRole('navigation', { name: '하위 업무' })).toBeNull();
+  vi.unstubAllGlobals();
+});
+
+test('71 — 묶음 화면: 하위 업무로 가는 링크', async () => {
+  stub({ '/api/targets/page?value=%EB%B0%B0%EA%B4%80': { ...PAGE, value: '배관', synonyms: [], group: null,
+    children: [{ value: 'Manifold', entries: 20 }, { value: 'Pipe', entries: 2 }] } });
+  at('/t/%EB%B0%B0%EA%B4%80');
+  const nav = await screen.findByRole('navigation', { name: '하위 업무' });
+  expect(within(nav).getByRole('link', { name: /Manifold/ })).toHaveAttribute('href', '/t/Manifold');
+  expect(within(nav).getByRole('link', { name: /Pipe/ })).toHaveTextContent('2');
+  vi.unstubAllGlobals();
 });

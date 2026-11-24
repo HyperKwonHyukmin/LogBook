@@ -27,11 +27,22 @@ def _thumb(it: dict) -> dict | None:
 
 
 def list_targets(db: Session, user) -> dict:
-    """대상 카드 목록 — 자료 수 순, '기타'는 맨 뒤. 카드: 자료 수, 호선 수, 최근 날짜, 대표 3D 썸네일(가장 최근 것)."""
+    """대상 카드 목록 — 자료 수 순, '기타'는 맨 뒤. 카드: 자료 수, 호선 수, 최근 날짜, 대표 3D 썸네일(가장 최근 것).
+
+    71 — 대상 묶음: 묶음 카드는 하위 대상 자료까지 합쳐 세고 children(하위 카드 값)을, 하위 카드는 group(묶음)을 싣는다.
+    화면이 묶음 아래에 하위를 들여 쓴다. 묶음에 직접 분류한 자료가 없어도 하위 자료가 있으면 묶음 카드가 생긴다."""
     groups: dict[str, list[dict]] = defaultdict(list)
     for it in _items(db, user):
         if it.get("target"):
             groups[it["target"]].append(it)
+    v = vocab.Vocab(db, "target")
+    parent_of = {value: v.group_value(value) for value in groups}
+    for value, g in list(parent_of.items()):
+        if g:
+            seen = {it["entry_id"] for it in groups[g]}
+            groups[g].extend(it for it in groups[value] if it["entry_id"] not in seen)
+            # 대표 그림은 '가장 최근 것' — 하위 자료를 붙였으니 다시 최근 순으로
+            groups[g].sort(key=lambda it: it.get("posted_at") or "", reverse=True)
     other = vocab.OTHER
     cards = []
     for value, its in groups.items():
@@ -45,7 +56,10 @@ def list_targets(db: Session, user) -> dict:
                       "conclusions": sum(1 for it in its if it.get("conclusion")),
                       "lead": {"name": lead[0], "count": lead[1]} if lead else None,
                       "latest": max((it.get("posted_at") or "" for it in its), default="") or None,
-                      "thumb": thumb, "other": value == other})
+                      "thumb": thumb, "other": value == other,
+                      "group": parent_of.get(value),
+                      "children": sorted((c for c, g in parent_of.items() if g == value),
+                                         key=lambda c: (-len(groups[c]), c))})
     cards.sort(key=lambda c: (c["other"], -c["entries"], c["value"]))
     return {"targets": cards}
 
@@ -54,7 +68,7 @@ def _row(it: dict) -> dict:
     """화면 한 줄 — 검색 행에서 이 화면이 쓰는 칸만."""
     return {k: it.get(k) for k in ("entry_id", "title", "posted_at", "hulls", "ship_types", "assignees", "conclusion",
                                    "reviewed", "kind_counts", "thumb", "cover", "no_hull", "report", "label",
-                                   "zones", "tags")} | {
+                                   "zones", "tags", "target")} | {
         "elements": (it.get("model") or {}).get("elements"),
         "solve": ((it.get("model") or {}).get("solve") or {}).get("status")}
 
@@ -65,8 +79,11 @@ def target_page(db: Session, user, value: str) -> dict:
     canon = v.canon(value) or value
     term = v.target(canon)
     synonyms = [s.value for s in v.synonyms(term)] if term is not None else []
-    its = _items(db, user, canon)
+    its = _items(db, user, canon)   # 71 — 묶음이면 검색이 하위 대상 자료까지 준다
     rows = [_row(it) for it in its]
+    parent = v.parent(term)
+    child_n = Counter(r["target"] for r in rows)
+    children = [{"value": c.value, "entries": child_n.get(c.value, 0)} for c in v.children(term)]
     kc = lambda r, k: (r.get("kind_counts") or {}).get(k, 0)   # noqa: E731
     with_hull = [r for r in rows if not r["no_hull"]]
     # 처음이면 여기부터(자동) — 호선 자료 중 모델과 보고서가 다 있는 것, 결론이 있는 것 먼저, 그다음 최근
@@ -110,6 +127,9 @@ def target_page(db: Session, user, value: str) -> dict:
 
     return {
         "value": canon, "synonyms": synonyms, "other": canon == vocab.OTHER,
+        # 71 — 대상 묶음: 든 묶음, 하위 대상(볼 수 있는 자료 수, 0건도 싣는다)
+        "group": parent.value if parent is not None else None,
+        "children": children,
         # 빈 곳 목록은 고칠 수 있는 사람(LV2 이상)에게 펼쳐 보인다 — 그 밖에는 숫자만(할 일 목록처럼 보이지 않게)
         "can_fix": access.can_write_shared(user),
         "counts": {"entries": len(rows), "hulls": len(hulls), "assignees": len(people),

@@ -290,6 +290,8 @@ class Tag(Base):
     listed = Column(Boolean, nullable=False, default=False, server_default=sa_text("0"))
     sort_order = Column(Integer, nullable=True)
     active = Column(Boolean, nullable=False, default=True, server_default=sa_text("1"))
+    # 71 — 대상 묶음(한 단계): 이 대상 용어가 드는 묶음 용어의 id. 맞지 않는 연결은 vocab.Vocab 이 읽을 때 무시한다
+    parent_id = Column(Integer, nullable=True)
 
 
 class EntryTag(Base):

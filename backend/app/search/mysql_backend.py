@@ -227,6 +227,10 @@ class MySqlSearch:
 
         # 13 — 볼 수 없는 Entry 는 모든 적중 질의의 SQL 조건에서 뺀다(건수·묶음·요약이 그 뒤에 계산된다)
         vis = access.visible_entries_filter(query.user)
+        # 71 — 검색어 전체가 공백 든 대상 용어('선체 구조')면 한 낱말로 찾는다. 낱말마다 나눠 모두 맞는 자료만 남기면
+        # 묶음의 하위 대상 자료(제목에 '선체'·'구조'가 없는 블록 자료)가 빠져 필터 target=선체 구조 와 결과가 달라진다
+        if len(terms) > 1 and vocab["target"].target(query.q.strip()) is not None:
+            terms = [query.q.strip()]
         hits = [self._term_hits(db, t, statuses, vocab, vis) for t in terms]
         # 39 — 검색어 전체가 'WB #123' 꼴이면 그 WorkBench 해석에서 온 자료(Core 01 표기). 키가 꺼져 있으면 글자 검색 그대로
         wb_id = wb_origin.parse_term(query.q) if settings.wb_origin_show else None
@@ -315,7 +319,7 @@ class MySqlSearch:
             c = Counter()
             for r in rows.values():
                 # 45 — 분류 화면의 호선 목록은 실제 호선(호선 화면으로 간다). 검색 거르기 · 묶기만 시리즈 단위
-                c.update(r["hulls"] if key == "hull" else self._values(r, key))
+                c.update(r["hulls"] if key == "hull" else self._filter_have(r, key) if key == "target" else self._values(r, key))
             out[key] = [{"value": v, "count": n} for v, n in c.items()]
         for key, kind in (("zone", "zone"), ("target", "target")):
             v = vocab[kind]
@@ -326,6 +330,12 @@ class MySqlSearch:
                 t = v.term(f["value"])
                 f["listed"] = t is not None
                 f["aliases"] = [x.value for x in v.synonyms(t)] if t is not None else []
+                if kind == "target" and t is not None:   # 71 — 대상 묶음(화면이 묶음 아래로 들여 쓴다)
+                    p = v.parent(t)
+                    if p is not None:
+                        f["group"] = p.value
+                    if v.children(t):
+                        f["children"] = [c.value for c in v.children(t)]
         for f in out["tag"]:
             f["aliases"] = vocab["free"].aliases(f["value"])
         ships = dict(db.query(models.Hull.hull_no, models.Hull.ship_type)
@@ -532,7 +542,9 @@ class MySqlSearch:
             if t is None:
                 continue
             # 묶인 동의어뿐 아니라 아직 묶이지 않은 표기 변형('선미 부')도 — 필터·건수와 같은 canon 기준
-            ids = [x.id for x in vocab[kind].by_id.values() if vocab[kind].canon(x.value) == t.value]
+            # 71 — 대상 묶음이면 하위 용어 값도(낱말 '배관' 이 Manifold 자료도 찾게)
+            fam = vocab[kind].family(t.value) if kind == "target" else {t.value}
+            ids = [x.id for x in vocab[kind].by_id.values() if vocab[kind].canon(x.value) in fam]
             for (eid,) in (db.query(models.EntryTag.entry_id).join(E, E.id == models.EntryTag.entry_id)
                            .filter(live, models.EntryTag.tag_id.in_(ids))):
                 h.entry(eid, S_TAG, kind)
@@ -561,7 +573,8 @@ class MySqlSearch:
         rows: dict[int, dict] = {}
         id_list = list(ids)
         for e in db.query(models.Entry).filter(models.Entry.id.in_(id_list)):
-            rows[e.id] = {"id": e.id, "entry": e, "hulls": [], "ship_types": set(), "zones": set(), "targets": set(), "tags": set(),
+            rows[e.id] = {"id": e.id, "entry": e, "hulls": [], "ship_types": set(), "zones": set(), "targets": set(),
+                          "target_groups": set(), "tags": set(),
                           "kinds": set(), "kind_counts": Counter(), "file_count": 0,
                           "uploaded_by": e.uploaded_by, "assignees": [],
                           "no_hull": bool(e.no_hull),
@@ -587,6 +600,9 @@ class MySqlSearch:
                 rows[eid]["zones"].add(vocab["zone"].canon(value))
             elif kind == "target":
                 rows[eid]["targets"].add(vocab["target"].canon(value))
+                group = vocab["target"].group_value(value)   # 71 — 대상 묶음: 거르기와 건수에 묶음 값도 보탠다
+                if group:
+                    rows[eid]["target_groups"].add(group)
             else:
                 rows[eid]["tags"].add(vocab["free"].canon(value))
         # 46 — 담당자(명부 번호, 주 담당자 먼저)
@@ -633,6 +649,9 @@ class MySqlSearch:
     def _filter_have(cls, r: dict, key: str) -> list[str]:
         """필터·건수용 값 — 49: 담당자가 없는 자료는 GROUP_NONE('담당자 없음')으로 거르고 센다."""
         have = cls._values(r, key)
+        if key == "target" and r.get("target_groups"):
+            # 71 — '배관'으로 거르면 하위 대상(Manifold 등) 자료도 통과하고, 묶음 건수는 하위를 합친다
+            return sorted(set(have) | r["target_groups"])
         return have or ([GROUP_NONE] if key == "assignee" else [])
 
     def _passes(self, r: dict, filters: dict, skip: str | None = None) -> bool:
@@ -679,6 +698,12 @@ class MySqlSearch:
                     aliases = [x.value for x in vocab[kind].synonyms(t)] if t is not None else []
                     if aliases:
                         f["aliases"] = aliases
+                    if kind == "target" and t is not None:   # 71 — 대상 묶음
+                        p = vocab[kind].parent(t)
+                        if p is not None:
+                            f["group"] = p.value
+                        if vocab[kind].children(t):
+                            f["children"] = [c.value for c in vocab[kind].children(t)]
             for f in out["tag"]:   # 자유 태그 동의어
                 aliases = vocab["free"].aliases(f["value"])
                 if aliases:

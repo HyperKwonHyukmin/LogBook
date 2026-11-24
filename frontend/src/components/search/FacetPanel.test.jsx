@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import FacetPanel, { matchesFilter } from './FacetPanel.jsx';
+import FacetPanel, { matchesFilter, nestGroups } from './FacetPanel.jsx';
 
 // 19 — 합성 값(가상 호선 9xxx). 호선 20개 = 격자 12칸을 넘어 칸 안 찾기·더 보기가 생기는 수.
 // 서버는 건수 순으로 준다(9119 가 가장 많음) — 화면은 번호 순이어야 한다(2026-11-06)
@@ -125,4 +125,10 @@ test('48 — 칸마다 [값 전체 보기] 가 분류 화면의 그 속성 탭�
     .toHaveAttribute('href', '/browse?by=zone');
   expect(within(screen.getByRole('group', { name: '호선' })).getByRole('link', { name: '값 전체 보기' }))
     .toHaveAttribute('href', '/browse?by=hull');
+});
+
+test('71 — 대상 묶음: 하위 대상을 묶음 바로 아래로(묶음이 목록에 없으면 제자리)', () => {
+  const items = [{ value: 'Unit' }, { value: 'Manifold', group: '배관' }, { value: '배관', children: ['Manifold', 'Pipe'] },
+    { value: 'Pipe', group: '배관' }, { value: 'Rudder', group: '추진 및 조타' }];
+  expect(nestGroups(items).map((f) => f.value)).toEqual(['Unit', '배관', 'Manifold', 'Pipe', 'Rudder']);
 });

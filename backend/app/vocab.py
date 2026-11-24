@@ -99,6 +99,16 @@ class Vocab:
                 self._term_key.setdefault(key(t.value), r)
         for t in self.terms:   # 용어 자신의 표기가 동의어 표기보다 앞선다
             self._term_key[key(t.value)] = t
+        # 71 — 대상 묶음(한 단계). 묶음이 목록 용어가 아니거나 자기 자신, '기타', 또는 묶음이 다른 묶음에 든 연결은 무시한다
+        by_term = {t.id: t for t in self.terms}
+        self._parent: dict[int, models.Tag] = {}
+        for t in (self.terms if kind == "target" else ()):   # 구역은 묶지 않는다(옮긴 용어에 남은 연결도 무시)
+            p = by_term.get(t.parent_id) if t.parent_id else None
+            if p is None or p.id == t.id or OTHER in (p.value, t.value):
+                continue
+            if p.parent_id and by_term.get(p.parent_id) is not None:
+                continue
+            self._parent[t.id] = p
 
     @property
     def has_terms(self) -> bool:
@@ -109,6 +119,29 @@ class Vocab:
 
     def synonyms(self, term: models.Tag) -> list[models.Tag]:
         return sorted((t for t in self.by_id.values() if t.alias_of_id == term.id), key=lambda t: t.value)
+
+    def parent(self, term: models.Tag | None) -> models.Tag | None:
+        """71 — 이 용어가 든 묶음(없으면 None)."""
+        return self._parent.get(term.id) if term is not None else None
+
+    def children(self, term: models.Tag | None) -> list[models.Tag]:
+        """71 — 이 묶음에 든 용어(목록 순서)."""
+        if term is None:
+            return []
+        return [t for t in self.terms if (p := self._parent.get(t.id)) is not None and p.id == term.id]
+
+    def group_value(self, value) -> str | None:
+        """71 — 값(대표 값이나 동의어)이 든 묶음의 이름. 묶음이 없으면 None."""
+        p = self.parent(self.target(value))
+        return p.value if p is not None else None
+
+    def family(self, value) -> set[str]:
+        """71 — 거르기용: 그 값과, 묶음이면 하위 용어 값까지(대표 값)."""
+        t = self.target(value)
+        if t is None:
+            v = self.canon(value)
+            return {v} if v else set()
+        return {t.value} | {c.value for c in self.children(t)}
 
     def term(self, value) -> models.Tag | None:
         """값과 같은 용어(대소문자 무시)."""
@@ -297,8 +330,15 @@ def list_terms(db: Session, kind: str, user=None) -> list[dict]:
         t = v.target(val)
         if t is not None:
             counts[t.id] += n
-    return [{"id": t.id, "value": t.value, "active": bool(t.active), "count": counts.get(t.id, 0),
-             "synonyms": [{"id": s.id, "value": s.value} for s in v.synonyms(t)]} for t in v.terms]
+    out = []
+    for t in v.terms:
+        p = v.parent(t)
+        out.append({"id": t.id, "value": t.value, "active": bool(t.active), "count": counts.get(t.id, 0),
+                    "synonyms": [{"id": s.id, "value": s.value} for s in v.synonyms(t)],
+                    # 71 — 대상 묶음: 든 묶음과 하위 용어(대상만 쓴다)
+                    "parent": p.value if p is not None else None,
+                    "children": [c.value for c in v.children(t)]})
+    return out
 
 
 # ---- 입력 정규화(정리 대기·Entry 상세) ----
@@ -414,12 +454,42 @@ def add_term(db: Session, storage: StoragePaths, actor: str, kind: str, value, i
     return t
 
 
+_UNSET = object()
+
+
+def _check_parent(db: Session, term: models.Tag, raw) -> models.Tag | None:
+    """71 — 묶음 지정 검사. 빈 값이면 묶음에서 뺀다(None). 한 단계만, 대상만, '기타'는 묶음도 하위도 아니다."""
+    if term.kind != "target":
+        raise _err(422, "group_target_only")
+    v = clean(raw or "", "target")
+    if not v:
+        return None
+    voc = Vocab(db, "target")
+    p = voc.target(v)
+    if p is None:
+        raise _err(404, "group_not_found")
+    if p.id == term.id:
+        raise _err(422, "group_self")
+    if OTHER in (p.value, term.value):
+        raise _err(422, "group_other")
+    if voc.parent(p) is not None:
+        raise _err(422, "group_nested")
+    if voc.children(term):
+        raise _err(422, "group_has_children")
+    return p
+
+
 def update_term(db: Session, storage: StoragePaths, actor: str, term: models.Tag, *, value=None,
-                active: bool | None = None, ip: str | None = None) -> models.Tag:
-    """이름 바꾸기(옛 이름은 동의어로 남기고 Entry 값도 바꾼다)·사용 중지/다시 사용."""
+                active: bool | None = None, parent=_UNSET, ip: str | None = None) -> models.Tag:
+    """이름 바꾸기(옛 이름은 동의어로 남기고 Entry 값도 바꾼다)·사용 중지/다시 사용. 71 — parent: 묶음 이름(빈 값 = 빼기)."""
     term = _term(db, term)
     kind = term.kind
     before = {"value": term.value, "active": bool(term.active)}
+    new_parent = _UNSET
+    if parent is not _UNSET:
+        new_parent = _check_parent(db, term, parent)
+        old = Vocab(db, kind).parent(term)
+        before["parent"] = old.value if old is not None else None
     renamed_from = None
     if value is not None:
         v = clean(value, kind)
@@ -438,10 +508,13 @@ def update_term(db: Session, storage: StoragePaths, actor: str, term: models.Tag
                 _new_tag(db, kind, renamed_from, alias_of=term)
     if active is not None:
         term.active = bool(active)
+    after = {"value": term.value, "active": bool(term.active)}
+    if new_parent is not _UNSET:
+        term.parent_id = new_parent.id if new_parent is not None else None
+        after["parent"] = new_parent.value if new_parent is not None else None
     db.flush()
     audit.record(db, storage, actor=actor, action="VOCAB_TERM_UPDATE", target_type="vocab",
-                 target_id=f"{kind}:{term.value}"[:40], before=before,
-                 after={"value": term.value, "active": bool(term.active)}, ip=ip)
+                 target_id=f"{kind}:{term.value}"[:40], before=before, after=after, ip=ip)
     if renamed_from is not None:
         # Entry 가 태그 행을 가리켜 화면 값은 이미 바뀌었다 — 이력과 entry.json 만 맞춘다
         _touch_tag_entries(db, storage, actor, term, renamed_from, ip)
@@ -572,6 +645,8 @@ def delete_term(db: Session, storage: StoragePaths, actor: str, term: models.Tag
             db.commit()
         done.append(e.entry_id)
     value, synonyms = term.value, [g.value for g in group if g.id != term.id]
+    # 71 — 지우는 용어가 묶음이면 하위 용어의 연결도 끊는다(남겨 두면 같은 id 가 다시 쓰일 때 엉뚱한 묶음이 된다)
+    db.query(models.Tag).filter(models.Tag.parent_id.in_(ids)).update({models.Tag.parent_id: None}, synchronize_session=False)
     for g in group:
         db.delete(g)
         db.flush()

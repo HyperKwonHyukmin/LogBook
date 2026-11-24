@@ -10,6 +10,12 @@ test('업로드·정리 API 오류 코드를 한국어로 보여 준다', () => 
   expect(errorText({ detail: 'unknown_code' }, 'FALLBACK')).toBe('FALLBACK');
 });
 
+test('71 대상 묶음 오류 코드', () => {
+  for (const code of ['group_target_only', 'group_not_found', 'group_self', 'group_other', 'group_nested', 'group_has_children']) {
+    expect(errorText({ detail: code }, 'FALLBACK')).not.toBe('FALLBACK');
+  }
+});
+
 test('03 오류·동작 라벨과 날짜 표시', () => {
   expect(errorText({ detail: 'link_invalid' })).toMatch('링크');
   expect(errorText({ detail: 'hull_not_found' })).toMatch('호선');

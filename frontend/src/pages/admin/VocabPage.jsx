@@ -10,9 +10,32 @@ import { ErrorNote, OkNote, Page, PageHeader, SectionTitle } from '../../compone
 import { RowsSkeleton } from '../../components/ui/Skeleton.jsx';
 import { Segmented } from '../../components/ui/Tabs.jsx';
 import { errorText } from '../../lib/labels.js';
-import { VOCAB_KINDS, invalidateVocab } from '../../lib/vocab.js';
+import { OTHER_TERM, VOCAB_KINDS, invalidateVocab } from '../../lib/vocab.js';
 
 const TERM_COLS = 'grid grid-cols-[56px_minmax(140px,220px)_minmax(0,1fr)_56px_150px] items-center gap-3';
+// 71 — 대상은 '묶음' 칸이 하나 더 있다
+const TARGET_COLS = 'grid grid-cols-[56px_minmax(140px,200px)_minmax(0,1fr)_150px_56px_150px] items-center gap-3';
+const colsOf = (kind) => (kind === 'target' ? TARGET_COLS : TERM_COLS);
+
+/**
+ * 71 — 대상 묶음 고르기. 묶음이 될 수 있는 용어: 사용 중이고, 자기 자신과 '기타'가 아니고, 다른 묶음에 들지 않은 것.
+ * 하위가 있는 용어(이미 묶음)는 다른 묶음에 넣지 못한다(한 단계).
+ */
+function GroupPick({ term, terms, busy, onPick }) {
+  if (term.value === OTHER_TERM) return <span className="text-meta text-n-500">묶지 않음</span>;
+  if (term.children?.length) {
+    return <span className="text-meta text-n-600" title={term.children.join(', ')}>묶음, 하위 <span className="font-mono">{term.children.length}</span></span>;
+  }
+  // 사용 중지한 묶음도 지금 든 묶음이면 남긴다(빼면 '묶음 없음'으로 잘못 보인다)
+  const options = terms.filter((t) => t.id !== term.id && t.value !== OTHER_TERM && !t.parent && (t.active || t.value === term.parent));
+  return (
+    <select aria-label={`${term.value} 묶음`} value={term.parent || ''} disabled={busy}
+            onChange={(e) => onPick(term, e.target.value)} className={selectClass('h-7 w-full text-meta')}>
+      <option value="">묶음 없음</option>
+      {options.map((t) => <option key={t.id} value={t.value}>{t.value}</option>)}
+    </select>
+  );
+}
 const OUT_COLS = 'grid grid-cols-[minmax(0,1fr)_56px_minmax(260px,auto)] items-center gap-3';
 const KIND_NAME = Object.fromEntries(VOCAB_KINDS.map((k) => [k.id, k.label]));
 
@@ -44,9 +67,9 @@ function SynonymAdd({ term, onAdd, busy }) {
   );
 }
 
-function TermRow({ kind, term, index, last, busy, onMove, onRename, onToggle, onDelete, onAddSynonym, onRemoveSynonym }) {
+function TermRow({ kind, term, terms, index, last, busy, onMove, onRename, onToggle, onDelete, onAddSynonym, onRemoveSynonym, onGroup }) {
   return (
-    <li className={`${TERM_COLS} min-h-11 border-b border-n-200 px-3 py-1.5 text-ui last:border-0 ${term.active ? '' : 'bg-n-25'}`}>
+    <li className={`${colsOf(kind)} min-h-11 border-b border-n-200 px-3 py-1.5 text-ui last:border-0 ${term.active ? '' : 'bg-n-25'}`}>
       <span className="flex gap-0.5">
         <button type="button" aria-label={`${term.value} 위로`} disabled={busy || index === 0} onClick={() => onMove(index, -1)}
                 className={buttonClass('ghost', 'icon-sm', `h-6 w-6 ${index === 0 ? 'invisible' : ''}`)}><ArrowUp size={14} aria-hidden="true" /></button>
@@ -69,6 +92,7 @@ function TermRow({ kind, term, index, last, busy, onMove, onRename, onToggle, on
         ))}
         <SynonymAdd term={term} onAdd={onAddSynonym} busy={busy} />
       </span>
+      {kind === 'target' && <span className="min-w-0"><GroupPick term={term} terms={terms} busy={busy} onPick={onGroup} /></span>}
       {/* 54 — 쓰는 자료 수를 누르면 그 값으로 거른 검색 — 거기서 [여러 자료 고르기]로 분류를 한꺼번에 바꾼다 */}
       <span className="text-right font-mono text-meta text-n-600" title="쓰인 Entry 수(동의어 포함)">
         {term.count > 0 ? <FilterLink field={kind} value={term.value}>{term.count}</FilterLink> : term.count}
@@ -178,6 +202,9 @@ export default function VocabPage() {
   }
   const addSynonym = (t, value) => act(() => api(`/vocab/terms/${t.id}/synonyms`, { method: 'POST', body: { value } }),
     (r) => `‘${value}’ 를 ‘${t.value}’ 의 동의어로 등록했습니다.${changed(r)}`);
+  /** 71 — 대상 묶음 지정(빈 값 = 묶음에서 빼기). 묶음으로 거르면 하위 대상 자료도 함께 나온다. */
+  const setGroup = (t, parent) => act(() => api(`/vocab/terms/${t.id}`, { method: 'PATCH', body: { parent } }),
+    () => (parent ? `‘${t.value}’ 를 묶음 ‘${parent}’ 에 넣었습니다. ‘${parent}’ 로 거르면 ‘${t.value}’ 자료도 함께 나옵니다.` : `‘${t.value}’ 를 묶음에서 뺐습니다.`));
   const removeSynonym = (s) => act(() => api(`/vocab/synonyms/${s.id}`, { method: 'DELETE' }), () => `동의어 ‘${s.value}’ 를 뺐습니다.`);
   const merge = (row, t) => act(() => api(`/vocab/terms/${t.id}/merge`, { method: 'POST', body: { value: row.value } }),
     (r) => `‘${row.value}’ 를 ‘${t.value}’ 로 합쳤습니다.${changed(r)}`);
@@ -205,20 +232,22 @@ export default function VocabPage() {
           </form>
         </div>
         <div className="overflow-hidden rounded-lg border border-n-200">
-          <div className={`${TERM_COLS} h-9 border-b border-n-200 bg-n-50 px-3 text-meta font-medium text-n-600`}>
-            <span>순서</span><span>용어</span><span>동의어</span><span className="text-right">사용</span><span />
+          <div className={`${colsOf(kind)} h-9 border-b border-n-200 bg-n-50 px-3 text-meta font-medium text-n-600`}>
+            <span>순서</span><span>용어</span><span>동의어</span>{kind === 'target' && <span>묶음</span>}<span className="text-right">사용</span><span />
           </div>
           {!terms && !error && <RowsSkeleton rows={5} dense label="용어를 불러오는 중" />}
           {terms?.length === 0 && <p className="py-8 text-center text-ui text-n-500">용어가 없습니다. 위에서 추가하세요.</p>}
           {terms?.length > 0 && (
             <ul>
               {terms.map((t, i) => (
-                <TermRow key={t.id} kind={kind} term={t} index={i} last={i === terms.length - 1} busy={busy} onMove={move}
-                         onRename={rename} onToggle={toggle} onDelete={remove} onAddSynonym={addSynonym} onRemoveSynonym={removeSynonym} />
+                <TermRow key={t.id} kind={kind} term={t} terms={terms} index={i} last={i === terms.length - 1} busy={busy} onMove={move}
+                         onRename={rename} onToggle={toggle} onDelete={remove} onAddSynonym={addSynonym} onRemoveSynonym={removeSynonym}
+                         onGroup={setGroup} />
               ))}
             </ul>
           )}
         </div>
+        {kind === 'target' && <p className="mt-2 text-meta text-n-500">묶음: 구체적인 대상이 안 맞는 자료는 ‘기타’ 대신 묶음(예: 배관)으로 분류합니다. 묶음으로 거르면 하위 대상 자료도 함께 나오고, 업무별 모음에서 묶음 아래에 하위 업무가 들여 쓰입니다. 묶음은 한 단계만 둡니다.</p>}
         <p className="mt-2 text-meta text-n-500">‘기타’ 는 늘 끝에 둡니다. 이름을 바꾸면 그 용어를 쓰는 자료 전부에 함께 반영됩니다(옛 이름은 동의어로 남음). 지우면 그 값을 쓰는 자료에서도 빠집니다. 사용 중지한 용어는 입력 목록에서만 빠지고, 이미 쓴 값과 검색은 그대로입니다.</p>
       </section>
 
