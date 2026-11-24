@@ -11,6 +11,7 @@ import { Tabs } from '../components/ui/Tabs.jsx';
 import BatchCard from '../components/inbox/BatchCard.jsx';
 import DraftDetail from '../components/inbox/DraftDetail.jsx';
 import TaskSheetCard from '../components/inbox/TaskSheetCard.jsx';
+import TaskTemplateButton from '../components/inbox/TaskTemplateButton.jsx';
 import InboxList from '../components/inbox/InboxList.jsx';
 import FixList from '../components/coverage/FixList.jsx';
 import { PageDropOverlay, UploadButtons, UploadCenterCard, UploadCenterStack, UploadFeedback, isOsFileDrag,
@@ -326,7 +327,7 @@ export default function InboxPage() {
         description={canWrite
           ? '올린 자료의 초안을 왼쪽 목록에서 골라 확인하고 확정하세요. 확정 전에도 검색에는 미분류로 보입니다. 이 화면에 폴더를 끌어 놓으면 새로 올리고, 목록의 초안 줄에 놓으면 그 초안에 첨부합니다.'
           : READ_ONLY_REASON}
-        actions={canWrite ? <UploadButtons u={uploader} /> : null} />
+        actions={canWrite ? <><TaskTemplateButton /><UploadButtons u={uploader} /></> : null} />
       {/* 52 — 올리는 중·멈춤은 화면 가운데 카드로(어디까지 왔는지 바로 보이게), 끝난 결과는 이 자리에 */}
       {canWrite && (uploader.busy || uploader.resumable) && (
         <UploadCenterStack><UploadCenterCard u={uploader} title="올리기" /></UploadCenterStack>

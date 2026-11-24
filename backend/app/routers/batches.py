@@ -1,7 +1,7 @@
 """배치 목록·주인 지정(정리 대기 화면용)."""
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import String, and_, cast, exists, or_, select
 from sqlalchemy.orm import Session
@@ -197,6 +197,23 @@ def batch_summary(db: Session = Depends(get_db), user: models.User = Depends(req
             "staged": sum(1 for _n, s, _r in rows if s == "staged"),
             "uploading": sum(1 for _n, s, _r in rows if s == "uploading"),
             "names": names}
+
+
+@router.get("/task-template")
+def task_template(db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
+    """과제 엑셀 양식(2026-11-24) — 올해 연도와 지금 분류 목록의 대상으로 만든다. 로그인한 누구나."""
+    from urllib.parse import quote
+
+    from .. import vocab
+    from ..ingest.task_template import build_template
+
+    year = datetime.now().year
+    targets = [t.value for t in vocab.Vocab(db, "target").terms if t.active]
+    name = f"과제엑셀_양식_{year}.xlsx"
+    return Response(build_template(year, targets),
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f"attachment; filename=\"task_template_{year}.xlsx\"; filename*=UTF-8''{quote(name)}",
+                             "Cache-Control": "private, no-store"})
 
 
 @router.get("/{key}")

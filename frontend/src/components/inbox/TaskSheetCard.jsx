@@ -7,6 +7,7 @@ import Spinner from '../ui/Spinner.jsx';
 import { ErrorNote } from '../ui/Page.jsx';
 import { useConfirm } from '../ui/ConfirmDialog.jsx';
 import { useToast } from '../ui/Toast.jsx';
+import TaskTemplateButton from './TaskTemplateButton.jsx';
 
 const defaults = (rows) => new Set(rows.filter((r) => r.checked).map((r) => r.index));
 
@@ -69,8 +70,8 @@ export default function TaskSheetCard({ batch, onChanged }) {
         <span className="text-meta text-n-500">과제 <span className="font-mono">{ts.total ?? rows.length}</span>행</span>
       </header>
       {ts.error && (
-        <ErrorNote action={review && ts.can_discard ? <Button variant="secondary" size="sm" disabled={busy} onClick={discard}>이 묶음 버리기</Button> : null}>
-          {ts.error} 과제 엑셀 양식(통합과제)인지 확인해 주세요. 일반 자료로 올리려면 다른 파일과 함께 올리세요.
+        <ErrorNote action={<span className="flex flex-wrap gap-2"><TaskTemplateButton variant="secondary" />{review && ts.can_discard && <Button variant="secondary" size="sm" disabled={busy} onClick={discard}>이 묶음 버리기</Button>}</span>}>
+          {ts.error} 과제 엑셀 양식(통합과제)인지 확인해 주세요. 양식이 없으면 [과제 엑셀 양식]으로 받아 쓰세요. 일반 자료로 올리려면 다른 파일과 함께 올리세요.
         </ErrorNote>
       )}
       {result && (
