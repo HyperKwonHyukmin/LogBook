@@ -19,6 +19,7 @@ def search(q: str = "", unit: str = Query(default="entry", pattern="^(entry|file
            assignee: list[str] | None = Query(default=None),   # 46 — 담당자(명부 번호)
            tag: list[str] | None = Query(default=None), target: list[str] | None = Query(default=None),
            drafts: bool = False, fav: bool = False, new: bool = False,   # 72 — 새 자료만
+           team: int | None = Query(default=None, ge=1),   # 74 — 팀 공간(그 팀의 팀 자료만)
            sort: str | None = Query(default=None, pattern="^(relevance|period|recent|favorited|hull|title)$"),
            limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0),
            group: str | None = Query(default=None, pattern="^(hull|zone|target|uploaded_by|assignee|tag)$"),
@@ -36,7 +37,7 @@ def search(q: str = "", unit: str = Query(default="entry", pattern="^(entry|file
     filters = {k: vs for k, vs in ((k, filter_values(v)) for k, v in filters.items()) if vs}
     query = SearchQuery(q=q.strip()[:200], unit=unit, filters=filters,
                         include_drafts=drafts, limit=limit, offset=offset, sort=sort,
-                        viewer=user.employee_id, user=user, favorites_of=user.employee_id if fav else None, only_new=new,
+                        viewer=user.employee_id, user=user, favorites_of=user.employee_id if fav else None, only_new=new, team=team,
                         group=group, group_value=group_value, group_sort=group_sort, group_rows=group_rows,
                         group_limit=group_limit, group_offset=group_offset)
     # 11 — group 이 있으면 결과를 그 속성 값으로 묶는다(문서 보기에서만): groups[{value,label,count,items}].

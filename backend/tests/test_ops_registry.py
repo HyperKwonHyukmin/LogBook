@@ -60,7 +60,8 @@ def test_alias_and_hull_update_write_registry(client, db, storage, make_user, au
 
 def test_read_missing_returns_empty(storage):
     assert read_registry(storage) == {"version": 1, "users": [], "hulls": [], "tags": [], "vocab": [],
-                                      "entry_access": [], "grants": [], "wb_target_rules": [], "comments": []}
+                                      "entry_access": [], "grants": [], "wb_target_rules": [], "comments": [],
+                                      "teams": []}
 
 
 def test_user_changes_write_registry(client, db, storage, make_user, auth_headers, wb):

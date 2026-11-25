@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Box, ChevronRight, Library, Search } from 'lucide-react';
+import { Box, ChevronRight, Library, Search, Shield } from 'lucide-react';
 import { api } from '../api/client.js';
 import EmptyState from '../components/ui/EmptyState.jsx';
 import { inputClass } from '../components/ui/Field.jsx';
@@ -41,9 +41,11 @@ export default function TargetsPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
+  const [teams, setTeams] = useState([]);   // 74 — 팀 공간 줄(팀원은 자기 팀, 관리자는 모든 팀, 그 밖에는 없음)
   useEffect(() => {
     let alive = true;
     api('/targets').then((d) => { if (alive) setData(d); }).catch(() => { if (alive) setError('업무 목록을 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요.'); });
+    api('/teams').then((r) => { if (alive) setTeams(r || []); }).catch(() => {});
     return () => { alive = false; };
   }, []);
   const all = data?.targets || [];
@@ -58,6 +60,31 @@ export default function TargetsPage() {
         description="업무(대상)마다 기준 문서, 먼저 볼 예제, 지난 실적, 물어볼 사람을 한 화면에 모았습니다. 처음 맡은 해석이나 복습할 때 여기서 시작하세요." />
       {error && <ErrorNote>{error}</ErrorNote>}
       {!data && !error && <BlockSkeleton className="h-40" />}
+      {teams.length > 0 && (
+        <ul aria-label="팀 공간" className="mb-4 flex max-w-[960px] flex-col gap-2">
+          {teams.map((t) => (
+            <li key={t.id}>
+              <Link to={`/team/${t.id}`}
+                    className="group grid grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-4 rounded-md border border-n-200 bg-n-0 py-3 pl-1 pr-3 transition-colors duration-150 hover:bg-n-50">
+                <span aria-hidden="true" className="flex h-[60px] w-24 items-center justify-center rounded-sm bg-brand-subtle text-brand">
+                  <Shield size={20} strokeWidth={1.5} />
+                </span>
+                <span className="min-w-0">
+                  <span className="flex items-center gap-2 text-body font-semibold text-n-900 group-hover:text-brand">
+                    {t.name}
+                    <span className="inline-flex h-5 items-center rounded-xs bg-n-100 px-1.5 text-micro font-medium text-n-700">팀 전용</span>
+                  </span>
+                  <span className="block truncate text-meta text-n-600">
+                    {`팀 자료 ${t.entries}건, 팀원 ${t.members}명${t.drafts ? `, 확정 전 초안 ${t.drafts}건` : ''}`}
+                    {t.description ? `, ${t.description}` : ''}
+                  </span>
+                </span>
+                <ChevronRight size={14} aria-hidden="true" className="text-n-400" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
       {data && all.length === 0 && (
         <EmptyState icon={Library} title="아직 모을 자료가 없습니다">자료에 대상을 넣으면 여기에 업무별로 모입니다.</EmptyState>
       )}

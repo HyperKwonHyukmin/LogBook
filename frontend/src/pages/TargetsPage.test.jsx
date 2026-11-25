@@ -113,3 +113,23 @@ test('71 — 묶음 화면: 하위 업무로 가는 링크', async () => {
   expect(within(nav).getByRole('link', { name: /Pipe/ })).toHaveTextContent('2');
   vi.unstubAllGlobals();
 });
+
+
+test('74 — 팀원과 관리자에게만 맨 위 팀 공간 줄', async () => {
+  stub({ '/api/targets': { targets: [] },
+    '/api/teams': [{ id: 3, name: '배관해석', description: 'CAESAR II', entries: 12, drafts: 2, members: 4 }] });
+  at('/targets');
+  const team = await screen.findByRole('link', { name: /배관해석/ });
+  expect(team).toHaveAttribute('href', '/team/3');
+  expect(team).toHaveTextContent('팀 전용');
+  expect(team).toHaveTextContent('팀 자료 12건, 팀원 4명, 확정 전 초안 2건, CAESAR II');
+  vi.unstubAllGlobals();
+});
+
+test('74 — 팀이 없으면 팀 줄도 없다', async () => {
+  stub({ '/api/targets': { targets: [] }, '/api/teams': [] });
+  at('/targets');
+  expect(await screen.findByText('아직 모을 자료가 없습니다')).toBeInTheDocument();
+  expect(screen.queryByRole('list', { name: '팀 공간' })).toBeNull();
+  vi.unstubAllGlobals();
+});

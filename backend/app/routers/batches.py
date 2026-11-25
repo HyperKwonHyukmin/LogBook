@@ -69,7 +69,7 @@ def batch_to_dict(db: Session, b: models.Batch, ctx: dict | None = None, viewer=
          "allow_duplicates": bool(b.allow_duplicates),
          # 66 — '올리고 바로 확정'을 켰는지와 결과 {confirmed: [E…], kept: [{entry_id, reason}]}(정리가 끝난 뒤)
          "auto_confirm": bool(isinstance(b.preset, dict) and b.preset.get("auto_confirm")),
-         "auto_result": b.preset.get("auto_result") if isinstance(b.preset, dict) else None,
+         "auto_result": _visible_auto_result(db, b, viewer),
          "target_entry_id": b.target_entry_id, "draft_count": draft_count,
          # 68 — 과제 엑셀 묶음: 미리보기(review) 또는 만든 결과
          **({"task_sheet": task_import.preview(db, b, viewer)} if task_import.is_task_batch(b) else {}),
@@ -87,7 +87,8 @@ def batch_to_dict(db: Session, b: models.Batch, ctx: dict | None = None, viewer=
             for f in e["files"]:
                 if f.get("model") is not None:
                     f["model"]["running"] = f["id"] in converting
-    if b.target_entry_id and b.state == "done":
+    if b.target_entry_id and b.state == "done" and (viewer is None or access.can_view_entry(
+            viewer, db.get(models.Entry, b.target_entry_id), db=db)):   # 74 검토 — 볼 수 없는 자료의 파일은 싣지 않는다
         # 62 — [파일 추가]가 실제로 붙인 파일(대상 자료 안 경로). 화면이 '추가한 파일 N개'·'새 파일' 표시에 쓴다
         d["added"] = [{"id": i, "rel_path": r} for i, r in db.query(models.File.id, models.File.rel_path)
                       .filter(models.File.batch_id == b.id, models.File.entry_id == b.target_entry_id)
@@ -152,9 +153,27 @@ def _has_duplicate_exclusion(b: models.Batch) -> bool:
 
 
 def _has_hidden_drafts(db: Session, b: models.Batch, user: models.User) -> bool:
+    """남의 묶음을 목록에서 뺄지 — 남은 초안이 있는데 하나도 안 보이거나(13), 그 묶음에서 나온 자료 중
+    이 사람이 볼 수 없는 것이 있으면(74 검토 — 자동 확정 결과와 묶음 이름으로 팀 자료가 드러나지 않게)."""
     if access.is_admin(user) or (b.uploader and b.uploader == user.employee_id):
         return False
-    return db.query(models.Entry.id).filter_by(batch_id=b.id, status="draft").first() is not None
+    if db.query(models.Entry.id).filter_by(batch_id=b.id, status="draft").first() is not None:
+        return True
+    return (db.query(models.Entry.id).filter(models.Entry.batch_id == b.id, models.Entry.status != "trashed",
+                                             ~access.visible_entries_filter(user)).first()) is not None
+
+
+def _visible_auto_result(db: Session, b: models.Batch, viewer) -> dict | None:
+    """66 — 자동 확정 결과. 보는 사람이 볼 수 없는 자료 번호는 뺀다(74 검토)."""
+    r = b.preset.get("auto_result") if isinstance(b.preset, dict) else None
+    if not isinstance(r, dict) or viewer is None or access.is_admin(viewer):
+        return r
+    ids = {str(x) for x in (r.get("confirmed") or [])} | {
+        str(k.get("entry_id")) for k in (r.get("kept") or []) if isinstance(k, dict)}
+    rows = db.query(models.Entry).filter(models.Entry.entry_id.in_(ids or {""})).all()
+    seen = {e.entry_id for e in rows if access.can_view_entry(viewer, e, db=db)}
+    return {**r, "confirmed": [x for x in (r.get("confirmed") or []) if str(x) in seen],
+            "kept": [k for k in (r.get("kept") or []) if isinstance(k, dict) and str(k.get("entry_id")) in seen]}
 
 
 def _has_unseen_drafts(db: Session, b: models.Batch, user: models.User) -> bool:

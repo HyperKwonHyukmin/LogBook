@@ -11,6 +11,7 @@ import HullPage from './pages/HullPage.jsx';
 import PersonPage from './pages/PersonPage.jsx';
 import TargetsPage from './pages/TargetsPage.jsx';
 import TargetPage from './pages/TargetPage.jsx';
+import TeamSpacePage from './pages/TeamSpacePage.jsx';
 import HullsPage from './pages/HullsPage.jsx';
 import InboxPage from './pages/InboxPage.jsx';
 import RecentComparesPage from './pages/RecentComparesPage.jsx';
@@ -30,6 +31,7 @@ import WbRulesPage from './pages/admin/WbRulesPage.jsx';
 import UpdatesPage from './pages/admin/UpdatesPage.jsx';
 import UpdateNotesAdminPage from './pages/admin/UpdateNotesAdminPage.jsx';
 import AuditLogPage from './pages/admin/AuditLogPage.jsx';
+import TeamsPage from './pages/admin/TeamsPage.jsx';
 import UpdateNotesPage from './pages/UpdateNotesPage.jsx';
 import ViewerPage from './pages/ViewerPage.jsx';
 
@@ -45,7 +47,7 @@ const ShipMapPage = lazy(() => import('./pages/ShipMapPage.jsx'));
 
 const EXPLORE_TABS = [{ to: '/graph', label: '관계 지도' }, { to: '/coverage', label: '갖춤 현황' }, { to: '/ship-map', label: '선박 지도' }];
 const ADMIN_TABS = [
-  { to: '/admin/users', label: '사용자' }, { to: '/admin/ops', label: '운영' }, { to: '/admin/log', label: '활동 로그' },
+  { to: '/admin/users', label: '사용자' }, { to: '/admin/teams', label: '팀' }, { to: '/admin/ops', label: '운영' }, { to: '/admin/log', label: '활동 로그' },
   { to: '/admin/vocab', label: '분류 목록' }, { to: '/admin/wb-targets', label: 'WorkBench 연결 규칙' },
   { to: '/admin/stats', label: '자료 현황' }, { to: '/admin/entries', label: '자료 목록' },
   { to: '/admin/cleanup', label: '자료 정비' }, { to: '/admin/updates', label: '업데이트 이력' },
@@ -68,6 +70,7 @@ export default function App() {
             <Route path="e/:entryId" element={<EntryPage />} />
             <Route path="targets" element={<TargetsPage />} />   {/* 69 — 업무별 모음 */}
             <Route path="t/:value" element={<TargetPage />} />
+            <Route path="team/:teamId" element={<TeamSpacePage />} />   {/* 74 — 팀 공간(업무별 모음 맨 위 팀 줄) */}
             <Route path="p/:personKey" element={<PersonPage />} />   {/* 67 — 담당자 프로필 카드 */}
             <Route path="v/:fileId" element={<ViewerPage />} />
             <Route path="compare" element={<Suspense fallback={null}><ComparePage /></Suspense>} />
@@ -100,6 +103,7 @@ export default function App() {
               {/* 관리 6화면 — 사이드 메뉴 '관리' 하나 아래 탭으로(2026-11-05) */}
               <Route element={<SectionTabs label="관리" items={ADMIN_TABS} contained />}>
                 <Route path="admin/users" element={<UsersPage />} />
+                <Route path="admin/teams" element={<TeamsPage />} />   {/* 74 — 팀 공간 */}
                 <Route path="admin/ops" element={<OpsPage />} />
                 <Route path="admin/log" element={<AuditLogPage />} />
                 <Route path="admin/vocab" element={<VocabPage />} />

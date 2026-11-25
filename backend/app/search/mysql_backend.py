@@ -265,6 +265,9 @@ class MySqlSearch:
         if query.only_new:   # 72 — 새 자료만(설정을 꺼 두었으면 없음)
             from .. import news
             ids &= news.new_pks(db, query.user)
+        if query.team is not None:   # 74 — 팀 공간: 그 팀의 팀 자료만(열람 조건 vis 는 위에서 이미 걸렸다)
+            ids &= {i for (i,) in db.query(models.Entry.id).filter(models.Entry.access == "team",
+                                                                   models.Entry.team_id == query.team)}
 
         rows = self._rows(db, ids, vocab)
         for r in rows.values():

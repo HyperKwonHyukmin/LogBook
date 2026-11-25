@@ -10,6 +10,8 @@
     shared   공유 — LV1 이상 모두
     normal   일반 — LV2 이상(기본). 알 수 없는 값(13 의 public/private 가 남은 행)도 일반으로 다룬다
     blocked  블록 — LV3 만
+    team     팀 — 그 팀원(team_members)과 LV3 만(74). Entry.team_id 가 그 팀. 팀원은 팀 자료에서 올린 사람과 같다
+             (고치기, 휴지통과 복원, 확정, 허락, 공개 범위). 팀 밖 자료를 팀으로 넣는 일은 LV3 와 그 자료의 주인(팀원)만
     올린 사람은 자기 자료를 늘 본다(블록돼도). 개별 허락(entry_grants)은 단계와 무관하게 그 사람에게 보인다.
     60 — WorkBench 해석 실행자(묶음 출처 origin.owner)도 그 해석에서 온 **확정** 자료를 늘 본다(등급·단계 무관).
     WB 보내기는 관리자만 해서 올린 사람이 관리자가 되므로, 실행자 본인이 LogBook·WB 가져오기에서 못 보던 것을 푼다.
@@ -27,7 +29,9 @@ from . import models
 
 LEVELS = models.USER_LEVELS
 LEVEL_LABELS = {1: "게스트", 2: "일반", 3: "관리자"}
-ACCESS_LABELS = {"shared": "공유", "normal": "일반", "blocked": "블록"}
+ACCESS_LABELS = {"shared": "공유", "normal": "일반", "blocked": "블록", "team": "팀 전용"}
+# 74 — LV2 가 단계만으로 보는 값(블록과 팀은 빠진다). 알 수 없는 옛 값은 일반으로 다루므로 '아닌 것' 으로 적는다
+CLOSED_ACCESS = ("blocked", "team")
 
 
 def level_of(user) -> int:
@@ -68,7 +72,61 @@ def require_shared_writer(user) -> None:
 def access_of(entry: models.Entry) -> str:
     """Entry 의 공개 단계. 알 수 없는 값(옮기기 전 13 값 등)은 '일반'."""
     a = getattr(entry, "access", None)
-    return a if a in ("shared", "blocked") else "normal"
+    return a if a in ("shared", "blocked", "team") else "normal"
+
+
+# ---- 74 팀 ----
+
+def _norm_eid(employee_id) -> str:
+    return (employee_id or "").strip().upper()
+
+
+def _team_ids_of(employee_id):
+    """74 — 이 사번이 속한 팀 id(SQL 부분 질의, 한 사람 한 팀이라 많아야 1행)."""
+    TM = models.TeamMember
+    return select(TM.team_id).where(TM.employee_id == _norm_eid(employee_id))
+
+
+def team_id_of(db: Session | None, user) -> int | None:
+    """74 — 사용자가 속한 팀 id(없으면 None). 같은 요청 안에서는 사용자 객체에 기억해 둔다."""
+    if user is None or db is None or not getattr(user, "employee_id", None):
+        return None
+    cached = getattr(user, "_lb_team", False)
+    if cached is not False:
+        return cached
+    row = db.execute(_team_ids_of(user.employee_id).limit(1)).first()
+    tid = row[0] if row else None
+    try:
+        user._lb_team = tid
+    except AttributeError:
+        pass
+    return tid
+
+
+def forget_team(user) -> None:
+    """팀원 명단을 바꾼 뒤 같은 요청 안에서 다시 읽게 한다."""
+    if user is not None and hasattr(user, "_lb_team"):
+        try:
+            del user._lb_team
+        except AttributeError:
+            pass
+
+
+def is_team_member(user, entry: models.Entry | None, db: Session | None = None) -> bool:
+    """74 — 이 사용자가 이 **팀 자료**의 팀원인가. 팀 자료가 아니면 늘 거짓."""
+    if user is None or entry is None or access_of(entry) != "team" or entry.team_id is None:
+        return False
+    db = db or object_session(entry)
+    return team_id_of(db, user) == entry.team_id
+
+
+def team_name(entry: models.Entry, db: Session | None = None) -> str | None:
+    """팀 자료의 팀 이름(화면, entry.json, 감사용). 팀 자료가 아니거나 팀을 못 찾으면 None."""
+    if access_of(entry) != "team" or entry.team_id is None:
+        return None
+    db = db or object_session(entry)
+    t = db.get(models.Team, entry.team_id) if db is not None else None
+    return t.name if t is not None else None
 
 
 # ---- Entry 열람 ----
@@ -89,12 +147,15 @@ def visible_entries_filter(user):
         # ~visible_entries_filter() (감사 로그·배치 가져가기의 '숨은 것' 조건)가 그 행을 놓친다 — NULL 안전하게
         and_(E.uploaded_by.isnot(None), E.uploaded_by == user.employee_id),
         E.id.in_(select(models.EntryGrant.entry_id).where(models.EntryGrant.employee_id == user.employee_id)),
-        and_(E.status == "confirmed", E.id.in_(_wb_runner_entry_ids(user.employee_id))),
+        # 74 — 팀 자료에는 WB 실행자, 초안 담당자 규칙을 쓰지 않는다(팀 밖 사람에게는 개별 허락으로만)
+        and_(E.status == "confirmed", E.access != "team", E.id.in_(_wb_runner_entry_ids(user.employee_id))),
         # 68 — 사번이 연결된 담당자는 자기가 맡은 초안을 본다(확정되면 다른 자료와 같은 규칙)
-        and_(E.status == "draft", E.id.in_(_draft_assignee_ids(user.employee_id))),
+        and_(E.status == "draft", E.access != "team", E.id.in_(_draft_assignee_ids(user.employee_id))),
+        # 74 — 팀 자료는 그 팀원에게(초안 포함 — 팀원 누구나 정리하고 확정한다)
+        and_(E.access == "team", E.team_id.isnot(None), E.team_id.in_(_team_ids_of(user.employee_id))),
     ]
     if lv >= 2:
-        conds.append(E.access != "blocked")
+        conds.append(E.access.notin_(CLOSED_ACCESS))
     return or_(*conds)
 
 
@@ -122,6 +183,8 @@ def is_draft_assignee(user, entry: models.Entry | None, db: Session | None = Non
     담당자는 그 초안을 보고, 고치고, 파일을 첨부하고, 확정할 수 있다(버리기와 공개 범위는 올린 사람과 LV3 만)."""
     if user is None or entry is None or entry.status != "draft" or not getattr(user, "employee_id", None):
         return False
+    if access_of(entry) == "team":   # 74 — 팀 초안은 팀원(is_team_member)만. 팀 밖 담당자는 개별 허락으로
+        return False
     db = db or object_session(entry)
     if db is None or entry.id is None:
         return False
@@ -132,6 +195,8 @@ def is_draft_assignee(user, entry: models.Entry | None, db: Session | None = Non
 def is_wb_runner(db: Session, user, entry: models.Entry) -> bool:
     """60 — 이 사용자가 이 확정 Entry 의 WorkBench 해석 실행자인가(visible_entries_filter 의 같은 조건)."""
     if user is None or entry is None or entry.status != "confirmed" or db is None:
+        return False
+    if access_of(entry) == "team":   # 74 — 팀 자료는 팀원과 LV3, 개별 허락만
         return False
     sub = _wb_runner_entry_ids(user.employee_id).where(models.File.entry_id == entry.id).limit(1)
     return db.execute(sub).first() is not None
@@ -153,9 +218,11 @@ def can_view_entry(user, entry: models.Entry | None, grants=None, db: Session | 
         return True
     if entry.uploaded_by and entry.uploaded_by == user.employee_id:
         return True
-    if lv >= 2 and a != "blocked":
+    if lv >= 2 and a not in CLOSED_ACCESS:
         return True
     if is_draft_assignee(user, entry, db):   # 68
+        return True
+    if is_team_member(user, entry, db):   # 74
         return True
     if grants is None:
         grants = _grant_holders(db, entry) if db is not None else set()
@@ -214,14 +281,16 @@ def can_edit_entry(user, entry: models.Entry) -> bool:
     68 — 초안이면 담당자도(고치기, 첨부, 나누기와 합치기). 초안 버리기와 공개 범위는 can_own_entry 로 따로 막는다."""
     if user is None or not can_write(user):
         return False
-    return is_admin(user) or is_uploader(user, entry) or is_draft_assignee(user, entry)
+    return (is_admin(user) or is_uploader(user, entry) or is_draft_assignee(user, entry)
+            or is_team_member(user, entry))   # 74 — 팀 자료의 팀원
 
 
 def can_own_entry(user, entry: models.Entry) -> bool:
-    """68 — 담당자에게는 주지 않는 일(초안 버리기, 공개 범위와 허락) — 올린 사람(LV1 이상) 또는 LV3."""
+    """68 — 담당자에게는 주지 않는 일(초안 버리기, 공개 범위와 허락) — 올린 사람(LV1 이상) 또는 LV3.
+    74 — 팀 자료는 그 팀원도(팀원 누구나 올린 사람과 같다)."""
     if user is None or not can_write(user):
         return False
-    return is_admin(user) or is_uploader(user, entry)
+    return is_admin(user) or is_uploader(user, entry) or is_team_member(user, entry)
 
 
 def ensure_can_edit(user, entry: models.Entry) -> None:
@@ -237,19 +306,54 @@ def can_manage_access(user, entry: models.Entry) -> bool:
     return is_admin(user) or access_of(entry) != "blocked"
 
 
-def ensure_can_manage_access(user, entry: models.Entry, new_access: str | None = None) -> None:
-    """공개 단계 바꾸기·허락 주기/회수 권한. new_access='blocked' 이거나 지금 블록이면 LV3 만(403 level3_required)."""
+def ensure_can_manage_access(user, entry: models.Entry, new_access: str | None = None,
+                             team_id: int | None = None) -> None:
+    """공개 단계 바꾸기·허락 주기/회수 권한. new_access='blocked' 이거나 지금 블록이면 LV3 만(403 level3_required).
+    74 — new_access='team' 은 LV3(아무 팀) 또는 팀원(자기 팀으로만, 403 team_member_required). team_id 는
+    resolve_team 이 정한 값(검사만 한다)."""
     ensure_can_edit(user, entry)
     if not can_own_entry(user, entry):   # 68 — 초안 담당자는 고칠 수는 있어도 공개 범위는 못 바꾼다
         raise HTTPException(status_code=403, detail="not_uploader")
     if not is_admin(user) and (access_of(entry) == "blocked" or new_access == "blocked"):
         raise HTTPException(status_code=403, detail="level3_required")
+    if new_access == "team" and not is_admin(user):
+        mine = team_id_of(object_session(entry), user)
+        if mine is None or (team_id is not None and team_id != mine):
+            raise HTTPException(status_code=403, detail="team_member_required")
+
+
+def default_access(db: Session, employee_id) -> tuple[str, int | None]:
+    """74 결정 9 — 새 초안의 공개 단계 기본값: 올린 사람이 팀원이면 ('team', 그 팀), 아니면 ('normal', None)."""
+    if not employee_id or db is None:
+        return "normal", None
+    row = db.execute(_team_ids_of(employee_id).limit(1)).first()
+    return ("team", row[0]) if row else ("normal", None)
+
+
+def resolve_team(db: Session, user, entry: models.Entry, team_id: int | None) -> int:
+    """74 — 공개 단계를 'team' 으로 둘 때 쓸 팀. 준 값이 있으면 그 팀(없는 팀이면 404 team_not_found),
+    없으면 지금 팀 자료면 그 팀, 아니면 사용자 자기 팀(없으면 422 team_required)."""
+    if team_id is not None:
+        if db.get(models.Team, team_id) is None:
+            raise HTTPException(status_code=404, detail="team_not_found")
+        return team_id
+    if access_of(entry) == "team" and entry.team_id is not None:
+        return entry.team_id
+    mine = team_id_of(db, user)
+    if mine is None:
+        # 팀이 없는 사람은 팀 자료를 만들 수 없다(403). LV3 는 팀을 골라야 한다(422)
+        raise HTTPException(status_code=422 if is_admin(user) else 403,
+                            detail="team_required" if is_admin(user) else "team_member_required")
+    return mine
 
 
 def access_brief(entry: models.Entry) -> dict:
     """화면용 공개 단계 한 덩어리 — {access, label}. 일반(기본)은 label 없음(배지를 그리지 않는다)."""
     a = access_of(entry)
-    return {"access": a, "label": None if a == "normal" else ACCESS_LABELS[a]}
+    out = {"access": a, "label": None if a == "normal" else ACCESS_LABELS[a]}
+    if a == "team":   # 74 — 팀 이름(화면 배지, entry.json)
+        out["team"] = {"id": entry.team_id, "name": team_name(entry)}
+    return out
 
 
 class _System:

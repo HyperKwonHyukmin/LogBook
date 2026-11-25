@@ -146,6 +146,8 @@ def entry_table(db: Session, *, drafts: bool = False) -> dict:
             "hulls": hulls[e.id], "no_hull": bool(e.no_hull),
             "zones": tags[e.id]["zone"], "target": (tags[e.id]["target"] or [None])[0],
             "assignees": people[e.id], "access": access.access_of(e),
+            "team_id": e.team_id if access.access_of(e) == "team" else None,   # 74
+            "team": access.team_name(e, db),
             "uploaded_by": e.uploaded_by, "uploader_name": names.get(e.uploaded_by or ""),
             "confirmed_at": e.confirmed_at.isoformat(timespec="minutes") if e.confirmed_at else None,
             "files": dict(counts[e.id]),

@@ -48,6 +48,7 @@ class SearchQuery:
     viewer: str | None = None         # 10 — 행마다 '내 즐겨찾기인가'(favorite) 를 붙일 사용자
     favorites_of: str | None = None   # 10 — 이 사용자의 즐겨찾기만(휴지통 제외, 미확정 포함)
     only_new: bool = False            # 72 — 이 사용자(user)의 새 자료만
+    team: int | None = None           # 74 — 이 팀의 팀 자료만(팀 공간 화면). 볼 수 없으면 원래대로 빠진다
     # 13 — 요청한 사용자(models.User). 볼 수 없는 Entry 를 SQL 단계에서 뺀다(목록·건수·묶음·요약 모두).
     # None 이면 아무것도 보이지 않는다(안전한 기본값) — API 는 반드시 넘긴다
     user: object | None = None

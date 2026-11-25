@@ -212,6 +212,8 @@ def write_entry_files(db: Session, storage: StoragePaths, entry: models.Entry, b
                               "version")}
     # 13·15 — 공개 단계(공유·일반·블록)는 재구축 원천이라 남긴다(열람 허락 명단은 registry.json 에만 — 이 폴더는 탐색기로 보인다)
     meta["access"] = d["access"]
+    if d.get("team"):   # 74 — 팀 자료는 팀 이름(재구축 때 이름으로 팀을 찾는다)
+        meta["team"] = d["team"]["name"]
     # 20 — '호선 없음(공용)'·제목 초안의 원래 이름(재구축 원천). 값이 있을 때만 쓴다
     if d["no_hull"]:
         meta["no_hull"] = True

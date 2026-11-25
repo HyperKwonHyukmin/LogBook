@@ -6,6 +6,8 @@ import VocabInput from '../ui/VocabInput.jsx';
 import AssigneeInput from '../people/AssigneeInput.jsx';
 import { selectClass } from '../ui/Field.jsx';
 import { errorText } from '../../lib/labels.js';
+import { parseAccess, teamOptionText } from '../../lib/levels.js';
+import { useTeamChoices } from '../../lib/teams.js';
 
 /** 고른 칸 → 서버 본문(고르지 않은 칸은 건드리지 않는다). 바꿀 것이 없으면 null. */
 export function bulkBody(entryIds, f) {
@@ -18,7 +20,7 @@ export function bulkBody(entryIds, f) {
   const remove = f.assigneesRemove.filter((p) => p.id).map((p) => p.id);
   if (remove.length) body.assignees_remove = remove;
   if (f.noHull !== '') body.no_hull = f.noHull === 'on';
-  if (f.access) body.access = f.access;   // 57 — 공개 범위(관리 › 자료 목록에서)
+  if (f.access) Object.assign(body, parseAccess(f.access));   // 57 — 공개 범위(관리 › 자료 목록에서), 74 — 'team:<번호>'
   return Object.keys(body).length > 1 ? body : null;
 }
 
@@ -40,6 +42,7 @@ export default function BulkClassifyDialog({ entryIds, onDone, onCancel, allowAc
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const set = (k) => (v) => { setF((cur) => ({ ...cur, [k]: v })); setPreview(null); };
+  const teams = useTeamChoices();
   const body = bulkBody(entryIds, f);
   useEffect(() => { setError(''); }, [f]);
 
@@ -107,6 +110,7 @@ export default function BulkClassifyDialog({ entryIds, onDone, onCancel, allowAc
                 <option value="shared">공유(LV1 이상 모두)</option>
                 <option value="normal">일반(LV2 이상, 기본)</option>
                 <option value="blocked">블록(LV3·허락받은 사람만)</option>
+                {teams.map((t) => <option key={t.id} value={`team:${t.id}`}>{teamOptionText(t)}</option>)}
               </select>
             </div>
           )}

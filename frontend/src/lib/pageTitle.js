@@ -36,12 +36,14 @@ export function pageTitle(pathname, name = '') {
     const person = path.match(/^\/p\/([^/]+)$/);   // 67 — 담당자 프로필 카드
     const target = path.match(/^\/t\/([^/]+)$/);   // 69 — 업무별 모음
     const note = path.match(/^\/update-notes\/([^/]+)$/);   // 70 — 업데이트 안내 한 건
+    const team = path.match(/^\/team\/([^/]+)$/);   // 74 — 팀 공간
     if (hull) label = `${decodeURIComponent(hull[1])} 호선`;
     else if (entry) label = name || decodeURIComponent(entry[1]);
     else if (file) label = name || '파일 보기';
     else if (person) label = name ? `${name} 담당자` : '담당자';
     else if (target) label = `${decodeURIComponent(target[1])} 업무`;
     else if (note) label = name || '업데이트 안내';
+    else if (team) label = name ? `${name} 팀 공간` : '팀 공간';
     else if (path.startsWith('/admin')) label = '관리';
   }
   return label ? `${label} - ${APP_NAME}` : APP_NAME;

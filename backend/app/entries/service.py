@@ -395,6 +395,7 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
         raise HTTPException(status_code=409, detail="entry_trashed")
     actor = system_actor or user.employee_id
     admin = True if system_actor is not None else access.is_admin(user)
+    access_changed = False   # 74
     if patch.get("version") != entry.version:
         raise HTTPException(status_code=409, detail="version_conflict")
     if patch.get("no_hull") and patch.get("hulls"):
@@ -451,9 +452,12 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
         if entry.status != "draft":
             # 확정 자료의 공개 단계는 set_access(감사 ENTRY_ACCESS)로만 바꾼다
             raise HTTPException(status_code=422, detail="use_access_endpoint")
-        if patch["access"] != access.access_of(entry):
-            access.ensure_can_manage_access(user, entry, patch["access"])
-            _apply_access(entry, patch["access"])
+        team_id = (access.resolve_team(db, user, entry, patch.get("team_id"))
+                   if patch["access"] == "team" else None)   # 74
+        if patch["access"] != access.access_of(entry) or team_id != entry.team_id:
+            access.ensure_can_manage_access(user, entry, patch["access"], team_id)
+            _apply_access(entry, patch["access"], team_id)
+            access_changed = True
     db.flush()
     # 20 — 제목 초안 따라가기: [형식대로 다시 만들기](title_auto), 또는 초안 제목이 초안 그대로이고 값이 바뀌었을 때
     title_kept = "title" not in patch or (patch["title"] or "").strip() == old_title
@@ -477,6 +481,9 @@ def update_entry(db: Session, storage: StoragePaths, entry: models.Entry, user: 
         _write_meta_or_queue(db, storage, entry)
     else:
         db.commit()
+        if access_changed:   # 74 — 초안의 공개 범위도 재구축 원천(registry.json)에 남긴다(과제 엑셀 초안은 번호가 그대로라 되살아난다)
+            from ..ops.registry import write_registry
+            write_registry(db, storage)
     return entry
 
 
@@ -551,6 +558,8 @@ def _check_confirmer(db: Session, user: models.User, entry: models.Entry) -> mod
     if entry.uploaded_by and entry.uploaded_by == user.employee_id:
         return batch
     if access.is_draft_assignee(user, entry, db):   # 68 결정 1 — 사번이 연결된 담당자도 확정
+        return batch
+    if access.is_team_member(user, entry, db):   # 74 — 팀 초안은 팀원 누구나 확정
         return batch
     if access.is_admin(user) and batch and batch.received_at <= datetime.now() - timedelta(days=ADMIN_TAKEOVER_DAYS):
         return batch
@@ -686,6 +695,9 @@ def confirm(db: Session, storage: StoragePaths, entry: models.Entry, user: model
         if target is None or target.status != "confirmed" or not access.can_view_entry(user, target, db=db):
             raise HTTPException(status_code=409, detail="target_not_confirmed")
         if not access.can_edit_entry(user, target):
+            raise HTTPException(status_code=403, detail="not_uploader")
+        # 74 — 팀 자료로 합치면 파일이 팀 안으로 숨는다. 원본 초안의 주인(올린 사람, 같은 팀 팀원, LV3)만
+        if access.access_of(target) == "team" and not access.can_own_entry(user, entry):
             raise HTTPException(status_code=403, detail="not_uploader")
         target = _lock(db, target)
         if target.status != "confirmed":
@@ -1187,7 +1199,7 @@ def split(db: Session, entry: models.Entry, user: models.User, file_ids: list[in
         raise HTTPException(status_code=422, detail="file_not_in_entry")
     new = models.Entry(title=entry.title, status="draft", batch_id=entry.batch_id, uploaded_by=entry.uploaded_by,
                        hull_evidence=entry.hull_evidence, merge_into_id=entry.merge_into_id,
-                       access=access.access_of(entry), no_hull=bool(entry.no_hull),
+                       access=access.access_of(entry), team_id=entry.team_id, no_hull=bool(entry.no_hull),
                        title_source=entry.title_source)
     db.add(new)
     db.flush()
@@ -1258,14 +1270,19 @@ def move_file(db: Session, f: models.File, target: models.Entry, user: models.Us
 
 # ---- 13·15: 공개 단계·열람 허락 ----
 
-def _apply_access(entry: models.Entry, value) -> None:
-    if value not in models.ENTRY_ACCESS:
+def _apply_access(entry: models.Entry, value, team_id: int | None = None) -> None:
+    """공개 단계 넣기. 74 — 'team' 이면 team_id 가 반드시 있고, 다른 단계면 team_id 를 비운다."""
+    if value not in models.ENTRY_ACCESS or (value == "team" and team_id is None):
         raise HTTPException(status_code=422, detail="invalid_access")
     entry.access = value
+    entry.team_id = team_id if value == "team" else None
 
 
 def access_snapshot(entry: models.Entry) -> dict:
-    return {"access": access.access_of(entry)}
+    out = {"access": access.access_of(entry)}
+    if out["access"] == "team":   # 74 — 감사 기록에 팀 이름
+        out["team"] = access.team_name(entry)
+    return out
 
 
 def _after_access_change(db: Session, storage: StoragePaths, entry: models.Entry) -> None:
@@ -1278,16 +1295,18 @@ def _after_access_change(db: Session, storage: StoragePaths, entry: models.Entry
 
 
 def set_access(db: Session, storage: StoragePaths, entry: models.Entry, user: models.User, value: str,
-               version: int | None = None, ip: str | None = None) -> models.Entry:
-    """공개 단계 바꾸기 — 공유↔일반은 올린 사람 + LV3, 블록 지정·해제는 LV3 만. 감사 ENTRY_ACCESS(before/after)."""
+               version: int | None = None, ip: str | None = None, team_id: int | None = None) -> models.Entry:
+    """공개 단계 바꾸기 — 공유↔일반은 올린 사람 + LV3, 블록 지정·해제는 LV3 만. 감사 ENTRY_ACCESS(before/after).
+    74 — 'team' 은 LV3(team_id 로 아무 팀) 또는 팀원(자기 팀). 팀 자료의 팀원은 일반이나 공유로 풀 수도 있다."""
     entry = _lock(db, entry)
-    access.ensure_can_manage_access(user, entry, value)
+    team_id = access.resolve_team(db, user, entry, team_id) if value == "team" else None
+    access.ensure_can_manage_access(user, entry, value, team_id)
     if entry.status == "trashed":
         raise HTTPException(status_code=409, detail="entry_trashed")
     if version is not None and version != entry.version:
         raise HTTPException(status_code=409, detail="version_conflict")
     before = access_snapshot(entry)
-    _apply_access(entry, value)
+    _apply_access(entry, value, team_id)
     after = access_snapshot(entry)
     if after == before:
         db.rollback()

@@ -36,7 +36,8 @@ class EntryPatch(BaseModel):
     target: str | None = Field(default=None, max_length=100)   # 38 — 대상 구조물(빈 값 = 지움)
     tags: list[str] | None = None
     merge_into_id: str | None = None
-    access: str | None = Field(default=None, pattern="^(shared|normal|blocked)$")   # 15 — 초안에서만
+    access: str | None = Field(default=None, pattern="^(shared|normal|blocked|team)$")   # 15 — 초안에서만
+    team_id: int | None = None   # 74 — access='team' 일 때 팀(LV3 만 고른다, 팀원은 자기 팀)
     no_hull: bool | None = None       # 20 — '호선 없음(공용)'
     title_auto: bool | None = None
     task: dict | None = None   # 68 — 과제 정보(통째로, entries/tasks.clean 이 칸과 Category 를 검사)
@@ -44,8 +45,9 @@ class EntryPatch(BaseModel):
 
 
 class AccessBody(BaseModel):
-    """15 — 공개 단계: 공유(LV1 이상) · 일반(LV2 이상) · 블록(LV3 만)."""
-    access: str = Field(pattern="^(shared|normal|blocked)$")
+    """15 — 공개 단계: 공유(LV1 이상) · 일반(LV2 이상) · 블록(LV3 만). 74 — 팀(그 팀원과 LV3)."""
+    access: str = Field(pattern="^(shared|normal|blocked|team)$")
+    team_id: int | None = None   # 74 — 'team' 일 때(LV3 만 고른다, 팀원은 비워 두면 자기 팀)
     version: int | None = None
 
 
@@ -129,7 +131,8 @@ class BulkClassifyBody(BaseModel):
     assignees_remove: list[int] = []
     no_hull: bool | None = None
     # 57 — 공개 범위(공유·일반·블록). 바꾸는 규칙은 한 건씩과 같다(set_access: 공유↔일반은 올린 사람+LV3, 블록은 LV3)
-    access: Literal["shared", "normal", "blocked"] | None = None
+    access: Literal["shared", "normal", "blocked", "team"] | None = None
+    team_id: int | None = None   # 74 — access='team' 일 때
     dry_run: bool = False
 
 
@@ -248,7 +251,7 @@ def put_access(entry_id: str, body: AccessBody, request: Request, db: Session = 
                storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
     """공개 단계 바꾸기 — 공유↔일반은 올린 사람 + LV3, 블록 지정·해제는 LV3 만(아니면 403). 감사 ENTRY_ACCESS."""
     e = service.set_access(db, storage, _entry(db, entry_id, user), user, body.access, body.version,
-                           client_ip(request))
+                           client_ip(request), team_id=body.team_id)
     return _detail(db, storage, e, user)
 
 

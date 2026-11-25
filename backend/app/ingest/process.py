@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import and_, case, or_
 from sqlalchemy.orm import Session
 
-from .. import audit, models
+from .. import access, audit, models
 from ..entries import naming
 from ..entries.files import remove_empty_dirs
 from ..convert.job import enqueue_convert, set_signature
@@ -17,7 +17,7 @@ from ..uploads import hint
 from . import duplicates
 from .hashing import sha256_of
 from .proposal import FileInfo, propose
-from .rules import classify, is_excluded, safe_ext
+from .rules import CAESAR_TARGET, classify, is_caesar, is_excluded, safe_ext
 
 MAX_REL_PATH = 1024  # models.File.rel_path 컬럼 길이
 MAX_NAME = 255       # models.File.name 컬럼 길이
@@ -275,6 +275,11 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
     if chosen is None and from_wb and batch.target_entry_id is None:
         chosen = _wb_preset(db, batch)
     hinted: dict[str, str] = {}
+    # 74 결정 9 — 팀원이 올린 묶음의 초안은 처음부터 팀 자료(재구축 뒤 다시 정리할 때도 같다)
+    new_access, new_team = access.default_access(db, batch.uploader)
+    term = (db.query(models.Tag).filter_by(kind="target", value=CAESAR_TARGET, alias_of_id=None)
+            .filter(models.Tag.listed.is_(True)).first())
+    caesar_term = term.value if term is not None else None
     for p in propose(infos, known, single=from_wb, hints=_wb_hints(batch) if from_wb else None,
                      split_top=bool(batch.split_top), whole=bool(batch.whole)):
         # 20 — 호선을 알면 제목 초안을 형식(`3496 · 구별자`)으로, 모르면 예전처럼 폴더/파일 이름. 구역·대상은
@@ -284,7 +289,8 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
                              hull_evidence=p.hull_candidates, merge_into_id=batch.target_entry_id,
                              # Targeted upload proposals are temporary. Only their uploader/admin
                              # may see them until files inherit the selected Entry's visibility.
-                             access="blocked" if batch.target_entry_id is not None else "normal",
+                             access="blocked" if batch.target_entry_id is not None else new_access,
+                             team_id=None if batch.target_entry_id is not None else new_team,
                              title_source=p.source or None)
         db.add(entry)
         db.flush()
@@ -299,6 +305,11 @@ def process_batch(db: Session, storage: StoragePaths, batch: models.Batch, progr
             if found:
                 _apply_preset(db, entry, found)
                 hinted[entry.entry_id] = found["from_entry"]
+        if batch.target_entry_id is None and caesar_term and not (chosen or {}).get("target") and any(
+                is_caesar(rows[k].name) for k in p.file_keys):
+            from ..entries.service import target_of
+            if not target_of(db, entry):   # 74 결정 10 — CAESAR 입력이 든 초안은 대상 '배관'(사람이 고른 대상은 그대로)
+                _apply_preset(db, entry, {"target": caesar_term})
         if batch.target_entry_id is None:
             entry.suggested_entry_id = _find_similar(db, p.best_hull, entry.title)
         for key in p.file_keys:

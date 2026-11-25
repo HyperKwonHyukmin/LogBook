@@ -1,3 +1,4 @@
+import * as L from './levels.js';
 import {
   ACCESS_OPTIONS, accessLabel, accessOf, assignableLevels, canWriteLevel, canWriteShared, isAdminLevel, levelName,
   levelOf,
@@ -33,10 +34,26 @@ test('고를 수 있는 등급 — LV3 만, 자기 자신·WorkBench 관리자·
 });
 
 test('공개 단계 — 일반은 배지 없음, 옛 값은 일반', () => {
-  expect(ACCESS_OPTIONS.map((o) => o.value)).toEqual(['shared', 'normal', 'blocked']);
+  expect(ACCESS_OPTIONS.map((o) => o.value)).toEqual(['shared', 'normal', 'blocked', 'team']);   // 74 — 팀 전용
   expect(accessLabel({ access: 'normal' })).toBeNull();
   expect(accessLabel({ access: 'shared' })).toBe('공유');
   expect(accessLabel({ access: 'blocked', label: '블록' })).toBe('블록');
   expect(accessOf({ access: 'public' })).toBe('normal');
   expect(accessLabel({ access: 'private' })).toBeNull();
+});
+
+
+test('74 — 팀 전용 값: 고르기 칸 문자열과 서버 본문, 고를 수 있는 팀, 배지 문구', () => {
+  const team = { id: 3, name: '배관해석' };
+  expect(L.accessValue({ access: 'team', team })).toBe('team:3');
+  expect(L.accessValue({ access: 'normal' })).toBe('normal');
+  expect(L.parseAccess('team:3')).toEqual({ access: 'team', team_id: 3 });
+  expect(L.parseAccess('shared')).toEqual({ access: 'shared' });
+  expect(L.teamChoices({ level: 1, team }, [], null)).toEqual([team]);
+  expect(L.teamChoices({ level: 2, team: null }, [], null)).toEqual([]);
+  expect(L.teamChoices({ level: 3 }, [team, { id: 4, name: '다른팀' }], null)).toHaveLength(2);
+  // 지금 자료가 다른 팀이면 그 팀도 보인다(보이기만 — 서버가 옮기기를 막는다)
+  expect(L.teamChoices({ level: 1, team }, [], { team: { id: 9, name: '다른팀' } }).map((t) => t.id)).toEqual([3, 9]);
+  expect(L.accessLabel({ access: 'team', team })).toBe('팀 전용: 배관해석');
+  expect(L.accessOf({ access: 'team' })).toBe('team');
 });

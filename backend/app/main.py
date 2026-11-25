@@ -29,6 +29,7 @@ from .routers import update_notes as update_notes_router
 from .routers import inbox as inbox_router
 from .routers import targets as targets_router
 from .routers import news as news_router
+from .routers import teams as teams_router
 from .spa import mount_spa
 from .vocab import safe_seed
 from .wb_targets import safe_seed as safe_seed_wb_rules
@@ -146,6 +147,8 @@ def create_app(frontend_dist: Path | None | object = _USE_DEFAULT) -> FastAPI:
     app.include_router(admin_ops.router)
     app.include_router(admin_cleanup.router)   # 20 — 자료 정비(필수 분류·제목 형식)
     app.include_router(admin_stats.router)     # 57 — 자료 현황·자료 목록(LV3)
+    app.include_router(teams_router.router)    # 74 — 팀 관리(LV3)
+    app.include_router(teams_router.space_router)   # 74 — 팀 공간(팀원과 LV3)
     # 18 — WorkBench 연동: 서버 간 API(/api/integration/*) + 자동 로그인(/sso, SPA 보다 먼저)
     app.include_router(integration.router)
     app.include_router(integration.sso_router)

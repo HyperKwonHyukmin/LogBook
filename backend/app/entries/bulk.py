@@ -17,6 +17,9 @@ REASONS = {
     "version_conflict": "다른 사람이 막 고침",
     "has_hulls": "호선이 있어 공용으로 바꾸지 않음",
     "level3_required": "블록 공개 범위는 관리자만",
+    "team_member_required": "팀 공개 범위는 그 팀원과 관리자만",   # 74
+    "team_required": "팀을 골라야 함",
+    "team_not_found": "없는 팀",
 }
 
 
@@ -79,7 +82,8 @@ def bulk_classify(db: Session, storage: StoragePaths, user: models.User, entry_i
     changed, same, failed = [], [], []
     for eid in ids:
         e = db.query(models.Entry).filter_by(entry_id=eid).first()
-        title = e.title if e is not None else ""
+        # 볼 수 없는 자료의 제목은 실패 목록에도 싣지 않는다(존재 자체를 숨김, 74 검토)
+        title = e.title if e is not None and access.can_view_entry(user, e, db=db) else ""
         try:
             if e is None or e.status not in LIVE or not access.can_view_entry(user, e, db=db):
                 raise HTTPException(status_code=404, detail="entry_not_found")
@@ -87,17 +91,20 @@ def bulk_classify(db: Session, storage: StoragePaths, user: models.User, entry_i
             patch = _patch_for(db, e, ops)
             # 57 — 공개 범위는 update_entry 가 아니라 set_access(감사 ENTRY_ACCESS)로 바꾼다
             new_access = ops.get("access")
-            access_change = bool(new_access) and new_access != access.access_of(e)
+            # 74 — 팀으로 옮기기는 팀까지 같아야 '같음'
+            new_team = access.resolve_team(db, user, e, ops.get("team_id")) if new_access == "team" else None
+            access_change = bool(new_access) and (new_access != access.access_of(e) or new_team != e.team_id)
             if not patch and not access_change:
                 same.append(eid)
                 continue
             if access_change:
-                access.ensure_can_manage_access(user, e, new_access)
+                access.ensure_can_manage_access(user, e, new_access, new_team)
             if not dry_run:
                 if patch:
                     e = service.update_entry(db, storage, e, user, {**patch, "version": e.version}, ip)
                 if access_change:
-                    service.set_access(db, storage, e, user, new_access, e.version, ip)   # 감사 기록이 커밋한다
+                    service.set_access(db, storage, e, user, new_access, e.version, ip,
+                                       team_id=new_team)   # 감사 기록이 커밋한다
             changed.append(eid)
         except HTTPException as exc:
             db.rollback()

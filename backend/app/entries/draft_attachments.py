@@ -141,6 +141,7 @@ def release_batch(db, user, entry_id, key, storage=None):
     for child in children:
         child.merge_into_id = None
         child.access = access.access_of(target)
+        child.team_id = target.team_id if child.access == "team" else None   # 74
         child.version += 1
     if children:
         batch.state = "processed"

@@ -1,4 +1,4 @@
-import{at as e,ct as t,ht as n,lt as r,ot as i}from"./index-BQKUZXhc.js";import{D as a,F as o,G as s,I as c,M as l,P as u,R as d,V as f,W as p,X as m,Y as ee,_ as h,at as g,b as te,c as _,d as v,f as y,g as ne,h as re,i as ie,it as b,k as ae,l as x,nt as S,o as oe,p as se,q as ce,s as le,st as C,t as ue,tt as w,u as de,y as T,z as fe}from"./OrbitControls-C2KlVucn.js";var E={name:`CopyShader`,uniforms:{tDiffuse:{value:null},opacity:{value:1}},vertexShader:`
+import{at as e,ct as t,ht as n,lt as r,ot as i}from"./index-BBo0iDCZ.js";import{D as a,F as o,G as s,I as c,M as l,P as u,R as d,V as f,W as p,X as m,Y as ee,_ as h,at as g,b as te,c as _,d as v,f as y,g as ne,h as re,i as ie,it as b,k as ae,l as x,nt as S,o as oe,p as se,q as ce,s as le,st as C,t as ue,tt as w,u as de,y as T,z as fe}from"./OrbitControls-C2KlVucn.js";var E={name:`CopyShader`,uniforms:{tDiffuse:{value:null},opacity:{value:1}},vertexShader:`
 
 		varying vec2 vUv;
 

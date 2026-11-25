@@ -61,6 +61,9 @@ export const ACCESS_OPTIONS = [
     help: 'LV2 이상: 구조시스템연구실과 관리자, 작성자, 열람을 허락받은 사람이 봅니다.' },
   { value: 'blocked', label: '블록', who: 'LV3만',
     help: 'LV3만: 관리자와 작성자, 관리자가 허락한 사람만 봅니다. 관리자만 지정하고 풉니다.' },
+  // 74 — 팀 공간. 팀원과 관리자만 보고, 팀원 누구나 고치고 확정한다. 고르기 칸에는 팀마다 한 줄(teamOptionText)
+  { value: 'team', label: '팀 전용', who: '팀원과 LV3',
+    help: '팀원과 관리자, 열람을 허락받은 사람만 봅니다. 팀원 누구나 고치고 확정합니다. 다른 화면에서도 팀 밖 사람에게는 보이지 않습니다.' },
 ];
 
 /** 고르기 칸 아래 한 줄 — 등급이 높을수록 아래 범위도 본다(2026-11-20 사용자 확인). */
@@ -69,12 +72,35 @@ export const ACCESS_LADDER = '등급이 높을수록 더 넓게 봅니다: LV1 �
 /** 고르기 칸에 보이는 글자 — '일반 (LV2 이상)'. 배지는 짧게 label 만 쓴다. */
 export const accessOptionText = (o) => `${o.label} (${o.who})`;
 
-export const accessOf = (item) => (item?.access === 'shared' || item?.access === 'blocked' ? item.access : 'normal');
+export const accessOf = (item) => (['shared', 'blocked', 'team'].includes(item?.access) ? item.access : 'normal');
+
+// ---- 74 팀 전용 ----
+// 고르기 칸 값은 문자열 하나다 — 팀은 'team:<팀 번호>', 나머지는 단계 이름. 서버 본문은 parseAccess 로 {access, team_id}.
+
+/** 자료의 지금 값(고르기 칸용). */
+export const accessValue = (item) => (accessOf(item) === 'team' && item?.team?.id != null ? `team:${item.team.id}` : accessOf(item));
+
+/** 고르기 칸 값 → 서버 본문 조각. */
+export function parseAccess(v) {
+  const m = /^team:(\d+)$/.exec(String(v || ''));
+  return m ? { access: 'team', team_id: Number(m[1]) } : { access: v };
+}
+
+/** '팀 전용: 배관해석 (팀원과 LV3)' */
+export const teamOptionText = (team) => `팀 전용: ${team.name} (팀원과 LV3)`;
+
+/** 고를 수 있는 팀 — 관리자는 모든 팀(teams), 팀원은 자기 팀, 지금 자료가 다른 팀이면 그 팀도(보이기만). */
+export function teamChoices(user, teams, item) {
+  const out = isAdminLevel(user) ? [...(teams || [])] : (user?.team ? [user.team] : []);
+  if (item?.team?.id != null && !out.some((t) => t.id === item.team.id)) out.push(item.team);
+  return out;
+}
 
 /** 배지 문구 — 공유·블록만(일반은 기본이라 표시하지 않는다). */
 export function accessLabel(item) {
   const a = accessOf(item);
   if (a === 'normal') return null;
+  if (a === 'team' && item?.team?.name) return `팀 전용: ${item.team.name}`;   // 74
   return item?.label || ACCESS_OPTIONS.find((o) => o.value === a).label;
 }
 
@@ -90,4 +116,17 @@ export const LEVEL_ERRORS = {
   cannot_change_self: '자기 자신의 등급은 바꿀 수 없습니다.',
   invalid_level: '알 수 없는 등급입니다.',
   last_level3: '마지막 관리자(LV3)입니다. 다른 사람을 먼저 LV3 로 지정하세요.',
+  // 74 — 팀 공간
+  team_member_required: '팀 전용은 그 팀원과 관리자만 지정합니다. 다른 팀으로는 옮길 수 없습니다.',
+  team_required: '팀 전용으로 둘 팀을 고르세요.',
+  team_not_found: '없는 팀입니다. 화면을 새로 고쳐 주세요.',
+  team_name_required: '팀 이름을 적으세요.',
+  team_name_too_long: '팀 이름은 50자까지입니다.',
+  team_name_taken: '같은 이름의 팀이 이미 있습니다.',
+  team_has_entries: '팀 자료가 남아 있어 지울 수 없습니다. 자료의 공개 범위를 먼저 바꾸세요.',
+  member_empty: '넣을 사람의 사번을 적으세요.',
+  member_too_many: '한 번에 200명까지 넣습니다.',
+  member_user_inactive: 'WorkBench 에서 활성 사용자가 아니라 넣을 수 없습니다.',
+  member_in_other_team: '이미 다른 팀에 속한 사람입니다. 한 사람은 한 팀에만 들어갑니다. 먼저 그 팀에서 빼세요.',
+  member_not_found: '이 팀의 팀원이 아닙니다.',
 };

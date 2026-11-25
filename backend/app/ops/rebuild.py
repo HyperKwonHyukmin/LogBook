@@ -163,7 +163,10 @@ def _restore_entry(db: Session, storage: StoragePaths, data: dict, *, status: st
     """entry.json 하나로 Entry·호선·태그·파일 행을 만든다. 디스크에 없는 파일도 행은 만들고 센다."""
     entry_id = data["entry_id"]
     acc = access_value(data.get("access"), data.get("private_min_role"))
-    e = models.Entry(access=acc,
+    team_id = _team_id(db, data.get("team")) if acc == "team" else None   # 74
+    if acc == "team" and team_id is None:
+        acc = "blocked"   # 팀 이름이 없으면 LV3 만 보게(새지 않는 쪽으로) — registry 가 있으면 뒤에서 바로잡는다
+    e = models.Entry(access=acc, team_id=team_id,
         id=int(entry_id[1:]), entry_id=entry_id, title=(data.get("title") or "")[:200],
         description=data.get("description"),   # 42 — 옛 entry.json 의 analysis_type 은 읽지 않는다
         # 53 — 결론·주의점·검토 서명(없으면 NULL — 53 이전 entry.json)
@@ -239,6 +242,44 @@ def _restore_entry(db: Session, storage: StoragePaths, data: dict, *, status: st
     return e, files, missing
 
 
+def _team_id(db: Session, name, create: bool = True) -> int | None:
+    """74 — 이름으로 팀 id(없으면 이름만으로 만든다 — 설명과 팀원은 _restore_teams 가 채운다)."""
+    name = str(name or "").strip()[:50]
+    if not name:
+        return None
+    t = db.query(models.Team).filter_by(name=name).first()
+    if t is None and create:
+        t = models.Team(name=name, created_by="system")
+        db.add(t)
+        db.flush()
+    return t.id if t is not None else None
+
+
+def _restore_teams(db: Session, registry: dict) -> tuple[int, int]:
+    """74 — registry.json 의 팀과 팀원. 같은 사번이 두 팀에 있으면 먼저 나온 팀만(한 사람 한 팀)."""
+    n_teams = n_members = 0
+    seen: set[str] = {e for (e,) in db.query(models.TeamMember.employee_id)}
+    for t in registry.get("teams") or []:
+        tid = _team_id(db, t.get("name"))
+        if tid is None:
+            continue
+        row = db.get(models.Team, tid)
+        row.description = (t.get("description") or None) and str(t["description"])[:200]
+        row.created_by = t.get("created_by") or row.created_by
+        row.created_at = _dt(t.get("created_at")) or row.created_at
+        n_teams += 1
+        for m in t.get("members") or []:
+            who = str(m.get("employee_id") or "").strip().upper()
+            if not who or who in seen:
+                continue
+            seen.add(who)
+            db.add(models.TeamMember(team_id=tid, employee_id=who, added_by=m.get("added_by"),
+                                     added_at=_dt(m.get("added_at")) or models._now()))
+            n_members += 1
+    db.flush()
+    return n_teams, n_members
+
+
 def _restore_access(db: Session, registry: dict) -> tuple[int, int]:
     """13·15 — registry.json 의 공개 단계(공유·블록)·열람 허락을 Entry 에 입힌다(entry.json 보다 registry 를 믿는다 —
     둘 다 바뀔 때마다 쓰지만, entry.json 은 휴지통·초안에 없을 수 있다). 없는 Entry 는 건너뛴다."""
@@ -250,6 +291,9 @@ def _restore_access(db: Session, registry: dict) -> tuple[int, int]:
             continue
         e = db.get(models.Entry, pk)
         e.access = access_value(a["access"], a.get("private_min_role"))
+        e.team_id = _team_id(db, a.get("team")) if e.access == "team" else None   # 74
+        if e.access == "team" and e.team_id is None:
+            e.access = "blocked"   # 팀을 모르면 LV3 만(새지 않는 쪽)
         n_access += 1
     seen: set[tuple[int, str]] = set()
     for g in registry.get("grants") or []:
@@ -565,6 +609,7 @@ def rebuild(db: Session, storage: StoragePaths, *, force: bool = False) -> dict:
 
     # 68 — 과제 엑셀 초안(정해진 번호)을 먼저 되살려야 registry 의 공개 범위, 열람 허락, 의견이 그 초안에도 입혀진다(Codex 검토)
     result["staging_batches"], result["jobs"] = _restore_staging(db, storage)
+    result["teams"], result["team_members"] = _restore_teams(db, registry)   # 74 — 공개 범위보다 먼저
     result["access_entries"], result["grants"] = _restore_access(db, registry)
     result["alias_tags"] = _restore_aliases(db, registry)
     result["vocab_terms"] = _restore_vocab(db, registry)

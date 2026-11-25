@@ -207,8 +207,9 @@ def _lock_review(db: Session, key: str) -> models.Batch:
 def _make_draft(db: Session, batch: models.Batch, p: dict) -> models.Entry:
     from .service import set_tags
 
+    acc, team_id = access.default_access(db, batch.uploader)   # 74 결정 9
     e = models.Entry(title=(p["name"] or f"과제 {p['no']}")[:200], status="draft", batch_id=batch.id,
-                     uploaded_by=batch.uploader, access="normal")
+                     uploaded_by=batch.uploader, access=acc, team_id=team_id)
     db.add(e)
     db.flush()
     e.entry_id = f"E{e.id:06d}"
@@ -379,8 +380,9 @@ def restore_import(db: Session, batch: models.Batch, data: dict) -> int:
             continue
         sp = db.begin_nested()
         try:
+            acc, team_id = access.default_access(db, data.get("by"))   # 74 — registry 가 뒤에서 바로잡는다
             e = models.Entry(id=int(eid[1:]), entry_id=eid, title=str(rec.get("title") or eid)[:200], status="draft",
-                             batch_id=batch.id, uploaded_by=data.get("by"), access="normal")
+                             batch_id=batch.id, uploaded_by=data.get("by"), access=acc, team_id=team_id)
             db.add(e)
             db.flush()
             for i, h in enumerate(rec.get("hulls") or []):

@@ -137,6 +137,7 @@ def draft_rows(db: Session, user, *, scope: str = "mine", who: str = "all", stat
     me = user.employee_id
     mine_assigned = {i for (i,) in db.execute(access._draft_assignee_ids(me).where(models.EntryAssignee.entry_id.in_(ids)))}
     admin = access.is_admin(user)
+    my_team = access.team_id_of(db, user)   # 74 — 팀 초안은 팀원 누구나 고치고 확정한다
     takeover = datetime.now() - timedelta(days=ADMIN_TAKEOVER_DAYS)
     # 합치기 대상은 보는 사람이 볼 수 있을 때만 있는 것으로 친다(상세 응답 merge_into 와 같다 — 볼 수 없으면 숨긴다)
     merge_seen = access.visible_entry_pks(db, user, {e.merge_into_id for e, _b in pairs if e.merge_into_id})
@@ -156,6 +157,7 @@ def draft_rows(db: Session, user, *, scope: str = "mine", who: str = "all", stat
                                  title=e.title, blocked=bool(blocked), wire=wire)
         uploader = bool(e.uploaded_by and e.uploaded_by == me)
         assigned = e.id in mine_assigned
+        team_member = my_team is not None and access.access_of(e) == "team" and e.team_id == my_team
         can_write = access.can_write(user)
         rows.append({
             "entry_id": e.entry_id, "title": e.title, "state": st, "reason": reason,
@@ -164,10 +166,10 @@ def draft_rows(db: Session, user, *, scope: str = "mine", who: str = "all", stat
             "file_count": len(fs), "merge_into": merge_into, "uploaded_by": e.uploaded_by,
             "batch": {"key": b.key, "name": b.original_name, "state": b.state, "source": b.source,
                       "uploader": b.uploader, "received_at": b.received_at.isoformat() if b.received_at else None},
-            "can_edit": can_write and (admin or uploader or assigned),
+            "can_edit": can_write and (admin or uploader or assigned or team_member),
             # 확정 권한(service._check_confirmer 와 같은 규칙)
-            "can_confirm": can_write and (uploader or assigned or (admin and b.received_at is not None
-                                                                    and b.received_at <= takeover)),
+            "can_confirm": can_write and (uploader or assigned or team_member
+                                          or (admin and b.received_at is not None and b.received_at <= takeover)),
         })
     counts = {s: 0 for s in STATES}
     for r in rows:

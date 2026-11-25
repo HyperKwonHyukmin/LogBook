@@ -14,8 +14,9 @@ import { MODEL_CONVERT_LABELS, draftChecks, modelConvertState, needsLiftingWire 
 import Spinner from '../ui/Spinner.jsx';
 import { EntryLink, SameModelChips } from '../preview/SameModel.jsx';
 import { changedFields, editErrors, editValues, patchBody } from '../../lib/entryEdit.js';
-import { ACCESS_OPTIONS, AccessSelect } from '../access/AccessPanel.jsx';
-import { ACCESS_LADDER, accessOf, isAdminLevel } from '../../lib/levels.js';
+import { AccessSelect, accessHelp } from '../access/AccessPanel.jsx';
+import { ACCESS_LADDER, accessOf, accessValue, isAdminLevel, parseAccess } from '../../lib/levels.js';
+import { useTeamChoices } from '../../lib/teams.js';
 import { AuthContext } from '../../auth/AuthContext.jsx';
 import { DuplicateTargets } from './DuplicateBlocked.jsx';
 import DraftAttachments from './DraftAttachments.jsx';
@@ -60,6 +61,7 @@ const DraftCard = forwardRef(function DraftCard({ entry, siblings, canEdit, onCh
   const [error, setError] = useState('');
   const [dup, setDup] = useState(null); // 17 — 확정 409 duplicate_model 의 대상 목록(오류가 아니라 안내로 보인다)
   const canForce = isAdminLevel(useContext(AuthContext)?.user);
+  const teams = useTeamChoices(entry);   // 74 — 공개 범위 '팀 전용' 줄
   const [busy, setBusy] = useState(false); // 저장·확정·버리기·나누기 등 동작 중
   const [discarding, setDiscarding] = useState(false); // 버리기를 확인한 뒤(서버가 끝나기 전에도 카드를 숨긴다)
   const toast = useToast();
@@ -210,7 +212,7 @@ const DraftCard = forwardRef(function DraftCard({ entry, siblings, canEdit, onCh
     setBusy(true);
     return enqueue(async () => {
       try {
-        const res = await api(`/entries/${entry.entry_id}`, { method: 'PATCH', body: { version: versionRef.current, access: value } });
+        const res = await api(`/entries/${entry.entry_id}`, { method: 'PATCH', body: { version: versionRef.current, ...parseAccess(value) } });
         takeVersion(res);
         setError('');
         onChanged();
@@ -510,10 +512,10 @@ const DraftCard = forwardRef(function DraftCard({ entry, siblings, canEdit, onCh
         {!entry.merge_into && (
           <div className="flex min-w-0 flex-col gap-1 text-meta font-medium text-n-600">
             <span>공개 범위</span>
-            <AccessSelect value={accessOf(entry)} disabled={disabled || (accessOf(entry) === 'blocked' && !entry.can_block)}
-                          canBlock={!!entry.can_block} onChange={patchAccess} />
+            <AccessSelect value={accessValue(entry)} disabled={disabled || (accessOf(entry) === 'blocked' && !entry.can_block)}
+                          canBlock={!!entry.can_block} teams={teams} onChange={patchAccess} />
             <span className="font-normal text-n-500">
-              {ACCESS_OPTIONS.find((o) => o.value === accessOf(entry)).help}
+              {accessHelp(accessValue(entry), teams)}
             </span>
             <span className="font-normal text-n-500">{ACCESS_LADDER}</span>
           </div>

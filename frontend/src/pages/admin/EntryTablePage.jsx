@@ -10,11 +10,15 @@ import BulkClassifyDialog, { bulkDoneText } from '../../components/search/BulkCl
 import VocabInput from '../../components/ui/VocabInput.jsx';
 import AssigneeInput from '../../components/people/AssigneeInput.jsx';
 import { errorText } from '../../lib/labels.js';
+import { parseAccess, teamOptionText } from '../../lib/levels.js';
+import { useTeamChoices } from '../../lib/teams.js';
 
 const th = 'sticky top-0 z-[1] h-9 border-b border-n-200 bg-n-50 px-2 text-left text-meta font-medium text-n-600 whitespace-nowrap';
 const td = 'border-b border-n-200 px-2 py-1.5 align-top text-ui';
 const PAGE = 200;
-const ACCESS = { shared: '공유', normal: '일반', blocked: '블록' };
+const ACCESS = { shared: '공유', normal: '일반', blocked: '블록', team: '팀 전용' };
+// 74 — 줄의 공개 범위 값(팀이면 'team:<번호>', 고르기 칸과 같은 값)
+const rowAccess = (r) => (r.access === 'team' && r.team_id != null ? `team:${r.team_id}` : r.access);
 // 빠진 칸 거르개 — 공용(호선 없음) 표시가 있으면 호선이 없어도 빠진 것이 아니다
 const MISSING = [
   { id: 'zones', label: '구역 없음', test: (r) => !r.zones.length },
@@ -36,7 +40,7 @@ function realChanges(row, edit) {
   if ('zones' in edit && !sameList(edit.zones, row.zones)) out.zones = edit.zones;
   if ('target' in edit && (edit.target || null) !== (row.target || null)) out.target = edit.target || null;
   if ('assignees' in edit && !sameList(personKeys(edit.assignees), personKeys(row.assignees))) out.assignees = edit.assignees;
-  if ('access' in edit && edit.access !== row.access) out.access = edit.access;
+  if ('access' in edit && edit.access !== rowAccess(row)) out.access = edit.access;
   return out;
 }
 
@@ -48,13 +52,13 @@ async function saveRow(row, ch) {
   if ('target' in ch) patch.target = ch.target || '';   // 빈 값 = 대상 지우기
   if ('assignees' in ch) patch.assignees = ch.assignees.map(personRef);
   const accessViaPatch = 'access' in ch && row.status === 'draft';   // 초안의 공개 범위는 PATCH 로(15)
-  if (accessViaPatch) patch.access = ch.access;
+  if (accessViaPatch) Object.assign(patch, parseAccess(ch.access));
   if (Object.keys(patch).length) {
     const d = await api(`/entries/${row.entry_id}`, { method: 'PATCH', body: { ...patch, version } });
     version = d.version;
   }
   if ('access' in ch && !accessViaPatch) {
-    await api(`/entries/${row.entry_id}/access`, { method: 'PUT', body: { access: ch.access, version } });
+    await api(`/entries/${row.entry_id}/access`, { method: 'PUT', body: { ...parseAccess(ch.access), version } });
   }
 }
 
@@ -99,7 +103,9 @@ export default function EntryTablePage() {
     setEdits((cur) => ({ ...cur, [id]: { ...cur[id], [field]: v } }));
     setRowErrors((cur) => { if (!cur[id]) return cur; const n = { ...cur }; delete n[id]; return n; });
   };
-  const val = (r, field) => (edits[r.entry_id] && field in edits[r.entry_id] ? edits[r.entry_id][field] : r[field]);
+  const val = (r, field) => (edits[r.entry_id] && field in edits[r.entry_id] ? edits[r.entry_id][field]
+    : field === 'access' ? rowAccess(r) : r[field]);
+  const teams = useTeamChoices();   // 74 — 관리자: 모든 팀
 
   // 저장하지 않은 변경이 있으면 창을 닫거나 새로 고칠 때 묻는다
   useEffect(() => {
@@ -246,7 +252,11 @@ export default function EntryTablePage() {
                     <select aria-label={`${r.entry_id} 공개 범위`} value={val(r, 'access')} disabled={saving}
                             onChange={(e) => edit(r.entry_id, 'access')(e.target.value)}
                             className={selectClass('h-7 w-auto text-meta')}>
-                      {Object.entries(ACCESS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      {Object.entries(ACCESS).filter(([k]) => k !== 'team').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      {teams.map((t) => <option key={t.id} value={`team:${t.id}`}>{teamOptionText(t)}</option>)}
+                      {r.access === 'team' && !teams.some((t) => t.id === r.team_id) && (
+                        <option value={rowAccess(r)}>팀 전용{r.team ? `: ${r.team}` : ''}</option>
+                      )}
                     </select>
                   </td>
                   <td className={`${td} whitespace-nowrap text-meta text-n-700`}>

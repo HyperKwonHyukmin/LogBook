@@ -88,6 +88,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("entries", "caveats", "TEXT NULL"),
     ("entries", "reviewed_by", "VARCHAR(20) NULL"),
     ("entries", "reviewed_at", "DATETIME NULL"),
+    ("entries", "team_id", "INT NULL"),               # 74 — 팀 자료의 팀
 )
 # 기존 표에 더하는 색인 (표, 색인 이름, 열들). 이름은 SQLAlchemy index=True 가 새 표에 만드는 이름과 같게 둔다.
 ADDED_INDEXES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
@@ -96,6 +97,7 @@ ADDED_INDEXES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("files", "ix_files_removed_from_id", ("removed_from_id",)),                  # 37 — 자료에서 뺀 파일
     ("batches", "ix_batches_wb_analysis_id", ("wb_analysis_id",)),               # 39 — 'WB #123' 검색
     ("hulls", "ix_hulls_series_lead", ("series_lead",)),                         # 45 — 시리즈 호선
+    ("entries", "ix_entries_team_id", ("team_id",)),                             # 74 — 팀 자료
 )
 
 

@@ -25,6 +25,9 @@ export const ACTION_LABELS = {
   // 15 — WorkBench 사용자 첫 로그인·LogBook 등급
   USER_JOIN: '처음 들어옴(LV1)', USER_LEVEL: '등급 변경',
   ENTRY_ACCESS: '공개 범위 변경',
+  // 74 — 팀 공간
+  TEAM_CREATE: '팀 만들기', TEAM_UPDATE: '팀 이름과 설명 변경', TEAM_DELETE: '팀 지우기',
+  TEAM_MEMBER_ADD: '팀원 넣기', TEAM_MEMBER_REMOVE: '팀원 빼기',
   // 14 — 판 정리
   ENTRY_REVISIONS: '판 정리',
   // 17 — 완전 동일 BDF

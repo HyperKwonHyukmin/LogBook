@@ -123,10 +123,11 @@ function detailLines(r) {
 }
 
 // 15 — 공유·일반·블록. 13 이전 기록(public/private)도 읽는다
-const ACCESS_TEXT = { shared: '공유', normal: '일반', blocked: '블록', public: '공개(옛 기록)' };
+const ACCESS_TEXT = { shared: '공유', normal: '일반', blocked: '블록', team: '팀 전용', public: '공개(옛 기록)' };
 function accessText(v) {
   if (!v) return '일반';
   if (v.access === 'private') return v.private_min_role === 'admin' ? '비공개 · 관리자 이상(옛 기록)' : '비공개(옛 기록)';
+  if (v.access === 'team' && v.team) return `팀 전용(${v.team})`;   // 74
   return ACCESS_TEXT[v.access] || '일반';
 }
 

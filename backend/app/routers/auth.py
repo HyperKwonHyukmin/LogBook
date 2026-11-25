@@ -86,7 +86,7 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db),
         raise HTTPException(status_code=403, detail="employee_id_login_disabled")
     user = admit(db, storage, _normalize(body.employee_id), client_ip(request))
     token = sessions.create(db, user.employee_id, hours=settings.session_hours)
-    return {"token": token, "user": user_to_dict(user)}
+    return {"token": token, "user": _user_out(db, user)}
 
 
 @router.get("/options")
@@ -156,7 +156,7 @@ def login_windows(request: Request, employee_id: str | None = Query(default=None
         raise HTTPException(status_code=exc.status, detail=exc.reason, headers=exc.headers)
     token = sessions.create(db, user.employee_id, hours=settings.session_hours)
     headers = {"WWW-Authenticate": f"Negotiate {out_token}"} if out_token else {}
-    return JSONResponse({"token": token, "user": user_to_dict(user)}, headers=login_page.HEADERS | headers)
+    return JSONResponse({"token": token, "user": _user_out(db, user)}, headers=login_page.HEADERS | headers)
 
 
 @page_router.get("/auth/windows", include_in_schema=False)
@@ -190,6 +190,13 @@ def logout(request: Request, db: Session = Depends(get_db),
     return {"ok": True}
 
 
+def _user_out(db: Session, user: models.User) -> dict:
+    """로그인 사용자 응답 — 74: 내 팀 {id, name}(공개 범위 '팀' 고르기, 없으면 None)."""
+    from .. import teams
+
+    return user_to_dict(user) | {"team": teams.team_brief_of(db, user)}
+
+
 @router.get("/me")
-def me(user: models.User = Depends(require_auth)):
-    return user_to_dict(user)
+def me(user: models.User = Depends(require_auth), db: Session = Depends(get_db)):
+    return _user_out(db, user)

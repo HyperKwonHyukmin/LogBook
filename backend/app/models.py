@@ -33,7 +33,8 @@ USER_ROLES = ("guest", "member", "viewer_all", "admin", "master")
 # 15 — LogBook 등급 LV1(게스트)·LV2(일반)·LV3(관리자). 판단은 access.py 한 곳
 USER_LEVELS = (1, 2, 3)
 # 15 — 자료 공개 단계: 공유(LV1 이상) · 일반(LV2 이상, 기본) · 블록(LV3 만). 옛 13 값(public/private)은 이전 대상
-ENTRY_ACCESS = ("shared", "normal", "blocked")
+# 74 — 팀(그 팀원과 LV3 만, Entry.team_id 와 함께). 판단은 access.py 한 곳
+ENTRY_ACCESS = ("shared", "normal", "blocked", "team")
 LEGACY_ENTRY_ACCESS = ("public", "private")
 PRIVATE_MIN_ROLES = ("viewer_all", "admin")
 
@@ -169,8 +170,36 @@ class Entry(Base):
     no_hull = Column(Boolean, nullable=False, default=False, server_default=sa_text("0"))
     # 20 — 제목 초안의 원천(올라온 폴더 이름 또는 확장자 뗀 파일 이름). 20 이전 자료는 NULL — 파일 경로로 추정한다
     title_source = Column(String(255), nullable=True)
+    # 74 — 공개 단계가 'team' 일 때 그 팀(teams.id). 다른 단계면 늘 NULL(service._apply_access 가 맞춘다).
+    # 기존 DB 에는 database.ensure_columns 가 FK 없이 더한다(팀은 자료가 0건일 때만 지운다)
+    team_id = Column(Integer, nullable=True, index=True)
     created_at = Column(DateTime, nullable=False, default=_now)
     updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
+
+
+class Team(Base):
+    """74 — 팀 공간. 팀 자료(Entry.access='team')는 그 팀원과 LV3 만 본다. 팀원 명단은 LV3 만 고친다.
+    registry.json(teams)에 남겨 재구축 뒤에도 되살린다(이름으로 찾는다)."""
+
+    __tablename__ = "teams"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50), unique=True, nullable=False)
+    description = Column(String(200), nullable=True)
+    created_by = Column(String(20), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=_now)
+
+
+class TeamMember(Base):
+    """74 — 팀원. 한 사람은 한 팀에만(employee_id 고유). 사번은 대문자로 남긴다."""
+
+    __tablename__ = "team_members"
+
+    id = Column(Integer, primary_key=True)
+    team_id = Column(Integer, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True)
+    employee_id = Column(String(20), unique=True, nullable=False)
+    added_by = Column(String(20), nullable=True)
+    added_at = Column(DateTime, nullable=False, default=_now)
 
 
 class EntryGrant(Base):

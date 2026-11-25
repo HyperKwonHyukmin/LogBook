@@ -90,14 +90,14 @@ def ensure_wires(db: Session, storage: StoragePaths, f: models.File) -> dict | N
 # ---- 권상 참조 열람 범위 (2026-11-06 사용자 결정) ----
 # 권상 Wire 배치는 다른 Unit 의 권상을 잡을 때 참고하는 사내 실적이라, 레벨(LV1 포함)과 무관하게 확정된 Wire 모델을
 # 모두 보여 준다. 소유자·관리자가 일부러 '차단(blocked)' 한 자료만 빼되, 원래 볼 수 있던 사람(올린 사람·허락받은 사람·LV3)은
-# 그대로 본다. 이 범위는 이 모듈의 목록·상세·결과에만 쓴다 — 자료 화면·파일 받기의 권한(access.*)은 바꾸지 않는다.
+# 그대로 본다. 74 — 팀 자료도 블록처럼 뺀다(그 팀원과 LV3 는 원래 규칙으로 본다). 이 범위는 이 모듈의 목록·상세·결과에만 쓴다 — 자료 화면·파일 받기의 권한(access.*)은 바꾸지 않는다.
 
 def reference_visible_filter(user):
     """SQL 조건 — 권상 참조로 이 사용자에게 보일 Entry. 사용자 없음(비활성 등)은 아무것도 안 보인다."""
     if user is None:
         return false()
     E = models.Entry
-    return or_(access.visible_entries_filter(user), E.access.is_(None), E.access != "blocked")
+    return or_(access.visible_entries_filter(user), E.access.is_(None), E.access.notin_(access.CLOSED_ACCESS))
 
 
 def reference_visible(db: Session, user, f: models.File) -> bool:
@@ -107,7 +107,7 @@ def reference_visible(db: Session, user, f: models.File) -> bool:
     e = db.get(models.Entry, f.entry_id)
     if e is None:
         return False
-    return access.access_of(e) != "blocked" or access.can_view_entry(user, e, db=db)
+    return access.access_of(e) not in access.CLOSED_ACCESS or access.can_view_entry(user, e, db=db)
 
 
 def _candidate_ids(db: Session, user, q: str | None, hull: str | None) -> list[tuple[int, int]]:

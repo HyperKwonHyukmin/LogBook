@@ -22,8 +22,8 @@ from ..storage.paths import StoragePaths, to_long
 log = logging.getLogger(__name__)
 REGISTRY_FILE = "registry.json"
 EMPTY = {"version": 1, "users": [], "hulls": [], "tags": [], "vocab": [], "entry_access": [], "grants": [],
-         "wb_target_rules": [], "comments": []}
-LIST_KEYS = ("users", "hulls", "tags", "vocab", "entry_access", "grants", "wb_target_rules", "comments")
+         "wb_target_rules": [], "comments": [], "teams": []}
+LIST_KEYS = ("users", "hulls", "tags", "vocab", "entry_access", "grants", "wb_target_rules", "comments", "teams")
 _write_lock = threading.Lock()
 
 
@@ -59,10 +59,21 @@ def build_registry(db: Session) -> dict:
                                                   models.Tag.kind != "atype")
              .order_by(models.Tag.kind, models.Tag.sort_order, models.Tag.value)]
     # 15 — 일반이 아닌 Entry(공유·블록 — 일반은 기본값이라 적지 않는다)와 열람 허락
+    # 74 — 팀 자료는 팀 이름까지(재구축 때 이름으로 팀을 찾는다)
+    team_names = {t.id: t.name for t in db.query(models.Team)}
     entry_access = [{"entry_id": eid, "access": acc}
-                    for eid, acc in db.query(models.Entry.entry_id, models.Entry.access)
-                    .filter(models.Entry.access.in_(("shared", "blocked")), models.Entry.entry_id.isnot(None))
+                    | ({"team": team_names.get(tid)} if acc == "team" else {})
+                    for eid, acc, tid in db.query(models.Entry.entry_id, models.Entry.access, models.Entry.team_id)
+                    .filter(models.Entry.access.in_(("shared", "blocked", "team")), models.Entry.entry_id.isnot(None))
                     .order_by(models.Entry.entry_id)]
+    members: dict[int, list] = {}
+    for m in db.query(models.TeamMember).order_by(models.TeamMember.employee_id):
+        members.setdefault(m.team_id, []).append(
+            {"employee_id": m.employee_id, "added_by": m.added_by,
+             "added_at": m.added_at.isoformat() if m.added_at else None})
+    teams = [{"name": t.name, "description": t.description, "created_by": t.created_by,
+              "created_at": t.created_at.isoformat() if t.created_at else None, "members": members.get(t.id, [])}
+             for t in db.query(models.Team).order_by(models.Team.name)]
     grants = [{"entry_id": eid, "employee_id": g.employee_id, "granted_by": g.granted_by,
                "granted_at": g.granted_at.isoformat() if g.granted_at else None}
               for g, eid in db.query(models.EntryGrant, models.Entry.entry_id)
@@ -76,7 +87,8 @@ def build_registry(db: Session) -> dict:
     return {"version": 1, "written_at": datetime.now().replace(microsecond=0).isoformat(),
             "users": users, "hulls": hulls, "tags": tags, "vocab": vocab,
             "entry_access": entry_access, "grants": grants, "wb_target_rules": wb_rules,
-            "comments": comment_rows(db)}   # 63 — 자료 의견과 이슈(사람이 남긴 지식)
+            "comments": comment_rows(db),   # 63 — 자료 의견과 이슈(사람이 남긴 지식)
+            "teams": teams}                 # 74 — 팀과 팀원
 
 
 def write_registry(db: Session, storage: StoragePaths) -> bool:

@@ -37,6 +37,14 @@ ABAQUS_EXTS = (".inp",)
 # 실제 .fem 으로 확인 — 요소 59,547개, 경고 없음). Nastran 으로 돌지 않으므로 .inp 처럼 보기 전용(kind other)
 OPTISTRUCT_EXTS = (".fem",)
 VIEWER_EXTS = ABAQUS_EXTS + OPTISTRUCT_EXTS
+# 74 결정 10 — CAESAR II 배관 응력해석 입력(.c2 신형, ._A 구형). 이 파일이 든 초안은 누가 올리든 대상 기본값이 '배관'
+# (분류 목록에 그 용어가 있을 때만). kind 는 other 그대로(보관만, 미리보기 없음). 결과와 보조 파일은 판정에 쓰지 않는다
+CAESAR_EXTS = (".c2", "._a")
+CAESAR_TARGET = "배관"
+
+
+def is_caesar(name: str) -> bool:
+    return os.path.splitext(name or "")[1].lower() in CAESAR_EXTS
 
 
 def _ext(name: str) -> str:
