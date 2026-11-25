@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowUpRight, X } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { sortForPreview } from '../../lib/files.js';
+import { markSeen } from '../../lib/news.js';
 import { errorText, formatBytes, formatDateTime } from '../../lib/labels.js';
 import FilePreview, { FileActions } from '../preview/FilePreview.jsx';
 import { buttonClass } from '../ui/Button.jsx';
@@ -24,7 +25,11 @@ export default function EntryPreviewPanel({ entryId, fileId, onClose, width, pan
   useEffect(() => {
     const id = ++idRef.current;
     setEntry(null); setError('');
-    api(`/entries/${encodeURIComponent(entryId)}`).then((e) => { if (id === idRef.current) setEntry(e); })
+    api(`/entries/${encodeURIComponent(entryId)}`).then((e) => {
+      if (id !== idRef.current) return;
+      setEntry(e);
+      if (e.is_new) markSeen(e.entry_id);   // 72 — 미리보기로 열어 본 것도 확인
+    })
       .catch((err) => { if (id === idRef.current) setError(errorText(err, '자료를 불러오지 못했습니다.')); });
   }, [entryId]);
   useEffect(() => { setPicked(fileId || null); }, [entryId, fileId]);

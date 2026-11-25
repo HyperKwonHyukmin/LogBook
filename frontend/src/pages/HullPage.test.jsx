@@ -92,12 +92,14 @@ const PLM = { status: 'found', ship_type_raw: '174K-LNG', capacity: '174K', ship
 
 test('[선박 정보 검색] — PLM 값으로 선종과 선박 정보 줄을 채운다', async () => {
   renderAt('/h/9999', { 'GET /api/hulls/9999': HULL,
-    'POST /api/hulls/9999/plm': { hull_no: '9999', ship_type: '174K LNG', memo: null, plm: PLM } });
+    'POST /api/hulls/9999/plm': { hull_no: '9999', ship_type: '174K LNG', memo: null,
+      plm: { ...PLM, ship_class2: 'KR', owner: 'A.P.MOLLER' } } });
   await userEvent.click(await screen.findByRole('button', { name: '선박 정보 검색' }));
   expect(await screen.findByText('174K LNG')).toBeInTheDocument();
   const line = screen.getByLabelText('PLM 선박 정보');
   expect(line).toHaveTextContent('G70ME-C10.5-GA-EGRBP');
-  expect(line).toHaveTextContent('BV');
+  expect(line).toHaveTextContent('선급BV, KR');   // 이중 선급(2026-11-25)
+  expect(line).toHaveTextContent('선주A.P.MOLLER');
   expect(line).toHaveTextContent('2025-02-28');
   expect(line).not.toHaveTextContent('미인도');
 });
@@ -114,7 +116,8 @@ test('호선 목록 [선종 채우기(PLM)] — 한 번에 조회하고 목록�
   const fetch = (() => {
     const rows = () => (n === 0
       ? [{ hull_no: '9999', ship_type: null, plm_status: null, entries: 2, last_at: '2026-09-05T00:00:00' }]
-      : [{ hull_no: '9999', ship_type: '174K LNG', plm_status: 'found', entries: 2, last_at: '2026-09-05T00:00:00' }]);
+      : [{ hull_no: '9999', ship_type: '174K LNG', plm_status: 'found', entries: 2, last_at: '2026-09-05T00:00:00',
+        owner: 'HMM', ship_class: 'KR', ship_class2: null }]);
     return { 'GET /api/hulls?q=': rows,
       'POST /api/hulls/plm-fill': () => { n += 1; return { checked: 1, found: 1, not_found: 0, filled: 1 }; } };
   })();
@@ -123,6 +126,9 @@ test('호선 목록 [선종 채우기(PLM)] — 한 번에 조회하고 목록�
   expect(btn).toHaveTextContent('1');   // 선종이 빈 호선 수
   await userEvent.click(btn);
   expect(await screen.findByText('174K LNG')).toBeInTheDocument();
+  // 선주, 선급 열(2026-11-25)
+  const row = screen.getByText('174K LNG').closest('[role="row"]');
+  expect(within(row).getAllByRole('cell').map((c) => c.textContent).slice(1, 4)).toEqual(['174K LNG', 'HMM', 'KR']);
 });
 
 test('45 — 같은 시리즈 호선 줄: 다른 호선은 링크, 자기는 굵게', async () => {

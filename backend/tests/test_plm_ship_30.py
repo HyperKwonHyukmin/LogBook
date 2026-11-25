@@ -78,7 +78,8 @@ def test_lookup_found_shape(plm):
     assert r.status == "found" and plm["calls"] == [["3370"]]
     assert r.ship == {"shipNo": "3370", "shipType": "174K-LNG", "capacity": "174K", "shipKind": "LNG", "variant": None,
                       "label": "174K LNG", "mainEngine": "G70ME-C10.5-GA-EGRBP", "shipClass": "BV",
-                      "deliveryDate": "2025-02-28", "delivered": True, "seriesLead": None, "seriesSeq": None}
+                      "deliveryDate": "2025-02-28", "delivered": True, "seriesLead": None, "seriesSeq": None,
+                      "shipClass2": None, "owner": None}
 
 
 def test_lookup_empty_delivery_and_statuses(plm):
@@ -129,6 +130,7 @@ def test_hull_plm_button_fills_and_audits(client, db, storage, make_user, make_e
     assert body["ship_type"] == "174K LNG"
     assert body["plm"] == {"status": "found", "ship_type_raw": "174K-LNG", "capacity": "174K", "ship_kind": "LNG",
                            "variant": None, "main_engine": "G70ME-C10.5-GA-EGRBP", "ship_class": "BV",
+                           "ship_class2": None, "owner": None,
                            "delivery_date": "2025-02-28", "delivered": True, "checked_at": body["plm"]["checked_at"]}
     d = client.get("/api/hulls/3370", headers=h).json()
     assert d["ship_type"] == "174K LNG" and d["plm"]["main_engine"] == "G70ME-C10.5-GA-EGRBP"
@@ -291,6 +293,32 @@ def test_cli_plm_fill(db, storage, make_entry_file, plm):
     db.commit()
     out = io.StringIO()
     assert cli.plm_fill(db, storage, out=out) == 2 and "plm_not_configured" in out.getvalue()
+
+
+def test_refresh_fills_class2_and_owner_on_found_hulls(client, db, make_user, make_entry_file, auth_headers, plm):
+    """2026-11-25 — 선급 2 · 선주: 이미 찾은 호선도 refresh 로 다시 읽어 채운다. 사람이 적은 선종은 그대로, 목록에도 싣는다."""
+    make_user("A100001")
+    h = auth_headers("A100001")
+    make_entry_file(title="x", hulls=("3370",), name="a.pdf")
+    assert client.post("/api/hulls/plm-fill", headers=h).json()["found"] == 1
+    db.get(models.Hull, "3370").ship_type = "LNGC 직접"
+    db.commit()
+    plm["rows"]["3370"] = {**ROW_3370, "SHIP_CLASS2": "KR", "SHIP_OWNER_NAME": " A.P.MOLLER " + "X" * 200}
+    plm_ship.clear_cache()
+    assert client.post("/api/hulls/plm-fill", headers=h).json()["checked"] == 0   # 기본은 찾은 호선을 건너뛴다
+    r = client.post("/api/hulls/plm-fill?refresh=true", headers=h).json()
+    assert r["checked"] == 1 and r["found"] == 1 and r["filled"] == 0
+    db.expire_all()
+    hull = db.get(models.Hull, "3370")
+    assert hull.ship_class2 == "KR" and hull.owner.startswith("A.P.MOLLER") and len(hull.owner) == 100
+    assert hull.ship_type == "LNGC 직접"
+    row = [x for x in client.get("/api/hulls", headers=h).json() if x["hull_no"] == "3370"][0]
+    assert (row["ship_class"], row["ship_class2"], row["owner"][:10]) == ("BV", "KR", "A.P.MOLLER")
+    assert client.get("/api/hulls/3370", headers=h).json()["plm"]["owner"].startswith("A.P.MOLLER")
+    log = db.query(models.AuditLog).filter_by(action="HULL_PLM").order_by(models.AuditLog.id.desc()).first()
+    assert log.before["owner"] is None and log.after["ship_class2"] == "KR"
+    reg = registry.build_registry(db)   # 재구축 원천에도 남는다
+    assert [x for x in reg["hulls"] if x["hull_no"] == "3370"][0]["plm"]["ship_class2"] == "KR"
 
 
 # ---- CLI plm-check(접속 진단) ----

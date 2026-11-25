@@ -214,6 +214,10 @@ function EntryRow({ item, on, terms, filters, picked, onPick }) {
       <RowThumb item={item} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
+          {item.is_new && (
+            <span title="새로 확정된 자료 — 열어 보거나 [모두 확인]을 누르면 사라집니다" data-testid="new-badge"
+                  className="inline-flex h-5 shrink-0 items-center rounded-xs bg-brand px-1.5 text-micro font-semibold tracking-[0.02em] text-n-0">New</span>
+          )}
           <ContentBadge item={item} />
           {/* 2026-11-19 — 둘째 줄(호선, 구역, 대상)과 겹치는 제목 머리는 빼고 구별자만. 전체 제목은 title 로 */}
           <Link to={`/e/${item.entry_id}`} onClick={stop} title={item.title}

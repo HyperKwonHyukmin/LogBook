@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, ListChecks, SearchX, SlidersHorizontal, Star, X } from 'lucide-react';
+import { ArrowRight, BellDot, ListChecks, SearchX, SlidersHorizontal, Star, X } from 'lucide-react';
 import { api } from '../api/client.js';
 import { AuthContext } from '../auth/AuthContext.jsx';
 import BulkClassifyDialog, { bulkDoneText } from '../components/search/BulkClassifyDialog.jsx';
@@ -24,6 +24,8 @@ import {
 } from '../lib/search.js';
 import { useSearchGroupPref } from '../lib/searchGroup.js';
 import { selectClass } from '../components/ui/Field.jsx';
+import NewsSettingsDialog from '../components/news/NewsSettingsDialog.jsx';
+import { NEWS_EVENT, seenAll, useNews } from '../lib/news.js';
 
 const PAGE = 50;
 const GROUP_ROWS = 5;     // 묶음마다 처음에 보이는 행(11)
@@ -101,6 +103,20 @@ export default function SearchPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => new Set()); // 접은 묶음 번호(11)
   const [attempt, setAttempt] = useState(0); // '다시 시도' 로 같은 검색을 다시 보낸다
+  // 72 — 새 자료: 검색 위 'N건' 줄, [모두 확인], 설정. 자료를 열어 본 것으로 표시되면(NEWS_EVENT) 그 행의 New 를 바로 뗀다
+  const [news] = useNews();
+  const [newsSettings, setNewsSettings] = useState(false);
+  useEffect(() => {
+    function onNews(e) {
+      const seen = e.detail?.seen;
+      if (e.detail?.all) { setAttempt((n) => n + 1); return; }
+      if (!seen) return;
+      const off = (it) => (it.entry_id === seen && it.is_new ? { ...it, is_new: false } : it);
+      setRes((r) => r && { ...r, items: r.items?.map(off), groups: r.groups?.map((g) => ({ ...g, items: g.items?.map(off) })) });
+    }
+    window.addEventListener(NEWS_EVENT, onNews);
+    return () => window.removeEventListener(NEWS_EVENT, onNews);
+  }, []);
   // 54 — 여러 자료 고르기 → 분류 한꺼번에 바꾸기. 고른 것은 검색을 바꿔도 남는다(구역 A 로 거르고 고른 뒤 B 로 거르고 더 고르기)
   const auth = useContext(AuthContext);
   const canWrite = !!auth?.user && auth.canWrite !== false;
@@ -343,6 +359,18 @@ export default function SearchPage() {
             </div>
           )}
         </div>
+        {news?.enabled && !state.fav && (news.count > 0 || state.newOnly) && (
+          <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-n-200 bg-brand-subtle/50 px-5 py-2 text-meta text-n-700">
+            <BellDot size={14} aria-hidden="true" className="text-brand" />
+            <span>{state.newOnly ? '새 자료만 보는 중' : '새로 확정된 자료'} <span className="font-mono font-semibold text-n-900">{news.count}</span>건</span>
+            {state.newOnly
+              ? <Button variant="secondary" size="sm" onClick={() => update({ newOnly: false })}>전체 보기</Button>
+              : <Button variant="secondary" size="sm" onClick={() => update({ newOnly: true })}>새 자료만 보기</Button>}
+            {news.count > 0 && <Button variant="ghost" size="sm" onClick={() => seenAll().catch(() => {})} title="지금까지의 새 자료를 모두 본 것으로 합니다">모두 확인</Button>}
+            <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setNewsSettings(true)}>설정</Button>
+          </div>
+        )}
+        {newsSettings && <NewsSettingsDialog onClose={() => setNewsSettings(false)} />}
         {sug && !curHulls.includes(sug.hull_no) && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-n-200 bg-n-25 px-5 py-2 text-meta text-n-600">
             <span>검색어의 <span className="font-mono text-n-900">{sug.hull_no}</span> 는 호선 번호로 보입니다{!sug.known && ' (등록 안 된 번호)'}.</span>

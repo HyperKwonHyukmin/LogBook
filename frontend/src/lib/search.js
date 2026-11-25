@@ -69,13 +69,14 @@ export function readSearch(params) {
   const sort = sortsFor(fav).some((s) => s.id === params.get('sort')) ? params.get('sort') : '';
   const group = isGroup(params.get('group')) ? params.get('group') : '';
   return { q: params.get('q') || '', unit: params.get('unit') === 'file' ? 'file' : 'entry',
-           drafts: params.get('drafts') === '1', fav, filters, sort,
+           drafts: params.get('drafts') === '1', fav, filters, sort, newOnly: params.get('new') === '1',
            group, gsort: group && params.get('gsort') === 'name' ? 'name' : '' };
 }
 
-export function writeSearch({ q = '', unit = 'entry', drafts = false, fav = false, filters = {}, sort = '', group = '', gsort = '' }) {
+export function writeSearch({ q = '', unit = 'entry', drafts = false, fav = false, filters = {}, sort = '', group = '', gsort = '', newOnly = false }) {
   const p = new URLSearchParams();
   if (fav) p.set('fav', '1');   // 10 — 내 즐겨찾기만
+  if (newOnly) p.set('new', '1');   // 72 — 새 자료만
   if (q) p.set('q', q);
   if (unit === 'file') p.set('unit', 'file');
   if (drafts) p.set('drafts', '1');

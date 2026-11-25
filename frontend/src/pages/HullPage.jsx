@@ -14,7 +14,7 @@ import { ErrorNote, Page, SectionTitle } from '../components/ui/Page.jsx';
 import { Bar } from '../components/ui/Skeleton.jsx';
 import { errorText } from '../lib/labels.js';
 import { useToast } from '../components/ui/Toast.jsx';
-import { sizeClassOf } from '../components/hull/HullPlmLookup.jsx';
+import { classesOf, sizeClassOf } from '../components/hull/HullPlmLookup.jsx';
 import BackButton from '../components/ui/BackButton.jsx';
 import Distribution from '../components/ui/Distribution.jsx';
 import { profileHref } from '../lib/people.js';
@@ -36,8 +36,9 @@ function PlmLine({ plm }) {
   const delivery = `${plm.delivery_date || '—'}${plm.delivered ? '' : ' (미인도)'}`;
   const items = [
     sizeClassOf(plm) && ['크기급', sizeClassOf(plm)],
+    plm.owner && ['선주', plm.owner],
     plm.main_engine && ['주기관', plm.main_engine],
-    plm.ship_class && ['선급', plm.ship_class],
+    classesOf(plm) && ['선급', classesOf(plm)],
     ['인도', delivery],
   ].filter(Boolean);
   return (

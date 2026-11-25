@@ -24,11 +24,12 @@ def list_hulls(q: str = "", db: Session = Depends(get_db), user: models.User = D
 
 
 @router.post("/plm-fill")
-def plm_fill(request: Request, db: Session = Depends(get_db), storage: StoragePaths = Depends(get_storage),
-             user: models.User = Depends(require_auth)):
-    """30 — 호선 목록 [선종 채우기]: 찾지 못했거나 아직 안 본 호선을 PLM 에서 한 번에 조회한다(선종은 빈 것만 채운다)."""
+def plm_fill(request: Request, refresh: bool = False, db: Session = Depends(get_db),
+             storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    """30 — 호선 목록 [선종 채우기]: 찾지 못했거나 아직 안 본 호선을 PLM 에서 한 번에 조회한다(선종은 빈 것만 채운다).
+    2026-11-25 — refresh=true 면 모든 호선을 다시 읽는다(선급 2 · 선주처럼 새로 읽는 칸을 이미 찾은 호선에 채울 때, 화면 단추 없음)."""
     access.require_shared_writer(user)
-    return hull_info.fill_from_plm(db, storage, user.employee_id, ip=client_ip(request))
+    return hull_info.fill_from_plm(db, storage, user.employee_id, refresh=refresh, ip=client_ip(request))
 
 
 @router.get("/{hull_no}")

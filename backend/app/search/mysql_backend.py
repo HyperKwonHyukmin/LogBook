@@ -262,6 +262,9 @@ class MySqlSearch:
             ids = {i for (i,) in db.query(models.Entry.id).filter(models.Entry.status.in_(statuses), vis)}
         if fav_at is not None:
             ids &= set(fav_at)
+        if query.only_new:   # 72 — 새 자료만(설정을 꺼 두었으면 없음)
+            from .. import news
+            ids &= news.new_pks(db, query.user)
 
         rows = self._rows(db, ids, vocab)
         for r in rows.values():
@@ -775,6 +778,8 @@ class MySqlSearch:
     def _entry_items(self, db: Session, page: list[dict], terms: list[str], hits: list[_Hits],
                      reps: dict[int, dict] | None = None, user=None) -> list[dict]:
         ids = [r["id"] for r in page]
+        from .. import news   # 72 — 행마다 'New'
+        fresh = news.new_pks(db, user, ids) if user is not None else set()
         free: dict[int, list[str]] = defaultdict(list)
         if ids:  # 자유 태그는 페이지 전체를 한 번에 읽는다(화면에는 입력한 값 그대로)
             for eid, value in (db.query(models.EntryTag.entry_id, models.Tag.value)
@@ -835,6 +840,7 @@ class MySqlSearch:
                 # 13·15 — 공개 단계(공유·블록이면 배지). 볼 수 있는 사람에게만 실린다
                 **access.access_brief(e),
                 "no_hull": r["no_hull"],
+                "is_new": e.id in fresh,   # 72
                 # 20 — '보완 필요'(확정 BDF 자료의 빠진 필수 칸) — 고칠 수 있는 사람(올린 사람·LV3)에게만
                 "needs_fix": (missing_fields(has_bdf=r["kind_counts"].get("model", 0) > 0, hulls=r["hulls"],
                                              no_hull=r["no_hull"], zones=r["zones"], target=min(r["targets"]) if r["targets"] else None)

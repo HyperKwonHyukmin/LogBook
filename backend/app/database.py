@@ -69,6 +69,8 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("hulls", "ship_variant", "VARCHAR(60) NULL"),
     ("hulls", "main_engine", "VARCHAR(100) NULL"),
     ("hulls", "ship_class", "VARCHAR(20) NULL"),
+    ("hulls", "ship_class2", "VARCHAR(20) NULL"),  # 30 덧붙임(2026-11-25) — 선급 2 · 선주
+    ("hulls", "owner", "VARCHAR(100) NULL"),
     ("hulls", "delivery_date", "VARCHAR(10) NULL"),
     ("hulls", "delivered", "TINYINT(1) NULL"),
     ("hulls", "series_lead", "VARCHAR(8) NULL"),   # 45 — 시리즈

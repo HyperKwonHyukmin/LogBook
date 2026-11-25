@@ -6,6 +6,8 @@ import { errorText } from '../../lib/labels.js';
 
 /** 35 — 크기급 '174K급 LNG'(용량 + 선종). 규칙 밖(FPSO·함정)이면 PLM 선형 원문. */
 export const sizeClassOf = (plm) => (plm?.capacity && plm?.ship_kind ? `${plm.capacity}급 ${plm.ship_kind}` : plm?.ship_type_raw || null);
+/** 선급 1, 2 를 'BV, KR' 로(이중 선급, 2026-11-25). 둘 다 없으면 null. */
+export const classesOf = (p) => [p?.ship_class, p?.ship_class2].filter(Boolean).join(', ') || null;
 
 /**
  * 30 — 자료 수정·정리 대기 화면의 [선박 정보 검색]. 한 번 찾은 호선은 저장된 정보를 보여 주고(PLM 에 다시 묻지 않음),
@@ -61,8 +63,9 @@ function PlmRow({ hullNo, r }) {
   const p = r.plm;
   const items = [
     sizeClassOf(p) && ['크기급', sizeClassOf(p)],
+    p.owner && ['선주', p.owner],
     p.main_engine && ['주기관', p.main_engine],
-    p.ship_class && ['선급', p.ship_class],
+    classesOf(p) && ['선급', classesOf(p)],
     ['인도', `${p.delivery_date || '—'}${p.delivered ? '' : ' (미인도)'}`],
   ].filter(Boolean);
   return (

@@ -28,6 +28,7 @@ from .routers import updates as updates_router
 from .routers import update_notes as update_notes_router
 from .routers import inbox as inbox_router
 from .routers import targets as targets_router
+from .routers import news as news_router
 from .spa import mount_spa
 from .vocab import safe_seed
 from .wb_targets import safe_seed as safe_seed_wb_rules
@@ -131,6 +132,7 @@ def create_app(frontend_dist: Path | None | object = _USE_DEFAULT) -> FastAPI:
     app.include_router(favorites.router)
     app.include_router(comments_router.router)   # 63 — 자료 의견과 이슈
     app.include_router(notes_router.router)      # 64 — 나의 메모
+    app.include_router(news_router.router)       # 72 — 새 자료 표시
     app.include_router(compares.router)
     app.include_router(hulls.router)
     app.include_router(graph_router.router)   # 25 — 관계 지도

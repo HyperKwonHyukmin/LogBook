@@ -38,6 +38,9 @@ def list_hulls(db: Session, q: str = "", user=None) -> list[dict]:
     ships = {h.hull_no: h for h in db.query(models.Hull)}
     out = [{"hull_no": h, "ship_type": ships[h].ship_type if h in ships else None,
             "plm_status": ships[h].plm_status if h in ships else None,   # 30 — PLM 조회 여부(일괄 채우기 대상)
+            "owner": ships[h].owner if h in ships else None,             # 2026-11-25 — 선주 · 선급(목록 열)
+            "ship_class": ships[h].ship_class if h in ships else None,
+            "ship_class2": ships[h].ship_class2 if h in ships else None,
             "entries": n, "last_at": last.isoformat() if last else None}
            for h, n, last in rows]
     return sorted(out, key=lambda r: (r["last_at"] or "", r["hull_no"]), reverse=True)[:500]
@@ -157,7 +160,7 @@ def update_hull(db: Session, storage: StoragePaths, actor: str, hull_no: str, pa
 # ---- 30 — 사내 PLM 선박 정보 ----
 
 PLM_FIELDS = ("plm_ship_type", "ship_capacity", "ship_kind", "ship_variant", "main_engine", "ship_class",
-              "delivery_date", "delivered")
+              "delivery_date", "delivered", "ship_class2", "owner")
 
 
 def plm_of(hull: models.Hull | None) -> dict | None:
@@ -166,7 +169,8 @@ def plm_of(hull: models.Hull | None) -> dict | None:
         return None
     return {"status": hull.plm_status, "ship_type_raw": hull.plm_ship_type, "capacity": hull.ship_capacity,
             "ship_kind": hull.ship_kind, "variant": hull.ship_variant, "main_engine": hull.main_engine,
-            "ship_class": hull.ship_class, "delivery_date": hull.delivery_date,
+            "ship_class": hull.ship_class, "ship_class2": hull.ship_class2, "owner": hull.owner,
+            "delivery_date": hull.delivery_date,
             "delivered": hull.delivered, "checked_at": hull.plm_checked_at.isoformat() if hull.plm_checked_at else None}
 
 
@@ -214,6 +218,7 @@ def _apply(db: Session, hull: models.Hull, result, *, replace_ship_type: bool) -
     hull.plm_ship_type, hull.ship_capacity, hull.ship_kind, hull.ship_variant = (
         s["shipType"], s["capacity"], s["shipKind"], s["variant"])
     hull.main_engine, hull.ship_class = s["mainEngine"], s["shipClass"]
+    hull.ship_class2, hull.owner = s.get("shipClass2"), s.get("owner")   # 2026-11-25 — 선급 2 · 선주
     hull.delivery_date, hull.delivered = s["deliveryDate"], s["delivered"]
     if replace_ship_type or not hull.series_manual:
         # PLM 에 선행호선이 없으면 자기 번호 — '시리즈를 봤고 혼자'. 비어 있는 것(None)은 '아직 시리즈를 안 본 호선'만 남는다
@@ -363,16 +368,20 @@ def _known_leads(db: Session) -> set[str]:
 
 
 def fill_from_plm(db: Session, storage: StoragePaths, actor: str, *, only_unchecked: bool = False,
-                  series: bool = False, ip: str | None = None) -> dict:
+                  series: bool = False, refresh: bool = False, ip: str | None = None) -> dict:
     """호선 목록 [선종 채우기]·확정 뒤 작업·CLI — 한 번의 조회로 여러 호선을 채운다. 선종은 비어 있을 때만 채운다.
     대상: only_unchecked 면 아직 조회하지 않은 호선(자동), 아니면 찾지 못했거나 안 본 호선 + 선종이 빈 호선.
     45 — series 면 이미 찾은 호선 중 시리즈가 빈 것(사람이 고친 것 빼고)도 다시 본다(시리즈를 읽기 전에 찾은 호선).
-    PLM 장애면 PlmUnavailable·예외를 그대로 올린다(아무것도 바꾸지 않는다)."""
+    PLM 장애면 PlmUnavailable·예외를 그대로 올린다(아무것도 바꾸지 않는다).
+    2026-11-25 — refresh 면 형식에 맞는 모든 호선을 다시 읽는다(새로 읽는 PLM 칸 — 선급 2 · 선주 — 을 이미 찾은 호선에도 채울 때).
+    선종과 사람이 고친 시리즈는 그대로 둔다(replace_ship_type=False 와 같은 규칙)."""
     from . import plm_ship
 
     _ensure_confirmed_hull_rows(db)
     hulls = [h for h in db.query(models.Hull).order_by(models.Hull.hull_no) if HULL_PATTERN.fullmatch(h.hull_no)]
-    if only_unchecked:
+    if refresh:
+        pass   # 모든 호선
+    elif only_unchecked:
         # 45 — 자동 작업은 시리즈를 아직 안 본 찾은 호선(시리즈 기능 전에 찾은 호선)도 함께 — 단추 · CLI 없이 채워지게
         hulls = [h for h in hulls if h.plm_status is None or needs_series(h)]
     else:

@@ -11,8 +11,9 @@ import { inputClass } from '../components/ui/Field.jsx';
 import { ErrorNote, Page, PageHeader } from '../components/ui/Page.jsx';
 import { RowsSkeleton } from '../components/ui/Skeleton.jsx';
 import { errorText, formatDateTime } from '../lib/labels.js';
+import { classesOf } from '../components/hull/HullPlmLookup.jsx';
 
-const COLS = 'grid grid-cols-[96px_minmax(0,1fr)_80px_120px] items-center gap-3 px-3';
+const COLS = 'grid grid-cols-[96px_minmax(0,1fr)_minmax(0,1fr)_88px_64px_104px] items-center gap-3 px-3';
 
 /** 호선 목록(`/hulls`) — 확정 자료가 있는 호선, 최근 순. 번호 앞자리로 거른다. */
 export default function HullsPage() {
@@ -94,6 +95,7 @@ export default function HullsPage() {
         <div role="table" aria-label="호선 목록" className="overflow-hidden rounded-lg border border-n-200">
           <div role="row" className={`${COLS} h-9 border-b border-n-200 bg-n-50 text-meta font-medium text-n-600`}>
             <span role="columnheader">호선</span><span role="columnheader">선종</span>
+            <span role="columnheader">선주</span><span role="columnheader">선급</span>
             <span role="columnheader" className="text-right">자료</span><span role="columnheader" className="text-right">최근 확정</span>
           </div>
           {rows.length === 0 && (
@@ -107,6 +109,8 @@ export default function HullsPage() {
                       className="font-mono text-body font-medium text-brand hover:underline">{r.hull_no}</Link>
               </span>
               <span role="cell" className={`truncate ${r.ship_type ? 'text-n-700' : 'text-n-500'}`}>{r.ship_type || '—'}</span>
+              <span role="cell" title={r.owner || undefined} className={`truncate ${r.owner ? 'text-n-700' : 'text-n-500'}`}>{r.owner || '—'}</span>
+              <span role="cell" className={`truncate font-mono text-meta ${classesOf(r) ? 'text-n-700' : 'text-n-500'}`}>{classesOf(r) || '—'}</span>
               <span role="cell" className="text-right font-mono text-n-700">{r.entries}</span>
               <span role="cell" className="text-right font-mono text-meta text-n-500">{formatDateTime(r.last_at).slice(0, 10)}</span>
             </div>

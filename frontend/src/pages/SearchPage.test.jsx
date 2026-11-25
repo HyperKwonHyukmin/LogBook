@@ -46,7 +46,7 @@ test('주소로 검색하고 결과·발췌·필터 건수를 보인다', async 
   const author = screen.getByRole('group', { name: '작성자' });
   await userEvent.click(within(author).getByRole('button', { name: /작성자/ }));
   expect(author).toHaveTextContent('홍길동');
-  expect(calls(fetch)).toHaveLength(1);
+  expect(calls(fetch).filter((c) => c !== 'GET /api/me/news')).toHaveLength(1);   // 72 — 새 자료 수는 따로 묻는다
 });
 
 test('필터를 누르면 주소에 들어가고, 호선 제안으로 좁힐 수 있다', async () => {

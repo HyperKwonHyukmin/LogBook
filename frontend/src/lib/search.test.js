@@ -4,9 +4,12 @@ import {
 
 test('주소 ↔ 검색 상태', () => {
   const s = readSearch(new URLSearchParams('q=9999%20강도&hull=9999&unit=file&drafts=1&bogus=x'));
-  expect(s).toEqual({ q: '9999 강도', unit: 'file', drafts: true, fav: false, filters: { hull: ['9999'] }, sort: '', group: '', gsort: '' });
+  expect(s).toEqual({ q: '9999 강도', unit: 'file', drafts: true, fav: false, filters: { hull: ['9999'] }, sort: '', group: '', gsort: '', newOnly: false });
   expect(writeSearch(s).toString()).toBe('q=9999+%EA%B0%95%EB%8F%84&unit=file&drafts=1&hull=9999');
-  expect(readSearch(new URLSearchParams(''))).toEqual({ q: '', unit: 'entry', drafts: false, fav: false, filters: {}, sort: '', group: '', gsort: '' });
+  expect(readSearch(new URLSearchParams(''))).toEqual({ q: '', unit: 'entry', drafts: false, fav: false, filters: {}, sort: '', group: '', gsort: '', newOnly: false });
+  // 72 — 새 자료만(new=1)은 주소와 서버 질의에 그대로 간다
+  expect(readSearch(new URLSearchParams('new=1')).newOnly).toBe(true);
+  expect(writeSearch({ newOnly: true }).toString()).toBe('new=1');
 });
 
 test('API 질의는 drafts=true 와 쪽 정보를 붙인다', () => {

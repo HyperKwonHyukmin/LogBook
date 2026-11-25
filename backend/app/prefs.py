@@ -31,8 +31,41 @@ def _one_of(*allowed: str):
     return check
 
 
+def _bool(v):
+    if not isinstance(v, bool):
+        raise ValueError
+    return v
+
+
+def _str_list(max_items: int, max_len: int = 100):
+    def check(v):
+        if not isinstance(v, list) or len(v) > max_items:
+            raise ValueError
+        out = []
+        for s in v:
+            if not isinstance(s, str) or not s.strip() or len(s.strip()) > max_len:
+                raise ValueError
+            if s.strip() not in out:
+                out.append(s.strip())
+        return out
+    return check
+
+
+def _iso_time(v):
+    from datetime import datetime
+
+    if not isinstance(v, str):
+        raise ValueError
+    return datetime.fromisoformat(v).replace(microsecond=0).isoformat()
+
+
 # 열쇠 → 검사(통과하면 저장할 값을 돌려주고, 아니면 ValueError)
 PREF_KEYS = {
+    # 72 — 새 자료 표시: 켜기, 관심 대상(묶음이면 하위 포함), 관심 선종, 기준 시각([모두 확인])
+    "news.enabled": _bool,
+    "news.targets": _str_list(30),
+    "news.shipTypes": _str_list(30),
+    "news.seenAt": _iso_time,
     # 검색 미리보기 패널 폭(px). 아래 한계는 화면의 PREVIEW_MIN(360) 과 같다 — 표시할 때 화면 폭에 맞춰 다시 자른다
     "search.previewWidth": _int_range(360, 4000),
     # 11 — 검색의 '보기 기준'(묶어 보기). 묶지 않음은 값을 지운다(null). 19 — 태그별 추가(search.base.GROUP_KEYS 와 같다)

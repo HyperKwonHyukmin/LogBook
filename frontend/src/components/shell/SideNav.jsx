@@ -2,6 +2,7 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Anchor, Grid2x2Check, Inbox, Library, NotebookPen, ScanSearch, Search, Settings, Trash2 } from 'lucide-react';
 import Spinner from '../ui/Spinner.jsx';
 import { useInboxSummary } from './InboxSummary.jsx';
+import { countText, useNews } from '../../lib/news.js';
 
 // 48 — 문서 본문 검색(/reports)·분류(/browse, 태그 동의어 /tags)는 검색 화면 안에서 들어가므로 '검색' 아래에서 강조한다
 const IN_SEARCH = ['/reports', '/browse', '/tags'];
@@ -11,7 +12,7 @@ const IN_SEARCH = ['/reports', '/browse', '/tags'];
 // 한 항목뿐이던 '기록' 묶음은 '등록·정리' 로 합쳤다(메뉴 9 → 7).
 const GROUPS = [
   { label: '찾아 쓰기', items: [
-    { to: '/', label: '검색', icon: Search,
+    { to: '/', label: '검색', icon: Search, badge: 'news',   // 72 — 새 자료 수
       match: (path) => path === '/' || IN_SEARCH.some((p) => path.startsWith(p)) },
     { to: '/hulls', label: '호선', icon: Anchor, also: ['/h/'] }, // 호선 화면(/h/9999)도 '호선' 메뉴 아래
     // 69 — 업무별 모음(대상 화면 /t/Unit). 2026-11-23 사용자 결정으로 메뉴 8 → 9(호선과 같은 목적지 화면이라 탭으로 숨기면 찾지 못한다)
@@ -58,6 +59,18 @@ function InboxBadge() {
   );
 }
 
+/** 72 — '검색' 옆 새 자료 수(설정을 꺼 두었거나 0 이면 없음). */
+function NewsBadge() {
+  const [news] = useNews();
+  const n = news?.enabled ? news.count : 0;
+  if (!n) return null;
+  return (
+    <span title={`새 자료 ${n}건`} className="ml-auto min-w-5 rounded-full bg-brand px-1.5 text-center font-mono text-micro leading-5 text-n-0">
+      {countText(n)}<span className="sr-only">(새 자료 {n}건)</span>
+    </span>
+  );
+}
+
 function Item({ to, label, icon: Icon, end, also, match, pathname, search, badge }) {
   const body = (active) => (
     <>
@@ -65,6 +78,7 @@ function Item({ to, label, icon: Icon, end, also, match, pathname, search, badge
             className={`shrink-0 transition-colors duration-150 ease-out ${active ? 'text-on-navy' : 'text-on-navy-icon group-hover:text-on-navy-muted'}`} />
       {label}
       {badge === 'inbox' && <InboxBadge />}
+      {badge === 'news' && <NewsBadge />}
     </>
   );
   // 주소 질의까지 봐야 하는 메뉴(검색·즐겨찾기)는 NavLink 대신 직접 판정한다(NavLink 는 질의를 보지 않는다).

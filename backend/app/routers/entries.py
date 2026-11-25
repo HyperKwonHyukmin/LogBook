@@ -86,6 +86,8 @@ def _detail(db: Session, storage: StoragePaths, e: models.Entry, user: models.Us
     d = service.entry_to_dict(db, e, viewer=user)
     d["vault_unc"] = str(entry_dir(storage, e)) if e.status == "confirmed" and e.vault_rel else None
     d["favorite"] = bool(e.id in favorite_pks(db, user.employee_id, [e.id]))
+    from .. import news   # 72 — 화면이 열면 /api/me/news/seen 을 부른다
+    d["is_new"] = e.id in news.new_pks(db, user, [e.id])
     return d
 
 

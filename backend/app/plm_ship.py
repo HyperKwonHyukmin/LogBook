@@ -48,7 +48,8 @@ _SHIP_TYPE = re.compile(
     re.IGNORECASE,
 )
 _COLUMNS = ("SHIP_NO", "SHIP_TYPE_NAME", "MAIN_ENGINE", "SHIP_CLASS1", "RESULT_DELIVERY_DATE", "RESULT_DELIVERY_YN",
-            "SHIP_PRE", "SHIP_SEQ")   # 45 — 선행호선(시리즈 첫 호선, 첫 호선은 자기 번호) · 시리즈 순번
+            "SHIP_PRE", "SHIP_SEQ",   # 45 — 선행호선(시리즈 첫 호선, 첫 호선은 자기 번호) · 시리즈 순번
+            "SHIP_CLASS2", "SHIP_OWNER_NAME")   # 2026-11-25 — 이중 선급 · 선주 이름(PLM 에 약 40% 만 있음)
 
 
 class PlmUnavailable(Exception):
@@ -106,6 +107,7 @@ def to_ship(row: dict) -> dict:
         delivery = delivery[:10] if delivery else None
     return {"shipNo": _text(row.get("SHIP_NO")), "shipType": raw_type, **parse_ship_type(raw_type),
             "mainEngine": _text(row.get("MAIN_ENGINE")), "shipClass": _text(row.get("SHIP_CLASS1")),
+            "shipClass2": _text(row.get("SHIP_CLASS2")), "owner": (_text(row.get("SHIP_OWNER_NAME")) or "")[:100] or None,
             "deliveryDate": delivery,
             "delivered": (_text(row.get("RESULT_DELIVERY_YN")) or "").upper() == "Y",
             "seriesLead": normalize_ship_no(row.get("SHIP_PRE")),

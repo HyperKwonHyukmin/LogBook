@@ -81,7 +81,7 @@ test('기억한 보기 기준은 주소에 없어도 적용되고 주소에 적�
   renderAt('/');
   await screen.findByText('구역 없음');
   await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/?group=zone'));
-  expect(calls(fetch)).toEqual([Q_GROUP]);
+  expect(calls(fetch).filter((c) => c !== 'GET /api/me/news')).toEqual([Q_GROUP]);   // 72 — 새 자료 수는 따로 묻는다
 });
 
 test('묶음 머리를 누르면 그 값으로 거르고, 더 보기는 그 묶음만 더 받는다', async () => {

@@ -29,6 +29,7 @@ import { copyText } from '../lib/files.js';
 import { ACTION_LABELS, errorText, formatBytes, formatDateTime } from '../lib/labels.js';
 import { buildTree } from '../lib/tree.js';
 import { useEntry } from '../lib/useEntry.js';
+import { markSeen } from '../lib/news.js';
 import { useAddFilesWatch } from '../lib/useAddFilesWatch.js';
 import { useUploadSnapshot, useUploadStore } from '../components/inbox/UploadProvider.jsx';
 import { changedFields, editErrors, editValues, patchBody, sameEditable } from '../lib/entryEdit.js';
@@ -473,6 +474,8 @@ export default function EntryPage() {
   const toast = useToast();
   const [confirm, dialog] = useConfirm();
   const { entry, status, error, setError, commit, reload } = useEntry(entryId);
+  // 72 — 새 자료였으면 열어 본 것으로(검색의 New 와 메뉴 숫자에서 빠진다)
+  useEffect(() => { if (entry?.is_new) markSeen(entry.entry_id); }, [entry?.entry_id, entry?.is_new]);
   const [, setWireTick] = useState(0);   // 권상 안내 [다시 보지 않기] 뒤 다시 그리기
   const [commentCounts, setCommentCounts] = useState(null);   // 63 — 속성 칸 '의견' 줄(아래 의견 구역이 알려 준다)
   useEffect(() => { setCommentCounts(null); }, [entryId]);

@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { CircleHelp, History as HistoryIcon, LogOut, Megaphone, MessageSquare, Search, Upload, X, UserRound } from 'lucide-react';
+import { BellDot, CircleHelp, History as HistoryIcon, LogOut, Megaphone, MessageSquare, Search, Upload, X, UserRound } from 'lucide-react';
 import Button from '../ui/Button.jsx';
 import Logo from '../ui/Logo.jsx';
 import Menu from '../ui/Menu.jsx';
 import ManualPanel from './ManualPanel.jsx';
+import NewsSettingsDialog from '../news/NewsSettingsDialog.jsx';
 import { canWriteLevel, levelName, levelOf } from '../../lib/levels.js';
 import { api } from '../../api/client.js';
 import { FACET_LABELS } from '../../lib/labels.js';
@@ -55,6 +56,7 @@ export default function TopBar({ user, onLogout }) {
   const urlQ = onHome ? params.get('q') || '' : null;
   const [q, setQ] = useState(urlQ || '');
   const [manualOpen, setManualOpen] = useState(false);
+  const [newsSettings, setNewsSettings] = useState(false);   // 72
   const inputRef = useRef(null);
   const timerRef = useRef(null);
   // 타이머가 늦게 불려도 그 순간의 주소(다른 필터)를 쓰게 한다.
@@ -267,6 +269,8 @@ export default function TopBar({ user, onLogout }) {
           // 67 — 내 프로필 카드(명부에 없으면 작성한 자료만 보이는 카드)
           { label: '내 프로필', icon: UserRound, onSelect: () => navigate(`/p/${encodeURIComponent(user.employee_id)}`) },
           { label: '최근 비교', icon: HistoryIcon, onSelect: () => navigate('/compares') },
+          // 72 — 새 자료 표시 켜기와 관심 대상, 선종
+          { label: '새 자료 표시 설정', icon: BellDot, onSelect: () => setNewsSettings(true) },
           // 63 — 내 자료에 온 의견과 내 글에 달린 답글
           { label: unread ? `새 의견 ${unread > 99 ? '99+' : unread}` : '받은 의견', icon: MessageSquare, onSelect: () => navigate('/comments') },
           // 70 — 업데이트 안내(공유 주소 /update-notes/<id>), 이 브라우저에서 안 본 안내가 있으면 수를 붙인다
@@ -281,6 +285,7 @@ export default function TopBar({ user, onLogout }) {
       <ManualPanel href={manualHref(location.pathname)} section={manualSection(location.pathname)}
                    onClose={() => setManualOpen(false)} />
     )}
+    {newsSettings && <NewsSettingsDialog onClose={() => setNewsSettings(false)} />}
     </>
   );
 }

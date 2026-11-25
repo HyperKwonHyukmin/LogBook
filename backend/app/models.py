@@ -117,6 +117,8 @@ class Hull(Base):
     ship_variant = Column(String(60), nullable=True)      # 괄호 부가정보 'DF' · 'MOSS'
     main_engine = Column(String(100), nullable=True)
     ship_class = Column(String(20), nullable=True)        # SHIP_CLASS1
+    ship_class2 = Column(String(20), nullable=True)       # SHIP_CLASS2(이중 선급, 2026-11-25)
+    owner = Column(String(100), nullable=True)            # SHIP_OWNER_NAME(PLM 에 약 40% 만 있음, 2026-11-25)
     delivery_date = Column(String(10), nullable=True)     # 'YYYY-MM-DD'
     delivered = Column(Boolean, nullable=True)
     # 45 — 시리즈(같은 설계로 여러 척). PLM SHIP_PRE = 시리즈 첫 호선(첫 호선은 자기 번호). 묶음 키는 series_lead or hull_no.
@@ -510,6 +512,17 @@ class Favorite(Base):
     employee_id = Column(String(20), nullable=False, index=True)
     entry_id = Column(Integer, ForeignKey("entries.id", ondelete="CASCADE"), nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=_now)
+
+
+class EntryView(Base):
+    """72 — 새 자료 표시: 이 사용자가 이 자료를 열어 본 시각(자료 화면, 검색 미리보기). 새 자료(New)에서 그 자료만 빼는 데 쓴다.
+    [모두 확인]이면 그 사용자 행을 모두 지운다(기준 시각이 지금으로 바뀌어 필요 없다). 개인 편의 정보라 registry.json 대상이 아니다."""
+
+    __tablename__ = "entry_views"
+
+    employee_id = Column(String(20), primary_key=True)
+    entry_id = Column(Integer, ForeignKey("entries.id", ondelete="CASCADE"), primary_key=True, index=True)
+    seen_at = Column(DateTime, nullable=False, default=_now)
 
 
 class EntryNote(Base):
