@@ -43,7 +43,7 @@ function Filters({ counts, total, stateFilter, onState, q, onQ, who, onWho }) {
         <label className="relative min-w-0 flex-1">
           <span className="sr-only">초안 찾기</span>
           <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-n-500" />
-          <input type="search" value={q} onChange={(e) => onQ(e.target.value)} placeholder="제목, 호선, 자료 번호"
+          <input type="search" value={q} onChange={(e) => onQ(e.target.value)} placeholder="제목, 호선, 자료 번호, 담당자"
                  className={inputClass('w-full pl-8')} />
         </label>
         {onWho && (

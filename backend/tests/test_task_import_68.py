@@ -237,11 +237,29 @@ def test_discarded_task_draft_is_not_rebuilt(world, db, storage, client, auth_he
     with open(long_join(storage.staging / b.key, task_import.IMPORT_FILE), encoding="utf-8") as fh:
         data = json.load(fh)
     assert data["gone"] == created
-    # 같은 엑셀을 다시 넣으면 버린 초안 행은 '휴지통에 있음'으로 보이고 새로 만들지 않는다
+    # 2026-11-25 — 같은 엑셀을 다시 넣으면 버린 초안 행은 막히지 않는다: 기본 체크에서만 빠지고 고르면 새 초안을 만든다
     b2 = _batch(db, storage, key="20261123-task-0010")
     row = next(x for x in client.get("/api/batches", params={"lite": 1}, headers=h).json() if x["key"] == b2.key)["task_sheet"]["rows"][0]
-    assert row["exists"] == {"entry_id": created[0], "status": "trashed"} and not row["checked"]
-    assert row["notices"][0] == f"휴지통에 있음({created[0]}), 휴지통에서 되돌리세요"
+    assert row["exists"] is None and row["trashed"] == {"entry_id": created[0]} and not row["checked"]
+    assert row["notices"][0] == f"휴지통에 같은 과제가 있음({created[0]}), 고르면 새 초안을 만듭니다"
+    again = client.post(f"/api/batches/{b2.key}/task-drafts", json={"rows": [0]}, headers=h).json()
+    assert len(again["created"]) == 1 and again["created"] != created and not again["failed"] and not again["skipped"]
+    db.expire_all()
+    old = db.query(models.Entry).filter_by(entry_id=created[0]).one()
+    new = db.query(models.Entry).filter_by(entry_id=again["created"][0]).one()
+    assert old.status == "trashed" and db.get(models.EntryTask, old.id).task_key is None   # 휴지통 쪽은 열쇠만 내려놓는다
+    assert new.status == "draft" and db.get(models.EntryTask, new.id).task_key == row["key"]
+    with open(long_join(storage.staging / b.key, task_import.IMPORT_FILE), encoding="utf-8") as fh:
+        data = json.load(fh)
+    assert data["drafts"][0]["key_released"] is True and data["gone"] == created
+    # 휴지통의 옛 초안을 되돌려도 열쇠는 새 초안의 것 — 다시 넣으면 '이미 있음'은 새 초안을 가리킨다
+    assert client.post(f"/api/entries/{created[0]}/restore", headers=h).status_code == 200
+    b3 = _batch(db, storage, key="20261123-task-0011")
+    row3 = next(x for x in client.get("/api/batches", params={"lite": 1}, headers=h).json() if x["key"] == b3.key)["task_sheet"]["rows"][0]
+    assert row3["exists"] == {"entry_id": again["created"][0], "status": "draft"}
+    assert client.delete(f"/api/entries/{created[0]}", headers=h).status_code == 200
+    with open(long_join(storage.staging / b.key, task_import.IMPORT_FILE), encoding="utf-8") as fh:
+        data = json.load(fh)
     nb = models.Batch(key="20261123-task-0009", source="web", original_name="x", uploader=LV2, state="processed")
     db.add(nb)
     db.commit()

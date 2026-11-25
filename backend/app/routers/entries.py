@@ -234,14 +234,37 @@ def restore_entry(entry_id: str, request: Request, db: Session = Depends(get_db)
 
 
 @router.get("/trash")
-def list_trash(db: Session = Depends(get_db), user: models.User = Depends(require_auth)):
-    rows = (db.query(models.Entry).filter(models.Entry.status == "trashed", access.visible_entries_filter(user))
-            .order_by(models.Entry.updated_at.desc(), models.Entry.id.desc()).limit(200))
+def list_trash(scope: Literal["mine", "all"] = "mine", db: Session = Depends(get_db),
+               user: models.User = Depends(require_auth)):
+    """2026-11-25 — 자기가 버린 것만 보인다(LV3 은 scope=all 로 모두). 버린 사람 판단은 entries/trash_owner.py."""
+    from ..entries import trash_owner
+
+    rows = (trash_owner.trashed_query(db, user, scope)
+            .order_by(models.Entry.updated_at.desc(), models.Entry.id.desc()).limit(200).all())
+    who = trash_owner.names(db, {by for _e, by in rows})
     # 2026-11-20 — 버린 초안도 복원할 수 있다(kind='draft', 복원하면 올리기와 확정으로 돌아간다)
     return [{"entry_id": e.entry_id, "title": e.title, "trash_rel": e.trash_rel,
              "kind": "entry" if e.vault_rel else "draft",
              "restorable": bool(e.vault_rel) or service.is_restorable_draft(e), "updated_at": e.updated_at.isoformat(),
-             "can_restore": access.can_edit_entry(user, e), **access.access_brief(e)} for e in rows]
+             "can_restore": access.can_edit_entry(user, e), "can_purge": trash_owner.can_purge(user, e, by),
+             "trashed_by": by, "trashed_by_name": who.get(by or ""), **access.access_brief(e)} for e, by in rows]
+
+
+@router.delete("/trash/{entry_id}", status_code=204)
+def purge_trashed(entry_id: str, request: Request, db: Session = Depends(get_db),
+                  storage: StoragePaths = Depends(get_storage), user: models.User = Depends(require_auth)):
+    """2026-11-25 — 영구 삭제: LV3, 또는 자기가 버린 자기 자료(올린 사람, 팀 자료는 팀원). 잠금과 상태 재확인은 purge_entry."""
+    from fastapi import Response
+    from ..entries import trash_owner
+    from ..ops.purge import purge_entry
+
+    e = _entry(db, entry_id, user)
+    if e.status != "trashed":
+        raise HTTPException(status_code=409, detail="not_trashed")
+    if not trash_owner.can_purge(user, e, trash_owner.trashed_by(db, e)):
+        raise HTTPException(status_code=403, detail="not_trash_owner")
+    purge_entry(db, storage, e, user.employee_id, client_ip(request))
+    return Response(status_code=204)
 
 
 # ---- 13: 공개 범위·열람 허락 ----

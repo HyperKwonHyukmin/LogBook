@@ -94,7 +94,11 @@ def draft_rows(db: Session, user, *, scope: str = "mine", who: str = "all", stat
         like = _like(q)
         query = query.filter(or_(E.title.like(like, escape="\\"), E.entry_id == q.upper(),
                                  E.id.in_(select(models.EntryHull.entry_id)
-                                          .where(models.EntryHull.hull_no.like(like, escape="\\")))))
+                                          .where(models.EntryHull.hull_no.like(like, escape="\\"))),
+                                 # 2026-11-25 — 담당자 이름으로도 찾는다(신고: '장영재' 로 찾으면 0건)
+                                 E.id.in_(select(models.EntryAssignee.entry_id)
+                                          .join(models.Person, models.Person.id == models.EntryAssignee.person_id)
+                                          .where(models.Person.name.like(like, escape="\\")))))
     pairs = query.order_by(B.received_at.desc(), B.id.desc(), E.id).all()
     if not pairs:
         return {"rows": [], "counts": {s: 0 for s in STATES}, "total": 0}

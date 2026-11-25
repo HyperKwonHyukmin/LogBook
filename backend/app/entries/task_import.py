@@ -3,8 +3,9 @@
 묶음 상태: 워커가 과제 엑셀을 알아보면 `review`(미리보기 대기)로 두고 행 목록을 batch.preset['task_sheet'] 에 저장한다.
 [초안 만들기]는 묶음 행을 잠그고 review 일 때만 한 번(두 번 누름, 두 창 동시 요청 방지) → 만든 초안이 있으면 processed, 없으면 done.
 원본은 staging 폴더의 `_task_sheet.xlsx`, 만든 기록은 `_task_import.json`(재구축 원천 — 파일 없는 초안은 이것 없이는 재구축 때 사라진다).
-다시 넣기: 행 열쇠(과제의뢰서 NO., 없으면 '연도-#NO')가 이미 있으면(초안, 확정, 휴지통) 만들지 않는다 — entry_tasks.task_key 고유 제약이 최종으로 막는다.
-휴지통에 있는 행은 알림을 '휴지통에 있음(번호), 휴지통에서 되돌리세요'로 따로 보인다(버린 초안은 되돌리기로 살린다).
+다시 넣기: 행 열쇠(과제의뢰서 NO., 없으면 '연도-#NO')가 이미 있으면(초안, 확정) 만들지 않는다 — entry_tasks.task_key 고유 제약이 최종으로 막는다.
+휴지통에 있는 자료가 열쇠를 쥔 행은 막지 않는다(2026-11-25 사용자 지시 — 휴지통에서 되돌려야만 다시 올릴 수 있는 것이 번거롭다):
+기본 체크에서는 빠지지만 고를 수 있고, 만들면 새 초안이 열쇠를 갖고 휴지통 쪽 자료는 열쇠만 내려놓는다(그 자료는 휴지통에 그대로 남는다).
 금액, 기여도, M/H, 직책과장은 파서가 읽지 않는다.
 """
 import json
@@ -144,12 +145,14 @@ def _plan(db: Session, batch: models.Batch, viewer=None) -> list[dict]:
             category = ""
         hit = have.get(key)
         exists = None
+        trashed = None
         if hit:
             t, e = hit
-            if e.id in seen and e.status == "trashed":
-                # 버린 초안(또는 지운 자료)도 열쇠를 쥐고 있다 — 새로 만들면 휴지통에서 되돌릴 때 같은 과제가 둘이 된다(2026-11-24)
-                exists = {"entry_id": e.entry_id, "status": e.status}
-                notices.insert(0, f"휴지통에 있음({e.entry_id}), 휴지통에서 되돌리세요")
+            if e.status == "trashed":
+                # 2026-11-25 — 휴지통에 있는 과제는 막지 않는다. 고르면 새 초안을 만들고 휴지통 쪽은 열쇠를 내려놓는다(_release_trashed_key)
+                trashed = {"entry_id": e.entry_id if e.id in seen else None}
+                notices.insert(0, (f"휴지통에 같은 과제가 있음({e.entry_id})" if e.id in seen else "휴지통에 같은 과제가 있음")
+                               + ", 고르면 새 초안을 만듭니다")
             elif e.id in seen:
                 exists = {"entry_id": e.entry_id, "status": e.status}
                 changed = _changed(e, t, r, category)
@@ -160,7 +163,7 @@ def _plan(db: Session, batch: models.Batch, viewer=None) -> list[dict]:
         status = (r.get("status") or "").strip()
         out.append({
             "index": i, "no": r.get("no"), "row": r.get("row"), "name": r.get("name") or "", "status": status,
-            "key": key, "exists": exists,
+            "key": key, "exists": exists, "trashed": trashed,
             "assignee_text": r.get("assignee") or "",
             "assignees": [{"name": f["name"], "label": f.get("label"), "ref": f.get("ref")} for f in found],
             "hull": hull, "target": term.value if term is not None else None,
@@ -168,7 +171,7 @@ def _plan(db: Session, batch: models.Batch, viewer=None) -> list[dict]:
             "category": category or None, "request_no": r.get("request_no") or "",
             "task": {**{k: r.get(k) or "" for k in TASK_TEXT}, "category": category},
             "notices": notices,
-            "checked": not exists and status.replace(" ", "") in DEFAULT_STATUSES,
+            "checked": not exists and not trashed and status.replace(" ", "") in DEFAULT_STATUSES,
         })
     return out
 
@@ -202,6 +205,39 @@ def _lock_review(db: Session, key: str) -> models.Batch:
     if b.state != "review":
         raise HTTPException(status_code=409, detail="task_sheet_not_review")
     return b
+
+
+def _release_trashed_key(db: Session, storage: StoragePaths | None, key: str) -> str | None:
+    """휴지통에 있는 자료가 이 열쇠를 쥐고 있으면 내려놓게 한다(자료는 휴지통에 그대로, 되돌려도 열쇠 없는 자료다).
+    내려놓은 자료 번호. 과제 엑셀로 만든 초안이었으면 그 기록(_task_import.json)에도 적어 재구축이 열쇠를 되살리지 않게 한다."""
+    hit = (db.query(models.EntryTask, models.Entry).join(models.Entry, models.Entry.id == models.EntryTask.entry_id)
+           .filter(models.EntryTask.task_key == key, models.Entry.status == "trashed").with_for_update().first())
+    if hit is None:
+        return None
+    task, entry = hit
+    task.task_key = None
+    db.flush()
+    if storage is not None and task.source_batch:
+        _mark_key_released(storage, task.source_batch, entry.entry_id)
+    return entry.entry_id
+
+
+def _mark_key_released(storage: StoragePaths, batch_key: str, entry_id: str) -> None:
+    """기록 파일의 그 초안에 key_released 를 적는다. 실패해도 본 동작은 막지 않는다."""
+    path = long_join(storage.staging / batch_key, IMPORT_FILE)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        for rec in data.get("drafts") or []:
+            if rec.get("entry_id") == entry_id:
+                rec["key_released"] = True
+        with open(path + ".tmp", "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=1)
+        os.replace(path + ".tmp", path)
+    except FileNotFoundError:
+        return
+    except (OSError, ValueError):
+        log.warning("과제 기록 %s 에 열쇠 내려놓음(%s)을 적지 못함", batch_key, entry_id, exc_info=True)
 
 
 def _make_draft(db: Session, batch: models.Batch, p: dict) -> models.Entry:
@@ -250,15 +286,18 @@ def create_drafts(db: Session, storage: StoragePaths, key: str, user, indexes: l
     batch = _lock_review(db, key)
     if not can_create(user, batch):
         raise HTTPException(status_code=403, detail="level2_uploader_required")
-    created, failed, skipped, records = [], [], [], []
+    created, failed, skipped, records, released = [], [], [], [], []
     for p in chosen:
         if p["exists"]:
             skipped.append(p["no"])
             continue
         sp = db.begin_nested()
         try:
+            freed = _release_trashed_key(db, storage, p["key"])   # 휴지통 자료가 쥔 열쇠는 새 초안이 가져간다
             e = _make_draft(db, batch, p)
             sp.commit()
+            if freed:
+                released.append(freed)
         except IntegrityError:
             sp.rollback()
             failed.append({"no": p["no"], "reason": "이미 있음(같은 열쇠)"})
@@ -297,7 +336,7 @@ def create_drafts(db: Session, storage: StoragePaths, key: str, user, indexes: l
         db.commit()
     audit.record(db, storage, actor=user.employee_id, action="TASK_IMPORT", target_type="batch", target_id=batch.key,
                  after={"file": (batch.preset.get(SHEET_KEY) or {}).get("file"), "created": created,
-                        "failed": failed, "skipped": skipped}, ip=ip)
+                        "failed": failed, "skipped": skipped, **({"released": released} if released else {})}, ip=ip)
     return {"created": created, "failed": failed, "skipped": skipped}
 
 
@@ -369,17 +408,27 @@ def discard(db: Session, storage: StoragePaths, key: str, user, ip: str | None =
 
 def restore_import(db: Session, batch: models.Batch, data: dict) -> int:
     """재구축 — `_task_import.json` 의 초안을 다시 만든다(같은 자료 번호). 열쇠가 이미 있으면(확정 자료가 먼저 되살아났거나)
-    그 행은 건너뛴다. 만든 수."""
+    그 행은 건너뛴다. 다만 열쇠를 쥔 쪽이 휴지통 자료면 그쪽이 내려놓는다(가져오기와 같은 규칙), key_released 가 적힌
+    초안은 열쇠 없이 되살린다. 만든 수."""
     made = 0
     gone = set(data.get("gone") or [])
     for rec in data.get("drafts") or []:
         eid, key = str(rec.get("entry_id") or ""), str(rec.get("key") or "")
-        if not re.fullmatch(r"E\d{6}", eid) or not key or eid in gone:
+        if rec.get("key_released"):
+            key = None
+        elif not key:
             continue
-        if db.query(models.EntryTask.entry_id).filter_by(task_key=key).first() or db.get(models.Entry, int(eid[1:])):
+        if not re.fullmatch(r"E\d{6}", eid) or eid in gone or db.get(models.Entry, int(eid[1:])):
             continue
+        if key:
+            holder = (db.query(models.Entry.status).join(models.EntryTask, models.EntryTask.entry_id == models.Entry.id)
+                      .filter(models.EntryTask.task_key == key).first())
+            if holder is not None and holder[0] != "trashed":
+                continue
         sp = db.begin_nested()
         try:
+            if key:
+                _release_trashed_key(db, None, key)
             acc, team_id = access.default_access(db, data.get("by"))   # 74 — registry 가 뒤에서 바로잡는다
             e = models.Entry(id=int(eid[1:]), entry_id=eid, title=str(rec.get("title") or eid)[:200], status="draft",
                              batch_id=batch.id, uploaded_by=data.get("by"), access=acc, team_id=team_id)

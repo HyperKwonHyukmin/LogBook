@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { FileSpreadsheet } from 'lucide-react';
+import { FileSpreadsheet, Search } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { errorText } from '../../lib/labels.js';
 import Button from '../ui/Button.jsx';
+import { inputClass } from '../ui/Field.jsx';
 import Spinner from '../ui/Spinner.jsx';
 import { ErrorNote } from '../ui/Page.jsx';
 import { useConfirm } from '../ui/ConfirmDialog.jsx';
@@ -10,16 +11,26 @@ import { useToast } from '../ui/Toast.jsx';
 import TaskTemplateButton from './TaskTemplateButton.jsx';
 
 const defaults = (rows) => new Set(rows.filter((r) => r.checked).map((r) => r.index));
+// 찾기 — 띄어 쓴 낱말이 모두 들어 있는 행(과제 이름, 담당자, 의뢰서 NO., 호선, 대상, 상태). 대소문자와 낱말 순서는 가리지 않는다
+const haystack = (r) => [r.no, r.name, r.request_no, r.status, r.assignee_text, ...(r.assignees || []).map((a) => a.label || a.name),
+  r.hull, r.target, r.target_text, r.category].filter(Boolean).join(' ').toLowerCase();
+export const matchRows = (rows, q) => {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  return words.length ? rows.filter((r) => { const h = haystack(r); return words.every((w) => h.includes(w)); }) : rows;
+};
 
 /**
  * 68 3단계 — 과제 엑셀 묶음(review). 행마다 담당자 대조, 호선 추정, 알림(이미 있음, 명부에 없는 이름, 목록 밖 값)을 보고
  * 고른 행만 [초안 n건 만들기](LV2 이상인 올린 사람). 기본 체크는 완료, 진행 중, 자체수행이고 이미 있는 행은 고르지 못한다.
+ * 2026-11-25 — 과제 이름, 담당자로 찾아 그 행만 고를 수 있다(찾는 중의 [모두 고르기], [모두 해제]는 보이는 행에만).
+ * 휴지통에 같은 과제가 있는 행은 기본 체크에서 빠질 뿐 고를 수 있다(새 초안을 만든다).
  * 만든 뒤에는 결과(만든 수, 건너뜀, 실패)만 보인다.
  */
 export default function TaskSheetCard({ batch, onChanged }) {
   const ts = batch.task_sheet || {};
   const rows = useMemo(() => ts.rows || [], [ts.rows]);
   const [picked, setPicked] = useState(() => defaults(rows));
+  const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirm, dialog] = useConfirm();
@@ -31,19 +42,30 @@ export default function TaskSheetCard({ batch, onChanged }) {
     if (on) next.add(i); else next.delete(i);
     return next;
   });
-  const n = rows.filter((r) => picked.has(r.index) && !r.exists).length;
+  const chosen = rows.filter((r) => picked.has(r.index) && !r.exists);
+  const n = chosen.length;
+  const fromTrash = chosen.filter((r) => r.trashed).length;
+  const shown = useMemo(() => matchRows(rows, q), [rows, q]);
+  const finding = q.trim() !== '';
+  const shownFree = shown.filter((r) => !r.exists).map((r) => r.index);
+  const pickShown = (on) => setPicked((cur) => {
+    const next = new Set(cur);
+    shownFree.forEach((i) => { if (on) next.add(i); else next.delete(i); });
+    return next;
+  });
 
   async function create() {
     const ok = await confirm({
       title: `초안 ${n}건을 만들까요?`,
-      body: '파일 없는 초안이 만들어집니다. 담당자가 파일을 넣고 확정합니다. 같은 과제의뢰서 NO. 의 자료가 이미 있으면 건너뜁니다.',
+      body: `파일 없는 초안이 만들어집니다. 해석 자료는 나중에 초안에 넣고 확정하면 됩니다. 같은 과제의뢰서 NO. 의 자료가 이미 있으면 건너뜁니다.${
+        fromTrash ? ` 휴지통에 같은 과제가 있는 ${fromTrash}건도 새 초안으로 만듭니다(휴지통의 자료는 그대로 남습니다).` : ''}`,
       confirmLabel: `${n}건 만들기`, tone: 'primary',
     });
     if (!ok) return;
     setBusy(true); setError('');
     try {
       const res = await api(`/batches/${encodeURIComponent(batch.key)}/task-drafts`, {
-        method: 'POST', body: { rows: rows.filter((r) => picked.has(r.index) && !r.exists).map((r) => r.index) } });
+        method: 'POST', body: { rows: chosen.map((r) => r.index) } });
       toast.show({ tone: 'ok', message: `초안 ${res.created.length}건을 만들었습니다${res.failed.length ? `, 실패 ${res.failed.length}건` : ''}` });
       onChanged?.();
     } catch (err) { setError(errorText(err, '초안을 만들지 못했습니다.')); } finally { setBusy(false); }
@@ -90,10 +112,17 @@ export default function TaskSheetCard({ batch, onChanged }) {
             {!can && <p className="text-wait">LV2 이상인 올린 사람만 초안을 만들 수 있습니다.{!batch.uploader && " 폴더에 직접 넣은 묶음은 먼저 [내가 올렸어요]로 가져가세요."}</p>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <label className="relative w-full min-w-0 sm:w-72">
+              <span className="sr-only">과제 찾기</span>
+              <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-n-500" />
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="과제 이름, 담당자, 호선, 대상"
+                     className={inputClass('w-full pl-8')} />
+            </label>
+            {finding && <span className="text-meta text-n-600" role="status"><span className="font-mono">{shown.length}</span>행 보임</span>}
             <span className="text-meta text-n-700"><span className="font-mono">{n}</span>건 고름</span>
             <Button variant="ghost" size="sm" onClick={() => setPicked(defaults(rows))}>기본 선택으로</Button>
-            <Button variant="ghost" size="sm" onClick={() => setPicked(new Set(rows.filter((r) => !r.exists).map((r) => r.index)))}>모두 고르기</Button>
-            <Button variant="ghost" size="sm" onClick={() => setPicked(new Set())}>모두 해제</Button>
+            <Button variant="ghost" size="sm" disabled={!can} onClick={() => pickShown(true)}>{finding ? '보이는 행 고르기' : '모두 고르기'}</Button>
+            <Button variant="ghost" size="sm" disabled={!can} onClick={() => pickShown(false)}>{finding ? '보이는 행 해제' : '모두 해제'}</Button>
             <span className="flex-1" />
             {ts.can_discard && <Button variant="ghost" size="sm" disabled={busy} onClick={discard}>이 묶음 버리기</Button>}
             <Button size="sm" disabled={!can || busy || n === 0} onClick={create}>
@@ -112,7 +141,10 @@ export default function TaskSheetCard({ batch, onChanged }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {shown.length === 0 && (
+                  <tr><td colSpan={8} className="px-3 py-6 text-center text-ui text-n-600">찾는 말에 맞는 과제가 없습니다. 과제 이름이나 담당자 이름의 일부만 넣어 보세요.</td></tr>
+                )}
+                {shown.map((r) => (
                   <tr key={r.index} className={`border-t border-n-200 align-top ${r.exists ? 'text-n-500' : ''}`}>
                     <td className="px-2 py-1.5">
                       <input type="checkbox" className="h-4 w-4 accent-brand" aria-label={`NO.${r.no} 고르기`} disabled={!!r.exists || !can}

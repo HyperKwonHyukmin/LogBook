@@ -238,9 +238,14 @@ def test_trash_list_hides(world, client, auth_headers, db):
         e.status = "trashed"
         e.trash_rel = f"{e.entry_id}_20261007-000000"
     db.commit()
-    got = {x["entry_id"] for x in client.get("/api/trash", headers=auth_headers(USERS["lv2"])).json()}
-    assert got == {world["e"]["sh"]}
-    got = {x["entry_id"] for x in client.get("/api/trash", headers=auth_headers(USERS["lv3"])).json()}
+    # 2026-11-25 — 휴지통은 버린 사람의 것(trash_owner): 감사 기록이 없으면 올린 사람(OWNER)이 버린 사람이다.
+    # 볼 수 없는 자료는 그 전에 빠진다(13) — LV2 는 scope=all 이어도 자기가 버린 것만, LV3 는 scope=all 로 모두
+    got = {x["entry_id"] for x in client.get("/api/trash", params={"scope": "all"}, headers=auth_headers(USERS["lv2"])).json()}
+    assert got == set()
+    got = {x["entry_id"] for x in client.get("/api/trash", headers=auth_headers(OWNER)).json()}
+    assert got == {world["e"]["sh"], world["e"]["bl"]}   # 올린 사람은 자기 블록 자료도 본다
+    assert client.get("/api/trash", headers=auth_headers(USERS["lv3"])).json() == []
+    got = {x["entry_id"] for x in client.get("/api/trash", params={"scope": "all"}, headers=auth_headers(USERS["lv3"])).json()}
     assert got == {world["e"]["sh"], world["e"]["bl"]}
 
 

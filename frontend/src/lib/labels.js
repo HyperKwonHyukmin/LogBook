@@ -154,6 +154,7 @@ export const ERROR_LABELS = {
   not_failed: '이미 다시 시도 중이거나 끝난 작업입니다.',
   target_gone: '작업 대상 파일이 이미 영구 삭제되어 다시 시도할 수 없습니다.',
   not_trashed: '휴지통에 있는 자료가 아닙니다.',
+  not_trash_owner: '내가 버린 내 자료만 영구 삭제할 수 있습니다.',
   backup_failed: '백업하지 못했습니다.',
   admin_required: '관리자만 할 수 있습니다.',
   vocab_not_listed: '목록에 없는 값입니다. ‘기타’를 고르거나 관리자에게 용어 추가를 요청해 주세요.',

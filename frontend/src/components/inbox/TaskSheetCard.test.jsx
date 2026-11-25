@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import TaskSheetCard from './TaskSheetCard.jsx';
+import TaskSheetCard, { matchRows } from './TaskSheetCard.jsx';
 
 const row = (index, no, o = {}) => ({ index, no: String(no), row: 8 + index, name: `과제 ${no}`, status: '완료', key: `K-${no}`,
   exists: null, assignee_text: '구조가 연구원', assignees: [{ name: '구조가', label: '구조가(구조해석부, 연구원)', ref: { id: 1 } }],
@@ -30,6 +30,39 @@ test('68 — 기본 체크(완료 등), 이미 있는 행은 고르지 못하고
   await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '2건 만들기' }));
   await vi.waitFor(() => expect(onChanged).toHaveBeenCalled());
   expect(sent).toEqual([['/api/batches/B1/task-drafts', { rows: [0, 1] }]]);
+  vi.unstubAllGlobals();
+});
+
+test('과제 이름, 담당자로 찾아 그 행만 고른다. 휴지통에 같은 과제가 있는 행도 고를 수 있다', async () => {
+  const sent = [];
+  vi.stubGlobal('fetch', vi.fn((url, init = {}) => {
+    sent.push(init.body && JSON.parse(init.body));
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ created: ['E000020'], failed: [], skipped: [] }) });
+  }));
+  const b = batch();
+  b.task_sheet.rows = [row(0, 1, { name: '서비스타워 상세 검토' }),
+    row(1, 2, { name: 'Shaft Generator TMH', assignees: [{ name: '이정훈', label: '이정훈(기장설계부, 책임)', ref: { id: 2 } }], assignee_text: '이정훈 책임' }),
+    row(2, 3, { name: '골리앗 크레인', checked: false, trashed: { entry_id: 'E000262' }, notices: ['휴지통에 같은 과제가 있음(E000262), 고르면 새 초안을 만듭니다'] })];
+  render(<TaskSheetCard batch={b} onChanged={() => {}} />);
+  expect(matchRows(b.task_sheet.rows, '이정훈 shaft').map((r) => r.no)).toEqual(['2']);
+  // 휴지통 행: 기본은 안 고름, 고를 수는 있다
+  const trashRow = screen.getByRole('checkbox', { name: 'NO.3 고르기' });
+  expect(trashRow).not.toBeChecked();
+  expect(trashRow).toBeEnabled();
+  await userEvent.click(screen.getByRole('button', { name: '모두 해제' }));
+  await userEvent.type(screen.getByRole('searchbox', { name: '과제 찾기' }), '크레인');
+  expect(screen.queryByRole('checkbox', { name: 'NO.1 고르기' })).toBeNull();
+  expect(screen.getByRole('status')).toHaveTextContent('1행 보임');
+  await userEvent.click(screen.getByRole('button', { name: '보이는 행 고르기' }));
+  await userEvent.click(screen.getByRole('button', { name: '초안 1건 만들기' }));
+  const dlg = await screen.findByRole('alertdialog');
+  expect(dlg).toHaveTextContent('휴지통에 같은 과제가 있는 1건도 새 초안으로 만듭니다');
+  await userEvent.click(within(dlg).getByRole('button', { name: '1건 만들기' }));
+  await vi.waitFor(() => expect(sent).toEqual([{ rows: [2] }]));
+  // 찾는 말에 맞는 행이 없을 때
+  await userEvent.clear(screen.getByRole('searchbox', { name: '과제 찾기' }));
+  await userEvent.type(screen.getByRole('searchbox', { name: '과제 찾기' }), '없는과제');
+  expect(screen.getByText(/찾는 말에 맞는 과제가 없습니다/)).toBeInTheDocument();
   vi.unstubAllGlobals();
 });
 
