@@ -975,9 +975,13 @@ export default function EntryPage() {
                             valueHref={(v) => filterHref('zone', v)} />
                 {/* 73 — 배의 어느 구역인지 옆모습으로, 누르면 선박 지도 */}
                 {entry.zones.some(isShipZone) && (
-                  <Link to={`/ship-map?zone=${encodeURIComponent(entry.zones.find(isShipZone))}`} title="선박 지도에서 보기"
-                        className="mt-1.5 block w-full max-w-[220px] rounded-md border border-n-200 bg-n-0 px-2 py-1.5 hover:border-n-400">
+                  <Link to={`/ship-map?zone=${encodeURIComponent(entry.zones.find(isShipZone))}`}
+                        className="group mt-1.5 block w-full max-w-[240px] overflow-hidden rounded-md border border-n-200 bg-n-0 px-3 pb-1.5 pt-2.5
+                          transition-colors duration-150 ease-out hover:border-brand-ring hover:bg-brand-subtle active:bg-brand-muted">
                     <ShipSide2D zones={entry.zones} idPrefix={`entry-${entry.entry_id}`} />
+                    <span className="mt-1 flex items-center justify-end gap-0.5 text-meta text-n-500 group-hover:text-brand">
+                      선박 지도에서 보기<ChevronRight size={13} aria-hidden="true" />
+                    </span>
                   </Link>
                 )}
               </Prop>

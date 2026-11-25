@@ -8,7 +8,8 @@ import ShipMapPage from './ShipMapPage.jsx';
 const calls = vi.hoisted(() => ({ counts: null, selected: undefined }));
 vi.mock('../components/shipmap/shipScene.js', () => ({
   createShipScene: () => ({
-    setCounts: (c) => { calls.counts = c; }, select: (z) => { calls.selected = z; }, setView: () => {}, resize: () => {}, dispose: () => {},
+    setCounts: (c) => { calls.counts = c; }, select: (z) => { calls.selected = z; }, setView: () => {}, setAutoRotate: () => {},
+    resize: () => {}, dispose: () => {},
   }),
 }));
 
@@ -27,9 +28,10 @@ function renderPage(path = '/ship-map', data = DATA) {
   render(<MemoryRouter initialEntries={[path]}><ShipMapPage /></MemoryRouter>);
 }
 
-test('구역별 자료 수 표와 장면 색 재료', async () => {
+test('구역별 자료 수와 장면 색 재료, 얼마나 넓게 검토했나', async () => {
   renderPage();
   const side = await screen.findByRole('complementary', { name: '구역 자료' });
+  expect(within(side).getByText(/구역 7곳 중 2곳에 자료가 있습니다/)).toBeInTheDocument();
   expect(within(side).getByRole('button', { name: /상갑판\s*2/ })).toBeInTheDocument();
   expect(within(side).getByRole('button', { name: /위치 없는 자료\s*1/ })).toBeInTheDocument();
   await vi.waitFor(() => expect(calls.counts?.['상갑판']).toBe(2));
@@ -41,7 +43,10 @@ test('구역을 고르면 그 자료가 나오고 장면에 알린다', async ()
   await userEvent.click(within(side).getByRole('button', { name: /기관실\s*1/ }));
   expect(within(side).getByRole('link', { name: 'E000001 제목' })).toHaveAttribute('href', '/e/E000001');
   expect(within(side).queryByRole('link', { name: 'E000002 제목' })).toBeNull();
+  expect(within(side).getByText('대상 1종')).toBeInTheDocument();
   await vi.waitFor(() => expect(calls.selected).toBe('기관실'));
+  await userEvent.click(within(side).getByRole('button', { name: '구역 전체' }));
+  expect(within(side).getByRole('button', { name: /상갑판\s*2/ })).toBeInTheDocument();
 });
 
 test('주소의 선종, 구역으로 시작한다', async () => {
