@@ -12,6 +12,7 @@ const EXACT = {
   '/similar': '비슷한 모델 찾기',
   '/graph': '관계 지도',
   '/coverage': '갖춤 현황',
+  '/ship-map': '선박 지도',   // 73
   '/inbox': '올리기와 확정',
   '/browse': '분류로 찾기',
   '/tags/manage': '태그 관리',

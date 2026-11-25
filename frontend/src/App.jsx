@@ -40,8 +40,10 @@ const GraphPage = lazy(() => import('./pages/GraphPage.jsx'));
 // 26 갖춤 현황 · 27 선례 찾기 — 메뉴로만 들어오는 화면이라 따로 묶는다.
 const CoveragePage = lazy(() => import('./pages/CoveragePage.jsx'));
 const SimilarPage = lazy(() => import('./pages/SimilarPage.jsx'));
+// 73 — 선박 지도(three.js 장면은 화면 안에서 다시 따로 받는다)
+const ShipMapPage = lazy(() => import('./pages/ShipMapPage.jsx'));
 
-const EXPLORE_TABS = [{ to: '/graph', label: '관계 지도' }, { to: '/coverage', label: '갖춤 현황' }];
+const EXPLORE_TABS = [{ to: '/graph', label: '관계 지도' }, { to: '/coverage', label: '갖춤 현황' }, { to: '/ship-map', label: '선박 지도' }];
 const ADMIN_TABS = [
   { to: '/admin/users', label: '사용자' }, { to: '/admin/ops', label: '운영' }, { to: '/admin/log', label: '활동 로그' },
   { to: '/admin/vocab', label: '분류 목록' }, { to: '/admin/wb-targets', label: 'WorkBench 연결 규칙' },
@@ -82,6 +84,7 @@ export default function App() {
             <Route element={<SectionTabs label="자료 현황" items={EXPLORE_TABS} />}>
               <Route path="coverage" element={<Suspense fallback={null}><CoveragePage /></Suspense>} />
               <Route path="graph" element={<Suspense fallback={null}><GraphPage /></Suspense>} />
+              <Route path="ship-map" element={<Suspense fallback={null}><ShipMapPage /></Suspense>} />
             </Route>
             <Route path="similar" element={<Suspense fallback={null}><SimilarPage /></Suspense>} />
             <Route path="inbox" element={<InboxPage />} />

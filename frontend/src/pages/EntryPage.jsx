@@ -24,6 +24,8 @@ import { Bar } from '../components/ui/Skeleton.jsx';
 import { FilterLink, StatusDot, TagLink } from '../components/ui/Status.jsx';
 import { OTHER_TARGET, targetHref } from '../lib/targets.js';
 import { filterHref } from '../lib/search.js';
+import ShipSide2D from '../components/shipmap/ShipSide2D.jsx';
+import { isShipZone } from '../lib/shipZones.js';
 import { useToast } from '../components/ui/Toast.jsx';
 import { copyText } from '../lib/files.js';
 import { ACTION_LABELS, errorText, formatBytes, formatDateTime } from '../lib/labels.js';
@@ -971,6 +973,13 @@ export default function EntryPage() {
               <Prop label="구역">
                 <VocabInput compact disabled multiple kind="zone" label="구역" values={entry.zones} onChange={() => {}}
                             valueHref={(v) => filterHref('zone', v)} />
+                {/* 73 — 배의 어느 구역인지 옆모습으로, 누르면 선박 지도 */}
+                {entry.zones.some(isShipZone) && (
+                  <Link to={`/ship-map?zone=${encodeURIComponent(entry.zones.find(isShipZone))}`} title="선박 지도에서 보기"
+                        className="mt-1.5 block w-full max-w-[220px] rounded-md border border-n-200 bg-n-0 px-2 py-1.5 hover:border-n-400">
+                    <ShipSide2D zones={entry.zones} idPrefix={`entry-${entry.entry_id}`} />
+                  </Link>
+                )}
               </Prop>
               <Prop label="대상">
                 {entry.target ? (
