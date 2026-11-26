@@ -519,6 +519,28 @@ test('52 — 형식으로 골라 선택한 파일을 이 초안에서 뺀다(확
   expect(bodyOf('POST', '/api/entries/E000010/files/remove')).toEqual({ file_ids: [3, 4], version: 3 });
 });
 
+test('2026-11-26 — 줄의 [빼기]로 파일 하나를 바로 빼고, 마지막 파일도 뺄 수 있다', async () => {
+  const only = { id: 7, rel_path: '9999_시험/wrong.bdf', name: 'wrong.bdf', kind: 'model', size: 10, duplicate_of_entry: null, drm_encrypted: false };
+  const entry = { ...ENTRY, files: [only] };
+  mockFetch({ 'POST /api/entries/E000010/files/remove': { ...entry, files: [], version: 4 } });
+  const onChanged = vi.fn();
+  render(<DraftCard entry={entry} siblings={[]} canEdit onChanged={onChanged} />);
+  await userEvent.click(screen.getByRole('button', { name: '9999_시험/wrong.bdf 빼기' }));
+  const dlg = await screen.findByRole('alertdialog');
+  expect(dlg).toHaveTextContent("'wrong.bdf' 파일을 이 초안에서 뺄까요?");
+  expect(dlg).toHaveTextContent('파일 없는 초안으로 남고');
+  await userEvent.click(within(dlg).getByRole('button', { name: '빼기' }));
+  await vi.waitFor(() => expect(onChanged).toHaveBeenCalled());
+  expect(bodyOf('POST', '/api/entries/E000010/files/remove')).toEqual({ file_ids: [7], version: 3 });
+});
+
+test('2026-11-26 — 파일을 모두 골라도 [선택한 파일 빼기]가 열린다', async () => {
+  mockFetch({});
+  render(<DraftCard entry={ENTRY} siblings={[]} canEdit onChanged={() => {}} />);
+  for (const f of ENTRY.files) await userEvent.click(screen.getByRole('checkbox', { name: `${f.rel_path} 선택` }));
+  expect(screen.getByRole('button', { name: new RegExp(`선택한 파일 빼기 ${ENTRY.files.length}개`) })).toBeEnabled();
+});
+
 test('56 — 비슷한 기존 자료의 분류를 기본값으로 넣은 초안은 그 자료 번호를 알린다', () => {
   mockFetch({});
   const { rerender } = render(<MemoryRouter><DraftCard entry={{ ...READY, preset_from: 'E000123' }} siblings={[]} canEdit onChanged={() => {}} /></MemoryRouter>);

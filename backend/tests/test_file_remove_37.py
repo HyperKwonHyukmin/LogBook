@@ -168,3 +168,26 @@ def test_52_remove_files_from_draft(db, storage, make_user, setup_entry_with_fil
     assert db.query(models.AuditLog).filter_by(action="ENTRY_FILES_REMOVED", target_id=e.entry_id).count() == 1
     r = verify(db, storage)
     assert not r["missing"] and not r["orphan_trash"]
+
+
+def test_draft_can_remove_last_file(db, storage, make_user, setup_entry_with_files):
+    """2026-11-26 — 초안은 마지막 파일까지 뺄 수 있다. 파일 없는 초안('파일 기다림')으로 남고 확정은 no_files."""
+    from app.entries.inbox_rows import draft_state
+
+    u = make_user("A100001")
+    _b, e = setup_entry_with_files(rels=("p/wrong.bdf",))
+    only = db.query(models.File).filter_by(entry_id=e.id).one()
+    service.remove_files(db, storage, e, u, [only.id], e.version)
+    db.expire_all()
+    e = db.get(models.Entry, e.id)
+    assert e.status == "draft"
+    assert db.query(models.File).filter_by(entry_id=e.id).count() == 0
+    assert (storage.trash / db.get(models.File, only.id).trash_rel / "p" / "wrong.bdf").is_file()
+    # 준비물의 묶음은 staged(처리 중) — 정리가 끝난 초안의 묶음 상태(processed)로 본다
+    assert draft_state(batch_state="processed", pending=[], live_files=0, title=e.title,
+                       blocked=False, wire=False)[0] == "waiting_files"
+    with pytest.raises(HTTPException) as ei:
+        service.confirm(db, storage, e, u)
+    assert ei.value.detail == "no_files"
+    r = verify(db, storage)
+    assert not r["missing"] and not r["orphan_trash"]

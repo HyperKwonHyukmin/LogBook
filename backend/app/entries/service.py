@@ -993,7 +993,11 @@ def remove_files(db: Session, storage: StoragePaths, entry: models.Entry, user: 
     행은 남긴다(확정 자료는 되돌리기, 초안은 되돌리기 없음 — 휴지통 폴더에 남는다).
 
     File.entry_id 를 비우고 removed_from_id 에 원래 자료를 남긴다 — entry_id 로 파일을 고르는 모든 경로
-    (검색·판 묶음·문서·관계 지도·같은 BDF)에서 저절로 빠진다. 마지막 파일은 뺄 수 없다(자료를 휴지통으로)."""
+    (검색·판 묶음·문서·관계 지도·같은 BDF)에서 저절로 빠진다. 확정 자료는 마지막 파일을 뺄 수 없다(자료를 휴지통으로).
+    초안은 모두 뺄 수 있다(2026-11-26) — 파일 없는 초안(과제 엑셀 초안과 같은 '파일 기다림')으로 남고 확정은 no_files 로 막힌다.
+    잘못 올린 파일 하나뿐인 초안이나 과제 초안에 잘못 첨부한 파일을, 입력한 분류를 버리지 않고 바꿔 넣게 하려는 것.
+    재구축(ops/rebuild)은 일반 초안을 되살리지 않고 staging 파일을 주인 없는 묶음으로 다시 처리하므로 빈 일반 초안은
+    재구축 뒤 남지 않는다(입력한 값은 파일이 있어도 원래 잃는다, Codex 검토 2026-11-26)."""
     from .files import entry_dir, move_all, rel_move_pairs
 
     entry = _lock(db, entry)
@@ -1013,7 +1017,7 @@ def remove_files(db: Session, storage: StoragePaths, entry: models.Entry, user: 
     if any(f.location != ("staging" if draft else "vault") for f in files):
         raise HTTPException(status_code=409, detail="file_not_in_vault")
     left = db.query(models.File.id).filter(models.File.entry_id == entry.id, ~models.File.id.in_(ids)).count()
-    if left == 0:
+    if left == 0 and not draft:
         raise HTTPException(status_code=422, detail="last_file")
     if draft:
         from .draft_attachments import ensure_no_pending

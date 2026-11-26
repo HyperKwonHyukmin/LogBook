@@ -170,18 +170,22 @@ const DraftCard = forwardRef(function DraftCard({ entry, siblings, canEdit, onCh
     if (x) m[x] = (m[x] || 0) + 1;
     return m;
   }, {})).sort((a, b) => b[1] - a[1]);
-  async function removeSelected() {
-    const n = selected.length;
+  // 2026-11-26 — 줄마다 [빼기] 단추도 둔다(체크박스와 위쪽 단추만으로는 찾지 못했다). 초안은 마지막 파일까지 뺄 수 있다(파일 기다림으로 남음)
+  async function removeFiles(ids) {
+    const n = ids.length;
+    const all = n === entry.files.length;
+    const one = n === 1 ? entry.files.find((f) => f.id === ids[0]) : null;
     const ok = await confirm({
-      title: `파일 ${n}개를 이 초안에서 뺄까요?`,
-      body: '휴지통 폴더(95_Trash)로 옮겨지고 올리기와 확정에서는 되돌릴 수 없습니다. 다시 필요하면 [파일 추가]로 올리세요.',
-      confirmLabel: `${n}개 빼기`,
+      title: one ? `'${one.name}' 파일을 이 초안에서 뺄까요?` : `파일 ${n}개를 이 초안에서 뺄까요?`,
+      body: '휴지통 폴더(95_Trash)로 옮겨지고 올리기와 확정에서는 되돌릴 수 없습니다. 다시 필요하면 [파일 추가]로 올리세요.'
+        + (all ? ' 파일을 모두 빼면 입력한 제목과 분류는 그대로 둔 채 파일 없는 초안으로 남고, 파일을 넣어야 확정할 수 있습니다.' : ''),
+      confirmLabel: one ? '빼기' : `${n}개 빼기`,
     });
     if (!ok) return;
-    const ids = [...selected];
     await act(() => api(`/entries/${entry.entry_id}/files/remove`, { method: 'POST', body: { file_ids: ids, version: versionRef.current } }), '빼지');
     setSelected((cur) => cur.filter((id) => !ids.includes(id)));
   }
+  const removeSelected = () => removeFiles([...selected]);
 
   function act(fn, verb) {
     if (attaching) {
@@ -614,9 +618,7 @@ const DraftCard = forwardRef(function DraftCard({ entry, siblings, canEdit, onCh
             </select>
           )}
           {canEdit && (
-            <Button variant="secondary" size="sm" disabled={disabled || selected.length === 0 || selected.length === entry.files.length}
-                    title={selected.length === entry.files.length ? '파일을 모두 빼려면 [버리기]를 쓰세요' : undefined}
-                    onClick={removeSelected}>
+            <Button variant="secondary" size="sm" disabled={disabled || selected.length === 0} onClick={removeSelected}>
               <Trash2 size={14} aria-hidden="true" />선택한 파일 빼기{selected.length > 0 && ` ${selected.length}개`}
             </Button>
           )}
@@ -681,6 +683,13 @@ const DraftCard = forwardRef(function DraftCard({ entry, siblings, canEdit, onCh
                   <option value="">옮기기…</option>
                   {siblings.map((s) => <option key={s.entry_id} value={s.entry_id}>{s.entry_id}</option>)}
                 </select>
+              )}
+              {canEdit && (
+                <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label={`${f.rel_path} 빼기`}
+                        title="잘못 올린 파일이면 이 초안에서 뺍니다" onClick={() => removeFiles([f.id])}
+                        className="shrink-0 text-n-500 hover:text-err">
+                  <Trash2 size={14} aria-hidden="true" />
+                </Button>
               )}
             </li>
           ))}

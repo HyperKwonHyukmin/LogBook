@@ -16,6 +16,7 @@ Hi-TESS LogBook(구조해석 자료 창고). 무엇·어떻게 쓰는지는 `REA
   - **올리기와 확정 = 목록 + 상세(68, 2026-11-23)**: 초안 상태(확정 가능, 확인 필요 등)는 서버 `entries/inbox_rows.py` 한 곳에서 정한다. 확정 규칙을 바꾸면 여기와 화면 `inboxStatus.js` 를 같이.
     담당자 권한: 사번 연결 담당자는 초안을 보고, 고치고, 첨부하고, 확정한다(`access.is_draft_assignee`). 버리기, 공개 범위, 초안 사이 옮기기와 합치기는 `can_own_entry`(올린 사람과 LV3) — 담당자에게 열면 공개 범위를 넓히는 길이 된다.
     과제 엑셀 묶음(68 3단계)은 상태 `review`, staging 폴더의 `_task_import.json` 이 파일 없는 초안의 재구축 원천이다 — 그 폴더를 손으로 지우지 말 것.
+    잘못 올린 파일은 파일 줄의 [빼기](휴지통 폴더로, 되돌리기 없음). 초안은 마지막 파일까지 뺄 수 있고 '파일 기다림' 초안으로 남는다(2026-11-26, 확정 자료는 여전히 last_file).
     과제 엑셀 미리보기는 과제 이름, 담당자로 찾아 그 행만 고른다(2026-11-25, `TaskSheetCard.matchRows`). 휴지통 자료가 같은 과제 열쇠를 쥔 행은 막지 않는다 — 고르면 새 초안이 열쇠를 가져가고 휴지통 쪽은 열쇠만 내려놓는다(`task_import._release_trashed_key`, 기록 `_task_import.json` 의 `key_released`). 휴지통 자료를 되돌리면 같은 과제가 두 건이 될 수 있다(사용자 결정).
   - **검색 결과 그림(2026-11-23)**: BDF·.inp·.fem 이 있는 자료는 3D 변환 전이나 실패여도 보고서 첫 쪽을 쓰지 않는다(모델 아이콘) — 보고서 그림은 모델 없는 자료만(`mysql_backend._entry_items`). .fem(OptiStruct)은 BDF 파서로 읽는 보기 전용 모델(`rules.is_viewer_only`, 계획 61 덧붙임).
   - **솔리드 요소 미리보기(2026-11-24)**: CTETRA, CPENTA, CHEXA, CPYRAM 은 다른 솔리드와 나누지 않는 겉면만 쉘처럼 lbm 에 넣는다(`bdf/solids.py`, 면의 EID, PID, 카드는 원래 솔리드 것). 요소 수, 연결 그룹, 해석 검증 구속, 절점 점검은 겉면이 아니라 솔리드 자체로 센다(`Model.solids`, `connected_nodes`, lbm 블록 `solid_nodes`). 예전에 '요소 없음'으로 건너뛴 모델은 `python -m app.cli enqueue-convert --no-elements` 로 다시 변환. 한계: EID 찾기와 선택만 보기는 면 하나, PID 목록 개수는 겉면 수.
